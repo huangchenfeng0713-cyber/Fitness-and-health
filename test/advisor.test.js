@@ -169,3 +169,45 @@ test('游离糖：完整水果与纯奶不计入添加糖上限，果汁和甜�
   // 热量与其它宏量不受影响
   assert.ok(nutrientsFor(FB.get('watermelon'), 300).carb > 20);
 });
+
+
+/* -------------------------- 结论必须配得上样本量 -------------------------- */
+
+test('只记了 1 天时不下「近 14 天平均」的结论', () => {
+  // 用户实测：14 天健康数据 + 1 天饮食记录，
+  // 曾报出「近 14 天平均低于目标 3168 kcal/天，每周 2.88 kg 脂肪赤字」
+  const a = buildAdvice({
+    targets, profile, intake: zero, entries: [], now: at('12:30'),
+    baseline: { days: 14, windowDays: 14, healthDaysCounted: 14, loggedDays: 1,
+      activeEnergy: 310, kcalIntake: 1287, proteinIntake: 75, proteinHitDays: 0 },
+  });
+  const titles = a.insights.map((i) => i.title);
+  assert.ok(!titles.some((t) => /近 14 天平均/.test(t)), `不该出现 14 天的平均结论：${titles.join(' / ')}`);
+  assert.ok(!titles.some((t) => /近 14 天蛋白达标/.test(t)), `不该把没记的日子算成没达标：${titles.join(' / ')}`);
+  assert.ok(titles.some((t) => /只有 1 天的饮食记录/.test(t)), `应说明样本不足：${titles.join(' / ')}`);
+});
+
+test('样本够了才给平均摄入偏差，且写明真实天数', () => {
+  const a = buildAdvice({
+    targets, profile, intake: zero, entries: [], now: at('12:30'),
+    baseline: { days: 14, windowDays: 14, healthDaysCounted: 14, loggedDays: 5,
+      activeEnergy: 310, kcalIntake: 1200, proteinIntake: 70, proteinHitDays: 1 },
+  });
+  const hit = a.insights.find((i) => /平均低于目标/.test(i.title));
+  assert.ok(hit, '5 天样本应该给出结论');
+  assert.ok(/有记录的 5 天/.test(hit.title), `标题要写明真实天数：${hit.title}`);
+  assert.ok(/没记录的日子没有计入/.test(hit.text), '要提醒样本小于窗口');
+  assert.ok(/脂肪当量/.test(hit.text) && /不等于体重真会这样变/.test(hit.text),
+    '7700 kcal/kg 只是能量换算，措辞不能说成一定会瘦多少');
+  const prot = a.insights.find((i) => /蛋白达标/.test(i.title));
+  assert.ok(/有记录的 5 天/.test(prot.title), `蛋白达标率的分母也要真实：${prot.title}`);
+});
+
+test('没填生日时会说明年龄是估算的', () => {
+  const noAge = { sex: 'male', heightCm: 175, weightKg: 72, activity: 'light', goal: 'cut' };
+  const a = buildAdvice({
+    targets: dailyTargets(noAge), profile: noAge, intake: zero, entries: [], now: at('12:30'),
+  });
+  assert.ok(a.insights.some((i) => /年龄按 30 岁估算/.test(i.title)),
+    '兜底年龄不能悄悄用掉');
+});

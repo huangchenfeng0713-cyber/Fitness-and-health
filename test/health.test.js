@@ -358,3 +358,57 @@ test('基线平均值把不可能的数挡在外面', () => {
   const b = computeBaseline(days, [], '2026-08-23');
   assert.equal(Math.round(b.restingEnergy), 1600, '异常那天不参与平均');
 });
+
+
+/* ---------------------------------------------------- 样本量必须是真的 */
+
+test('摄入均值的分母是「记了饮食的天数」，不是日历天数', () => {
+  // 用户实测：14 天健康数据 + 只记了 1 天饮食，
+  // 原先报出「近 14 天平均低于目标 3168 kcal/天，每周 2.88 kg 脂肪赤字」——
+  // 那 13 天不是饿着，只是没记，这个结论是凭空造的。
+  const healthDays = [];
+  for (let i = 1; i <= 14; i += 1) {
+    const d = new Date(Date.UTC(2026, 7, 23) - i * 86400000).toISOString().slice(0, 10);
+    healthDays.push({ date: d, steps: 5000, activeEnergy: 300, restingEnergy: 1600 });
+  }
+  healthDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const dietDays = [{ date: '2026-08-22', kcal: 1287, protein: 75 }];
+
+  const b = computeBaseline(healthDays, dietDays, '2026-08-23');
+  assert.equal(b.healthDaysCounted, 14);
+  assert.equal(b.loggedDays, 1, '只有 1 天有饮食记录');
+  assert.equal(b.kcalIntake, 1287, '均值本身没错，错的是曾经把它当成 14 天的均值');
+  assert.equal(b.windowDays, 14);
+});
+
+test('记满之后分母跟着变大', () => {
+  const healthDays = [];
+  const dietDays = [];
+  for (let i = 1; i <= 6; i += 1) {
+    const d = new Date(Date.UTC(2026, 7, 23) - i * 86400000).toISOString().slice(0, 10);
+    healthDays.push({ date: d, steps: 5000, activeEnergy: 300 });
+    dietDays.push({ date: d, kcal: 2000, protein: 120 });
+  }
+  healthDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  dietDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const b = computeBaseline(healthDays, dietDays, '2026-08-23');
+  assert.equal(b.loggedDays, 6);
+  assert.equal(b.kcalIntake, 2000);
+});
+
+test('焦耳单位不区分大小写（只有 cal / Cal 那一对需要区分）', () => {
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'j') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 41.84, 'kJ') - 10) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 41.84, 'kj') - 10) < 1e-9);
+  assert.equal(normalizeValue('energy', 530, 'Cal'), 530, 'Cal 仍必须是千卡');
+  assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 仍是小卡');
+});
+
+test('单位换算用的是精确换算因子', () => {
+  assert.ok(Math.abs(normalizeValue('mass', 1, 'lb') - 0.45359237) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('length', 1, 'in') - 2.54) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('length', 1, 'ft') - 30.48) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('distance', 1, 'mi') - 1.609344) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('volume', 1, 'l') - 1000) < 1e-12);
+});

@@ -96,9 +96,10 @@ export function normalizeValue(kind, value, unit) {
       // 那是「大卡」也就是 kcal；而小写 cal 才是 1/1000 的小卡。
       // 先转小写再比较会把 Cal 当成 cal，整套能量数据被缩小一千倍。
       const raw = String(unit || '').trim();
-      if (/^kj$/i.test(raw)) return v / 4.184;
+      // 只有 cal / Cal 这一对需要区分大小写；焦耳没有同名的歧义单位，可以不区分
+      if (/^kj$/i.test(raw)) return v / 4.184;   // 1 kcal = 4.184 kJ（热化学卡）
+      if (/^j$/i.test(raw)) return v / 4184;
       if (raw === 'cal') return v / 1000;
-      if (raw === 'J') return v / 4184;
       return v; // kcal / Cal / KCAL
     }
     case 'mass':
@@ -515,16 +516,31 @@ export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey
     if (den > 0) weightTrend = Math.round((num / den) * 7 * 100) / 100;
   }
 
+  /*
+   * 摄入均值只能按「真正记了饮食的天数」算，而且必须把这个天数报出去。
+   *
+   * dietDays 里只有留下过记录的日子——没记的那天根本不在数组里，不是 0 kcal。
+   * 原先把分母写成 max(健康天数, 饮食天数)，于是只记了 1 天的人会看到
+   * 「近 14 天平均低于目标 3168 kcal/天，相当于每周 2.88 kg 脂肪赤字」，
+   * 那 13 天并不是饿着，只是没记。这个结论是凭空造出来的。
+   *
+   * 现在均值与天数一起返回，谁用谁负责说清楚样本有多大。
+   */
   const dietRecent = dietDays.filter((d) => d.date < today).slice(-window);
-  const kcalIntake = dietRecent.length
-    ? dietRecent.reduce((a, d) => a + (d.kcal || 0), 0) / dietRecent.length
+  const loggedDays = dietRecent.length;
+  const kcalIntake = loggedDays
+    ? dietRecent.reduce((a, d) => a + (d.kcal || 0), 0) / loggedDays
     : null;
-  const proteinIntake = dietRecent.length
-    ? dietRecent.reduce((a, d) => a + (d.protein || 0), 0) / dietRecent.length
+  const proteinIntake = loggedDays
+    ? dietRecent.reduce((a, d) => a + (d.protein || 0), 0) / loggedDays
     : null;
 
   return {
-    days: Math.max(recent.length, dietRecent.length),
+    days: Math.max(recent.length, loggedDays),
+    healthDaysCounted: recent.length,
+    // 摄入类结论的真实分母：有饮食记录的天数，和上面那个 days 不是一回事
+    loggedDays,
+    windowDays: window,
     activeEnergy: avg(recent, 'activeEnergy'),
     restingEnergy: avg(recent, 'restingEnergy'),
     steps: avg(recent, 'steps'),

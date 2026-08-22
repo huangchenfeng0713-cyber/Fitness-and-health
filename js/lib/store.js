@@ -138,6 +138,8 @@ export function recompute(now = new Date()) {
       bmr,
       activeSoFar: Number(health.activeEnergy) || 0,
       basalSoFar: Number(health.restingEnergy) || null,
+      // 近 14 天 Apple 实测的静息能量日均：比公式估算更有据，优先于 bmr 使用
+      baselineResting: baseline.restingEnergy,
       dayFraction: isToday ? dayFraction(now) : 1,
       baselineActive: baseline.activeEnergy,
       intakeKcal: intake.kcal,
@@ -154,7 +156,8 @@ export function recompute(now = new Date()) {
     health,
     baseline: {
       ...baseline,
-      proteinHitDays: countProteinHitDays(targets.protein, baseline.days),
+      // 分母用「有饮食记录的天数」，不是日历天数——否则会把没记的日子算成没达标
+      proteinHitDays: countProteinHitDays(targets.protein, baseline.loggedDays),
     },
     now: isToday ? now : new Date(`${state.day}T20:00:00`),
   });

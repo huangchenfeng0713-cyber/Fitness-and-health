@@ -476,6 +476,22 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
       + '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，建议去「健康」页核对一下。');
   }
 
+  /*
+   * 目标是怎么算出来的，依据够不够硬，得让用户看得到。
+   * 年龄差 10 岁在 Mifflin-St Jeor 里就是 50 kcal，静默用兜底值等于悄悄编数据。
+   */
+  if (targets.ageEstimated) {
+    add('warn', '年龄按 30 岁估算',
+      '没填生日，基础代谢只能按 30 岁算。Mifflin-St Jeor 公式里年龄每差 10 岁就是 50 kcal，'
+      + '到「设置」里补上生日，热量目标会更贴合你。');
+  }
+  if (targets.carbBelowRda) {
+    add('info', `碳水目标 ${targets.carb}g，低于 130g 的推荐摄入量`,
+      '130 g/天 是美国 IOM 给出的碳水推荐摄入量，依据是大脑的葡萄糖利用量。'
+      + '当前配比里蛋白和脂肪占得较多，把碳水挤到了这个水平以下。'
+      + '短期没问题，长期建议要么提高总热量，要么把蛋白目标调低一些。');
+  }
+
   // 动态热量预算：把"今天比平时多动/少动"和"预算调整了多少"讲成同一件事
   if (targets.tdeeSource === 'apple' && targets.staticTdee > 0) {
     const budgetDelta = round(targets.tdee - targets.staticTdee);
@@ -523,23 +539,45 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     add('warn', `钠已超标（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '高钠会让体重短期虚高 1-2kg（水潴留），别误判成长胖。今天多喝水，明天口味清淡一些。');
   }
 
-  // 近期趋势
-  if (baseline.days >= 3 && baseline.kcalIntake != null) {
+  /*
+   * 近期摄入趋势。
+   *
+   * 分母必须是「真正记了饮食的天数」（baseline.loggedDays），不是日历天数。
+   * 没记的日子不在样本里，把它们当成 0 kcal 会造出「近 14 天日均赤字 3168 kcal」
+   * 这种根本不存在的结论——那 13 天只是没记。
+   *
+   * 样本太小时干脆不下结论：1-2 天的均值说明不了趋势。
+   */
+  const MIN_LOGGED_DAYS = 3;
+  const logged = baseline.loggedDays ?? 0;
+  if (logged >= MIN_LOGGED_DAYS && baseline.kcalIntake != null) {
     const diff = round(baseline.kcalIntake - targets.kcal);
+    const scope = `有记录的 ${logged} 天`;
     if (Math.abs(diff) > targets.kcal * 0.1) {
+      // 7700 kcal/kg 是 Wishnofsky 1958 的经验值，只是「脂肪当量」的换算，
+      // 不等于实际会掉多少体重（真实减重里还有瘦体重和水分）。措辞照此保留。
       add(
         diff > 0 ? 'warn' : 'info',
-        `近 ${baseline.days} 天平均${diff > 0 ? '高于' : '低于'}目标 ${Math.abs(diff)} kcal/天`,
-        diff > 0
-          ? `照这个节奏每周约多摄入 ${round((diff * 7) / 7700, 2)} kg 的脂肪当量。先从最容易砍的项目下手：饮料、油、加工零食。`
-          : `每周约相当于 ${round((Math.abs(diff) * 7) / 7700, 2)} kg 的脂肪当量赤字。若体重下降过快（>1%/周）建议把赤字收小一点。`,
+        `${scope}平均${diff > 0 ? '高于' : '低于'}目标 ${Math.abs(diff)} kcal/天`,
+        `按 7700 kcal/kg 的脂肪当量换算，相当于每周 ${round((Math.abs(diff) * 7) / 7700, 2)} kg 的`
+        + `${diff > 0 ? '盈余' : '赤字'}（只是能量换算，不等于体重真会这样变）。`
+        + (diff > 0
+          ? '先从最容易砍的项目下手：饮料、油、加工零食。'
+          : '若体重下降过快（>1%/周）建议把赤字收小一点。')
+        + (logged < (baseline.windowDays || 14)
+          ? `注意这是 ${logged} 天的平均，没记录的日子没有计入。`
+          : ''),
       );
     }
     if (baseline.proteinHitDays != null) {
-      add('info', `近 ${baseline.days} 天蛋白达标 ${baseline.proteinHitDays} 天`, baseline.proteinHitDays >= baseline.days * 0.7
-        ? '蛋白执行得不错，保持住。'
-        : '蛋白达标率偏低。把高蛋白食物固定安排进早餐和加餐，比每天临时想吃什么更容易坚持。');
+      add('info', `${scope}里蛋白达标 ${baseline.proteinHitDays} 天`,
+        baseline.proteinHitDays >= logged * 0.7
+          ? '蛋白执行得不错，保持住。'
+          : '蛋白达标率偏低。把高蛋白食物固定安排进早餐和加餐，比每天临时想吃什么更容易坚持。');
     }
+  } else if (logged > 0 && logged < MIN_LOGGED_DAYS) {
+    add('info', `只有 ${logged} 天的饮食记录`,
+      `摄入趋势要至少 ${MIN_LOGGED_DAYS} 天才算得出来。记满几天之后，这里会给出平均摄入与目标的差距。`);
   }
 
   // 体重趋势 vs 目标速率
