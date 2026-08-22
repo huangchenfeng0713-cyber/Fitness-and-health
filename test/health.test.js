@@ -5,9 +5,18 @@ import {
   parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
 } from '../js/core/health.js';
 
-test('单位换算覆盖 HealthKit 常见单位', () => {
+test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
+  // export.xml 里 ActiveEnergyBurned / BasalEnergyBurned 的 unit 就是 "Cal"。
+  // 若按小写比较，会当成小卡除以 1000，整套能量数据缩小一千倍。
+  assert.equal(normalizeValue('energy', 530, 'Cal'), 530, 'Cal 必须原样保留');
+  assert.equal(normalizeValue('energy', 530, 'kcal'), 530);
+  assert.equal(normalizeValue('energy', 530, 'KCAL'), 530);
+  assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 才是小卡');
   assert.ok(Math.abs(normalizeValue('energy', 418.4, 'kJ') - 100) < 1e-9);
-  assert.equal(normalizeValue('energy', 250, 'kcal'), 250);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+});
+
+test('单位换算覆盖 HealthKit 其它常见单位', () => {
   assert.ok(Math.abs(normalizeValue('mass', 158.7, 'lb') - 71.98) < 0.02);
   assert.equal(normalizeValue('mass', 72500, 'g'), 72.5);
   assert.equal(normalizeValue('length', 1.75, 'm'), 175);
@@ -156,4 +165,102 @@ test('基线：没有历史饮食记录时返回 null 而不是 0', () => {
   const b = computeBaseline([{ date: '2026-08-19', steps: 100 }], [], '2026-08-20');
   assert.equal(b.kcalIntake, null);
   assert.equal(b.proteinIntake, null);
+});
+
+test('单条 JSON 记录也能导入（快捷指令最容易产出这种）', () => {
+  const { days } = parseHealthJson({ date: '2026-08-22', steps: 2413, activeEnergy: 76.8, weight: 59 });
+  assert.equal(days.length, 1);
+  assert.equal(days[0].steps, 2413);
+  assert.equal(days[0].activeEnergy, 76.8);
+  assert.equal(days[0].weightKg, 59);
+});
+
+test('字段名带多余空格 / 大小写 / 下划线都能认出来', () => {
+  const variants = [
+    { date: '2026-08-22', 'activeEnergy ': 76.8 },      // 末尾空格
+    { date: '2026-08-22', ' activeEnergy': 76.8 },      // 开头空格
+    { date: '2026-08-22', ACTIVE_ENERGY: 76.8 },        // 全大写加下划线
+    { date: '2026-08-22', 'active energy': 76.8 },      // 空格分隔
+    { date: '2026-08-22', 'Active-Energy': 76.8 },      // 连字符
+    { date: '2026-08-22', 活动能量: 76.8 },              // 中文
+  ];
+  for (const v of variants) {
+    const { days } = parseHealthJson(v);
+    assert.equal(days[0]?.activeEnergy, 76.8, `没认出写法：${JSON.stringify(Object.keys(v))}`);
+  }
+});
+
+test('体重的多种叫法都认得', () => {
+  for (const k of ['weight', 'weightKg', 'body_mass', 'weight_body_mass', '体重']) {
+    const { days } = parseHealthJson({ date: '2026-08-22', [k]: 59 });
+    assert.equal(days[0]?.weightKg, 59, `没认出 ${k}`);
+  }
+});
+
+test('认不出的字段会被列出来，而不是悄悄丢掉', () => {
+  const r = parseHealthJson({ date: '2026-08-22', steps: 100, 心情: 5, mystery: 1 });
+  assert.deepEqual(r.ignoredKeys.sort(), ['mystery', '心情']);
+  assert.equal(r.days[0].steps, 100, '认得出的字段仍应正常导入');
+});
+
+test('缺少 date 时不产出垃圾数据', () => {
+  const r = parseHealthJson({ steps: 100, weight: 59 });
+  assert.equal(r.days.length, 0);
+});
+
+test('日期字段的多种叫法都认得', () => {
+  for (const k of ['date', 'Date', 'day', '日期']) {
+    const { days } = parseHealthJson({ [k]: '2026-08-22', steps: 100 });
+    assert.equal(days[0]?.date, '2026-08-22', `没认出日期字段 ${k}`);
+  }
+});
+
+test('CSV 表头也走同一套归一化', () => {
+  const { days, ignoredKeys } = parseHealthCsv('Date, Active_Energy , weight, 心情\n2026-08-22,520,71.2,5\n');
+  assert.equal(days[0].activeEnergy, 520);
+  assert.equal(days[0].weightKg, 71.2);
+  assert.deepEqual(ignoredKeys, ['心情']);
+});
+
+test('识别被单位缺陷缩小一千倍的日子', async () => {
+  const { findMisscaledEnergyDays } = await import('../js/core/health.js');
+  const days = [
+    { date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 },  // 受影响
+    { date: '2026-08-02', steps: 8000, activeEnergy: 550, restingEnergy: 1480 },   // 正常
+    { date: '2026-08-03', steps: 0, activeEnergy: 0, restingEnergy: 0 },           // 空数据
+    { date: '2026-08-04', steps: 300, activeEnergy: 12 },                          // 步数太少，不下结论
+    { date: '2026-08-05', steps: 6000, activeEnergy: 8 },                          // 受影响
+  ];
+  assert.deepEqual(findMisscaledEnergyDays(days).map((d) => d.date), ['2026-08-01', '2026-08-05']);
+});
+
+test('修正只动能量字段，其余原样保留', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const fixed = repairMisscaledEnergy([
+    { date: '2026-08-01', steps: 8000, weightKg: 71.2, sleepMinutes: 430, activeEnergy: 0.55, restingEnergy: 1.48, hkKcal: 1.9 },
+  ]);
+  assert.equal(fixed.length, 1);
+  assert.equal(fixed[0].activeEnergy, 550);
+  assert.equal(fixed[0].restingEnergy, 1480);
+  assert.equal(fixed[0].hkKcal, 1900);
+  assert.equal(fixed[0].steps, 8000, '步数不该被改');
+  assert.equal(fixed[0].weightKg, 71.2, '体重不该被改');
+  assert.equal(fixed[0].sleepMinutes, 430, '睡眠不该被改');
+});
+
+test('修正是幂等的：再跑一次不会把正确数据放大一千倍', async () => {
+  const { repairMisscaledEnergy, findMisscaledEnergyDays } = await import('../js/core/health.js');
+  const once = repairMisscaledEnergy([{ date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 }]);
+  assert.equal(findMisscaledEnergyDays(once).length, 0, '修好后不该再被判定为需要修复');
+  assert.equal(repairMisscaledEnergy(once).length, 0);
+});
+
+test('正常数据不会被误伤', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const normal = [
+    { date: '2026-08-01', steps: 8000, activeEnergy: 550, restingEnergy: 1480 },
+    { date: '2026-08-02', steps: 200, activeEnergy: 30, restingEnergy: 1450 },   // 真久坐
+    { date: '2026-08-03', weightKg: 71 },                                        // 只有体重
+  ];
+  assert.deepEqual(repairMisscaledEnergy(normal), []);
 });

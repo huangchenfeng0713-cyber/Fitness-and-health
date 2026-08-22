@@ -73,7 +73,7 @@ export function macroBar({ value, target, color = 'var(--accent)' }) {
  */
 export function lineChart({
   data = [], width = 640, height = 200, color = 'var(--accent)',
-  target = null, targetLabel = '', unit = '', area = true, decimals = 0,
+  target = null, targetLabel = '', unit = '', area = true, decimals = null,
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
@@ -93,6 +93,16 @@ export function lineChart({
   const span = max - min || Math.abs(max) * 0.1 || 1;
   min -= span * 0.12;
   max += span * 0.12;
+  // 步数、能量、睡眠这类天然非负的指标，纵轴不该出现负刻度
+  if (ys.every((v) => v >= 0)) min = Math.max(0, min);
+
+  // 刻度小数位随量程自适应：量程只有 1 时固定 0 位会出现「1 / 1 / 0」这种重复刻度
+  const range = max - min;
+  const dec = decimals != null ? decimals : (range >= 20 ? 0 : range >= 2 ? 1 : 2);
+  const fmt = (v) => {
+    const t = v.toFixed(dec);
+    return t === `-${(0).toFixed(dec)}` ? (0).toFixed(dec) : t;   // 别显示 "-0"
+  };
 
   const px = (i) => pad.l + (i / (points.length - 1)) * (width - pad.l - pad.r);
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (height - pad.t - pad.b);
@@ -103,7 +113,7 @@ export function lineChart({
     const y = py(v);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'grid' }));
     const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
-    t.textContent = v.toFixed(decimals);
+    t.textContent = fmt(v);
     svg.append(t);
   }
 

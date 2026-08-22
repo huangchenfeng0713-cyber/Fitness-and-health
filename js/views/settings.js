@@ -1,68 +1,134 @@
 /** 设置：身体信息、目标、数据管理 */
 
-import { h, clearEl, num, toast, confirmAction, download } from '../lib/utils.js';
+import { h, clearEl, num, toast, confirmAction, download, mount } from '../lib/utils.js';
 import { state, saveProfile, clearAllData, db } from '../lib/store.js';
 import { ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass } from '../core/nutrition.js';
 
-function field(label, control, hint) {
-  return h('label.form-field', null,
+function field(label, control, hint, extraClass = '') {
+  return h(`label.form-field${extraClass ? `.${extraClass}` : ''}`, null,
     h('span', null, label),
     control,
     hint && h('small.field-hint', null, hint));
 }
 
-function profileCard(rerender) {
-  const p = state.profile;
-  const set = (patch) => saveProfile(patch);
+/**
+ * 身体信息表单。
+ *
+ * 这里刻意不做「改一个字段就立刻存盘」：存盘会触发整页重绘，
+ * 正在输入的那个 input 会被从 DOM 里拆掉重建 —— iOS 上表现为
+ * 打一个字键盘就收起、日期选择器刚滑到某天就被当场提交。
+ * 所以改成先写进 draft（纯内存，不重绘），点「保存」才落库。
+ */
+let draft = null;
+let draftBase = null;   // 打开草稿时的 profile 快照，用来判断有没有真的改动
 
-  const sexSelect = h('select', { onchange: (e) => set({ sex: e.target.value }) },
-    h('option', { value: 'male', selected: p.sex === 'male' }, '男'),
-    h('option', { value: 'female', selected: p.sex === 'female' }, '女'));
+function resetDraft() {
+  draft = null;
+  draftBase = null;
+}
+
+function ensureDraft() {
+  if (!draft || draftBase !== state.profile) {
+    draft = { ...state.profile };
+    draftBase = state.profile;
+  }
+  return draft;
+}
+
+function isDirty() {
+  if (!draft) return false;
+  return Object.keys(draft).some((k) => {
+    const a = draft[k];
+    const b = state.profile[k];
+    if (a == null && b == null) return false;
+    return a !== b;
+  });
+}
+
+function profileCard(rerender) {
+  const d = ensureDraft();
+  const saveBtn = h('button.primary-btn', {
+    disabled: !isDirty(),
+    onclick: async () => {
+      await saveProfile({ ...draft });
+      resetDraft();
+      toast('已保存', 'ok');
+      rerender();
+    },
+  }, '保存身体信息');
+
+  const dirtyMark = h('span.dirty-mark', { hidden: !isDirty() }, '有未保存的修改');
+
+  /** 只更新保存按钮状态，绝不重绘表单本身 */
+  const touch = () => {
+    const dirty = isDirty();
+    saveBtn.disabled = !dirty;
+    dirtyMark.hidden = !dirty;
+  };
+
+  const sexSelect = h('select', {
+    onchange: (e) => { d.sex = e.target.value; touch(); },
+  },
+  h('option', { value: 'male', selected: d.sex === 'male' }, '男'),
+  h('option', { value: 'female', selected: d.sex === 'female' }, '女'));
 
   const birthday = h('input', {
-    type: 'date', value: p.birthday || '',
-    onchange: (e) => set({ birthday: e.target.value }),
+    type: 'date', value: d.birthday || '', max: new Date().toISOString().slice(0, 10),
+    onchange: (e) => { d.birthday = e.target.value; touch(); },
   });
 
   const numInput = (key, step = '0.1', placeholder = '') => h('input', {
     type: 'number', step, inputmode: 'decimal', placeholder,
-    value: p[key] != null ? p[key] : '',
-    onchange: (e) => {
+    value: d[key] != null ? d[key] : '',
+    // 用 input 而不是 change：iOS 上 change 的触发时机跟着焦点走，容易丢最后一次输入
+    oninput: (e) => {
       const v = e.target.value.trim();
-      set({ [key]: v === '' ? null : Number(v) });
+      d[key] = v === '' ? null : Number(v);
+      touch();
     },
   });
 
-  const activity = h('select', { onchange: (e) => set({ activity: e.target.value }) },
-    Object.values(ACTIVITY_LEVELS).map((l) => h('option', { value: l.key, selected: p.activity === l.key }, l.label)));
-
-  const goal = h('select', {
-    onchange: (e) => set({ goal: e.target.value, rateKgPerWeek: GOALS[e.target.value].defaultRateKgPerWeek }),
-  }, Object.values(GOALS).map((g) => h('option', { value: g.key, selected: p.goal === g.key }, g.label)));
-
   const rate = h('input', {
     type: 'number', step: '0.05', inputmode: 'decimal',
-    value: p.rateKgPerWeek != null ? p.rateKgPerWeek : GOALS[p.goal]?.defaultRateKgPerWeek ?? 0,
-    onchange: (e) => set({ rateKgPerWeek: Number(e.target.value) }),
+    value: d.rateKgPerWeek != null ? d.rateKgPerWeek : GOALS[d.goal]?.defaultRateKgPerWeek ?? 0,
+    oninput: (e) => { d.rateKgPerWeek = Number(e.target.value); touch(); },
   });
 
+  const activity = h('select', {
+    onchange: (e) => { d.activity = e.target.value; touch(); },
+  }, Object.values(ACTIVITY_LEVELS).map((l) => h('option', { value: l.key, selected: d.activity === l.key }, l.label)));
+
+  const goal = h('select', {
+    onchange: (e) => {
+      d.goal = e.target.value;
+      d.rateKgPerWeek = GOALS[e.target.value].defaultRateKgPerWeek;
+      rate.value = d.rateKgPerWeek;   // 直接改 DOM，不重绘
+      touch();
+    },
+  }, Object.values(GOALS).map((g) => h('option', { value: g.key, selected: d.goal === g.key }, g.label)));
+
+  // 下方的体征小卡展示的是「已保存」的口径，避免草稿态给出误导性的数字
+  const p = state.profile;
   const w = state.derived?.effectiveProfile?.weightKg ?? p.weightKg;
   const bmiVal = bmi(w, p.heightCm);
   const cat = bmiCategory(bmiVal);
   const lbm = leanBodyMass(w, state.derived?.effectiveProfile?.bodyFatPct ?? p.bodyFatPct);
 
   return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '身体信息')),
+    h('div.card-head', null, h('h3', null, '身体信息'), dirtyMark),
     h('div.form-grid', null,
       field('性别', sexSelect),
-      field('生日', birthday, '用于计算基础代谢'),
+      // 生日独占一整行：iOS Safari 的原生日期控件固有宽度大，挤在半格里容易溢出
+      field('生日', birthday, '用于计算基础代谢', 'span-all'),
       field('身高（cm）', numInput('heightCm', '0.5')),
       field('体重（kg）', numInput('weightKg', '0.1'), p.syncWeightFromApple ? '已开启 Apple 健康体重同步，会以最新记录为准' : null),
       field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '不填则用公式估算'), '填了会改用更准的 Katch-McArdle 公式'),
-      field('日常活动量', activity, '运动消耗由 Apple 健康单独计入，这里选平时的生活强度'),
+      // 选项文字长（「轻度活动（每周 1-3 次）」），半格会被截断
+      field('日常活动量', activity, '运动消耗由 Apple 健康单独计入，这里选平时的生活强度', 'span-all'),
       field('目标', goal),
       field('目标速率（kg/周）', rate, '减脂填负数。建议不超过体重的 1%/周'),
     ),
+    saveBtn,
     h('div.stat-row', null,
       h('div.stat', null, h('strong', null, bmiVal ?? '—'), h('span', null, `BMI${cat ? ` · ${cat.label}` : ''}`)),
       h('div.stat', null, h('strong', null, lbm != null ? num(lbm, 1) : '—'), h('span', null, '瘦体重 kg')),
@@ -148,6 +214,7 @@ function dataCard(rerender) {
         onclick: async () => {
           if (!confirmAction('确定清空全部数据？此操作不可撤销，建议先导出备份。')) return;
           await clearAllData();
+          resetDraft();
           toast('已清空');
           rerender();
         },
@@ -164,7 +231,7 @@ function dataCard(rerender) {
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
   clearEl(root);
-  root.append(
+  mount(root, 
     profileCard(rerender),
     targetCard(),
     toggleCard(),

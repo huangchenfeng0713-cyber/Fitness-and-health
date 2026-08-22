@@ -7,7 +7,7 @@ import * as db from './db.js';
 import { todayKey, dayFraction } from './utils.js';
 import { dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { computeBaseline } from '../core/health.js';
+import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays } from '../core/health.js';
 import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
@@ -306,6 +306,22 @@ export async function mergeHealthDays(days, meta = {}) {
   recompute();
   emit();
   return days.length;
+}
+
+/** 有多少天的能量数据受早期单位缺陷影响 */
+export function countMisscaledDays() {
+  return findMisscaledEnergyDays(state.healthDays).length;
+}
+
+/** 一键把受影响日子的能量数值乘回正确量级 */
+export async function repairHealthEnergy() {
+  const fixed = repairMisscaledEnergy(state.healthDays);
+  if (!fixed.length) return 0;
+  await db.bulkPut(db.STORES.health, fixed, { merge: true });
+  setHealthDays(await db.getAll(db.STORES.health));
+  recompute();
+  emit();
+  return fixed.length;
 }
 
 /** 手动写入 / 修改某天的健康数据 */

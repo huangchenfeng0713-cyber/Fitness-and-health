@@ -1,8 +1,9 @@
 /** 趋势：体重、热量收支、蛋白达标、活动与睡眠 */
 
-import { h, clearEl, num, shiftDay, formatMinutes } from '../lib/utils.js';
+import { h, clearEl, num, shiftDay, formatMinutes, mount } from '../lib/utils.js';
 import { lineChart, barChart } from '../lib/charts.js';
 import { state } from '../lib/store.js';
+import { healthInsights } from '../core/health-insights.js';
 
 let range = 30;
 
@@ -70,7 +71,7 @@ export function renderTrends(root) {
   const avgProtein = loggedDays ? Math.round(proteinSeries.reduce((a, p) => a + p.y, 0) / Math.max(proteinSeries.length, 1)) : null;
   const baseline = d.baseline;
 
-  root.append(
+  mount(root, 
     rangeSwitch(rerender),
 
     h('section.card.summary-card', null,
@@ -82,6 +83,18 @@ export function renderTrends(root) {
         summaryItem('体重趋势', baseline.weightTrend != null ? `${baseline.weightTrend > 0 ? '+' : ''}${baseline.weightTrend}` : '—', 'kg/周'),
         summaryItem('平均活动', baseline.activeEnergy != null ? `${Math.round(baseline.activeEnergy)}` : '—', 'kcal/天'),
       )),
+
+    (() => {
+      const list = healthInsights(state.healthDays, {
+        targets, dietDaily: state.dietDaily, windowDays: range,
+      }).filter((i) => i.key !== 'nodata');
+      return list.length ? h('section.card', null,
+        h('div.card-head', null, h('h3', null, '这些数据说明什么'),
+          h('span.card-tag', null, `近 ${range} 天`)),
+        h('div.insight-list', null, list.map((i) => h(`div.insight.${i.level}`, null,
+          h('div.insight-title', null, i.title),
+          h('div.insight-text', null, i.text))))) : null;
+    })(),
 
     chartCard('体重', weightSeries.length ? `最新 ${num(weightSeries[weightSeries.length - 1].y, 1)} kg` : null,
       lineChart({ data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg' }),

@@ -54,12 +54,36 @@ export const ALIAS_KEYS = {
   sleep_analysis: 'sleepMinutes', 睡眠: 'sleepMinutes',
 };
 
+/**
+ * 键名归一化：去首尾空白、转小写、去掉空格/下划线/连字符。
+ * 手写或快捷指令拼出来的 JSON 常见 "activeEnergy "（末尾多个空格）、
+ * "active energy"、"Active_Energy" 这类写法，都应该认得。
+ */
+export function normalizeKey(k) {
+  return String(k).trim().toLowerCase().replace(/[\s_\-]+/g, '');
+}
+
 const SUM_KEYS = new Set(
   Object.values(HEALTH_TYPES).filter((t) => t.agg === 'sum').map((t) => t.key),
 );
-const LAST_KEYS = new Set(
-  Object.values(HEALTH_TYPES).filter((t) => t.agg === 'last' || t.agg === 'avg').map((t) => t.key),
-);
+
+/** 内部字段名集合，用于「用户直接写内部字段名」的情况 */
+const INTERNAL_KEYS = new Set(Object.values(HEALTH_TYPES).map((t) => t.key));
+
+/** 归一化后的别名查找表：别名与内部字段名都收进来 */
+const ALIAS_LOOKUP = (() => {
+  const map = new Map();
+  for (const [alias, key] of Object.entries(ALIAS_KEYS)) map.set(normalizeKey(alias), key);
+  for (const key of INTERNAL_KEYS) map.set(normalizeKey(key), key);
+  return map;
+})();
+
+const DATE_KEYS = new Set(['date', 'day', 'datetime', 'timestamp', 'time', '日期']);
+
+/** 把任意写法的字段名解析成内部字段名，认不出返回 null */
+export function resolveKey(k) {
+  return ALIAS_LOOKUP.get(normalizeKey(k)) || null;
+}
 
 /** 单位归一化 */
 export function normalizeValue(kind, value, unit) {
@@ -67,10 +91,16 @@ export function normalizeValue(kind, value, unit) {
   if (!Number.isFinite(v)) return null;
   const u = String(unit || '').trim().toLowerCase();
   switch (kind) {
-    case 'energy':
-      if (u === 'kj') return v / 4.184;
-      if (u === 'cal' || u === 'j') return v / 1000; // HK 里 Cal 即 kcal，小写 cal 视为卡
-      return v; // kcal / Cal
+    case 'energy': {
+      // 能量单位必须区分大小写：Apple 健康导出的 export.xml 写的是 unit="Cal"，
+      // 那是「大卡」也就是 kcal；而小写 cal 才是 1/1000 的小卡。
+      // 先转小写再比较会把 Cal 当成 cal，整套能量数据被缩小一千倍。
+      const raw = String(unit || '').trim();
+      if (/^kj$/i.test(raw)) return v / 4.184;
+      if (raw === 'cal') return v / 1000;
+      if (raw === 'J') return v / 4184;
+      return v; // kcal / Cal / KCAL
+    }
     case 'mass':
       if (u === 'lb') return v * 0.45359237;
       if (u === 'g') return v / 1000;
@@ -258,9 +288,16 @@ export function feedXmlChunk(chunk, aggregator) {
   return chunk.slice(tailStart);
 }
 
-/** 解析 Health Auto Export 风格的 JSON */
+/**
+ * 解析 JSON。同时支持三种形态：
+ *   1. Health Auto Export 的 { data: { metrics: [...] } }
+ *   2. 每天一条的数组 [{date, steps, ...}, ...]
+ *   3. 单独一条记录 {date, steps, ...} —— 快捷指令最容易产出这种
+ */
 export function parseHealthJson(json) {
   const days = new Map();
+  const ignored = new Set();
+
   const put = (dayKey, key, value, mode = 'sum') => {
     if (!dayKey || value == null || !Number.isFinite(Number(value))) return;
     let d = days.get(dayKey);
@@ -269,12 +306,11 @@ export function parseHealthJson(json) {
     else d[key] = Number(value);
   };
 
-  const metrics = json?.data?.metrics || json?.metrics || (Array.isArray(json) ? json : null);
+  const metrics = json?.data?.metrics || json?.metrics || (Array.isArray(json) && json[0]?.data ? json : null);
   if (Array.isArray(metrics)) {
     for (const metric of metrics) {
-      const rawName = String(metric.name || metric.type || '').toLowerCase();
-      const key = ALIAS_KEYS[rawName] || ALIAS_KEYS[rawName.replace(/\s+/g, '_')];
-      if (!key) continue;
+      const key = resolveKey(metric.name || metric.type || '');
+      if (!key) { if (metric.name) ignored.add(String(metric.name)); continue; }
       const meta = Object.values(HEALTH_TYPES).find((t) => t.key === key);
       for (const point of metric.data || []) {
         const stamp = parseAppleDate(point.date || point.startDate || point.timestamp);
@@ -288,17 +324,26 @@ export function parseHealthJson(json) {
     }
   }
 
-  // 也接受扁平结构：[{date:'2026-08-21', steps:8000, activeEnergy:520}, ...]
-  const flat = json?.days || (Array.isArray(json) ? json : null);
-  if (Array.isArray(flat)) {
-    for (const row of flat) {
-      const stamp = parseAppleDate(row.date || row.day);
-      const dayKey = stamp?.dayKey || (typeof row.date === 'string' ? row.date.slice(0, 10) : null);
+  // 扁平结构：数组、或单独一条记录
+  let rows = null;
+  if (Array.isArray(json?.days)) rows = json.days;
+  else if (Array.isArray(json) && !json[0]?.data) rows = json;
+  else if (json && typeof json === 'object' && !Array.isArray(json)
+    && !json.data && !json.metrics && !json.days) rows = [json];
+
+  if (rows) {
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue;
+      const dateEntry = Object.entries(row).find(([k]) => DATE_KEYS.has(normalizeKey(k)));
+      const stamp = dateEntry ? parseAppleDate(dateEntry[1]) : null;
+      const dayKey = stamp?.dayKey
+        || (typeof dateEntry?.[1] === 'string' ? dateEntry[1].slice(0, 10) : null);
       if (!dayKey) continue;
       for (const [k, v] of Object.entries(row)) {
-        if (k === 'date' || k === 'day') continue;
-        const key = ALIAS_KEYS[String(k).toLowerCase()] || (SUM_KEYS.has(k) || LAST_KEYS.has(k) || k === 'sleepMinutes' ? k : null);
-        if (key) put(dayKey, key, v, 'last');
+        if (DATE_KEYS.has(normalizeKey(k))) continue;
+        const key = resolveKey(k);
+        if (!key) { ignored.add(String(k)); continue; }
+        put(dayKey, key, v, 'last');
       }
     }
   }
@@ -309,7 +354,7 @@ export function parseHealthJson(json) {
     return c;
   });
   out.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return { days: out, recordCount: out.length, skipped: 0, types: [] };
+  return { days: out, recordCount: out.length, skipped: 0, types: [], ignoredKeys: [...ignored] };
 }
 
 /** 解析 CSV（首行为表头，需含 date 列） */
@@ -317,11 +362,12 @@ export function parseHealthCsv(text) {
   const lines = String(text).split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return { days: [], recordCount: 0, skipped: 0, types: [] };
   const split = (line) => line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
-  const header = split(lines[0]).map((h) => h.toLowerCase());
-  const dateIdx = header.findIndex((h) => /date|日期|day/.test(h));
+  const header = split(lines[0]);
+  const dateIdx = header.findIndex((h) => DATE_KEYS.has(normalizeKey(h)) || /date|日期|day/i.test(h));
   if (dateIdx === -1) return { days: [], recordCount: 0, skipped: lines.length - 1, types: [] };
 
   const rows = [];
+  const ignored = new Set();
   for (let i = 1; i < lines.length; i += 1) {
     const cells = split(lines[i]);
     const stamp = parseAppleDate(cells[dateIdx]);
@@ -330,14 +376,55 @@ export function parseHealthCsv(text) {
     const row = { date: dayKey, source: 'apple' };
     header.forEach((h, idx) => {
       if (idx === dateIdx) return;
-      const key = ALIAS_KEYS[h] || ALIAS_KEYS[h.replace(/[\s()]+/g, '_')];
+      const key = resolveKey(h);
       const v = Number(cells[idx]);
       if (key && Number.isFinite(v)) row[key] = v;
+      else if (!key && h.trim()) ignored.add(h.trim());
     });
     if (Object.keys(row).length > 2) rows.push(row);
   }
   rows.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return { days: rows, recordCount: rows.length, skipped: 0, types: [] };
+  return { days: rows, recordCount: rows.length, skipped: 0, types: [], ignoredKeys: [...ignored] };
+}
+
+/* ------------------------------------------------------------------ */
+/* 历史数据修复                                                          */
+/* ------------------------------------------------------------------ */
+
+/** 受单位缺陷影响的能量字段 */
+export const ENERGY_FIELDS = ['activeEnergy', 'restingEnergy', 'hkKcal'];
+
+/**
+ * 找出被「Cal 当成小卡」缺陷缩小一千倍的日子。
+ *
+ * 判据要足够保守，宁可漏也不能误伤手动录入的正确数据：
+ *  - 全天静息能量低于 50 kcal 在生理上不可能（成人躺一天也有 1200+）
+ *  - 活动能量低于 20 kcal 却走了一千步以上，同样只可能是量级错了
+ */
+export function findMisscaledEnergyDays(days = []) {
+  return days.filter((d) => {
+    const resting = Number(d.restingEnergy);
+    const active = Number(d.activeEnergy);
+    const steps = Number(d.steps) || 0;
+    if (resting > 0 && resting < 50) return true;
+    if (active > 0 && active < 20 && steps > 1000) return true;
+    return false;
+  });
+}
+
+/**
+ * 把受影响的日子的能量字段乘回 1000。
+ * 返回需要写回的记录，不改原数组。
+ */
+export function repairMisscaledEnergy(days = []) {
+  return findMisscaledEnergyDays(days).map((d) => {
+    const fixed = { ...d };
+    for (const key of ENERGY_FIELDS) {
+      const v = Number(fixed[key]);
+      if (Number.isFinite(v) && v > 0) fixed[key] = Math.round(v * 1000 * 100) / 100;
+    }
+    return fixed;
+  });
 }
 
 /** 计算近期基线（用于动态 TDEE 与趋势判断） */

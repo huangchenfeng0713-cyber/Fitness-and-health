@@ -1,11 +1,17 @@
-/** 饮食记录：搜索食物、按份量记账、编辑删除、常吃与"和昨天一样" */
+/**
+ * 饮食记录页
+ *
+ * 这一页做的是增量更新而不是整页重绘：搜索框、份量输入框这些
+ * 承载焦点的节点一旦被拆掉重建，iOS 就会收起键盘、输入被打断。
+ * 所以外壳只建一次（buildShell），之后只刷新会变的那几块容器。
+ */
 
-import { h, clearEl, num, toast, confirmAction, debounce, shiftDay } from '../lib/utils.js';
+import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount } from '../lib/utils.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood,
 } from '../lib/store.js';
-import { searchFoods, nutrientsFor, CATEGORIES, per100 } from '../data/foods.js';
+import { searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
 import { dayNav } from './dashboard.js';
 
@@ -14,157 +20,321 @@ const ui = {
   meal: null,
   selected: null,
   grams: 100,
+  unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按克输入
+  qty: 1,         // 份数
   showCustomForm: false,
 };
 
-function guessMeal() {
-  return ui.meal || currentMeal().key;
+/** 常驻 DOM 节点引用 */
+const nodes = {};
+
+const guessMeal = () => ui.meal || currentMeal().key;
+
+/* ---------------------------------------------------------------- 外壳 */
+
+function buildShell(root) {
+  clearEl(root);
+
+  nodes.dayNav = h('div.slot');
+  nodes.quick = h('div.slot');
+  nodes.favRow = h('div.slot');
+  nodes.results = h('div.slot');
+  nodes.portion = h('div.slot');
+  nodes.customBox = h('div.slot');
+  nodes.entries = h('div.slot');
+
+  nodes.searchInput = h('input.search-input', {
+    type: 'search',
+    enterkeyhint: 'search',
+    autocomplete: 'off',
+    autocapitalize: 'off',
+    autocorrect: 'off',
+    spellcheck: false,
+    placeholder: '搜索食物，支持拼音',
+    // 只刷新结果区，绝不重建这个 input 本身
+    oninput: debounce((e) => {
+      ui.query = e.target.value;
+      refreshResults();
+    }, 160),
+  });
+
+  nodes.customToggle = h('button.text-btn', {
+    onclick: () => {
+      ui.showCustomForm = !ui.showCustomForm;
+      nodes.customToggle.textContent = ui.showCustomForm ? '收起' : '+ 自定义';
+      refreshCustomForm();
+    },
+  }, '+ 自定义');
+
+  nodes.searchCard = h('section.card', null,
+    h('div.search-row', null, nodes.searchInput, nodes.customToggle),
+    nodes.customBox,
+    nodes.favRow,
+    nodes.results,
+    nodes.portion);
+
+  nodes.root = h('div.view-stack', null,
+    nodes.dayNav, nodes.quick, nodes.searchCard, nodes.entries);
+  mount(root, nodes.root);
 }
 
-/** 食物选择后的份量面板 */
-function portionPanel(rerender) {
-  const food = ui.selected;
-  if (!food) return null;
-  const nut = nutrientsFor(food, ui.grams);
-  const p = per100(food);
+/* ---------------------------------------------------------------- 各区块 */
 
-  const setGrams = (g) => {
-    ui.grams = Math.max(1, Math.round(g));
-    rerender();
+function refreshDayNav() {
+  mount(clearEl(nodes.dayNav), dayNav());
+}
+
+/** 顶部实时剩余额度，记账时随时能看到 */
+function refreshQuick() {
+  const d = state.derived;
+  clearEl(nodes.quick);
+  if (!d) return;
+  const { kcal, protein } = d.advice.gaps;
+  mount(nodes.quick, h('div.quick-strip', null,
+    h('div.qs-item', null, h('span', null, '还可吃'),
+      h('strong', { class: kcal.remaining < 0 ? 'neg' : '' }, `${num(kcal.remaining)} kcal`)),
+    h('div.qs-item', null, h('span', null, '蛋白还差'),
+      h('strong', { class: protein.remaining <= 0 ? 'pos' : '' }, `${num(Math.max(protein.remaining, 0), 1)} g`)),
+    h('div.qs-item', null, h('span', null, '下一餐'),
+      h('strong', null, `${MEAL_LABEL[d.advice.budget.meal.key]} ${num(d.advice.budget.kcal)} kcal`)),
+  ));
+}
+
+function refreshFav() {
+  clearEl(nodes.favRow);
+  if (ui.query) return;
+  const favorites = state.favorites.map(findFood).filter(Boolean).slice(0, 10);
+  if (!favorites.length) return;
+  mount(nodes.favRow, h('div.fav-row', null,
+    h('span.fav-label', null, '常吃'),
+    favorites.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name))));
+}
+
+function refreshResults() {
+  clearEl(nodes.results);
+  refreshFav();
+  if (!ui.query) return;
+
+  const results = searchFoods(ui.query, allFoods(), 24);
+  if (!results.length) {
+    mount(nodes.results, h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'));
+    return;
+  }
+  mount(nodes.results, h('div.search-results', null, results.map((f) => {
+    const p = per100(f);
+    return h('button.search-item', { onclick: () => selectFood(f) },
+      h('div.search-item-main', null,
+        h('strong', null, f.name),
+        h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / 100g`)),
+      h('span.chip', null, CATEGORIES[f.cat] || '自定义'));
+  })));
+}
+
+function selectFood(food) {
+  ui.selected = food;
+  ui.unitIdx = 0;
+  ui.qty = 1;
+  ui.grams = food.s?.[0]?.[1] || 100;
+  refreshPortion();
+  nodes.portion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/**
+ * 份量面板。
+ *
+ * 以「份数 × 常用单位」为主、克数为辅：没有厨房秤的人报不出
+ * 「185 克」，但能说出「一碗」「半份」。旁边给出实物参照，
+ * 想精确时再切到「克」自己填。
+ */
+function refreshPortion() {
+  clearEl(nodes.portion);
+  const food = ui.selected;
+  if (!food) return;
+
+  const p = per100(food);
+  const servings = food.s || [['一份', 100]];
+  const gramMode = () => ui.unitIdx >= servings.length;
+  const step = () => (gramMode() ? 10 : 0.5);
+
+  const computeGrams = () => (gramMode()
+    ? Math.max(1, Math.round(ui.qty))
+    : Math.max(1, Math.round(servings[ui.unitIdx][1] * ui.qty)));
+
+  const qtyValue = h('span.qty-value');
+  const qtyUnit = h('span.qty-unit');
+  const gramsHint = h('div.grams-hint');
+  const gramsInput = h('input.grams-input', {
+    type: 'number', min: 1, step: 5, inputmode: 'numeric',
+    'aria-label': '克数',
+    oninput: (e) => {
+      ui.qty = Math.max(1, Number(e.target.value) || 1);
+      ui.grams = computeGrams();
+      syncReadouts();
+    },
+  });
+
+  function syncReadouts() {
+    ui.grams = computeGrams();
+    const unit = gramMode() ? 'g' : unitLabel(servings[ui.unitIdx][0]);
+    qtyValue.textContent = gramMode()
+      ? String(ui.grams)
+      : String(Number(ui.qty.toFixed(2)));
+    qtyUnit.textContent = unit;
+    gramsHint.textContent = gramMode()
+      ? `${p.kcal} kcal / 100g`
+      : `≈ ${ui.grams} g`;
+    if (gramMode()) gramsInput.value = ui.grams;
+    refreshPreview();
+  }
+
+  const bump = (dir) => {
+    ui.qty = Math.max(step(), Number((ui.qty + dir * step()).toFixed(2)));
+    syncReadouts();
+    refreshQuickChips();
   };
 
-  return h('div.portion-panel', null,
+  // 单位切换：食物自带的常用份量 + 一个「克」档
+  const unitRow = h('div.unit-row', null,
+    servings.map(([name, g], i) => h('button', {
+      class: `chip-btn${ui.unitIdx === i ? ' active' : ''}`,
+      onclick: () => {
+        ui.unitIdx = i; ui.qty = 1;
+        rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
+      },
+    }, `${unitLabel(name)}（${g}g）`)),
+    h('button', {
+      class: `chip-btn${gramMode() ? ' active' : ''}`,
+      onclick: () => {
+        ui.unitIdx = servings.length; ui.qty = ui.grams;
+        rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
+      },
+    }, '按克输入'));
+
+  function rebuildUnitRow() {
+    [...unitRow.children].forEach((btn, i) => {
+      const active = i === servings.length ? gramMode() : ui.unitIdx === i;
+      btn.className = `chip-btn${active ? ' active' : ''}`;
+    });
+  }
+
+  const quickChips = h('div.qty-quick');
+  function refreshQuickChips() {
+    const presets = gramMode() ? [50, 100, 150, 200, 300] : [0.5, 1, 1.5, 2, 3];
+    mount(clearEl(quickChips), presets.map((v) => h('button', {
+      class: `chip-btn${Math.abs(ui.qty - v) < 1e-6 ? ' active' : ''}`,
+      onclick: () => { ui.qty = v; syncReadouts(); refreshQuickChips(); },
+    }, gramMode() ? `${v}g` : `${v} ${unitLabel(servings[ui.unitIdx][0])}`)));
+  }
+
+  const gramInputWrap = h('div.gram-input-wrap', null,
+    h('span', null, '克数'), gramsInput, h('span.unit', null, 'g'));
+  function toggleGramInput() { gramInputWrap.hidden = !gramMode(); }
+
+  nodes.preview = h('div.portion-preview');
+  nodes.mealRow = h('div.portion-meal', null);
+  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+
+  const refreshMealChips = () => {
+    mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
+      class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
+      onclick: () => { ui.meal = m.key; refreshMealChips(); addBtn.textContent = `记录到${m.label}`; },
+    }, m.label)));
+  };
+
+  addBtn.onclick = async () => {
+    addBtn.disabled = true;
+    await addEntry({
+      foodId: food.id, grams: ui.grams, meal: guessMeal(),
+      custom: food.custom ? food : null,
+    });
+    toast(`已记录 ${food.name} ${ui.grams}g`, 'ok');
+    ui.selected = null;
+    ui.query = '';
+    nodes.searchInput.value = '';
+    refreshResults();
+    refreshPortion();
+  };
+
+  refreshMealChips();
+  refreshQuickChips();
+  toggleGramInput();
+
+  mount(nodes.portion, h('div.portion-panel', null,
     h('div.portion-head', null,
       h('div', null,
         h('strong', null, food.name),
         h('span.chip', null, CATEGORIES[food.cat] || '自定义'),
-        h('div.portion-per100', null, `每 100g：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
-      h('button.icon-btn', { onclick: () => { ui.selected = null; rerender(); } }, '×')),
+        h('div.portion-per100', null,
+          `每 100g：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
+      h('button.icon-btn', {
+        'aria-label': '取消',
+        onclick: () => { ui.selected = null; refreshPortion(); },
+      }, '×')),
 
-    h('div.portion-servings', null,
-      (food.s || []).map(([name, g]) => h('button', {
-        class: `chip-btn${ui.grams === g ? ' active' : ''}`,
-        onclick: () => setGrams(g),
-      }, `${name} ${g}g`)),
-      [50, 100, 150, 200].map((g) => h('button', {
-        class: `chip-btn${ui.grams === g ? ' active' : ''}`,
-        onclick: () => setGrams(g),
-      }, `${g}g`))),
+    h('div.field-label', null, '吃了多少'),
+    unitRow,
 
-    h('div.portion-grams', null,
-      h('button.step-btn', { onclick: () => setGrams(ui.grams - 10) }, '−10'),
-      h('input.grams-input', {
-        type: 'number', value: ui.grams, min: 1, step: 5, inputmode: 'numeric',
-        oninput: (e) => { ui.grams = Math.max(1, Number(e.target.value) || 1); renderNutrientPreview(); },
-      }),
-      h('span.unit', null, 'g'),
-      h('button.step-btn', { onclick: () => setGrams(ui.grams + 10) }, '+10')),
+    h('div.qty-stepper', null,
+      h('button.step-btn.round', { 'aria-label': '减少', onclick: () => bump(-1) }, '−'),
+      h('div.qty-readout', null, qtyValue, qtyUnit, gramsHint),
+      h('button.step-btn.round', { 'aria-label': '增加', onclick: () => bump(1) }, '+')),
 
-    h('div.portion-preview', { id: 'portion-preview' }, nutrientPreview(nut)),
+    quickChips,
+    gramInputWrap,
 
-    h('div.portion-meal', null,
-      MEALS.map((m) => h('button', {
-        class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
-        onclick: () => { ui.meal = m.key; rerender(); },
-      }, m.label))),
+    h('p.portion-tip', null, portionTip(food)),
 
-    h('button.primary-btn', {
-      onclick: async () => {
-        await addEntry({ foodId: food.id, grams: ui.grams, meal: guessMeal(), custom: food.custom ? food : null });
-        toast(`已记录 ${food.name} ${ui.grams}g`, 'ok');
-        ui.selected = null;
-        ui.query = '';
-        rerender();
-      },
-    }, `记录到${MEAL_LABEL[guessMeal()]}`),
-  );
+    nodes.preview,
+    h('div.field-label', null, '记到哪一餐'),
+    nodes.mealRow,
+    addBtn));
+
+  syncReadouts();
 }
 
-function nutrientPreview(nut) {
-  return [
-    h('div.np', null, h('strong', null, num(nut.kcal)), h('span', null, 'kcal')),
-    h('div.np', null, h('strong', null, num(nut.protein, 1)), h('span', null, '蛋白 g')),
-    h('div.np', null, h('strong', null, num(nut.fat, 1)), h('span', null, '脂肪 g')),
-    h('div.np', null, h('strong', null, num(nut.carb, 1)), h('span', null, '碳水 g')),
-    h('div.np', null, h('strong', null, num(nut.sodium)), h('span', null, '钠 mg')),
-  ];
+function refreshPreview() {
+  if (!nodes.preview || !ui.selected) return;
+  const n = nutrientsFor(ui.selected, ui.grams);
+  mount(clearEl(nodes.preview), 
+    h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
+    h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),
+    h('div.np', null, h('strong', null, num(n.fat, 1)), h('span', null, '脂肪 g')),
+    h('div.np', null, h('strong', null, num(n.carb, 1)), h('span', null, '碳水 g')),
+    h('div.np', null, h('strong', null, num(n.sodium)), h('span', null, '钠 mg')));
 }
 
-function renderNutrientPreview() {
-  const box = document.getElementById('portion-preview');
-  if (!box || !ui.selected) return;
-  clearEl(box).append(...nutrientPreview(nutrientsFor(ui.selected, ui.grams)));
-}
+function refreshCustomForm() {
+  clearEl(nodes.customBox);
+  if (!ui.showCustomForm) return;
 
-function searchPanel(rerender) {
-  const results = searchFoods(ui.query, allFoods(), ui.query ? 24 : 0);
-  const favorites = state.favorites.map(findFood).filter(Boolean).slice(0, 10);
-
-  return h('section.card', null,
-    h('div.search-row', null,
-      h('input.search-input', {
-        type: 'search',
-        placeholder: '搜索食物，支持拼音',
-        value: ui.query,
-        oninput: debounce((e) => { ui.query = e.target.value; rerender(); }, 180),
-      }),
-      h('button.text-btn', { onclick: () => { ui.showCustomForm = !ui.showCustomForm; rerender(); } },
-        ui.showCustomForm ? '收起' : '+ 自定义')),
-
-    ui.showCustomForm && customFoodForm(rerender),
-
-    !ui.query && favorites.length ? h('div.fav-row', null,
-      h('span.fav-label', null, '常吃'),
-      favorites.map((f) => h('button.chip-btn', {
-        onclick: () => { ui.selected = f; ui.grams = f.s?.[0]?.[1] || 100; rerender(); },
-      }, f.name))) : null,
-
-    ui.query ? h('div.search-results', null,
-      results.length
-        ? results.map((f) => {
-          const p = per100(f);
-          return h('button.search-item', {
-            onclick: () => { ui.selected = f; ui.grams = f.s?.[0]?.[1] || 100; rerender(); },
-          },
-          h('div.search-item-main', null,
-            h('strong', null, f.name),
-            h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / 100g`)),
-          h('span.chip', null, CATEGORIES[f.cat] || '自定义'));
-        })
-        : h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'))
-      : null,
-
-    ui.selected && portionPanel(rerender),
-  );
-}
-
-function customFoodForm(rerender) {
   const fields = [
-    ['name', '名称', 'text', ''],
-    ['kcal', '热量 kcal/100g', 'number', ''],
-    ['protein', '蛋白 g', 'number', ''],
-    ['fat', '脂肪 g', 'number', ''],
-    ['carb', '碳水 g', 'number', ''],
-    ['sodium', '钠 mg', 'number', ''],
+    ['name', '名称', 'text'],
+    ['kcal', '热量 kcal', 'number'],
+    ['protein', '蛋白 g', 'number'],
+    ['fat', '脂肪 g', 'number'],
+    ['carb', '碳水 g', 'number'],
+    ['sodium', '钠 mg', 'number'],
   ];
   const inputs = {};
-  const form = h('div.custom-form', null,
+  const grid = h('div.form-grid', null, fields.map(([key, label, type]) => {
+    const input = h('input', {
+      type, placeholder: label, step: '0.1',
+      inputmode: type === 'number' ? 'decimal' : 'text',
+    });
+    inputs[key] = input;
+    return h('label.form-field', null, h('span', null, label), input);
+  }));
+
+  mount(nodes.customBox, h('div.custom-form', null,
     h('p.form-hint', null, '按包装上的「营养成分表（每 100 克）」填写即可。'),
-    h('div.form-grid', null, fields.map(([key, label, type]) => {
-      const input = h('input', { type, placeholder: label, step: '0.1', inputmode: type === 'number' ? 'decimal' : 'text' });
-      inputs[key] = input;
-      return h('label.form-field', null, h('span', null, label), input);
-    })),
+    grid,
     h('button.primary-btn', {
       onclick: async () => {
         const name = inputs.name.value.trim();
         const kcal = Number(inputs.kcal.value);
         if (!name || !Number.isFinite(kcal)) { toast('至少填写名称和每 100g 热量', 'warn'); return; }
         const food = await addCustomFood({
-          name,
-          alias: '',
-          cat: 'other',
-          custom: true,
+          name, alias: '', cat: 'other', custom: true,
           n: [kcal, Number(inputs.protein.value) || 0, Number(inputs.fat.value) || 0,
             Number(inputs.carb.value) || 0, 0, 0, Number(inputs.sodium.value) || 0],
           s: [['一份', 100]],
@@ -172,75 +342,81 @@ function customFoodForm(rerender) {
         });
         toast(`已添加「${name}」`, 'ok');
         ui.showCustomForm = false;
-        ui.selected = food;
-        ui.grams = 100;
-        rerender();
+        nodes.customToggle.textContent = '+ 自定义';
+        refreshCustomForm();
+        selectFood(food);
       },
     }, '保存到我的食物库'),
     state.customFoods.length ? h('div.custom-list', null,
       state.customFoods.map((f) => h('span.custom-chip', null, f.name,
         h('button', {
-          onclick: async () => { await removeCustomFood(f.id); rerender(); },
-          title: '删除',
+          'aria-label': `删除 ${f.name}`,
+          onclick: async () => { await removeCustomFood(f.id); refreshCustomForm(); },
         }, '×')))) : null,
-  );
-  return form;
+  ));
 }
 
-function entryList(rerender) {
-  const entries = [...state.dietEntries].sort((a, b) => {
-    const order = MEALS.map((m) => m.key);
-    return order.indexOf(a.meal) - order.indexOf(b.meal) || String(a.time).localeCompare(String(b.time));
-  });
+function refreshEntries() {
+  clearEl(nodes.entries);
+  const order = MEALS.map((m) => m.key);
+  const entries = [...state.dietEntries].sort(
+    (a, b) => order.indexOf(a.meal) - order.indexOf(b.meal) || String(a.time).localeCompare(String(b.time)),
+  );
 
   if (!entries.length) {
-    return h('section.card', null,
+    mount(nodes.entries, h('section.card', null,
       h('div.card-head', null, h('h3', null, '这一天的记录')),
       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
-      copyRow(rerender));
+      copyRow()));
+    return;
   }
 
   const grouped = {};
   for (const e of entries) (grouped[e.meal] ||= []).push(e);
 
-  return h('section.card', null,
+  mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '这一天的记录'),
-      h('span.card-tag', null, `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`)),
+      h('span.card-tag', null,
+        `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`)),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
         h('strong', null, MEAL_LABEL[meal] || meal),
         h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
-      list.map((e) => h('div.entry-row', null,
-        h('div.entry-main', null,
-          h('div.entry-name', null, e.name),
-          h('div.entry-meta', null,
-            h('strong', null, `${num(e.kcal)} kcal`),
-            ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
-        h('div.entry-actions', null,
-          h('input.entry-grams', {
-            type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',
-            title: '修改克数',
-            onchange: async (ev) => {
-              const g = Number(ev.target.value);
-              if (g > 0) { await updateEntry(e.id, { grams: g }); toast('已更新', 'ok'); }
-            },
-          }),
-          h('span.unit', null, 'g'),
-          h('button.icon-btn.danger', {
-            title: '删除',
-            onclick: async () => { await removeEntry(e.id); toast('已删除'); },
-          }, '×')))))),
-    copyRow(rerender));
+      list.map(entryRow))),
+    copyRow()));
 }
 
-function copyRow(rerender) {
+function entryRow(e) {
+  return h('div.entry-row', null,
+    h('div.entry-main', null,
+      h('div.entry-name', null, e.name),
+      h('div.entry-meta', null,
+        h('strong', null, `${num(e.kcal)} kcal`),
+        ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
+    h('div.entry-actions', null,
+      h('input.entry-grams', {
+        type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',
+        'aria-label': `${e.name} 的克数`,
+        // 用 change：输入过程中不落库，避免每敲一个数字就重算重绘
+        onchange: async (ev) => {
+          const g = Number(ev.target.value);
+          if (g > 0) { await updateEntry(e.id, { grams: g }); toast('已更新', 'ok'); }
+        },
+      }),
+      h('span.unit', null, 'g'),
+      h('button.icon-btn.danger', {
+        'aria-label': `删除 ${e.name}`,
+        onclick: async () => { await removeEntry(e.id); toast('已删除'); },
+      }, '×')));
+}
+
+function copyRow() {
   return h('div.copy-row', null,
     h('button.text-btn', {
       onclick: async () => {
         const n = await copyDay(shiftDay(state.day, -1));
         toast(n ? `已复制昨天的 ${n} 条记录` : '昨天没有记录', n ? 'ok' : 'warn');
-        rerender();
       },
     }, '和昨天一样'),
     h('button.text-btn.danger', {
@@ -249,31 +425,22 @@ function copyRow(rerender) {
         if (!confirmAction(`确定清空 ${state.day} 的全部 ${state.dietEntries.length} 条记录？`)) return;
         for (const e of [...state.dietEntries]) await removeEntry(e.id);
         toast('已清空');
-        rerender();
       },
     }, '清空这一天'),
   );
 }
 
-export function renderDiet(root) {
-  const rerender = () => renderDiet(root);
-  clearEl(root);
-  root.append(
-    dayNav(),
-    quickStrip(),
-    searchPanel(rerender),
-    entryList(rerender),
-  );
-}
+/* ---------------------------------------------------------------- 入口 */
 
-/** 顶部一条实时的剩余额度，记账时随时能看到 */
-function quickStrip() {
-  const d = state.derived;
-  if (!d) return null;
-  const { kcal, protein } = d.advice.gaps;
-  return h('div.quick-strip', null,
-    h('div.qs-item', null, h('span', null, '还可吃'), h('strong', { class: kcal.remaining < 0 ? 'neg' : '' }, `${num(kcal.remaining)} kcal`)),
-    h('div.qs-item', null, h('span', null, '蛋白还差'), h('strong', { class: protein.remaining <= 0 ? 'pos' : '' }, `${num(Math.max(protein.remaining, 0), 1)} g`)),
-    h('div.qs-item', null, h('span', null, '下一餐'), h('strong', null, `${MEAL_LABEL[d.advice.budget.meal.key]} ${num(d.advice.budget.kcal)} kcal`)),
-  );
+export function renderDiet(root) {
+  // 外壳还挂在页面上就只做增量刷新，被别的页面清掉了才重建
+  if (nodes.root?.parentNode !== root) {
+    buildShell(root);
+    refreshCustomForm();
+    refreshResults();
+    refreshPortion();
+  }
+  refreshDayNav();
+  refreshQuick();
+  refreshEntries();
 }
