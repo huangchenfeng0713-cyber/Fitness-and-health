@@ -137,7 +137,76 @@ function runUrlImport() {
   });
 }
 
+/*
+ * 安全区（刘海 / 状态栏 / 底部横条）不能只交给 CSS 的 env() 算一次。
+ *
+ * iOS 上把网页加到主屏幕独立运行时，env(safe-area-inset-*) 在首帧经常还是 0，
+ * 要等一次重排才会给出真值。用户看到的就是：顶栏一开始压在状态栏底下，标题被
+ * 状态栏那层半透明糊住；随手在页面上双击一下（双击本身触发了重排），整页内容
+ * 才「哐」地下移一个状态栏的高度，毛玻璃也跟着没了。反复改 CSS 治不好，因为
+ * CSS 只在样式重算时才会重新读 env()，而那次重算迟迟不来。
+ *
+ * 这里的做法：每个可能重排的时机都拿探针重新量一遍 env()，量到多少就写多少到
+ * <html> 上。写变量这个动作本身会触发重绘，等于把用户手动双击的那一下替我们做了。
+ */
+const STATUS_BAR_FALLBACK = 44;   // 兜底用的状态栏高度（pt），只在确认网页盖住状态栏却量到 0 时才用
+
+function readEnvInsets() {
+  // 自定义属性在 getComputedStyle 里拿到的是 env(...) 这段文本本身，不是算出来的长度，
+  // 所以得插一个真实元素、把值落到 padding 上，再读它的计算值。
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;'
+    + 'padding:var(--env-top) var(--env-right) var(--env-bottom) var(--env-left);';
+  document.body.appendChild(probe);
+  const cs = getComputedStyle(probe);
+  const px = (v) => Math.max(0, Math.round(parseFloat(v) || 0));
+  const out = {
+    top: px(cs.paddingTop), bottom: px(cs.paddingBottom),
+    left: px(cs.paddingLeft), right: px(cs.paddingRight),
+  };
+  probe.remove();
+  return out;
+}
+
+/** 是否以「添加到主屏幕」的独立窗口在跑 */
+function isStandalone() {
+  return navigator.standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches;
+}
+
+function applySafeInsets() {
+  const env = readEnvInsets();
+  /*
+   * 只有「独立运行 + 窗口正好铺满整块屏幕」才说明网页真的伸到了状态栏底下，
+   * 这时量到 0 一定是没算出来，得兜一个状态栏的高度。状态栏样式是 default 时
+   * 系统会把窗口顶下来，innerHeight 比屏幕矮一截，就不该再补——补了就是白留一条。
+   */
+  const coversStatusBar = isStandalone() && window.innerHeight >= (window.screen?.height ?? 0) - 1;
+  const top = coversStatusBar ? Math.max(env.top, STATUS_BAR_FALLBACK) : env.top;
+  const root = document.documentElement;
+  const set = (name, v) => {
+    if (root.style.getPropertyValue(name) !== `${v}px`) root.style.setProperty(name, `${v}px`);
+  };
+  set('--safe-top', top);
+  set('--safe-bottom', env.bottom);
+  set('--safe-left', env.left);
+  set('--safe-right', env.right);
+}
+
+function watchSafeInsets() {
+  applySafeInsets();
+  // iOS 那个真值可能晚几帧才到，多补几次；之后就只靠事件驱动。
+  requestAnimationFrame(applySafeInsets);
+  [120, 400, 1200].forEach((ms) => setTimeout(applySafeInsets, ms));
+  ['resize', 'orientationchange', 'pageshow', 'focus'].forEach((evt) =>
+    window.addEventListener(evt, applySafeInsets));
+  window.visualViewport?.addEventListener('resize', applySafeInsets);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) applySafeInsets(); });
+}
+
 async function boot() {
+  watchSafeInsets();
   viewRoot = $('#view');
   const hash = location.hash.replace('#', '');
   if (TABS.some((t) => t.key === hash)) current = hash;
