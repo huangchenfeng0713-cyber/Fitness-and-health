@@ -58,6 +58,23 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * 快速连点会触发 iOS 的双击缩放。touch-action: manipulation 只关掉
+ * 双击缩放，双指捏合缩放照常可用 —— 不像 user-scalable=no 会把
+ * 无障碍缩放一并废掉。
+ */
+button, a, label, summary, [role="button"],
+input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* 连点时按钮文字被选中会闪蓝底，顺手一起去掉 */
+button, .tab, summary, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -70,35 +87,66 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * 三段式：顶栏 / 可滚动内容区 / tab 栏。
+ *
+ * 原先是「tab 栏 fixed + 页面底部塞 padding 避让」，代价是每一页都能
+ * 往下拉出一整块什么都没有的区域（实测 102px 死滚动）。改成 flex 之后，
+ * 滚动容器的高度天然就是顶栏与 tab 栏之间的空间，不需要任何补偿。
+ * 顺带让顶栏不必再 position: sticky —— 它已经在滚动容器外面了。
+ */
+html, body { height: 100%; }
 #app {
   max-width: 720px;
   margin: 0 auto;
-  padding-bottom: calc(72px + var(--safe-bottom));
+  height: 100vh;
+  height: 100dvh;   /* iOS 地址栏收放时不跳动 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ============ 顶栏 / 标签栏 ============ */
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(14px);
+  flex: none;
+  /* 不用 backdrop-filter：iOS 上它会把自身文字一起糊掉，看着像蒙了层毛玻璃。
+     内容区已经在独立的滚动容器里，顶栏不会被内容穿过，实色就够了。 */
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding-top: var(--safe-top);
 }
-.topbar-inner { padding: 10px calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left)); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
-.topbar-sub { font-size: 12px; color: var(--faint); }
+.topbar-inner {
+  display: flex; align-items: center; gap: 6px; min-height: 44px;
+  padding: 3px calc(10px + var(--safe-right)) 5px calc(10px + var(--safe-left));
+}
+.topbar h1 {
+  font-size: 17px; margin: 0 0 0 6px; font-weight: 650; letter-spacing: -.01em;
+}
 
-.view { padding: 14px calc(14px + var(--safe-right)) 24px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
+/* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
+.topbar-day {
+  flex: 1; min-width: 0; text-align: center; line-height: 1.15;
+  border: 0; background: none; color: inherit; font-family: inherit;
+  cursor: pointer; padding: 2px 4px;
+}
+.topbar-day strong { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.topbar-date { display: block; font-size: 10.5px; color: var(--faint); margin-top: 1px; }
+.nav-arrow {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+  border: 0; background: none; color: var(--muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-arrow:active { background: var(--card-2); }
+.nav-arrow:disabled { opacity: .25; cursor: default; }
+
+.view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+  padding: 12px calc(14px + var(--safe-right)) 14px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
 
 .tabbar {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 30;
+  flex: none;
   display: flex;
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
+  background: var(--card);
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
 }
@@ -145,19 +193,6 @@ body {
   border-radius: var(--radius-sm); color: var(--text);
 }
 .privacy-note { font-size: 11.5px; color: var(--faint); margin: 10px 0 0; }
-
-/* ============ 日期导航 ============ */
-.day-nav {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 8px 10px;
-}
-.day-nav-center {
-  flex: 1; text-align: center; line-height: 1.25; border: 0; background: none;
-  color: inherit; cursor: pointer; padding: 4px; font-family: inherit;
-}
-.day-nav-center strong { font-size: 15px; }
-.day-nav-date { display: block; font-size: 11px; color: var(--faint); }
 
 /* ============ 主卡（状态 + 热量 + 宏量） ============ */
 .hero { border-top: 3px solid var(--accent); }
@@ -248,6 +283,12 @@ body {
   font-size: 10.5px; padding: 1.5px 6px; border-radius: 5px; white-space: nowrap;
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); font-weight: 400;
 }
+.chip-est {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn); border-color: transparent;
+}
+.search-item-tags { display: flex; gap: 4px; flex-shrink: 0; }
+
 .chip-danger {
   background: color-mix(in srgb, var(--danger) 11%, transparent);
   color: var(--danger); border-color: transparent;
@@ -412,7 +453,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .portion-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .portion-head strong { font-size: 15px; margin-right: 6px; }
 .portion-per100 { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
-.portion-meal, .unit-row, .qty-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.portion-meal, .unit-row, .qty-quick, .sugar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 .field-label {
   font-size: 12px; color: var(--faint); margin-top: 14px; font-weight: 600;
@@ -580,6 +621,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .chart .target-label { fill: var(--muted); }
 
 /* ============ 引导 / 提示 ============ */
+.banner-slot { flex: none; }
 .banner-slot:empty { display: none; }
 .onboard {
   margin: 14px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left)); padding: 16px; background: var(--accent-soft);

@@ -201,10 +201,10 @@ export async function saveProfile(patch) {
 }
 
 /** 新增一条饮食记录 */
-export async function addEntry({ foodId, name, grams, meal, custom = null, note = '' }) {
+export async function addEntry({ foodId, name, grams, meal, custom = null, note = '', sugarLevel = null }) {
   const food = custom || findFood(foodId);
   if (!food) throw new Error('找不到这个食物');
-  const nutrients = custom?.nutrients || nutrientsFor(food, grams);
+  const nutrients = custom?.nutrients || nutrientsFor(food, grams, sugarLevel);
   const entry = {
     date: state.day,
     time: new Date().toISOString(),
@@ -212,6 +212,8 @@ export async function addEntry({ foodId, name, grams, meal, custom = null, note 
     foodId: food.id || null,
     name: name || food.name,
     grams: Number(grams) || 0,
+    // 字段名不能叫 sugar：下面展开的 nutrients 里 sugar 是糖的克数，会把档位覆盖掉
+    sugarLevel,
     note,
     ...nutrients,
   };
@@ -232,7 +234,7 @@ export async function updateEntry(id, patch) {
   let next = { ...current, ...patch };
   if (patch.grams != null && current.foodId) {
     const food = findFood(current.foodId);
-    if (food) next = { ...next, ...nutrientsFor(food, patch.grams) };
+    if (food) next = { ...next, ...nutrientsFor(food, patch.grams, current.sugarLevel) };
   }
   await db.put(db.STORES.diet, next);
   state.dietEntries = state.dietEntries.map((e) => (e.id === id ? next : e));

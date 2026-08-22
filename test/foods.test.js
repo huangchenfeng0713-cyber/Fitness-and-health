@@ -102,3 +102,139 @@ test('游离糖系数只对该免除的类别免除', () => {
     if (f.cat === 'snack') assert.equal(factor, 1, `${f.name} 的糖应计入`);
   }
 });
+
+test('连锁快餐品牌都收录了，且搜品牌名首条是主力单品', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const brands = {
+    肯德基: '鸡腿堡', kfc: '鸡腿堡', 麦当劳: '巨无霸', 塔斯汀: '堡',
+    必胜客: '比萨', 汉堡王: '皇堡', 德克士: null, 华莱士: null,
+    赛百味: '三明治', 星巴克: null, 瑞幸: '拿铁', 蜜雪: null,
+    喜茶: null, 老乡鸡: null, 沙县: null, 萨莉亚: null, 吉野家: null,
+  };
+  for (const [kw, expectFirst] of Object.entries(brands)) {
+    const hits = searchFoods(kw);
+    assert.ok(hits.length > 0, `搜不到品牌「${kw}」`);
+    if (expectFirst) {
+      assert.ok(hits[0].name.includes(expectFirst),
+        `搜「${kw}」首条应是主力单品，实际是「${hits[0].name}」`);
+    }
+  }
+  // 同名单品要能按品牌区分
+  const fries = searchFoods('薯条').map((f) => f.name);
+  assert.ok(fries.some((n) => n.includes('肯德基')) && fries.some((n) => n.includes('麦当劳')),
+    `薯条应能区分品牌：${fries.join(' / ')}`);
+  assert.ok(isEstimated(FOOD_BY_ID.get('tastien_spicy')), '塔斯汀未公开营养表，应标为估算');
+  assert.ok(!isEstimated(FOOD_BY_ID.get('mcd_bigmac')), '巨无霸有官方数据，不该标估算');
+});
+
+test('连锁快餐的份量就是品牌的标准份，不是 100g', () => {
+  const chain = FOODS.filter((f) => f.cat === 'chain');
+  assert.ok(chain.length >= 50, `只有 ${chain.length} 条连锁快餐`);
+  for (const f of chain) {
+    const [name, g] = f.s[0];
+    assert.ok(/个|块|只|份|杯|罐|中份|大杯|中碗|五块/.test(name),
+      `${f.name} 的份量名「${name}」不像品牌标准份`);
+    assert.ok(g >= 40 && g <= 600, `${f.name} 的份量 ${g}g 不合理`);
+  }
+});
+
+test('搜索同分时按录入顺序，不按名称笔画', () => {
+  // 数据里同品牌按常点程度排列，按名称排会让配菜跑到主食前面
+  const kfc = searchFoods('肯德基').map((f) => f.name);
+  const burgerAt = kfc.findIndex((n) => n.includes('香辣鸡腿堡'));
+  const soupAt = kfc.findIndex((n) => n.includes('芙蓉鲜蔬汤'));
+  assert.ok(burgerAt >= 0 && soupAt >= 0);
+  assert.ok(burgerAt < soupAt, `主力单品应排在配菜前：${kfc.slice(0, 4).join(' / ')}`);
+});
+
+test('茶饮连锁品牌与主力品类都收录了', () => {
+  const brands = ['蜜雪', '喜茶', '奈雪', '茶百道', '古茗', '沪上阿姨', '一点点',
+    'coco', '书亦', '益禾堂', '茶颜悦色', '霸王茶姬', '库迪', '瑞幸', '星巴克'];
+  const missing = brands.filter((b) => searchFoods(b).length === 0);
+  assert.deepEqual(missing, [], `搜不到品牌：${missing.join('、')}`);
+
+  const kinds = ['珍珠奶茶', '烧仙草', '奶盖', '黑糖', '芋圆', '水果茶', '纯茶', '拿铁'];
+  const missKind = kinds.filter((k) => searchFoods(k).length === 0);
+  assert.deepEqual(missKind, [], `搜不到品类：${missKind.join('、')}`);
+});
+
+test('糖度五档齐全，且包含常见别名', async () => {
+  const { SUGAR_LEVELS } = await import('../js/data/foods.js');
+  assert.deepEqual(SUGAR_LEVELS.map((l) => l.label),
+    ['全糖', '七分糖', '半糖', '三分糖', '无糖'],
+    '国内奶茶店的标准档位就是这五档');
+  assert.deepEqual(SUGAR_LEVELS.map((l) => l.ratio), [1, 0.7, 0.5, 0.3, 0]);
+  // 少糖 / 微糖 是同档的另一种叫法，得认
+  assert.equal(SUGAR_LEVELS.find((l) => l.label === '七分糖').alias, '少糖');
+  assert.equal(SUGAR_LEVELS.find((l) => l.label === '三分糖').alias, '微糖');
+});
+
+test('糖度换算：热量与糖随档位单调下降', async () => {
+  const { SUGAR_LEVELS } = await import('../js/data/foods.js');
+  const boba = FOOD_BY_ID.get('tea_boba');
+  const rows = SUGAR_LEVELS.map((l) => ({ label: l.label, ...nutrientsFor(boba, 500, l.key) }));
+  for (let i = 1; i < rows.length; i += 1) {
+    assert.ok(rows[i].kcal < rows[i - 1].kcal,
+      `${rows[i].label}(${rows[i].kcal}) 应低于 ${rows[i - 1].label}(${rows[i - 1].kcal})`);
+    assert.ok(rows[i].sugar < rows[i - 1].sugar, '糖也应随档位递减');
+    assert.ok(rows[i].carb < rows[i - 1].carb, '碳水应跟着糖一起减');
+  }
+  assert.ok(rows[0].kcal - rows[3].kcal >= 80,
+    `全糖与三分糖只差 ${rows[0].kcal - rows[3].kcal} kcal，分档意义不大`);
+  // 蛋白脂肪不该被糖度影响
+  assert.equal(rows[0].protein, rows[4].protein);
+  assert.equal(rows[0].fat, rows[4].fat);
+});
+
+test('点无糖时，奶的乳糖与配料自带的糖不会被归零', () => {
+  // 珍珠奶茶点无糖，珍珠的糖水和奶的乳糖仍在
+  const boba = nutrientsFor(FOOD_BY_ID.get('tea_boba'), 500, 'none');
+  assert.ok(boba.sugar > 0 && boba.sugar <= 8, `残留糖 ${boba.sugar}g 不合理`);
+  assert.ok(boba.kcal > 250, '无糖奶茶不该只剩几十千卡');
+
+  // 水果茶点无糖，水果自带的糖占比更高
+  const fruit = nutrientsFor(FOOD_BY_ID.get('tea_fruit'), 500, 'none');
+  assert.ok(fruit.sugar >= 10, `水果自带糖应保留，实得 ${fruit.sugar}g`);
+});
+
+test('本来就没有加糖的饮品不提供糖度选项', async () => {
+  const { hasSugarLevel } = await import('../js/data/foods.js');
+  for (const id of ['luckin_americano', 'tea_pure', 'sb_latte']) {
+    assert.equal(hasSugarLevel(FOOD_BY_ID.get(id)), false,
+      `${FOOD_BY_ID.get(id).name} 不该有糖度选项`);
+  }
+  for (const id of ['tea_boba', 'mixue_boba', 'heytea_grape', 'luckin_coconut']) {
+    assert.equal(hasSugarLevel(FOOD_BY_ID.get(id)), true,
+      `${FOOD_BY_ID.get(id).name} 应该能选糖度`);
+  }
+});
+
+test('缺省不传糖度时按全糖算，与显式全糖一致', () => {
+  const f = FOOD_BY_ID.get('tea_boba');
+  assert.deepEqual(nutrientsFor(f, 500), nutrientsFor(f, 500, 'full'));
+});
+
+test('茶饮不再按糖度重复录入（糖度是选项，不是多条记录）', () => {
+  // 只针对茶饮连锁：像「豆浆（无糖）/（加糖）」「美式咖啡（无糖）」是本来
+  // 就不同的产品，不是同一杯的糖度变体，不该被这条规则误伤。
+  const dupes = FOODS.filter((f) => f.cat === 'chain' && /（(全|半|三分|七分|少|微|无|标准)糖）/.test(f.name));
+  assert.deepEqual(dupes.map((f) => f.name), [],
+    `糖度应由界面选择：${dupes.map((f) => f.name).join('、')}`);
+
+  // 同一个基础名不该出现多条茶饮
+  const byBase = {};
+  for (const f of FOODS.filter((x) => x.cat === 'chain')) {
+    const base = f.name.replace(/（[^）]*）/g, '').trim();
+    (byBase[base] ||= []).push(f.name);
+  }
+  const repeated = Object.entries(byBase).filter(([, v]) => v.length > 1);
+  assert.deepEqual(repeated, [], `连锁条目重名：${repeated.map(([k]) => k).join('、')}`);
+});
+
+test('茶饮均标为估算（品牌不公开营养表）', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const tea = FOODS.filter((f) => f.cat === 'chain' && /茶|奶|拿铁|仙草/.test(f.name));
+  const notMarked = tea.filter((f) => !isEstimated(f) && !/星巴克|瑞幸/.test(f.name));
+  assert.deepEqual(notMarked.map((f) => f.name), [],
+    '茶饮品牌不公开营养表，应一律标为估算');
+});
