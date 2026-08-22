@@ -79,7 +79,7 @@ function switchTab(key) {
   renderCurrent();
 
   runUrlImport();
-  window.scrollTo({ top: 0, behavior: 'instant' });
+  viewRoot?.scrollTo({ top: 0, behavior: 'instant' });   // 滚动容器是 #view，不是 window
 }
 
 /** 焦点在输入控件里时不要重绘：DOM 一换，iOS 会收起键盘、日期选择器会被当场提交 */

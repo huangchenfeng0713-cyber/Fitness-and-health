@@ -40,6 +40,7 @@ function buildShell(root) {
   nodes.portion = h('div.slot');
   nodes.customBox = h('div.slot');
   nodes.entries = h('div.slot');
+  nodes.suggest = h('div.slot');
 
   nodes.searchInput = h('input.search-input', {
     type: 'search',
@@ -72,7 +73,7 @@ function buildShell(root) {
     nodes.portion);
 
   nodes.root = h('div.view-stack', null,
-    nodes.quick, nodes.searchCard, nodes.entries);
+    nodes.quick, nodes.searchCard, nodes.entries, nodes.suggest);
   mount(root, nodes.root);
 }
 
@@ -104,10 +105,43 @@ function refreshFav() {
     favorites.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name))));
 }
 
+/**
+ * 没在搜索时展示当下的推荐。
+ * 记录页内容天然偏短，下方常空一大片；而这一页的用途就是记东西，
+ * 把「现在该吃什么」放这儿既填了空白，也正好是用户要的下一步。
+ */
+function suggestionBlock() {
+  const rec = state.derived?.advice?.recommend;
+  if (!rec?.length) return null;
+  const meal = state.derived.advice.budget.meal;
+  return h('section.card', null,
+    h('div.card-head', null,
+      h('h3', null, '现在推荐'),
+      h('span.card-tag', null, `${MEAL_LABEL[meal.key]} · 还差 ${num(Math.max(state.derived.advice.gaps.protein.remaining, 0), 0)}g 蛋白`)),
+    h('div.rec-list', null, rec.slice(0, 3).map((item) => h('div.rec-row', null,
+      h('div.rec-info', null,
+        h('div.rec-name', null, item.food.name,
+          isEstimated(item.food) && h('span.chip.chip-est', null, '估算')),
+        h('div.rec-portion', null, item.portionLabel)),
+      h('div.rec-nums', null,
+        h('span.rec-kcal', null, `${item.nutrients.kcal}`),
+        h('span.rec-unit', null, 'kcal'),
+        h('span.rec-prot', null, `蛋白 ${item.nutrients.protein}g`)),
+      h('button.add-btn', {
+        'aria-label': `记录 ${item.food.name}`,
+        onclick: async (ev) => {
+          ev.currentTarget.disabled = true;
+          await addEntry({ foodId: item.food.id, grams: item.grams, meal: meal.key });
+          toast(`已记录 ${item.food.name} ${item.grams}g`, 'ok');
+        },
+      }, '＋')))));
+}
+
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query) return;
+  if (!ui.query) { refreshSuggestions(); return; }
+  clearEl(nodes.suggest);
 
   const results = searchFoods(ui.query, allFoods(), 24);
   if (!results.length) {
@@ -128,6 +162,7 @@ function refreshResults() {
 
 function selectFood(food) {
   ui.selected = food;
+  if (nodes.suggest) clearEl(nodes.suggest);
   ui.unitIdx = 0;
   ui.qty = 1;
   ui.grams = food.s?.[0]?.[1] || 100;
@@ -264,6 +299,7 @@ function refreshPortion() {
     nodes.searchInput.value = '';
     refreshResults();
     refreshPortion();
+    refreshSuggestions();
   };
 
   refreshMealChips();
@@ -280,7 +316,7 @@ function refreshPortion() {
           `每 100g：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
       h('button.icon-btn', {
         'aria-label': '取消',
-        onclick: () => { ui.selected = null; refreshPortion(); },
+        onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
       }, '×')),
 
     h('div.field-label', null, '吃了多少'),
@@ -372,6 +408,13 @@ function refreshCustomForm() {
   ));
 }
 
+function refreshSuggestions() {
+  if (!nodes.suggest) return;
+  clearEl(nodes.suggest);
+  if (ui.query || ui.selected) return;
+  mount(nodes.suggest, suggestionBlock());
+}
+
 function refreshEntries() {
   clearEl(nodes.entries);
   const order = MEALS.map((m) => m.key);
@@ -459,4 +502,5 @@ export function renderDiet(root) {
   }
   refreshQuick();
   refreshEntries();
+  refreshSuggestions();
 }

@@ -146,3 +146,39 @@ test('搜索同分时按录入顺序，不按名称笔画', () => {
   assert.ok(burgerAt >= 0 && soupAt >= 0);
   assert.ok(burgerAt < soupAt, `主力单品应排在配菜前：${kfc.slice(0, 4).join(' / ')}`);
 });
+
+test('茶饮连锁品牌与主力品类都收录了', () => {
+  const brands = ['蜜雪', '喜茶', '奈雪', '茶百道', '古茗', '沪上阿姨', '一点点',
+    'coco', '书亦', '益禾堂', '茶颜悦色', '霸王茶姬', '库迪', '瑞幸', '星巴克'];
+  const missing = brands.filter((b) => searchFoods(b).length === 0);
+  assert.deepEqual(missing, [], `搜不到品牌：${missing.join('、')}`);
+
+  const kinds = ['珍珠奶茶', '烧仙草', '奶盖', '黑糖', '芋圆', '水果茶', '纯茶', '拿铁'];
+  const missKind = kinds.filter((k) => searchFoods(k).length === 0);
+  assert.deepEqual(missKind, [], `搜不到品类：${missKind.join('、')}`);
+});
+
+test('奶茶按糖度分档，且热量随糖度单调下降', () => {
+  const ids = ['tea_boba_full', 'tea_boba_half', 'tea_boba_low', 'tea_boba_none'];
+  const rows = ids.map((id) => {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f, `缺少 ${id}`);
+    return { name: f.name, ...nutrientsFor(f, f.s[0][1]) };
+  });
+  for (let i = 1; i < rows.length; i += 1) {
+    assert.ok(rows[i].kcal < rows[i - 1].kcal,
+      `${rows[i].name}(${rows[i].kcal}) 应低于 ${rows[i - 1].name}(${rows[i - 1].kcal})`);
+    assert.ok(rows[i].sugar < rows[i - 1].sugar, '糖也应随糖度递减');
+  }
+  // 全糖与三分糖的差距要足够大，否则分档没意义
+  assert.ok(rows[0].kcal - rows[2].kcal >= 80,
+    `全糖与三分糖只差 ${rows[0].kcal - rows[2].kcal} kcal，分档意义不大`);
+});
+
+test('茶饮均标为估算（品牌不公开营养表）', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const tea = FOODS.filter((f) => f.cat === 'chain' && /茶|奶|拿铁|仙草/.test(f.name));
+  const notMarked = tea.filter((f) => !isEstimated(f) && !/星巴克|瑞幸/.test(f.name));
+  assert.deepEqual(notMarked.map((f) => f.name), [],
+    '茶饮品牌不公开营养表，应一律标为估算');
+});

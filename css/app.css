@@ -87,20 +87,31 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * 三段式：顶栏 / 可滚动内容区 / tab 栏。
+ *
+ * 原先是「tab 栏 fixed + 页面底部塞 padding 避让」，代价是每一页都能
+ * 往下拉出一整块什么都没有的区域（实测 102px 死滚动）。改成 flex 之后，
+ * 滚动容器的高度天然就是顶栏与 tab 栏之间的空间，不需要任何补偿。
+ * 顺带让顶栏不必再 position: sticky —— 它已经在滚动容器外面了。
+ */
+html, body { height: 100%; }
 #app {
   max-width: 720px;
   margin: 0 auto;
-  /* 正好盖住固定的 tab 栏（内容 54px）+ 一点呼吸空间，别多留一整屏白 */
-  padding-bottom: calc(62px + var(--safe-bottom));
+  height: 100vh;
+  height: 100dvh;   /* iOS 地址栏收放时不跳动 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* ============ 顶栏 / 标签栏 ============ */
 .topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(14px);
+  flex: none;
+  /* 不用 backdrop-filter：iOS 上它会把自身文字一起糊掉，看着像蒙了层毛玻璃。
+     内容区已经在独立的滚动容器里，顶栏不会被内容穿过，实色就够了。 */
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding-top: var(--safe-top);
 }
@@ -129,15 +140,13 @@ body {
 .nav-arrow:active { background: var(--card-2); }
 .nav-arrow:disabled { opacity: .25; cursor: default; }
 
-.view { padding: 12px calc(14px + var(--safe-right)) 6px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
+.view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+  padding: 12px calc(14px + var(--safe-right)) 14px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
 
 .tabbar {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
-  z-index: 30;
+  flex: none;
   display: flex;
-  background: color-mix(in srgb, var(--card) 92%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
+  background: var(--card);
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
 }
@@ -612,6 +621,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .chart .target-label { fill: var(--muted); }
 
 /* ============ 引导 / 提示 ============ */
+.banner-slot { flex: none; }
 .banner-slot:empty { display: none; }
 .onboard {
   margin: 14px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left)); padding: 16px; background: var(--accent-soft);
