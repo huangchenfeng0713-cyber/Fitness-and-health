@@ -13,6 +13,7 @@
  *            fried 油炸 / refined 精制 / processed 加工肉或深加工 / whole 全谷物
  *            quick 便利店随手可得 / breakfast 适合早餐 / late 适合睡前 / cook 需烹饪
  *            sweetdrink 含糖饮料 / alcohol 酒精 / natsugar 糖来自天然乳糖，不计入游离糖
+ *            est 该品牌未公开完整营养表，数值按同类食品推算
  */
 
 export const CATEGORIES = {
@@ -28,6 +29,7 @@ export const CATEGORIES = {
   drink: '饮品',
   snack: '零食甜点',
   dish: '菜肴外卖',
+  chain: '连锁快餐',
   other: '其他',
 };
 
@@ -541,6 +543,63 @@ export const FOODS = [
   { id: 'wafer', name: '威化饼', alias: 'weihuabing wafer', cat: 'snack', n: [510, 5.0, 27.0, 62.0, 1.0, 32.0, 200], s: [['一块', 20]], f: ['refined', 'processed', 'quick'] },
   { id: 'red_bean_bun', name: '豆沙包', alias: 'doushabao', cat: 'snack', n: [250, 6.0, 3.0, 50.0, 2.0, 20.0, 180], s: [['一个', 80]], f: ['breakfast'] },
 
+  // ---------- 连锁快餐 ----------
+  { id: 'kfc_spicy_burger', name: '肯德基 香辣鸡腿堡', alias: 'kfc kendeji xianglajitui', cat: 'chain', n: [270, 13.5, 13.0, 24.9, 1.4, 3.8, 595], s: [['一个', 185]], f: ['quick', 'processed'] },
+  { id: 'kfc_crispy_burger', name: '肯德基 劲脆鸡腿堡', alias: 'kfc jincui', cat: 'chain', n: [284, 13.7, 14.2, 24.7, 1.3, 3.7, 605], s: [['一个', 190]], f: ['quick', 'processed'] },
+  { id: 'kfc_no_burger', name: '肯德基 新奥尔良烤鸡腿堡', alias: 'kfc xinaoerliang kaojituibao', cat: 'chain', n: [221, 13.8, 7.2, 24.6, 1.3, 4.6, 513], s: [['一个', 195]], f: ['quick', 'processed'] },
+  { id: 'kfc_og_chicken', name: '肯德基 吮指原味鸡', alias: 'kfc shunzhiyuanweiji yuanweiji', cat: 'chain', n: [283, 22.2, 18.9, 7.8, 0.6, 0.6, 778], s: [['一块', 90]], f: ['quick', 'processed'] },
+  { id: 'kfc_no_wing', name: '肯德基 新奥尔良烤翅', alias: 'kfc kaochi', cat: 'chain', n: [244, 22.2, 14.4, 6.7, 0.0, 4.4, 733], s: [['一只', 45]], f: ['quick', 'processed'] },
+  { id: 'kfc_hot_wing', name: '肯德基 香辣鸡翅', alias: 'kfc xianglajichi', cat: 'chain', n: [333, 20.0, 22.2, 13.3, 0.7, 1.1, 778], s: [['一只', 45]], f: ['quick', 'processed'] },
+  { id: 'kfc_nuggets', name: '肯德基 上校鸡块', alias: 'kfc shangxiaojikuai', cat: 'chain', n: [307, 17.3, 17.3, 20.0, 0.8, 0.7, 733], s: [['五块', 75]], f: ['quick', 'processed'] },
+  { id: 'kfc_fries', name: '肯德基 薯条（中）', alias: 'kfc shutiao', cat: 'chain', n: [322, 4.3, 14.8, 42.6, 3.5, 0.4, 261], s: [['中份', 115]], f: ['quick', 'processed'] },
+  { id: 'kfc_egg_tart', name: '肯德基 葡式蛋挞', alias: 'kfc danta putashidanta', cat: 'chain', n: [350, 5.8, 20.0, 36.7, 0.7, 20.0, 167], s: [['一个', 60]], f: ['quick', 'processed'] },
+  { id: 'kfc_twister', name: '肯德基 老北京鸡肉卷', alias: 'kfc laobeijingjirouzhuan', cat: 'chain', n: [245, 11.0, 11.0, 25.5, 1.2, 3.0, 550], s: [['一个', 200]], f: ['quick', 'processed'] },
+  { id: 'kfc_mash', name: '肯德基 醇香土豆泥', alias: 'kfc tudouni', cat: 'chain', n: [83, 1.7, 2.5, 13.3, 1.0, 0.8, 417], s: [['一份', 120]], f: ['quick', 'processed'] },
+  { id: 'kfc_veg_soup', name: '肯德基 芙蓉鲜蔬汤', alias: 'kfc furongtang', cat: 'chain', n: [15, 0.8, 0.5, 2.0, 0.3, 0.5, 300], s: [['一份', 200]], f: ['quick', 'processed'] },
+  { id: 'mcd_bigmac', name: '麦当劳 巨无霸', alias: 'mcdonalds maidanglao juwuba bigmac', cat: 'chain', n: [238, 12.1, 12.1, 20.0, 1.4, 3.7, 442], s: [['一个', 215]], f: ['quick', 'processed'] },
+  { id: 'mcd_spicy_chicken', name: '麦当劳 麦辣鸡腿堡', alias: 'mcd mailajitui', cat: 'chain', n: [248, 12.0, 12.0, 22.5, 1.2, 3.5, 500], s: [['一个', 200]], f: ['quick', 'processed'] },
+  { id: 'mcd_double_cheese', name: '麦当劳 双层吉士汉堡', alias: 'mcd shuangcengjishi', cat: 'chain', n: [265, 15.2, 13.3, 20.6, 1.2, 4.2, 636], s: [['一个', 165]], f: ['quick', 'processed'] },
+  { id: 'mcd_mcchicken', name: '麦当劳 麦香鸡', alias: 'mcd maixiangji', cat: 'chain', n: [273, 12.3, 12.3, 28.5, 1.5, 3.8, 538], s: [['一个', 130]], f: ['quick', 'processed'] },
+  { id: 'mcd_grilled_chicken', name: '麦当劳 板烧鸡腿堡', alias: 'mcd banshaojitui', cat: 'chain', n: [210, 13.3, 7.6, 21.4, 1.2, 3.8, 524], s: [['一个', 210]], f: ['quick', 'processed'] },
+  { id: 'mcd_nuggets', name: '麦当劳 麦乐鸡（5块）', alias: 'mcd mailejikuai nuggets', cat: 'chain', n: [258, 14.7, 15.8, 14.7, 0.8, 0.5, 505], s: [['五块', 95]], f: ['quick', 'processed'] },
+  { id: 'mcd_fries', name: '麦当劳 薯条（中）', alias: 'mcd shutiao', cat: 'chain', n: [291, 3.5, 13.9, 37.4, 3.5, 0.4, 217], s: [['中份', 115]], f: ['quick', 'processed'] },
+  { id: 'mcd_mcflurry', name: '麦当劳 麦旋风', alias: 'mcd maixuanfeng mcflurry', cat: 'chain', n: [183, 4.4, 5.6, 28.9, 0.4, 24.4, 100], s: [['一份', 180]], f: ['quick', 'processed'] },
+  { id: 'mcd_sausage_muffin', name: '麦当劳 猪柳蛋麦满分', alias: 'mcd maimanfen zhuliudan', cat: 'chain', n: [280, 12.7, 14.7, 24.0, 1.3, 2.7, 600], s: [['一个', 150]], f: ['quick', 'processed'] },
+  { id: 'mcd_taro_pie', name: '麦当劳 香芋派', alias: 'mcd xiangyupai', cat: 'chain', n: [307, 4.0, 16.0, 37.3, 2.0, 16.0, 267], s: [['一个', 75]], f: ['quick', 'processed'] },
+  { id: 'bk_whopper', name: '汉堡王 皇堡', alias: 'burgerking hanbaowang huangbao whopper', cat: 'chain', n: [222, 10.4, 12.2, 18.1, 1.1, 4.1, 370], s: [['一个', 270]], f: ['quick', 'processed'] },
+  { id: 'bk_chicken', name: '汉堡王 香辣鸡腿堡', alias: 'burgerking hanbaowang', cat: 'chain', n: [248, 11.4, 12.4, 22.4, 1.2, 3.8, 476], s: [['一个', 210]], f: ['quick', 'processed', 'est'] },
+  { id: 'dicos_drumstick', name: '德克士 脆皮手枪腿', alias: 'dicos dekeshi shouqiangtui', cat: 'chain', n: [250, 18.3, 15.0, 10.0, 0.5, 0.8, 583], s: [['一只', 120]], f: ['quick', 'processed', 'est'] },
+  { id: 'dicos_burger', name: '德克士 香辣鸡腿堡', alias: 'dicos dekeshi', cat: 'chain', n: [254, 11.9, 11.9, 24.3, 1.4, 3.2, 514], s: [['一个', 185]], f: ['quick', 'processed', 'est'] },
+  { id: 'tastien_spicy', name: '塔斯汀 香辣鸡腿堡', alias: 'tasiting tastien zhongguohanbao', cat: 'chain', n: [239, 12.2, 10.0, 25.6, 1.4, 3.3, 528], s: [['一个', 180]], f: ['quick', 'processed', 'est'] },
+  { id: 'tastien_beef', name: '塔斯汀 麻辣嫩牛堡', alias: 'tasiting tastien', cat: 'chain', n: [237, 11.1, 10.5, 25.3, 1.3, 3.2, 526], s: [['一个', 190]], f: ['quick', 'processed', 'est'] },
+  { id: 'tastien_duck', name: '塔斯汀 北京烤鸭堡', alias: 'tasiting tastien kaoyabao', cat: 'chain', n: [247, 10.5, 11.6, 25.3, 1.3, 4.2, 553], s: [['一个', 190]], f: ['quick', 'processed', 'est'] },
+  { id: 'wallace_burger', name: '华莱士 全鸡堡', alias: 'hualaishi wallace', cat: 'chain', n: [240, 11.4, 10.9, 24.6, 1.1, 3.4, 514], s: [['一个', 175]], f: ['quick', 'processed', 'est'] },
+  { id: 'ph_supreme', name: '必胜客 超级至尊比萨（1块）', alias: 'pizzahut bishengke zhizun', cat: 'chain', n: [250, 11.8, 10.9, 26.4, 1.8, 3.6, 564], s: [['一块', 110]], f: ['quick', 'processed'] },
+  { id: 'ph_cheese_crust', name: '必胜客 芝心比萨（1块）', alias: 'pizzahut bishengke zhixin', cat: 'chain', n: [272, 12.0, 12.8, 27.2, 1.6, 4.0, 600], s: [['一块', 125]], f: ['quick', 'processed'] },
+  { id: 'ph_durian', name: '必胜客 榴莲比萨（1块）', alias: 'pizzahut bishengke liulian', cat: 'chain', n: [264, 9.1, 10.0, 34.5, 1.8, 10.9, 436], s: [['一块', 110]], f: ['quick', 'processed', 'est'] },
+  { id: 'ph_pasta', name: '必胜客 意式肉酱面', alias: 'pizzahut bishengke rouzjiangmian', cat: 'chain', n: [160, 6.3, 5.1, 22.3, 1.1, 2.6, 314], s: [['一份', 350]], f: ['quick', 'processed', 'est'] },
+  { id: 'ph_wing', name: '必胜客 蜜汁烤翅', alias: 'pizzahut bishengke mizhikaochi', cat: 'chain', n: [267, 20.0, 15.6, 11.1, 0.0, 8.9, 778], s: [['一只', 45]], f: ['quick', 'processed', 'est'] },
+  { id: 'subway_chicken', name: '赛百味 6寸鸡胸三明治', alias: 'subway saibaiwei', cat: 'chain', n: [141, 10.9, 2.3, 20.0, 1.8, 2.7, 364], s: [['一个', 220]], f: ['quick', 'processed'] },
+  { id: 'subway_tuna', name: '赛百味 6寸金枪鱼三明治', alias: 'subway saibaiwei jinqiangyu', cat: 'chain', n: [205, 9.1, 10.0, 19.5, 1.8, 2.7, 341], s: [['一个', 220]], f: ['quick', 'processed'] },
+  { id: 'sb_latte', name: '星巴克 拿铁（中杯）', alias: 'starbucks xingbake natie', cat: 'chain', n: [54, 2.8, 2.8, 4.2, 0.0, 4.2, 37], s: [['中杯', 355]], f: ['quick', 'processed'] },
+  { id: 'sb_mocha', name: '星巴克 摩卡（中杯）', alias: 'starbucks xingbake moka', cat: 'chain', n: [85, 2.8, 3.4, 10.7, 0.3, 9.0, 39], s: [['中杯', 355]], f: ['quick', 'processed'] },
+  { id: 'sb_frappuccino', name: '星巴克 星冰乐（中杯）', alias: 'starbucks xingbingle', cat: 'chain', n: [85, 1.1, 3.1, 13.2, 0.0, 12.7, 51], s: [['中杯', 355]], f: ['quick', 'processed', 'est'] },
+  { id: 'luckin_coconut', name: '瑞幸 生椰拿铁（大杯）', alias: 'luckin ruixing shengyenatie', cat: 'chain', n: [47, 1.1, 1.9, 6.2, 0.0, 5.5, 23], s: [['大杯', 470]], f: ['quick', 'processed', 'est'] },
+  { id: 'luckin_thick_milk', name: '瑞幸 厚乳拿铁（大杯）', alias: 'luckin ruixing hourunatie', cat: 'chain', n: [51, 1.9, 2.3, 5.5, 0.0, 5.1, 30], s: [['大杯', 470]], f: ['quick', 'processed', 'est'] },
+  { id: 'mixue_lemon', name: '蜜雪冰城 柠檬水（大杯）', alias: 'mixue miyuebingcheng ningmengshui', cat: 'chain', n: [29, 0.1, 0.0, 7.2, 0.1, 6.8, 2], s: [['大杯', 500]], f: ['quick', 'processed', 'est'] },
+  { id: 'mixue_icecream', name: '蜜雪冰城 甜筒', alias: 'mixue tiantong', cat: 'chain', n: [214, 3.6, 8.6, 30.0, 0.4, 24.3, 86], s: [['一个', 70]], f: ['quick', 'processed', 'est'] },
+  { id: 'heytea_grape', name: '喜茶 多肉葡萄（标准糖）', alias: 'heytea xicha duoroputao', cat: 'chain', n: [56, 0.4, 1.0, 11.2, 0.2, 9.6, 12], s: [['中杯', 500]], f: ['quick', 'processed', 'est'] },
+  { id: 'chabaidao_mango', name: '茶百道 杨枝甘露', alias: 'chabaidao yangzhiganlu', cat: 'chain', n: [70, 0.6, 1.8, 12.6, 0.3, 10.4, 16], s: [['中杯', 500]], f: ['quick', 'processed', 'est'] },
+  { id: 'bawang_milktea', name: '霸王茶姬 伯牙绝弦', alias: 'bawangchaji boyajuexian', cat: 'chain', n: [47, 1.3, 1.3, 7.4, 0.0, 6.0, 26], s: [['中杯', 470]], f: ['quick', 'processed', 'est'] },
+  { id: 'laoxiangji_soup', name: '老乡鸡 肥西老母鸡汤', alias: 'laoxiangji feixilaomujitang', cat: 'chain', n: [32, 2.0, 2.2, 0.5, 0.0, 0.1, 200], s: [['一份', 400]], f: ['quick', 'processed', 'est'] },
+  { id: 'laoxiangji_set', name: '老乡鸡 两菜一饭套餐', alias: 'laoxiangji taocan', cat: 'chain', n: [118, 4.7, 4.4, 14.5, 0.7, 1.1, 291], s: [['一份', 550]], f: ['quick', 'processed', 'est'] },
+  { id: 'shaxian_dumpling', name: '沙县小吃 蒸饺（一两）', alias: 'shaxian zhengjiao', cat: 'chain', n: [208, 7.5, 8.3, 25.0, 1.0, 1.2, 433], s: [['一份', 120]], f: ['quick', 'processed', 'est'] },
+  { id: 'shaxian_noodle', name: '沙县小吃 花生拌面', alias: 'shaxian banmian', cat: 'chain', n: [180, 4.8, 6.4, 25.2, 0.8, 1.6, 360], s: [['一份', 250]], f: ['quick', 'processed', 'est'] },
+  { id: 'shaxian_stew', name: '沙县小吃 炖罐（排骨）', alias: 'shaxian dunguan', cat: 'chain', n: [57, 4.0, 3.7, 1.7, 0.1, 0.3, 214], s: [['一罐', 350]], f: ['quick', 'processed', 'est'] },
+  { id: 'saizeriya_gratin', name: '萨莉亚 芝士焗饭', alias: 'saizeriya salia zhishijufan', cat: 'chain', n: [150, 5.0, 5.5, 20.0, 0.8, 1.5, 300], s: [['一份', 400]], f: ['quick', 'processed', 'est'] },
+  { id: 'hefu_noodle', name: '和府捞面 招牌汤面', alias: 'hefulaomian tangmian', cat: 'chain', n: [91, 4.0, 2.2, 13.6, 0.7, 0.7, 327], s: [['一份', 550]], f: ['quick', 'processed', 'est'] },
+  { id: 'yoshinoya_beef', name: '吉野家 牛肉饭（中碗）', alias: 'yoshinoya jiyejia niuroufan', cat: 'chain', n: [144, 4.9, 4.4, 21.1, 0.7, 2.7, 311], s: [['中碗', 450]], f: ['quick', 'processed', 'est'] },
+
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },
   { id: 'sugar', name: '白砂糖', alias: 'tang sugar', cat: 'other', n: [400, 0, 0, 99.9, 0, 99.9, 1], s: [['一勺', 8]], f: ['refined'] },
@@ -565,8 +624,14 @@ export const PORTION_TIPS = {
   drink: '一次性纸杯 ≈ 200ml；易拉罐 330ml；奶茶中杯 500ml',
   snack: '一小包薯片 ≈ 50g；一格独立包装巧克力 ≈ 10g',
   dish: '外卖餐盒的一个主菜格 ≈ 250g；餐馆一盘炒菜 ≈ 400g，通常是两人份',
+  chain: '按品牌的标准份量计。套餐要把主食、小食、饮料分别记，别只记一个汉堡',
   other: '普通瓷勺一平勺油 ≈ 10g；啤酒瓶盖一平盖盐 ≈ 5g',
 };
+
+/** 该条营养是否为推算值（品牌未公开完整营养表） */
+export function isEstimated(food) {
+  return (food.f || []).includes('est');
+}
 
 export function portionTip(food) {
   return PORTION_TIPS[food.cat] || PORTION_TIPS.other;
@@ -630,7 +695,9 @@ export function searchFoods(query, list = FOODS, limit = 30) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return list.slice(0, limit);
   const scored = [];
+  let index = 0;
   for (const f of list) {
+    const order = index; index += 1;   // 同分时保持录入顺序，见下方 sort
     const name = f.name.toLowerCase();
     const alias = (f.alias || '').toLowerCase();
     let score = 0;
@@ -653,8 +720,10 @@ export function searchFoods(query, list = FOODS, limit = 30) {
       }
       if (sim >= 0.5) score = Math.round(45 * sim);
     }
-    if (score > 0) scored.push({ f, score });
+    if (score > 0) scored.push({ f, score, order });
   }
-  scored.sort((a, b) => b.score - a.score || a.f.name.localeCompare(b.f.name, 'zh'));
+  // 同分时按录入顺序，而不是按名称：数据里同品牌是按常点程度排的，
+  // 按名称排会让「肯德基 醇香土豆泥」跑到「劲脆鸡腿堡」前面。
+  scored.sort((a, b) => b.score - a.score || a.order - b.order);
   return scored.slice(0, limit).map((x) => x.f);
 }

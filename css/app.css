@@ -58,6 +58,23 @@
 
 * { box-sizing: border-box; }
 
+/*
+ * 快速连点会触发 iOS 的双击缩放。touch-action: manipulation 只关掉
+ * 双击缩放，双指捏合缩放照常可用 —— 不像 user-scalable=no 会把
+ * 无障碍缩放一并废掉。
+ */
+button, a, label, summary, [role="button"],
+input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* 连点时按钮文字被选中会闪蓝底，顺手一起去掉 */
+button, .tab, summary, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -257,6 +274,12 @@ body {
   font-size: 10.5px; padding: 1.5px 6px; border-radius: 5px; white-space: nowrap;
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); font-weight: 400;
 }
+.chip-est {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn); border-color: transparent;
+}
+.search-item-tags { display: flex; gap: 4px; flex-shrink: 0; }
+
 .chip-danger {
   background: color-mix(in srgb, var(--danger) 11%, transparent);
   color: var(--danger); border-color: transparent;

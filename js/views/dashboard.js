@@ -3,7 +3,7 @@
 import { h, clearEl, num, formatMinutes, toast, mount } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state, addEntry } from '../lib/store.js';
-import { CATEGORIES } from '../data/foods.js';
+import { CATEGORIES, isEstimated } from '../data/foods.js';
 import { MEAL_LABEL } from '../core/advisor.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
@@ -101,7 +101,9 @@ function recRow(item, meal) {
   const f = item.food;
   return h('div.rec-row', null,
     h('div.rec-info', null,
-      h('div.rec-name', null, f.name, h('span.chip', null, CATEGORIES[f.cat] || '自定义')),
+      h('div.rec-name', null, f.name,
+        isEstimated(f) && h('span.chip.chip-est', null, '估算'),
+        h('span.chip', null, CATEGORIES[f.cat] || '自定义')),
       h('div.rec-portion', null, item.portionLabel),
       h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
     h('div.rec-nums', null,

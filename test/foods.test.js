@@ -102,3 +102,47 @@ test('游离糖系数只对该免除的类别免除', () => {
     if (f.cat === 'snack') assert.equal(factor, 1, `${f.name} 的糖应计入`);
   }
 });
+
+test('连锁快餐品牌都收录了，且搜品牌名首条是主力单品', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const brands = {
+    肯德基: '鸡腿堡', kfc: '鸡腿堡', 麦当劳: '巨无霸', 塔斯汀: '堡',
+    必胜客: '比萨', 汉堡王: '皇堡', 德克士: null, 华莱士: null,
+    赛百味: '三明治', 星巴克: null, 瑞幸: '拿铁', 蜜雪: null,
+    喜茶: null, 老乡鸡: null, 沙县: null, 萨莉亚: null, 吉野家: null,
+  };
+  for (const [kw, expectFirst] of Object.entries(brands)) {
+    const hits = searchFoods(kw);
+    assert.ok(hits.length > 0, `搜不到品牌「${kw}」`);
+    if (expectFirst) {
+      assert.ok(hits[0].name.includes(expectFirst),
+        `搜「${kw}」首条应是主力单品，实际是「${hits[0].name}」`);
+    }
+  }
+  // 同名单品要能按品牌区分
+  const fries = searchFoods('薯条').map((f) => f.name);
+  assert.ok(fries.some((n) => n.includes('肯德基')) && fries.some((n) => n.includes('麦当劳')),
+    `薯条应能区分品牌：${fries.join(' / ')}`);
+  assert.ok(isEstimated(FOOD_BY_ID.get('tastien_spicy')), '塔斯汀未公开营养表，应标为估算');
+  assert.ok(!isEstimated(FOOD_BY_ID.get('mcd_bigmac')), '巨无霸有官方数据，不该标估算');
+});
+
+test('连锁快餐的份量就是品牌的标准份，不是 100g', () => {
+  const chain = FOODS.filter((f) => f.cat === 'chain');
+  assert.ok(chain.length >= 50, `只有 ${chain.length} 条连锁快餐`);
+  for (const f of chain) {
+    const [name, g] = f.s[0];
+    assert.ok(/个|块|只|份|杯|罐|中份|大杯|中碗|五块/.test(name),
+      `${f.name} 的份量名「${name}」不像品牌标准份`);
+    assert.ok(g >= 40 && g <= 600, `${f.name} 的份量 ${g}g 不合理`);
+  }
+});
+
+test('搜索同分时按录入顺序，不按名称笔画', () => {
+  // 数据里同品牌按常点程度排列，按名称排会让配菜跑到主食前面
+  const kfc = searchFoods('肯德基').map((f) => f.name);
+  const burgerAt = kfc.findIndex((n) => n.includes('香辣鸡腿堡'));
+  const soupAt = kfc.findIndex((n) => n.includes('芙蓉鲜蔬汤'));
+  assert.ok(burgerAt >= 0 && soupAt >= 0);
+  assert.ok(burgerAt < soupAt, `主力单品应排在配菜前：${kfc.slice(0, 4).join(' / ')}`);
+});
