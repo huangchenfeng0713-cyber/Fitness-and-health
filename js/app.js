@@ -1,7 +1,8 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey } from './lib/utils.js';
+import { h, $, clearEl, todayKey, toast } from './lib/utils.js';
 import { initStore, subscribe, state, recompute, saveProfile } from './lib/store.js';
+import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
@@ -36,6 +37,8 @@ function switchTab(key) {
   renderTabs();
   syncOnboarding();
   renderCurrent();
+
+  runUrlImport();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
 
@@ -82,6 +85,18 @@ function syncOnboarding() {
   ));
 }
 
+/** 快捷指令可以直接打开 #import=<JSON> 完成同步，不用手动传文件 */
+function runUrlImport() {
+  importFromUrlHash().then((outcome) => {
+    if (!outcome) return;
+    toast(outcome.message, outcome.ok ? 'ok' : 'error');
+    if (outcome.ok) renderCurrent();
+  }).catch((err) => {
+    console.error('URL 导入失败', err);
+    toast('导入失败，请检查链接里的数据格式', 'error');
+  });
+}
+
 async function boot() {
   viewRoot = $('#view');
   const hash = location.hash.replace('#', '');
@@ -101,6 +116,8 @@ async function boot() {
   syncOnboarding();
   renderCurrent();
 
+  runUrlImport();
+
   subscribe(() => { syncOnboarding(); renderCurrent(); });
 
   // 时间在走，剩余预算和"下一餐"也要跟着变
@@ -118,6 +135,12 @@ async function boot() {
   });
 
   window.addEventListener('hashchange', () => {
+    // App 已经开着时再打开一个 #import= 链接属于同文档跳转，页面不会重新加载，
+    // 得在这里补一次导入，否则快捷指令的「打开 URL」只在冷启动时有效。
+    if (/[#&]import=/.test(location.hash)) {
+      runUrlImport();
+      return;
+    }
     const next = location.hash.replace('#', '');
     if (TABS.some((t) => t.key === next) && next !== current) switchTab(next);
   });

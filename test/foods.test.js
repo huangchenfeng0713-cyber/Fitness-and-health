@@ -34,7 +34,10 @@ test('热量与三大宏量自洽（纤维按 2 kcal/g 计）', () => {
     if (kcal <= 20) continue;
     // 膳食纤维大部分不产能，按 2 kcal/g 折算，剩余碳水按 4
     const est = protein * 4 + fat * 9 + Math.max(carb - fiber, 0) * 4 + fiber * 2;
-    if (Math.abs(est - kcal) / kcal > 0.25) off.push(`${f.name}: 标注 ${kcal}，按宏量算 ${Math.round(est)}`);
+    // 低热量食物用相对容差过严：柠檬这类富含有机酸的，通用 Atwater 系数会高估十几千卡，
+    // 但绝对差很小。所以取「相对 25%」与「绝对 12 kcal」中较宽的一个。
+    const tolerance = Math.max(kcal * 0.25, 12);
+    if (Math.abs(est - kcal) > tolerance) off.push(`${f.name}: 标注 ${kcal}，按宏量算 ${Math.round(est)}`);
   }
   assert.deepEqual(off, [], `以下条目热量与宏量对不上：\n${off.join('\n')}`);
 });
