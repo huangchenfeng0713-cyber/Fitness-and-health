@@ -14,7 +14,8 @@
 这是一个静态网站，但用到了 ES 模块和 Module Worker，**必须通过 http(s) 打开**，直接双击 `index.html` 会被浏览器的同源策略拦住。
 
 ```bash
-git clone <this-repo> && cd xuexi
+git clone https://github.com/huangchenfeng0713-cyber/Fitness-and-health.git
+cd Fitness-and-health
 npm run serve          # 等价于 python3 -m http.server 8080
 # 浏览器打开 http://localhost:8080
 ```
