@@ -108,3 +108,22 @@ test('摘要指标取近窗口均值', () => {
   assert.equal(s.weightKg, 70);
   assert.equal(s.restingHR, null, '没有的数据应为 null 而不是 0');
 });
+
+test('识别出被单位缺陷缩小过的历史能量数据', () => {
+  // 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000
+  const broken = healthInsights(mkDays(14, () => ({ steps: 8000, activeEnergy: 0.55 })));
+  const hit = byKey(broken, 'suspect_energy');
+  assert.ok(hit, '没能识别出异常量级的能量数据');
+  assert.equal(hit.level, 'bad');
+  assert.match(hit.text, /重新导入/);
+});
+
+test('正常量级的能量数据不会被误报', () => {
+  const fine = healthInsights(mkDays(14, () => ({ steps: 8000, activeEnergy: 550 })));
+  assert.equal(byKey(fine, 'suspect_energy'), undefined);
+});
+
+test('真正久坐的人（步数也低）不会被误判成数据错误', () => {
+  const sedentary = healthInsights(mkDays(14, () => ({ steps: 900, activeEnergy: 15 })));
+  assert.equal(byKey(sedentary, 'suspect_energy'), undefined, '步数也低时应视为真实久坐，而非数据问题');
+});

@@ -62,8 +62,10 @@ export function healthInsights(healthDays = [], opts = {}) {
     return out;
   }
 
-  // ---------------- 步数 ----------------
   const steps = series(days, 'steps');
+  const active = series(days, 'activeEnergy');
+
+  // ---------------- 步数 ----------------
   if (steps.length >= 3) {
     const m = round(avg(steps.map((p) => p.value)));
     const lowDays = steps.filter((p) => p.value < 4000).length;
@@ -196,7 +198,6 @@ export function healthInsights(healthDays = [], opts = {}) {
   }
 
   // ---------------- 消耗与摄入的匹配 ----------------
-  const active = series(days, 'activeEnergy');
   if (active.length >= 3 && targets?.kcal > 0) {
     const m = round(avg(active.map((p) => p.value)));
     const sd = round(stdev(active.map((p) => p.value)) || 0);
@@ -204,6 +205,20 @@ export function healthInsights(healthDays = [], opts = {}) {
       add('energy_var', 'info', `每天活动消耗差异很大（平均 ${m}，波动 ±${sd} kcal）`,
         '训练日和休息日的消耗差出几百千卡时，用固定热量目标就会一天吃不够、一天吃超。'
         + '本应用已按当天真实消耗动态调整预算，记得每天同步健康数据。', m);
+    }
+  }
+
+  // ---------------- 数据可信度 ----------------
+  // 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000，
+  // 已经导进来的历史数据会小得离谱。这里识别出来并告诉用户重导一次。
+  const stepsAvgForCheck = steps.length ? avg(steps.map((p) => p.value)) : null;
+  if (active.length >= 3) {
+    const activeAvg = avg(active.map((p) => p.value));
+    if (activeAvg < 20 && stepsAvgForCheck > 2000) {
+      add('suspect_energy', 'bad', '活动能量数据异常偏低',
+        `日均步数有 ${round(stepsAvgForCheck)} 步，活动能量却只有 ${round(activeAvg, 1)} kcal，量级明显不对。`
+        + '这是早期版本的单位换算缺陷（把 Apple 导出的 Cal 当成了小卡）。'
+        + '到本页重新导入一次健康数据即可修正，热量预算也会跟着回到正确水平。');
     }
   }
 

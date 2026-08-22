@@ -5,9 +5,18 @@ import {
   parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
 } from '../js/core/health.js';
 
-test('单位换算覆盖 HealthKit 常见单位', () => {
+test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
+  // export.xml 里 ActiveEnergyBurned / BasalEnergyBurned 的 unit 就是 "Cal"。
+  // 若按小写比较，会当成小卡除以 1000，整套能量数据缩小一千倍。
+  assert.equal(normalizeValue('energy', 530, 'Cal'), 530, 'Cal 必须原样保留');
+  assert.equal(normalizeValue('energy', 530, 'kcal'), 530);
+  assert.equal(normalizeValue('energy', 530, 'KCAL'), 530);
+  assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 才是小卡');
   assert.ok(Math.abs(normalizeValue('energy', 418.4, 'kJ') - 100) < 1e-9);
-  assert.equal(normalizeValue('energy', 250, 'kcal'), 250);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+});
+
+test('单位换算覆盖 HealthKit 其它常见单位', () => {
   assert.ok(Math.abs(normalizeValue('mass', 158.7, 'lb') - 71.98) < 0.02);
   assert.equal(normalizeValue('mass', 72500, 'g'), 72.5);
   assert.equal(normalizeValue('length', 1.75, 'm'), 175);

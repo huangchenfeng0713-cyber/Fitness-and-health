@@ -67,10 +67,16 @@ export function normalizeValue(kind, value, unit) {
   if (!Number.isFinite(v)) return null;
   const u = String(unit || '').trim().toLowerCase();
   switch (kind) {
-    case 'energy':
-      if (u === 'kj') return v / 4.184;
-      if (u === 'cal' || u === 'j') return v / 1000; // HK 里 Cal 即 kcal，小写 cal 视为卡
-      return v; // kcal / Cal
+    case 'energy': {
+      // 能量单位必须区分大小写：Apple 健康导出的 export.xml 写的是 unit="Cal"，
+      // 那是「大卡」也就是 kcal；而小写 cal 才是 1/1000 的小卡。
+      // 先转小写再比较会把 Cal 当成 cal，整套能量数据被缩小一千倍。
+      const raw = String(unit || '').trim();
+      if (/^kj$/i.test(raw)) return v / 4.184;
+      if (raw === 'cal') return v / 1000;
+      if (raw === 'J') return v / 4184;
+      return v; // kcal / Cal / KCAL
+    }
     case 'mass':
       if (u === 'lb') return v * 0.45359237;
       if (u === 'g') return v / 1000;
