@@ -53,6 +53,38 @@ export async function applyImport(result, meta = {}) {
 }
 
 /**
+ * 从剪贴板读一段快捷指令输出的数据并导入。
+ *
+ * 网页拿不到 HealthKit —— iOS 没给 Safari 任何读健康数据的接口，所以同步这件事
+ * 绕不开快捷指令。快捷指令那头可以配成「特定时间」自动化自己跑（关掉「运行前询问」
+ * 就是无人值守），但把数据交到网页手里这一步必须有用户手势：iOS 不允许网页在没有
+ * 手势时读剪贴板，读之前系统还要再弹一次「粘贴」确认。
+ *
+ * 所以这条路最少也要点一下，真正的零操作做不到。能省的是后面那一串：
+ * 放一个按钮在今日页，就是「开 App 点一下」，而不是「切到健康页、展开粘贴框、
+ * 长按粘贴、再点解析导入」。
+ */
+export async function importFromClipboard() {
+  if (!navigator.clipboard?.readText) {
+    return { ok: false, message: '这个浏览器不给网页读剪贴板，请到「健康」页用粘贴框' };
+  }
+  let text;
+  try {
+    text = (await navigator.clipboard.readText())?.trim();
+  } catch {
+    // 用户在系统的「粘贴」确认里点了取消，也会走到这儿
+    return { ok: false, message: '没读到剪贴板，请到「健康」页用粘贴框' };
+  }
+  if (!text) return { ok: false, message: '剪贴板是空的，先跑一次快捷指令' };
+  try {
+    const result = await runImportWorker({ text });
+    return applyImport(result, { via: 'clipboard' });
+  } catch (err) {
+    return { ok: false, message: `导入失败：${err.message}` };
+  }
+}
+
+/**
  * 从地址栏读取数据并导入。
  *
  * 让快捷指令可以「打开一个链接」就完成同步：

@@ -123,19 +123,37 @@ function guideCard() {
     '添加「文本」，内容写成 JSON：'
       + '[{"date":"当前日期","steps":步数总计,"activeEnergy":活动能量,"weightKg":体重}]'
       + '（花括号里的中文换成上面各步的「魔法变量」）',
-    '最后加「拷贝到剪贴板」，然后回本页点「从剪贴板读取」',
+    '最后加「拷贝到剪贴板」，存好并给它起个名字',
+  ];
+
+  // 把「每天记得跑一次」这一步也交给系统。剩下那一下点击省不掉：
+  // iOS 不允许网页在没有用户手势时读剪贴板。
+  const automationRecipe = [
+    '「快捷指令」App → 底部「自动化」→ 右上角 + → 选「特定时间」',
+    '时间设 23:50、重复选「每天」',
+    '关键一步：把「运行前询问」关掉（新版 iOS 里是选「立即运行」），'
+      + '否则每天还要点一次通知才跑',
+    '下一步选刚才存的那条快捷指令 → 完成',
+    '之后每天数据会自动躺在剪贴板里，打开本 App 在「今日」页点一下「一键导入」就行',
   ];
 
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, '三种同步方式，按省事程度排')),
 
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge.fast', null, '最快'), h('strong', null, '快捷指令 + 剪贴板')),
-      h('p', null, '配置一次，之后每天两下：跑一次快捷指令，回来点「从剪贴板读取」。也可以配成自动化，'
-        + '每晚定时把当天数据拷进剪贴板。'),
+      h('div.method-head', null, h('span.method-badge.fast', null, '最快'), h('strong', null, '快捷指令 + 定时自动化')),
+      h('p', null, '配置一次，之后每天只剩一下：定时自动化在后台把当天数据拷进剪贴板，'
+        + '打开 App 在「今日」页点一下「一键导入」。'),
+      h('p.form-hint', { style: { margin: '2px 0 8px' } },
+        '说明：网页读不到 Apple 健康（iOS 没给 Safari 这个接口），所以同步绕不开快捷指令；'
+        + '而读剪贴板必须有一次点击，系统还会再弹一次「粘贴」确认。'
+        + '真正的全自动做不到，这已经是最省的路径。'),
       h('details', null,
-        h('summary', null, '展开配置步骤'),
-        h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t))))),
+        h('summary', null, '第一步：做一条取数的快捷指令'),
+        h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
+      h('details', null,
+        h('summary', null, '第二步：让它每天自己跑'),
+        h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 
     h('div.method', null,
       h('div.method-head', null, h('span.method-badge', null, '较快'), h('strong', null, '第三方导出 App')),
