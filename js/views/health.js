@@ -1,7 +1,7 @@
 /** 健康数据：导入 Apple 健康导出文件、手动补录、查看已同步的每日数据 */
 
 import { h, clearEl, num, toast, formatMinutes, mount } from '../lib/utils.js';
-import { state, saveHealthDay } from '../lib/store.js';
+import { state, saveHealthDay, countMisscaledDays, repairHealthEnergy } from '../lib/store.js';
 import { healthInsights, healthSummary } from '../core/health-insights.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
 
@@ -193,6 +193,35 @@ function manualCard(rerender) {
   );
 }
 
+/**
+ * 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000，
+ * 已经存进来的能量数据全部小一千倍。与其让人重新导入全部历史，
+ * 不如就地乘回去 —— 判据很保守，只动量级明显不可能的那些天。
+ */
+function repairCard(rerender) {
+  const count = countMisscaledDays();
+  if (!count) return null;
+  return h('section.card.card-danger', null,
+    h('div.card-head', null,
+      h('h3', null, '有 ' + count + ' 天的能量数据需要修正'),
+      h('span.card-tag', null, '一次点击即可')),
+    h('p.empty-hint', null,
+      '这些天的活动能量与静息能量被记成了实际值的千分之一，'
+      + '导致热量预算退化成公式估算。这是早期版本的单位换算缺陷，现已修复，'
+      + '但已经存进来的历史数据需要就地修正一次。'),
+    h('button.primary-btn', {
+      onclick: async (ev) => {
+        ev.currentTarget.disabled = true;
+        const n = await repairHealthEnergy();
+        toast(`已修正 ${n} 天的能量数据`, 'ok');
+        rerender();
+      },
+    }, `修正这 ${count} 天`),
+    h('p.form-hint', null,
+      '只会改动活动能量、静息能量与膳食热量三项；步数、体重、睡眠等一律不动。'
+      + '重复点击不会把正确的数据再放大。'));
+}
+
 /** 把同步来的数字翻译成「这意味着什么、该怎么做」 */
 function insightCard() {
   const summary = healthSummary(state.healthDays);
@@ -253,6 +282,7 @@ export function renderHealth(root) {
   const rerender = () => renderHealth(root);
   clearEl(root);
   mount(root,
+    repairCard(rerender),
     insightCard(),
     importCard(rerender),
     manualCard(rerender),

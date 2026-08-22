@@ -221,3 +221,46 @@ test('CSV 表头也走同一套归一化', () => {
   assert.equal(days[0].weightKg, 71.2);
   assert.deepEqual(ignoredKeys, ['心情']);
 });
+
+test('识别被单位缺陷缩小一千倍的日子', async () => {
+  const { findMisscaledEnergyDays } = await import('../js/core/health.js');
+  const days = [
+    { date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 },  // 受影响
+    { date: '2026-08-02', steps: 8000, activeEnergy: 550, restingEnergy: 1480 },   // 正常
+    { date: '2026-08-03', steps: 0, activeEnergy: 0, restingEnergy: 0 },           // 空数据
+    { date: '2026-08-04', steps: 300, activeEnergy: 12 },                          // 步数太少，不下结论
+    { date: '2026-08-05', steps: 6000, activeEnergy: 8 },                          // 受影响
+  ];
+  assert.deepEqual(findMisscaledEnergyDays(days).map((d) => d.date), ['2026-08-01', '2026-08-05']);
+});
+
+test('修正只动能量字段，其余原样保留', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const fixed = repairMisscaledEnergy([
+    { date: '2026-08-01', steps: 8000, weightKg: 71.2, sleepMinutes: 430, activeEnergy: 0.55, restingEnergy: 1.48, hkKcal: 1.9 },
+  ]);
+  assert.equal(fixed.length, 1);
+  assert.equal(fixed[0].activeEnergy, 550);
+  assert.equal(fixed[0].restingEnergy, 1480);
+  assert.equal(fixed[0].hkKcal, 1900);
+  assert.equal(fixed[0].steps, 8000, '步数不该被改');
+  assert.equal(fixed[0].weightKg, 71.2, '体重不该被改');
+  assert.equal(fixed[0].sleepMinutes, 430, '睡眠不该被改');
+});
+
+test('修正是幂等的：再跑一次不会把正确数据放大一千倍', async () => {
+  const { repairMisscaledEnergy, findMisscaledEnergyDays } = await import('../js/core/health.js');
+  const once = repairMisscaledEnergy([{ date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 }]);
+  assert.equal(findMisscaledEnergyDays(once).length, 0, '修好后不该再被判定为需要修复');
+  assert.equal(repairMisscaledEnergy(once).length, 0);
+});
+
+test('正常数据不会被误伤', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const normal = [
+    { date: '2026-08-01', steps: 8000, activeEnergy: 550, restingEnergy: 1480 },
+    { date: '2026-08-02', steps: 200, activeEnergy: 30, restingEnergy: 1450 },   // 真久坐
+    { date: '2026-08-03', weightKg: 71 },                                        // 只有体重
+  ];
+  assert.deepEqual(repairMisscaledEnergy(normal), []);
+});

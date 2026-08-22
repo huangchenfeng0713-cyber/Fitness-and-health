@@ -27,7 +27,7 @@ npm run serve          # 等价于 python3 -m http.server 8080
 跑测试：
 
 ```bash
-npm test               # node --test，85 个用例，覆盖营养计算 / 建议引擎 / 健康数据解析 / 健康解读 / 食物库自洽性
+npm test               # node --test，89 个用例，覆盖营养计算 / 建议引擎 / 健康数据解析 / 健康解读 / 食物库自洽性
 ```
 
 ---

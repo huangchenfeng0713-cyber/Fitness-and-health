@@ -387,6 +387,46 @@ export function parseHealthCsv(text) {
   return { days: rows, recordCount: rows.length, skipped: 0, types: [], ignoredKeys: [...ignored] };
 }
 
+/* ------------------------------------------------------------------ */
+/* 历史数据修复                                                          */
+/* ------------------------------------------------------------------ */
+
+/** 受单位缺陷影响的能量字段 */
+export const ENERGY_FIELDS = ['activeEnergy', 'restingEnergy', 'hkKcal'];
+
+/**
+ * 找出被「Cal 当成小卡」缺陷缩小一千倍的日子。
+ *
+ * 判据要足够保守，宁可漏也不能误伤手动录入的正确数据：
+ *  - 全天静息能量低于 50 kcal 在生理上不可能（成人躺一天也有 1200+）
+ *  - 活动能量低于 20 kcal 却走了一千步以上，同样只可能是量级错了
+ */
+export function findMisscaledEnergyDays(days = []) {
+  return days.filter((d) => {
+    const resting = Number(d.restingEnergy);
+    const active = Number(d.activeEnergy);
+    const steps = Number(d.steps) || 0;
+    if (resting > 0 && resting < 50) return true;
+    if (active > 0 && active < 20 && steps > 1000) return true;
+    return false;
+  });
+}
+
+/**
+ * 把受影响的日子的能量字段乘回 1000。
+ * 返回需要写回的记录，不改原数组。
+ */
+export function repairMisscaledEnergy(days = []) {
+  return findMisscaledEnergyDays(days).map((d) => {
+    const fixed = { ...d };
+    for (const key of ENERGY_FIELDS) {
+      const v = Number(fixed[key]);
+      if (Number.isFinite(v) && v > 0) fixed[key] = Math.round(v * 1000 * 100) / 100;
+    }
+    return fixed;
+  });
+}
+
 /** 计算近期基线（用于动态 TDEE 与趋势判断） */
 export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey(new Date()), window = 14) {
   const recent = healthDays.filter((d) => d.date < today).slice(-window);
