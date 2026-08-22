@@ -15,6 +15,7 @@ const SHELL = [
   './js/lib/charts.js',
   './js/core/nutrition.js',
   './js/core/advisor.js',
+  './js/core/feedback.js',
   './js/core/health.js',
   './js/data/foods.js',
   './js/views/dashboard.js',

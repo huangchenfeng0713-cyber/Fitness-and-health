@@ -3,6 +3,9 @@
 import { h, clearEl, num, toast, confirmAction, download, mount } from '../lib/utils.js';
 import { state, saveProfile, clearAllData, db } from '../lib/store.js';
 import { ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass } from '../core/nutrition.js';
+import {
+  FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
+} from '../core/feedback.js';
 
 function field(label, control, hint, extraClass = '') {
   return h(`label.form-field${extraClass ? `.${extraClass}` : ''}`, null,
@@ -228,6 +231,80 @@ function dataCard(rerender) {
   );
 }
 
+/**
+ * 反馈草稿也放模块作用域。
+ *
+ * 理由和上面的身体信息表单一样：输入过程中绝不重绘。设置页任何一次 store
+ * 变更（顺手拨个开关就算）都会整页重建，草稿留在这儿，写了一半的字才不会被冲掉。
+ */
+const feedbackDraft = { kind: FEEDBACK_KINDS[0].key, message: '' };
+
+/** 只报条数不报数值：这份东西会进公开的 issue，体重体脂生日一个都不能带 */
+function currentDiagnostics() {
+  return buildDiagnostics({
+    healthDays: state.healthDays.length,
+    dietDays: state.dietDaily.length,
+    customFoods: state.customFoods.length,
+    userAgent: navigator.userAgent,
+    language: navigator.language,
+    standalone: window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true,
+  });
+}
+
+function feedbackCard() {
+  const input = h('textarea.feedback-area', {
+    rows: 4,
+    placeholder: feedbackKind(feedbackDraft.kind).placeholder,
+    value: feedbackDraft.message,
+    oninput: (e) => { feedbackDraft.message = e.target.value; touch(); },
+  });
+
+  const kindSelect = h('select', {
+    onchange: (e) => {
+      feedbackDraft.kind = e.target.value;
+      input.placeholder = feedbackKind(e.target.value).placeholder;   // 直接改 DOM，不重绘
+    },
+  }, FEEDBACK_KINDS.map((k) => h('option', { value: k.key, selected: feedbackDraft.kind === k.key }, k.label)));
+
+  const submitBtn = h('button.primary-btn', {
+    onclick: () => {
+      const url = feedbackIssueUrl({ ...feedbackDraft, diagnostics: currentDiagnostics() });
+      // noopener：新开的页面拿不到 window.opener，免得它反过来动本页
+      window.open(url, '_blank', 'noopener');
+    },
+  }, '打开 GitHub 提交');
+
+  const copyBtn = h('button.secondary-btn.full', {
+    onclick: async () => {
+      const body = buildFeedbackBody({ ...feedbackDraft, diagnostics: currentDiagnostics() });
+      try {
+        await navigator.clipboard.writeText(body);
+        toast('已复制，可以粘到任何地方发出来', 'ok');
+      } catch {
+        // 剪贴板要安全上下文 + 用户手势，http 或旧浏览器上会直接抛
+        toast('浏览器不给复制，请手动选中上面的文字', 'error');
+      }
+    },
+  }, '复制反馈内容');
+
+  function touch() {
+    const empty = !feedbackDraft.message.trim();
+    submitBtn.disabled = empty;
+    copyBtn.disabled = empty;
+  }
+  touch();
+
+  return h('section.card', null,
+    h('div.card-head', null, h('h3', null, '意见反馈')),
+    h('p.form-hint', null, '应用本身不联网，所以反馈不会自动发出去。点下面的按钮只是打开 GitHub 的新建 issue 页面并把内容填好，你能看到全文、改完再决定要不要提交。'),
+    h('div.form-grid', null, field('反馈类型', kindSelect, null, 'span-all')),
+    input,
+    h('p.form-hint', null, '会一并附上：应用版本、浏览器型号、语言，以及健康 / 饮食 / 自定义食物各有多少条。不含体重、体脂、生日，也不含任何一条饮食记录。'),
+    submitBtn,
+    copyBtn,
+  );
+}
+
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
   clearEl(root);
@@ -236,6 +313,7 @@ export function renderSettings(root) {
     targetCard(),
     toggleCard(),
     dataCard(rerender),
+    feedbackCard(),
     h('section.card.about', null,
       h('div.card-head', null, h('h3', null, '关于')),
       h('p', null, '这是一个纯本地运行的网页应用：没有账号、没有后端、不联网上传任何数据。'),
