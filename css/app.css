@@ -19,6 +19,12 @@
   --danger: #d64545;
   --ok: #0f9d76;
 
+  /* 抽成变量：一处定义、多处复用，测试里也能覆写来模拟刘海高度 */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
   --radius: 16px;
   --radius-sm: 10px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 16px rgba(16, 24, 40, .04);
@@ -67,7 +73,7 @@ body {
 #app {
   max-width: 720px;
   margin: 0 auto;
-  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  padding-bottom: calc(72px + var(--safe-bottom));
 }
 
 /* ============ 顶栏 / 标签栏 ============ */
@@ -78,13 +84,13 @@ body {
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: saturate(180%) blur(14px);
   border-bottom: 1px solid var(--border);
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
 }
-.topbar-inner { padding: 10px 16px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.topbar-inner { padding: 10px calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left)); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
 .topbar-sub { font-size: 12px; color: var(--faint); }
 
-.view { padding: 14px 14px 24px; display: flex; flex-direction: column; gap: 14px; }
+.view { padding: 14px calc(14px + var(--safe-right)) 24px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
 
 .tabbar {
   position: fixed;
@@ -94,7 +100,7 @@ body {
   background: color-mix(in srgb, var(--card) 92%, transparent);
   backdrop-filter: saturate(180%) blur(16px);
   border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-bottom);
 }
 .tab {
   flex: 1;
@@ -522,8 +528,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .chart .target-label { fill: var(--muted); }
 
 /* ============ 引导 / 提示 ============ */
+.banner-slot:empty { display: none; }
 .onboard {
-  margin: 14px 14px 0; padding: 16px; background: var(--accent-soft);
+  margin: 14px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left)); padding: 16px; background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-radius: var(--radius); text-align: center;
 }
@@ -545,7 +552,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 /* ============ Toast ============ */
 .toast {
-  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom));
+  position: fixed; left: 50%; bottom: calc(84px + var(--safe-bottom));
   transform: translate(-50%, 12px); z-index: 60;
   background: #22252c; color: #fff; padding: 9px 16px; border-radius: 999px;
   font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;

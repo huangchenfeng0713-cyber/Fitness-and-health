@@ -58,16 +58,23 @@ function renderCurrent() {
   }
 }
 
-/** 首次使用时的引导：先把身体信息填了，否则所有建议都没有依据 */
+/**
+ * 首次使用时的引导横幅。
+ *
+ * 必须渲染进顶栏之后的插槽：早先直接 prepend 到 #app，横幅就排在
+ * 顶栏之前，而安全区内边距只加在顶栏上 —— 加到主屏幕全屏运行时，
+ * 横幅整个跑到状态栏底下，顶部内容看不全。
+ */
 function syncOnboarding() {
-  const existing = document.querySelector('.onboard');
+  const slot = $('#banner');
+  if (!slot) return;
   // 人已经在设置页填表了，横幅只会碍事
   if (state.profile.onboarded || current === 'settings') {
-    existing?.remove();
+    clearEl(slot);
     return;
   }
-  if (existing) return;
-  $('#app').prepend(h('div.onboard', null,
+  if (slot.firstChild) return;
+  slot.append(h('div.onboard', null,
     h('h2', null, '先花 30 秒填一下身体信息'),
     h('p', null, '热量与蛋白目标都由这些数据算出来。填完就能开始记录，之后随时能在「设置」里改。'),
     h('button.primary-btn', { onclick: () => switchTab('settings') }, '去填写'),
