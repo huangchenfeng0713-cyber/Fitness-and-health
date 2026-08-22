@@ -7,6 +7,7 @@
  */
 
 import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount } from '../lib/utils.js';
+import { macroBar } from '../lib/charts.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood,
@@ -281,7 +282,7 @@ function refreshPortion() {
     h('span', null, '克数'), gramsInput, h('span.unit', null, 'g'));
   function toggleGramInput() { gramInputWrap.hidden = !gramMode(); }
 
-  nodes.preview = h('div.portion-preview');
+  nodes.preview = h('div.preview-slot');
   nodes.mealRow = h('div.portion-meal', null);
   const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
 
@@ -366,17 +367,68 @@ function refreshPortion() {
   syncReadouts();
 }
 
+/**
+ * 记完这一笔之后，今日目标会推进到哪。
+ *
+ * 只报「这一份 386 kcal」没什么用 —— 真正要知道的是：现在 600，
+ * 记完变 986，目标 1878。所以把「现在 → 记录后 / 目标」并排显示，
+ * 进度条上再用半透明的第二段画出本次增量。
+ */
+function impactBlock(n) {
+  const gaps = state.derived?.advice?.gaps;
+  if (!gaps) return null;
+
+  const rows = [
+    ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0],
+    ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1],
+    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1],
+    ['脂肪', 'g', gaps.fat, n.fat, 'var(--fat)', 1],
+  ];
+
+  const kcalAfter = gaps.kcal.eaten + n.kcal;
+  const overBy = Math.round(kcalAfter - gaps.kcal.target);
+  const proteinAfterPct = gaps.protein.target > 0
+    ? Math.round(((gaps.protein.eaten + n.protein) / gaps.protein.target) * 100) : 0;
+
+  let note = null;
+  if (overBy > 0) {
+    note = h('p.impact-note.warn', null, `记下去会超出今日热量 ${overBy} kcal`);
+  } else if (n.kcal > 0) {
+    note = h('p.impact-note', null,
+      `记下去还剩 ${Math.abs(overBy)} kcal，蛋白完成 ${proteinAfterPct}%`);
+  }
+
+  return h('div.impact-block', null,
+    h('div.impact-title', null, h('span', null, '记录后 · 今日进度'), h('span', null, '现在 → 记录后 / 目标')),
+    rows.map(([label, unit, g, add, color, dec]) => {
+      const after = g.eaten + add;
+      const pct = g.target > 0 ? (after / g.target) * 100 : 0;
+      return h('div.impact-row', null,
+        h('div.impact-head', null,
+          h('span.impact-name', null, label),
+          h('span.impact-from', null, num(g.eaten, dec)),
+          h('span.impact-arrow', null, '→'),
+          h('span.impact-to', { class: pct > 105 ? 'over' : '' }, num(after, dec)),
+          h('span.impact-target', null, `/${num(g.target, 0)}${unit}`)),
+        macroBar({ value: g.eaten, delta: add, target: g.target, color }));
+    }),
+    note);
+}
+
 function refreshPreview(pending = false) {
   if (!nodes.preview || !ui.selected) return;
   const n = pending
-    ? { kcal: 0, protein: 0, fat: 0, carb: 0, sodium: 0 }
+    ? { kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sugar: 0, sodium: 0 }
     : nutrientsFor(ui.selected, ui.grams, ui.sugar);
-  mount(clearEl(nodes.preview), 
-    h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
-    h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),
-    h('div.np', null, h('strong', null, num(n.fat, 1)), h('span', null, '脂肪 g')),
-    h('div.np', null, h('strong', null, num(n.carb, 1)), h('span', null, '碳水 g')),
-    h('div.np', null, h('strong', null, num(n.sodium)), h('span', null, '钠 mg')));
+
+  mount(clearEl(nodes.preview),
+    h('div.portion-preview', null,
+      h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
+      h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),
+      h('div.np', null, h('strong', null, num(n.fat, 1)), h('span', null, '脂肪 g')),
+      h('div.np', null, h('strong', null, num(n.carb, 1)), h('span', null, '碳水 g')),
+      h('div.np', null, h('strong', null, num(n.sodium)), h('span', null, '钠 mg'))),
+    pending ? null : impactBlock(n));
 }
 
 function refreshCustomForm() {

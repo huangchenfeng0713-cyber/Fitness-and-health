@@ -45,20 +45,37 @@ export function ring({ pct = 0, size = 92, stroke = 9, color = 'var(--accent)', 
   return svg;
 }
 
-/** 横向进度条（宏量营养素） */
-export function macroBar({ value, target, color = 'var(--accent)' }) {
-  const pct = target > 0 ? (value / target) * 100 : 0;
+/**
+ * 横向进度条（宏量营养素）
+ * @param {number} [delta] 本次将要增加的量，用半透明的第二段画出来，
+ *        让人一眼看出「记完这笔会推进到哪」。
+ */
+export function macroBar({ value, target, delta = 0, color = 'var(--accent)' }) {
   const wrap = document.createElement('div');
   wrap.className = 'macro-bar';
+  const pctOf = (v) => (target > 0 ? (v / target) * 100 : 0);
+
+  const basePct = Math.max(0, Math.min(pctOf(value), 100));
+  const totalPct = pctOf(value + delta);
+
   const fill = document.createElement('div');
-  fill.className = `macro-bar-fill${pct > 105 ? ' over' : ''}`;
-  fill.style.width = `${Math.max(0, Math.min(pct, 100))}%`;
-  if (pct <= 105) fill.style.background = color;
+  fill.className = `macro-bar-fill${pctOf(value) > 105 ? ' over' : ''}`;
+  fill.style.width = `${basePct}%`;
+  if (pctOf(value) <= 105) fill.style.background = color;
   wrap.append(fill);
-  if (pct > 100) {
+
+  if (delta > 0) {
+    const add = document.createElement('div');
+    add.className = 'macro-bar-delta';
+    add.style.width = `${Math.max(0, Math.min(totalPct, 100) - basePct)}%`;
+    add.style.background = totalPct > 105 ? 'var(--danger)' : color;
+    wrap.append(add);
+  }
+
+  if (totalPct > 100) {
     const over = document.createElement('div');
     over.className = 'macro-bar-over';
-    over.style.width = `${Math.min(pct - 100, 40)}%`;
+    over.style.width = `${Math.min(totalPct - 100, 40)}%`;
     wrap.append(over);
   }
   return wrap;

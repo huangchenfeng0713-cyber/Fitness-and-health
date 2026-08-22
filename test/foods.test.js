@@ -238,3 +238,39 @@ test('茶饮均标为估算（品牌不公开营养表）', async () => {
   assert.deepEqual(notMarked.map((f) => f.name), [],
     '茶饮品牌不公开营养表，应一律标为估算');
 });
+
+test('补剂、冰品、品牌方便面都能搜到', () => {
+  const musts = [
+    '增肌粉', 'myprotein', '鸭腿饭',
+    '碎冰冰', '旺旺', '梦龙', '可爱多', '巧乐兹', '老冰棍', '钟薛高', '哈根达斯', '雪糕', '圣代',
+    '康师傅', '统一', '老坛酸菜', '白象', '今麦郎', '出前一丁', '辛拉面', '合味道', '汤达人', '拉面说',
+  ];
+  const missing = musts.filter((k) => searchFoods(k).length === 0);
+  assert.deepEqual(missing, [], `搜不到：${missing.join('、')}`);
+});
+
+test('方便面按品牌区分，且钠都标得足够高', () => {
+  // 按语义标记筛，不靠名字里有没有「面」——「出前一丁 麻油味」就没有
+  const noodles = FOODS.filter((f) => f.f.includes('instant'));
+  const brands = ['康师傅', '统一', '白象', '今麦郎', '出前一丁', '农心', '日清'];
+  for (const b of brands) {
+    assert.ok(noodles.some((f) => f.name.includes(b)), `缺品牌 ${b}`);
+  }
+  // 油炸方便面一份下来钠普遍超过 1500mg，这是它最该被看见的问题
+  for (const f of noodles.filter((x) => x.f.includes('fried'))) {
+    const per = nutrientsFor(f, f.s[0][1]);
+    assert.ok(per.sodium >= 1200, `${f.name} 一份只有 ${per.sodium}mg 钠，偏低得可疑`);
+  }
+});
+
+test('冰品的糖占比合理（糖应占碳水的大部分）', () => {
+  const ices = FOODS.filter((f) => /雪糕|冰棍|甜筒|冰淇淋|圣代|碎冰冰|梦龙|巧乐兹/.test(f.name));
+  assert.ok(ices.length >= 10, `只有 ${ices.length} 种冰品`);
+  for (const f of ices) {
+    const p = per100(f);
+    if (p.carb > 5) {
+      assert.ok(p.sugar / p.carb >= 0.55,
+        `${f.name} 的糖只占碳水的 ${Math.round((p.sugar / p.carb) * 100)}%，冰品不该这样`);
+    }
+  }
+});
