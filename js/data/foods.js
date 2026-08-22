@@ -9,11 +9,14 @@
  *   cat      分类
  *   n        每 100g：[热量kcal, 蛋白g, 脂肪g, 碳水g, 膳食纤维g, 糖g, 钠mg]
  *   s        常用份量 [[名称, 克数], ...]
+ *   sf       仅茶饮：点「无糖」时仍残留的糖（每 100g）。奶的乳糖、珍珠芋圆的
+ *            糖水、水果自带的糖不会随糖度归零，只有加进去的那部分才可调。
  *   f        语义标记（无法从营养数字推导的部分）
  *            fried 油炸 / refined 精制 / processed 加工肉或深加工 / whole 全谷物
  *            quick 便利店随手可得 / breakfast 适合早餐 / late 适合睡前 / cook 需烹饪
  *            sweetdrink 含糖饮料 / alcohol 酒精 / natsugar 糖来自天然乳糖，不计入游离糖
  *            est 该品牌未公开完整营养表，数值按同类食品推算
+ *            tealevel 可选糖度（营养按全糖录入，由 nutrientsFor 按糖度换算）
  */
 
 export const CATEGORIES = {
@@ -151,7 +154,6 @@ export const FOODS = [
   { id: 'water', name: '白水', alias: 'shui water', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 0], s: [['一杯', 250]], f: ['quick', 'late'] },
   { id: 'black_coffee', name: '美式咖啡（无糖）', alias: 'kafei coffee 咖啡 美式 黑咖啡', cat: 'drink', n: [2, 0.2, 0, 0.3, 0, 0, 3], s: [['一杯', 350]], f: ['quick'] },
   { id: 'latte', name: '拿铁（全脂）', alias: 'natie latte', cat: 'drink', n: [55, 3.0, 3.0, 4.3, 0, 4.3, 45], s: [['中杯', 350]], f: ['quick'] },
-  { id: 'milk_tea', name: '奶茶（全糖）', alias: 'naicha milk tea', cat: 'drink', n: [86, 1.0, 3.2, 13.5, 0, 12.5, 40], s: [['中杯', 500]], f: ['sweetdrink', 'quick'] },
   { id: 'cola', name: '可乐', alias: 'kele cola', cat: 'drink', n: [43, 0, 0, 10.8, 0, 10.8, 12], s: [['一罐', 330]], f: ['sweetdrink', 'quick'] },
   { id: 'cola_zero', name: '无糖可乐', alias: 'wutang kele zero cola', cat: 'drink', n: [0.4, 0, 0, 0.1, 0, 0, 12], s: [['一罐', 330]], f: ['quick'] },
   { id: 'juice_orange', name: '橙汁（100%）', alias: 'chengzhi juice', cat: 'drink', n: [45, 0.7, 0.2, 10.4, 0.2, 8.8, 3], s: [['一杯', 250]], f: ['sweetdrink', 'quick'] },
@@ -315,7 +317,6 @@ export const FOODS = [
 
   // ---------- 饮品（补充） ----------
   { id: 'americano_milk', name: '燕麦拿铁', alias: 'yanmainatie oat latte', cat: 'drink', n: [45, 1.0, 1.8, 6.5, 0.5, 5.0, 40], s: [['中杯', 350]], f: ['quick'] },
-  { id: 'milk_tea_lowsugar', name: '奶茶（三分糖）', alias: 'naicha sanfen', cat: 'drink', n: [52, 1.0, 2.8, 5.5, 0, 4.5, 40], s: [['中杯', 500]], f: ['sweetdrink', 'quick'] },
   { id: 'soda_lemon', name: '柠檬气泡水（无糖）', alias: 'qipaoshui', cat: 'drink', n: [1, 0, 0, 0.2, 0, 0, 15], s: [['一罐', 330]], f: ['quick', 'late'] },
   { id: 'yakult', name: '乳酸菌饮料', alias: 'ruusuanjun yakult', cat: 'drink', n: [71, 1.1, 0.1, 16.5, 0, 15.5, 25], s: [['一小瓶', 100]], f: ['sweetdrink', 'quick'] },
   { id: 'energy_drink', name: '功能饮料', alias: 'gongneng yinliao', cat: 'drink', n: [45, 0, 0, 11.0, 0, 11.0, 100], s: [['一罐', 250]], f: ['sweetdrink', 'quick'] },
@@ -526,7 +527,6 @@ export const FOODS = [
   { id: 'barley_tea', name: '大麦茶', alias: 'damaicha', cat: 'drink', n: [2, 0.1, 0, 0.4, 0, 0, 3], s: [['一杯', 250]], f: ['quick', 'late'] },
   { id: 'chrysanthemum_tea', name: '菊花茶（无糖）', alias: 'juhuacha', cat: 'drink', n: [2, 0.1, 0, 0.4, 0, 0, 2], s: [['一杯', 250]], f: ['quick', 'late'] },
   { id: 'lemon_water', name: '柠檬水（无糖）', alias: 'ningmengshui', cat: 'drink', n: [4, 0.1, 0, 1.0, 0.1, 0.3, 2], s: [['一杯', 350]], f: ['quick', 'late'] },
-  { id: 'fruit_tea', name: '水果茶（含糖）', alias: 'shuiguocha', cat: 'drink', n: [45, 0.2, 0.1, 11.0, 0.3, 10.0, 15], s: [['中杯', 500]], f: ['sweetdrink', 'quick'] },
   { id: 'cocoa_milk', name: '可可牛奶', alias: 'kekeniunai', cat: 'drink', n: [80, 3.2, 2.5, 11.5, 0.5, 10.0, 60], s: [['一盒', 250]], f: ['sweetdrink', 'quick'] },
   { id: 'whisky', name: '威士忌', alias: 'weishiji whisky', cat: 'drink', n: [250, 0, 0, 0.1, 0, 0, 1], s: [['一杯', 45]], f: ['alcohol'] },
   { id: 'cocktail', name: '鸡尾酒', alias: 'jiweijiu cocktail', cat: 'drink', n: [155, 0.1, 0.1, 12.0, 0, 11.0, 10], s: [['一杯', 200]], f: ['alcohol', 'sweetdrink'] },
@@ -581,16 +581,6 @@ export const FOODS = [
   { id: 'ph_wing', name: '必胜客 蜜汁烤翅', alias: 'pizzahut bishengke mizhikaochi', cat: 'chain', n: [267, 20.0, 15.6, 11.1, 0.0, 8.9, 778], s: [['一只', 45]], f: ['quick', 'processed', 'est'] },
   { id: 'subway_chicken', name: '赛百味 6寸鸡胸三明治', alias: 'subway saibaiwei', cat: 'chain', n: [141, 10.9, 2.3, 20.0, 1.8, 2.7, 364], s: [['一个', 220]], f: ['quick', 'processed'] },
   { id: 'subway_tuna', name: '赛百味 6寸金枪鱼三明治', alias: 'subway saibaiwei jinqiangyu', cat: 'chain', n: [205, 9.1, 10.0, 19.5, 1.8, 2.7, 341], s: [['一个', 220]], f: ['quick', 'processed'] },
-  { id: 'sb_latte', name: '星巴克 拿铁（中杯）', alias: 'starbucks xingbake natie', cat: 'chain', n: [54, 2.8, 2.8, 4.2, 0.0, 4.2, 37], s: [['中杯', 355]], f: ['quick', 'processed'] },
-  { id: 'sb_mocha', name: '星巴克 摩卡（中杯）', alias: 'starbucks xingbake moka', cat: 'chain', n: [85, 2.8, 3.4, 10.7, 0.3, 9.0, 39], s: [['中杯', 355]], f: ['quick', 'processed'] },
-  { id: 'sb_frappuccino', name: '星巴克 星冰乐（中杯）', alias: 'starbucks xingbingle', cat: 'chain', n: [85, 1.1, 3.1, 13.2, 0.0, 12.7, 51], s: [['中杯', 355]], f: ['quick', 'processed', 'est'] },
-  { id: 'luckin_coconut', name: '瑞幸 生椰拿铁（大杯）', alias: 'luckin ruixing shengyenatie', cat: 'chain', n: [47, 1.1, 1.9, 6.2, 0.0, 5.5, 23], s: [['大杯', 470]], f: ['quick', 'processed', 'est'] },
-  { id: 'luckin_thick_milk', name: '瑞幸 厚乳拿铁（大杯）', alias: 'luckin ruixing hourunatie', cat: 'chain', n: [51, 1.9, 2.3, 5.5, 0.0, 5.1, 30], s: [['大杯', 470]], f: ['quick', 'processed', 'est'] },
-  { id: 'mixue_lemon', name: '蜜雪冰城 柠檬水（大杯）', alias: 'mixue miyuebingcheng ningmengshui', cat: 'chain', n: [29, 0.1, 0.0, 7.2, 0.1, 6.8, 2], s: [['大杯', 500]], f: ['quick', 'processed', 'est'] },
-  { id: 'mixue_icecream', name: '蜜雪冰城 甜筒', alias: 'mixue tiantong', cat: 'chain', n: [214, 3.6, 8.6, 30.0, 0.4, 24.3, 86], s: [['一个', 70]], f: ['quick', 'processed', 'est'] },
-  { id: 'heytea_grape', name: '喜茶 多肉葡萄（标准糖）', alias: 'heytea xicha duoroputao', cat: 'chain', n: [56, 0.4, 1.0, 11.2, 0.2, 9.6, 12], s: [['中杯', 500]], f: ['quick', 'processed', 'est'] },
-  { id: 'chabaidao_mango', name: '茶百道 杨枝甘露', alias: 'chabaidao yangzhiganlu', cat: 'chain', n: [70, 0.6, 1.8, 12.6, 0.3, 10.4, 16], s: [['中杯', 500]], f: ['quick', 'processed', 'est'] },
-  { id: 'bawang_milktea', name: '霸王茶姬 伯牙绝弦', alias: 'bawangchaji boyajuexian', cat: 'chain', n: [47, 1.3, 1.3, 7.4, 0.0, 6.0, 26], s: [['中杯', 470]], f: ['quick', 'processed', 'est'] },
   { id: 'laoxiangji_soup', name: '老乡鸡 肥西老母鸡汤', alias: 'laoxiangji feixilaomujitang', cat: 'chain', n: [32, 2.0, 2.2, 0.5, 0.0, 0.1, 200], s: [['一份', 400]], f: ['quick', 'processed', 'est'] },
   { id: 'laoxiangji_set', name: '老乡鸡 两菜一饭套餐', alias: 'laoxiangji taocan', cat: 'chain', n: [118, 4.7, 4.4, 14.5, 0.7, 1.1, 291], s: [['一份', 550]], f: ['quick', 'processed', 'est'] },
   { id: 'shaxian_dumpling', name: '沙县小吃 蒸饺（一两）', alias: 'shaxian zhengjiao', cat: 'chain', n: [208, 7.5, 8.3, 25.0, 1.0, 1.2, 433], s: [['一份', 120]], f: ['quick', 'processed', 'est'] },
@@ -600,46 +590,53 @@ export const FOODS = [
   { id: 'hefu_noodle', name: '和府捞面 招牌汤面', alias: 'hefulaomian tangmian', cat: 'chain', n: [91, 4.0, 2.2, 13.6, 0.7, 0.7, 327], s: [['一份', 550]], f: ['quick', 'processed', 'est'] },
   { id: 'yoshinoya_beef', name: '吉野家 牛肉饭（中碗）', alias: 'yoshinoya jiyejia niuroufan', cat: 'chain', n: [144, 4.9, 4.4, 21.1, 0.7, 2.7, 311], s: [['中碗', 450]], f: ['quick', 'processed', 'est'] },
 
-  // ---------- 茶饮连锁（糖度影响极大，主力品类按糖度分档） ----------
-  { id: 'tea_boba_full', name: '珍珠奶茶（全糖）', alias: 'zhenzhunaicha bobo boba naicha', cat: 'chain', n: [94, 1.2, 2.8, 16.0, 0.2, 9.6, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_boba_half', name: '珍珠奶茶（半糖）', alias: 'zhenzhunaicha banging naicha', cat: 'chain', n: [78, 1.2, 2.8, 12.0, 0.2, 5.6, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_boba_low', name: '珍珠奶茶（三分糖）', alias: 'zhenzhunaicha sanfentang naicha', cat: 'chain', n: [70, 1.2, 2.8, 10.0, 0.2, 3.6, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_boba_none', name: '珍珠奶茶（无糖）', alias: 'zhenzhunaicha wutang naicha', cat: 'chain', n: [60, 1.2, 2.8, 7.6, 0.2, 1.2, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est'] },
-  { id: 'tea_milk_plain_none', name: '奶茶（不加料·无糖）', alias: 'naicha wutang', cat: 'chain', n: [30, 1.0, 1.6, 2.8, 0.0, 1.0, 22], s: [['中杯 500ml', 500]], f: ['quick', 'est'] },
-  { id: 'tea_cheese_top', name: '芝士奶盖茶', alias: 'zhishinaigai naigaicha', cat: 'chain', n: [64, 1.4, 3.4, 7.0, 0.0, 5.6, 28], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_brownsugar_boba', name: '黑糖珍珠鲜奶', alias: 'heitangzhenzhuxiannai heitang', cat: 'chain', n: [96, 1.8, 3.0, 15.2, 0.2, 10.4, 26], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_grass_jelly', name: '烧仙草', alias: 'shaoxiancao', cat: 'chain', n: [84, 1.2, 2.4, 14.4, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_taro_boba', name: '芋圆奶茶', alias: 'yuyuannaicha', cat: 'chain', n: [90, 1.2, 2.6, 15.2, 0.3, 8.4, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_fruit_light', name: '水果茶（半糖）', alias: 'shuiguocha guocha', cat: 'chain', n: [36, 0.2, 0.1, 8.8, 0.3, 7.6, 4], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_pure_none', name: '纯茶（无糖）', alias: 'chuncha wutangcha', cat: 'chain', n: [2, 0.0, 0.0, 0.3, 0.0, 0.0, 3], s: [['中杯 500ml', 500]], f: ['quick', 'est'] },
-  { id: 'tea_lemon_light', name: '柠檬茶（半糖）', alias: 'ningmengcha', cat: 'chain', n: [32, 0.1, 0.0, 8.0, 0.1, 7.2, 3], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'tea_yogurt_fruit', name: '水果酸奶昔', alias: 'suannaixi', cat: 'chain', n: [76, 1.6, 1.8, 13.2, 0.3, 10.4, 30], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'mixue_boba', name: '蜜雪冰城 珍珠奶茶', alias: 'mixue miyuebingcheng zhenzhunaicha', cat: 'chain', n: [84, 1.0, 2.4, 14.6, 0.2, 8.4, 22], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'mixue_bingqilin_tea', name: '蜜雪冰城 冰淇淋红茶', alias: 'mixue bingqilinhongcha', cat: 'chain', n: [56, 0.6, 1.4, 10.2, 0.0, 8.8, 16], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'mixue_grape', name: '蜜雪冰城 摇摇奶昔', alias: 'mixue yaoyaonaixi', cat: 'chain', n: [78, 1.2, 2.2, 13.2, 0.1, 10.0, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'heytea_cheese_grape', name: '喜茶 芝芝葡萄', alias: 'heytea xicha zhizhiputao', cat: 'chain', n: [66, 1.2, 2.6, 9.6, 0.2, 8.0, 26], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'heytea_berry', name: '喜茶 芝芝莓莓', alias: 'heytea xicha zhizhimeimei', cat: 'chain', n: [64, 1.2, 2.6, 9.0, 0.3, 7.6, 26], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'heytea_brownsugar', name: '喜茶 烤黑糖波波牛乳', alias: 'heytea xicha kaoheitangbobo', cat: 'chain', n: [94, 1.8, 3.0, 14.8, 0.2, 10.0, 26], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'naixue_strawberry', name: '奈雪的茶 霸气芝士草莓', alias: 'naixue naixuedecha bpqizhishicaomei', cat: 'chain', n: [57, 1.2, 2.0, 8.3, 0.3, 7.0, 23], s: [['大杯 600ml', 600]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'naixue_treasure', name: '奈雪的茶 宝藏茶', alias: 'naixue baozangcha', cat: 'chain', n: [50, 0.5, 0.8, 10.3, 0.2, 8.0, 10], s: [['大杯 600ml', 600]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'chabaidao_taro', name: '茶百道 芋圆奶茶', alias: 'chabaidao yuyuannaicha', cat: 'chain', n: [90, 1.2, 2.6, 15.2, 0.3, 8.4, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'chabaidao_osmanthus', name: '茶百道 桂花乌龙奶茶', alias: 'chabaidao guihuawulong', cat: 'chain', n: [76, 1.2, 2.4, 12.0, 0.1, 6.8, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'guming_grape', name: '古茗 超A芝士葡萄', alias: 'guming chaoAzhishiputao', cat: 'chain', n: [64, 1.2, 2.4, 9.4, 0.2, 7.6, 26], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'guming_jasmine', name: '古茗 云雾茉莉奶绿', alias: 'guming yunwumolinailv', cat: 'chain', n: [72, 1.0, 2.2, 11.6, 0.1, 6.4, 23], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'hushang_purple_rice', name: '沪上阿姨 血糯米奶茶', alias: 'hushangayi xuenumi', cat: 'chain', n: [92, 1.4, 2.6, 15.4, 0.4, 8.0, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'yidiandian_boba', name: '一点点 波霸奶茶', alias: 'yidiandian bobanaicha', cat: 'chain', n: [88, 1.0, 2.6, 15.2, 0.2, 8.8, 23], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'yidiandian_sijinaiqing', name: '一点点 四季奶青', alias: 'yidiandian sijinaiqing', cat: 'chain', n: [66, 1.0, 2.2, 10.4, 0.0, 6.0, 22], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'coco_boba', name: 'CoCo都可 珍珠奶茶', alias: 'coco dukezhenzhunaicha', cat: 'chain', n: [86, 1.0, 2.6, 14.6, 0.2, 8.4, 23], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'coco_qingke', name: 'CoCo都可 青稞奶茶', alias: 'coco qingkenaicha', cat: 'chain', n: [84, 1.2, 2.4, 14.2, 0.4, 7.6, 23], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'shuyi_grassjelly', name: '书亦烧仙草 招牌烧仙草', alias: 'shuyi shaoxiancao', cat: 'chain', n: [86, 1.2, 2.4, 14.8, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'yihetang_kaonai', name: '益禾堂 烤奶', alias: 'yihetang kaonai', cat: 'chain', n: [70, 1.2, 2.2, 11.0, 0.0, 6.0, 24], s: [['中杯 500ml', 500]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'chayan_youlan', name: '茶颜悦色 幽兰拿铁', alias: 'chayanyuese youlannatie', cat: 'chain', n: [71, 1.5, 2.9, 9.6, 0.1, 5.8, 27], s: [['中杯 480ml', 480]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'bawang_osmanthus', name: '霸王茶姬 桂馥兰香', alias: 'bawangchaji guifulanxiang', cat: 'chain', n: [45, 1.3, 1.3, 7.0, 0.0, 5.5, 26], s: [['中杯 470ml', 470]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'luckin_velvet', name: '瑞幸 丝绒拿铁', alias: 'luckin ruixing sirongnatie', cat: 'chain', n: [53, 1.9, 2.3, 6.2, 0.0, 5.3, 30], s: [['大杯 470ml', 470]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'luckin_coconut_cloud', name: '瑞幸 椰云拿铁', alias: 'luckin ruixing yeyunnatie', cat: 'chain', n: [57, 1.3, 2.6, 7.2, 0.0, 6.4, 26], s: [['大杯 470ml', 470]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'luckin_americano', name: '瑞幸 美式（无糖）', alias: 'luckin ruixing meishi', cat: 'chain', n: [1, 0.1, 0.0, 0.2, 0.0, 0.0, 2], s: [['大杯 470ml', 470]], f: ['quick', 'est'] },
-  { id: 'sb_matcha_latte', name: '星巴克 抹茶拿铁', alias: 'starbucks xingbake mochanatie', cat: 'chain', n: [68, 2.8, 2.5, 8.7, 0.3, 7.9, 39], s: [['中杯 355ml', 355]], f: ['quick', 'est', 'sweetdrink'] },
-  { id: 'kudi_latte', name: '库迪 生椰拿铁', alias: 'kudi shengyenatie', cat: 'chain', n: [45, 1.1, 1.9, 6.0, 0.0, 5.3, 23], s: [['大杯 470ml', 470]], f: ['quick', 'est', 'sweetdrink'] },
+  // ---------- 茶饮 / 咖啡连锁（营养按全糖录入，糖度由界面换算） ----------
+  { id: 'tea_boba', name: '珍珠奶茶', alias: 'zhenzhunaicha bobo boba naicha', cat: 'chain', n: [94, 1.2, 2.8, 16.0, 0.2, 9.6, 24], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_milk_plain', name: '奶茶（不加料）', alias: 'naicha', cat: 'chain', n: [66, 1.0, 1.6, 11.6, 0.0, 7.2, 22], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_milk_green', name: '奶绿', alias: 'nailv naicha', cat: 'chain', n: [68, 1.0, 2.0, 11.2, 0.0, 6.8, 22], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_cheese_top', name: '芝士奶盖茶', alias: 'zhishinaigai naigaicha', cat: 'chain', n: [64, 1.4, 3.4, 7.0, 0.0, 5.6, 28], s: [['中杯 500ml', 500]], sf: 1.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_brownsugar_boba', name: '黑糖珍珠鲜奶', alias: 'heitangzhenzhuxiannai heitang', cat: 'chain', n: [96, 1.8, 3.0, 15.2, 0.2, 10.4, 26], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_grass_jelly', name: '烧仙草', alias: 'shaoxiancao', cat: 'chain', n: [84, 1.2, 2.4, 14.4, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_taro_boba', name: '芋圆奶茶', alias: 'yuyuannaicha', cat: 'chain', n: [90, 1.2, 2.6, 15.2, 0.3, 8.4, 24], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_fruit', name: '水果茶', alias: 'shuiguocha guocha', cat: 'chain', n: [46, 0.2, 0.1, 11.2, 0.3, 10.0, 4], s: [['中杯 500ml', 500]], sf: 2.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_lemon', name: '柠檬茶', alias: 'ningmengcha', cat: 'chain', n: [40, 0.1, 0.0, 9.8, 0.1, 9.0, 3], s: [['中杯 500ml', 500]], sf: 0.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_yogurt_fruit', name: '水果酸奶昔', alias: 'suannaixi', cat: 'chain', n: [76, 1.6, 1.8, 13.2, 0.3, 10.4, 30], s: [['中杯 500ml', 500]], sf: 2.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_pure', name: '纯茶（乌龙/茉莉）', alias: 'chuncha wulong molihua', cat: 'chain', n: [2, 0.0, 0.0, 0.3, 0.0, 0.0, 3], s: [['中杯 500ml', 500]], f: ['quick', 'est'] },
+  { id: 'mixue_boba', name: '蜜雪冰城 珍珠奶茶', alias: 'mixue miyuebingcheng zhenzhunaicha', cat: 'chain', n: [84, 1.0, 2.4, 14.6, 0.2, 8.4, 22], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'mixue_lemon', name: '蜜雪冰城 冰鲜柠檬水', alias: 'mixue ningmengshui', cat: 'chain', n: [36, 0.1, 0.0, 9.0, 0.1, 8.4, 2], s: [['大杯 500ml', 500]], sf: 0.4, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'mixue_icecream_tea', name: '蜜雪冰城 冰淇淋红茶', alias: 'mixue bingqilinhongcha', cat: 'chain', n: [56, 0.6, 1.4, 10.2, 0.0, 8.8, 16], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'mixue_shake', name: '蜜雪冰城 摇摇奶昔', alias: 'mixue yaoyaonaixi', cat: 'chain', n: [78, 1.2, 2.2, 13.2, 0.1, 10.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'heytea_grape', name: '喜茶 多肉葡萄', alias: 'heytea xicha duoroputao', cat: 'chain', n: [60, 0.4, 1.0, 12.4, 0.2, 10.8, 12], s: [['中杯 500ml', 500]], sf: 3.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'heytea_cheese_grape', name: '喜茶 芝芝葡萄', alias: 'heytea xicha zhizhiputao', cat: 'chain', n: [66, 1.2, 2.6, 9.6, 0.2, 8.0, 26], s: [['中杯 500ml', 500]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'heytea_berry', name: '喜茶 芝芝莓莓', alias: 'heytea xicha zhizhimeimei', cat: 'chain', n: [64, 1.2, 2.6, 9.0, 0.3, 7.6, 26], s: [['中杯 500ml', 500]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'heytea_brownsugar', name: '喜茶 烤黑糖波波牛乳', alias: 'heytea xicha kaoheitangbobo', cat: 'chain', n: [94, 1.8, 3.0, 14.8, 0.2, 10.0, 26], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'naixue_strawberry', name: '奈雪的茶 霸气芝士草莓', alias: 'naixue naixuedecha baqizhishicaomei', cat: 'chain', n: [57, 1.2, 2.0, 8.3, 0.3, 7.0, 23], s: [['大杯 600ml', 600]], sf: 2.3, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'naixue_treasure', name: '奈雪的茶 宝藏茶', alias: 'naixue baozangcha', cat: 'chain', n: [50, 0.5, 0.8, 10.3, 0.2, 8.0, 10], s: [['大杯 600ml', 600]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'chabaidao_mango', name: '茶百道 杨枝甘露', alias: 'chabaidao yangzhiganlu', cat: 'chain', n: [70, 0.6, 1.8, 12.6, 0.3, 10.4, 16], s: [['中杯 500ml', 500]], sf: 3.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'chabaidao_taro', name: '茶百道 芋圆奶茶', alias: 'chabaidao yuyuannaicha', cat: 'chain', n: [90, 1.2, 2.6, 15.2, 0.3, 8.4, 24], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'chabaidao_osmanthus', name: '茶百道 桂花乌龙奶茶', alias: 'chabaidao guihuawulong', cat: 'chain', n: [76, 1.2, 2.4, 12.0, 0.1, 6.8, 24], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'guming_grape', name: '古茗 超A芝士葡萄', alias: 'guming chaoAzhishiputao', cat: 'chain', n: [64, 1.2, 2.4, 9.4, 0.2, 7.6, 26], s: [['中杯 500ml', 500]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'guming_jasmine', name: '古茗 云雾茉莉奶绿', alias: 'guming yunwumolinailv', cat: 'chain', n: [72, 1.0, 2.2, 11.6, 0.1, 6.4, 23], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'hushang_purple_rice', name: '沪上阿姨 血糯米奶茶', alias: 'hushangayi xuenumi', cat: 'chain', n: [92, 1.4, 2.6, 15.4, 0.4, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.4, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'yidiandian_boba', name: '一点点 波霸奶茶', alias: 'yidiandian bobanaicha', cat: 'chain', n: [88, 1.0, 2.6, 15.2, 0.2, 8.8, 23], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'yidiandian_sijinaiqing', name: '一点点 四季奶青', alias: 'yidiandian sijinaiqing', cat: 'chain', n: [66, 1.0, 2.2, 10.4, 0.0, 6.0, 22], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'coco_boba', name: 'CoCo都可 珍珠奶茶', alias: 'coco dukezhenzhunaicha', cat: 'chain', n: [86, 1.0, 2.6, 14.6, 0.2, 8.4, 23], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'coco_qingke', name: 'CoCo都可 青稞奶茶', alias: 'coco qingkenaicha', cat: 'chain', n: [84, 1.2, 2.4, 14.2, 0.4, 7.6, 23], s: [['中杯 500ml', 500]], sf: 1.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'shuyi_grassjelly', name: '书亦烧仙草 招牌烧仙草', alias: 'shuyi shaoxiancao', cat: 'chain', n: [86, 1.2, 2.4, 14.8, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'yihetang_kaonai', name: '益禾堂 烤奶', alias: 'yihetang kaonai', cat: 'chain', n: [70, 1.2, 2.2, 11.0, 0.0, 6.0, 24], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'chayan_youlan', name: '茶颜悦色 幽兰拿铁', alias: 'chayanyuese youlannatie', cat: 'chain', n: [71, 1.5, 2.9, 9.6, 0.1, 5.8, 27], s: [['中杯 480ml', 480]], sf: 2.1, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'bawang_boya', name: '霸王茶姬 伯牙绝弦', alias: 'bawangchaji boyajuexian', cat: 'chain', n: [47, 1.3, 1.3, 7.4, 0.0, 6.0, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'bawang_osmanthus', name: '霸王茶姬 桂馥兰香', alias: 'bawangchaji guifulanxiang', cat: 'chain', n: [45, 1.3, 1.3, 7.0, 0.0, 5.5, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'sb_latte', name: '星巴克 拿铁', alias: 'starbucks xingbake natie', cat: 'chain', n: [54, 2.8, 2.8, 4.2, 0.0, 4.2, 37], s: [['中杯 355ml', 355]], f: ['quick', 'est', 'sweetdrink'] },
+  { id: 'sb_mocha', name: '星巴克 摩卡', alias: 'starbucks xingbake moka', cat: 'chain', n: [85, 2.8, 3.4, 10.7, 0.3, 9.0, 39], s: [['中杯 355ml', 355]], sf: 4.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'sb_matcha_latte', name: '星巴克 抹茶拿铁', alias: 'starbucks xingbake mochanatie', cat: 'chain', n: [68, 2.8, 2.5, 8.7, 0.3, 7.9, 39], s: [['中杯 355ml', 355]], sf: 4.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'sb_frappuccino', name: '星巴克 星冰乐', alias: 'starbucks xingbingle', cat: 'chain', n: [85, 1.1, 3.1, 13.2, 0.0, 12.7, 51], s: [['中杯 355ml', 355]], sf: 3.4, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'luckin_coconut', name: '瑞幸 生椰拿铁', alias: 'luckin ruixing shengyenatie', cat: 'chain', n: [47, 1.1, 1.9, 6.2, 0.0, 5.5, 23], s: [['大杯 470ml', 470]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'luckin_thick_milk', name: '瑞幸 厚乳拿铁', alias: 'luckin ruixing hourunatie', cat: 'chain', n: [51, 1.9, 2.3, 5.5, 0.0, 5.1, 30], s: [['大杯 470ml', 470]], sf: 3.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'luckin_velvet', name: '瑞幸 丝绒拿铁', alias: 'luckin ruixing sirongnatie', cat: 'chain', n: [53, 1.9, 2.3, 6.2, 0.0, 5.3, 30], s: [['大杯 470ml', 470]], sf: 3.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'luckin_cloud', name: '瑞幸 椰云拿铁', alias: 'luckin ruixing yeyunnatie', cat: 'chain', n: [57, 1.3, 2.6, 7.2, 0.0, 6.4, 26], s: [['大杯 470ml', 470]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'luckin_americano', name: '瑞幸 美式', alias: 'luckin ruixing meishi', cat: 'chain', n: [1, 0.1, 0.0, 0.2, 0.0, 0.0, 2], s: [['大杯 470ml', 470]], f: ['quick', 'est'] },
+  { id: 'kudi_latte', name: '库迪 生椰拿铁', alias: 'kudi shengyenatie', cat: 'chain', n: [45, 1.1, 1.9, 6.0, 0.0, 5.3, 23], s: [['大杯 470ml', 470]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
 
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },
@@ -705,9 +702,56 @@ export function freeSugarFactor(food) {
   return 1;
 }
 
-/** 按克数换算营养。sugar 一栏是游离糖，与每日添加糖上限对应。 */
-export function nutrientsFor(food, grams) {
-  const p = per100(food);
+/**
+ * 茶饮的糖度档位。国内奶茶店基本都是这五档（少数店把「七分糖」叫「少糖」、
+ * 「三分糖」叫「微糖」）。ratio 指的是加进去的那部分糖保留多少。
+ */
+export const SUGAR_LEVELS = [
+  { key: 'full', label: '全糖', ratio: 1 },
+  { key: 'seven', label: '七分糖', alias: '少糖', ratio: 0.7 },
+  { key: 'half', label: '半糖', ratio: 0.5 },
+  { key: 'three', label: '三分糖', alias: '微糖', ratio: 0.3 },
+  { key: 'none', label: '无糖', ratio: 0 },
+];
+
+export const DEFAULT_SUGAR_LEVEL = 'full';
+
+/** 该食物是否支持选糖度 */
+export function hasSugarLevel(food) {
+  return (food.f || []).includes('tealevel');
+}
+
+export function sugarLevel(key) {
+  return SUGAR_LEVELS.find((l) => l.key === key) || SUGAR_LEVELS[0];
+}
+
+/**
+ * 按糖度换算每 100g 的热量与糖。
+ * 只有「加进去的糖」随档位缩放；奶的乳糖、珍珠芋圆的糖水、水果自带的糖
+ * （即 sf）点无糖时依然在，不该一起归零。
+ */
+function applySugarLevel(food, p, levelKey) {
+  if (!hasSugarLevel(food) || !levelKey || levelKey === 'full') return p;
+  const ratio = sugarLevel(levelKey).ratio;
+  const floor = Math.min(Number(food.sf) || 0, p.sugar);
+  const addedSugar = Math.max(p.sugar - floor, 0);
+  const removed = addedSugar * (1 - ratio);
+  return {
+    ...p,
+    sugar: Math.round((floor + addedSugar * ratio) * 10) / 10,
+    carb: Math.max(0, Math.round((p.carb - removed) * 10) / 10),
+    kcal: Math.max(0, Math.round(p.kcal - removed * ATWATER_CARB)),
+  };
+}
+
+const ATWATER_CARB = 4;
+
+/**
+ * 按克数换算营养。sugar 一栏是游离糖，与每日添加糖上限对应。
+ * @param {string} [levelKey] 茶饮糖度，缺省按全糖
+ */
+export function nutrientsFor(food, grams, levelKey) {
+  const p = applySugarLevel(food, per100(food), levelKey);
   const k = (Number(grams) || 0) / 100;
   const r = (v) => Math.round(v * k * 10) / 10;
   return {

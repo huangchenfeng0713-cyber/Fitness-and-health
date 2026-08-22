@@ -11,7 +11,10 @@ import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood,
 } from '../lib/store.js';
-import { searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated } from '../data/foods.js';
+import {
+  searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
+  SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
+} from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
 
 const ui = {
@@ -21,6 +24,7 @@ const ui = {
   grams: 100,
   unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按克输入
   qty: 1,         // 份数
+  sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
   showCustomForm: false,
 };
 
@@ -165,6 +169,7 @@ function selectFood(food) {
   if (nodes.suggest) clearEl(nodes.suggest);
   ui.unitIdx = 0;
   ui.qty = 1;
+  ui.sugar = DEFAULT_SUGAR_LEVEL;
   ui.grams = food.s?.[0]?.[1] || 100;
   refreshPortion();
   nodes.portion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -280,6 +285,18 @@ function refreshPortion() {
   nodes.mealRow = h('div.portion-meal', null);
   const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
 
+  // 茶饮的糖度：同一杯全糖和三分糖能差 100 多千卡，必须能选
+  const sugarRow = hasSugarLevel(food) ? h('div.sugar-row') : null;
+  const refreshSugarChips = () => {
+    if (!sugarRow) return;
+    mount(clearEl(sugarRow), SUGAR_LEVELS.map((l) => h('button', {
+      class: `chip-btn${ui.sugar === l.key ? ' active' : ''}`,
+      title: l.alias ? `也叫「${l.alias}」` : '',
+      onclick: () => { ui.sugar = l.key; refreshSugarChips(); syncReadouts(); },
+    }, l.alias ? `${l.label} / ${l.alias}` : l.label)));
+  };
+  refreshSugarChips();
+
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
@@ -289,11 +306,15 @@ function refreshPortion() {
 
   addBtn.onclick = async () => {
     addBtn.disabled = true;
+    const levelLabel = hasSugarLevel(food) && ui.sugar !== 'full'
+      ? `（${sugarLevel(ui.sugar).label}）` : '';
     await addEntry({
       foodId: food.id, grams: ui.grams, meal: guessMeal(),
+      sugarLevel: hasSugarLevel(food) ? ui.sugar : null,
+      name: food.name + levelLabel,
       custom: food.custom ? food : null,
     });
-    toast(`已记录 ${food.name} ${ui.grams}g`, 'ok');
+    toast(`已记录 ${food.name}${levelLabel} ${ui.grams}g`, 'ok');
     ui.selected = null;
     ui.query = '';
     nodes.searchInput.value = '';
@@ -319,7 +340,10 @@ function refreshPortion() {
         onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
       }, '×')),
 
-    h('div.field-label', null, '吃了多少'),
+    sugarRow && h('div.field-label', null, '糖度'),
+    sugarRow,
+
+    h('div.field-label', null, hasSugarLevel(food) ? '喝了多少' : '吃了多少'),
     unitRow,
 
     h('div.qty-stepper', null,
@@ -346,7 +370,7 @@ function refreshPreview(pending = false) {
   if (!nodes.preview || !ui.selected) return;
   const n = pending
     ? { kcal: 0, protein: 0, fat: 0, carb: 0, sodium: 0 }
-    : nutrientsFor(ui.selected, ui.grams);
+    : nutrientsFor(ui.selected, ui.grams, ui.sugar);
   mount(clearEl(nodes.preview), 
     h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
     h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),

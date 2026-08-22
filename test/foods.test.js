@@ -158,21 +158,77 @@ test('茶饮连锁品牌与主力品类都收录了', () => {
   assert.deepEqual(missKind, [], `搜不到品类：${missKind.join('、')}`);
 });
 
-test('奶茶按糖度分档，且热量随糖度单调下降', () => {
-  const ids = ['tea_boba_full', 'tea_boba_half', 'tea_boba_low', 'tea_boba_none'];
-  const rows = ids.map((id) => {
-    const f = FOOD_BY_ID.get(id);
-    assert.ok(f, `缺少 ${id}`);
-    return { name: f.name, ...nutrientsFor(f, f.s[0][1]) };
-  });
+test('糖度五档齐全，且包含常见别名', async () => {
+  const { SUGAR_LEVELS } = await import('../js/data/foods.js');
+  assert.deepEqual(SUGAR_LEVELS.map((l) => l.label),
+    ['全糖', '七分糖', '半糖', '三分糖', '无糖'],
+    '国内奶茶店的标准档位就是这五档');
+  assert.deepEqual(SUGAR_LEVELS.map((l) => l.ratio), [1, 0.7, 0.5, 0.3, 0]);
+  // 少糖 / 微糖 是同档的另一种叫法，得认
+  assert.equal(SUGAR_LEVELS.find((l) => l.label === '七分糖').alias, '少糖');
+  assert.equal(SUGAR_LEVELS.find((l) => l.label === '三分糖').alias, '微糖');
+});
+
+test('糖度换算：热量与糖随档位单调下降', async () => {
+  const { SUGAR_LEVELS } = await import('../js/data/foods.js');
+  const boba = FOOD_BY_ID.get('tea_boba');
+  const rows = SUGAR_LEVELS.map((l) => ({ label: l.label, ...nutrientsFor(boba, 500, l.key) }));
   for (let i = 1; i < rows.length; i += 1) {
     assert.ok(rows[i].kcal < rows[i - 1].kcal,
-      `${rows[i].name}(${rows[i].kcal}) 应低于 ${rows[i - 1].name}(${rows[i - 1].kcal})`);
-    assert.ok(rows[i].sugar < rows[i - 1].sugar, '糖也应随糖度递减');
+      `${rows[i].label}(${rows[i].kcal}) 应低于 ${rows[i - 1].label}(${rows[i - 1].kcal})`);
+    assert.ok(rows[i].sugar < rows[i - 1].sugar, '糖也应随档位递减');
+    assert.ok(rows[i].carb < rows[i - 1].carb, '碳水应跟着糖一起减');
   }
-  // 全糖与三分糖的差距要足够大，否则分档没意义
-  assert.ok(rows[0].kcal - rows[2].kcal >= 80,
-    `全糖与三分糖只差 ${rows[0].kcal - rows[2].kcal} kcal，分档意义不大`);
+  assert.ok(rows[0].kcal - rows[3].kcal >= 80,
+    `全糖与三分糖只差 ${rows[0].kcal - rows[3].kcal} kcal，分档意义不大`);
+  // 蛋白脂肪不该被糖度影响
+  assert.equal(rows[0].protein, rows[4].protein);
+  assert.equal(rows[0].fat, rows[4].fat);
+});
+
+test('点无糖时，奶的乳糖与配料自带的糖不会被归零', () => {
+  // 珍珠奶茶点无糖，珍珠的糖水和奶的乳糖仍在
+  const boba = nutrientsFor(FOOD_BY_ID.get('tea_boba'), 500, 'none');
+  assert.ok(boba.sugar > 0 && boba.sugar <= 8, `残留糖 ${boba.sugar}g 不合理`);
+  assert.ok(boba.kcal > 250, '无糖奶茶不该只剩几十千卡');
+
+  // 水果茶点无糖，水果自带的糖占比更高
+  const fruit = nutrientsFor(FOOD_BY_ID.get('tea_fruit'), 500, 'none');
+  assert.ok(fruit.sugar >= 10, `水果自带糖应保留，实得 ${fruit.sugar}g`);
+});
+
+test('本来就没有加糖的饮品不提供糖度选项', async () => {
+  const { hasSugarLevel } = await import('../js/data/foods.js');
+  for (const id of ['luckin_americano', 'tea_pure', 'sb_latte']) {
+    assert.equal(hasSugarLevel(FOOD_BY_ID.get(id)), false,
+      `${FOOD_BY_ID.get(id).name} 不该有糖度选项`);
+  }
+  for (const id of ['tea_boba', 'mixue_boba', 'heytea_grape', 'luckin_coconut']) {
+    assert.equal(hasSugarLevel(FOOD_BY_ID.get(id)), true,
+      `${FOOD_BY_ID.get(id).name} 应该能选糖度`);
+  }
+});
+
+test('缺省不传糖度时按全糖算，与显式全糖一致', () => {
+  const f = FOOD_BY_ID.get('tea_boba');
+  assert.deepEqual(nutrientsFor(f, 500), nutrientsFor(f, 500, 'full'));
+});
+
+test('茶饮不再按糖度重复录入（糖度是选项，不是多条记录）', () => {
+  // 只针对茶饮连锁：像「豆浆（无糖）/（加糖）」「美式咖啡（无糖）」是本来
+  // 就不同的产品，不是同一杯的糖度变体，不该被这条规则误伤。
+  const dupes = FOODS.filter((f) => f.cat === 'chain' && /（(全|半|三分|七分|少|微|无|标准)糖）/.test(f.name));
+  assert.deepEqual(dupes.map((f) => f.name), [],
+    `糖度应由界面选择：${dupes.map((f) => f.name).join('、')}`);
+
+  // 同一个基础名不该出现多条茶饮
+  const byBase = {};
+  for (const f of FOODS.filter((x) => x.cat === 'chain')) {
+    const base = f.name.replace(/（[^）]*）/g, '').trim();
+    (byBase[base] ||= []).push(f.name);
+  }
+  const repeated = Object.entries(byBase).filter(([, v]) => v.length > 1);
+  assert.deepEqual(repeated, [], `连锁条目重名：${repeated.map(([k]) => k).join('、')}`);
 });
 
 test('茶饮均标为估算（品牌不公开营养表）', async () => {
