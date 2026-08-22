@@ -69,8 +69,8 @@ function importCard(rerender) {
     h('div.progress-text'));
 
   const pasteArea = h('textarea.paste-area', {
-    placeholder: '[{"date":"2026-08-21","steps":8600,"activeEnergy":520,"weightKg":71.2}]',
-    rows: 3,
+    placeholder: '{"date":"2026-08-21","steps":8600,"activeEnergy":520,"weight":71.2}',
+    rows: 4,
   });
 
   const clipboardBtn = h('button.secondary-btn', {
@@ -94,6 +94,9 @@ function importCard(rerender) {
     h('div.btn-row', { style: { marginTop: '12px' } }, clipboardBtn),
     h('details.paste-block', null,
       h('summary', null, '或粘贴快捷指令输出的 JSON / CSV'),
+      h('p.form-hint', { style: { margin: '4px 0 8px' } },
+        '单条记录、多条数组、CSV 都行。字段名大小写、下划线、多余空格都会自动归一化，'
+        + '常见叫法（weight / body_mass / 体重）也认得。只有 date 是必需的。'),
       pasteArea,
       h('button.secondary-btn.full', {
         onclick: () => {

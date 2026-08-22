@@ -27,7 +27,7 @@ npm run serve          # 等价于 python3 -m http.server 8080
 跑测试：
 
 ```bash
-npm test               # node --test，69 个用例，覆盖营养计算 / 建议引擎 / 健康数据解析 / 健康解读 / 食物库自洽性
+npm test               # node --test，85 个用例，覆盖营养计算 / 建议引擎 / 健康数据解析 / 健康解读 / 食物库自洽性
 ```
 
 ---
@@ -42,6 +42,19 @@ npm test               # node --test，69 个用例，覆盖营养计算 / 建�
 | **快捷指令** | 用「快捷指令」做个每日自动化，把当天数据拼成 JSON，粘贴到导入框 | 每天增量同步 |
 | **第三方 App** | Health Auto Export 之类定期导出 JSON / CSV，再上传 | 半自动 |
 | **手动补录** | 「健康」页直接填步数 / 活动能量 / 体重 | 没导出文件时 |
+
+粘贴或链接传入的 JSON 很宽松，下面几种写法都认：
+
+```jsonc
+{"date":"2026-08-22","steps":2413,"activeEnergy":76.8,"weight":59}   // 单条记录
+[{"date":"2026-08-22","steps":2413}, {"date":"2026-08-23","steps":5120}]  // 多条
+{"data":{"metrics":[...]}}                                          // Health Auto Export
+```
+
+字段名的大小写、下划线、连字符、多余空格都会自动归一化（`activeEnergy `、
+`ACTIVE_ENERGY`、`active energy`、`活动能量` 等价）；`weight`、`body_mass`、
+`体重` 也都指向同一项。**只有 `date` 是必需的**，认不出的字段会在提示里列出来，
+不会被悄悄丢掉。
 
 其中最省事的是**快捷指令 + 链接直达**：让快捷指令把当天数据拼成 JSON，
 然后打开 `https://你的地址/#import=<URL 编码的 JSON>`，App 打开即自动导入、

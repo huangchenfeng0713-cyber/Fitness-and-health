@@ -166,3 +166,58 @@ test('基线：没有历史饮食记录时返回 null 而不是 0', () => {
   assert.equal(b.kcalIntake, null);
   assert.equal(b.proteinIntake, null);
 });
+
+test('单条 JSON 记录也能导入（快捷指令最容易产出这种）', () => {
+  const { days } = parseHealthJson({ date: '2026-08-22', steps: 2413, activeEnergy: 76.8, weight: 59 });
+  assert.equal(days.length, 1);
+  assert.equal(days[0].steps, 2413);
+  assert.equal(days[0].activeEnergy, 76.8);
+  assert.equal(days[0].weightKg, 59);
+});
+
+test('字段名带多余空格 / 大小写 / 下划线都能认出来', () => {
+  const variants = [
+    { date: '2026-08-22', 'activeEnergy ': 76.8 },      // 末尾空格
+    { date: '2026-08-22', ' activeEnergy': 76.8 },      // 开头空格
+    { date: '2026-08-22', ACTIVE_ENERGY: 76.8 },        // 全大写加下划线
+    { date: '2026-08-22', 'active energy': 76.8 },      // 空格分隔
+    { date: '2026-08-22', 'Active-Energy': 76.8 },      // 连字符
+    { date: '2026-08-22', 活动能量: 76.8 },              // 中文
+  ];
+  for (const v of variants) {
+    const { days } = parseHealthJson(v);
+    assert.equal(days[0]?.activeEnergy, 76.8, `没认出写法：${JSON.stringify(Object.keys(v))}`);
+  }
+});
+
+test('体重的多种叫法都认得', () => {
+  for (const k of ['weight', 'weightKg', 'body_mass', 'weight_body_mass', '体重']) {
+    const { days } = parseHealthJson({ date: '2026-08-22', [k]: 59 });
+    assert.equal(days[0]?.weightKg, 59, `没认出 ${k}`);
+  }
+});
+
+test('认不出的字段会被列出来，而不是悄悄丢掉', () => {
+  const r = parseHealthJson({ date: '2026-08-22', steps: 100, 心情: 5, mystery: 1 });
+  assert.deepEqual(r.ignoredKeys.sort(), ['mystery', '心情']);
+  assert.equal(r.days[0].steps, 100, '认得出的字段仍应正常导入');
+});
+
+test('缺少 date 时不产出垃圾数据', () => {
+  const r = parseHealthJson({ steps: 100, weight: 59 });
+  assert.equal(r.days.length, 0);
+});
+
+test('日期字段的多种叫法都认得', () => {
+  for (const k of ['date', 'Date', 'day', '日期']) {
+    const { days } = parseHealthJson({ [k]: '2026-08-22', steps: 100 });
+    assert.equal(days[0]?.date, '2026-08-22', `没认出日期字段 ${k}`);
+  }
+});
+
+test('CSV 表头也走同一套归一化', () => {
+  const { days, ignoredKeys } = parseHealthCsv('Date, Active_Energy , weight, 心情\n2026-08-22,520,71.2,5\n');
+  assert.equal(days[0].activeEnergy, 520);
+  assert.equal(days[0].weightKg, 71.2);
+  assert.deepEqual(ignoredKeys, ['心情']);
+});

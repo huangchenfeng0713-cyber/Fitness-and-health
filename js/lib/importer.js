@@ -20,16 +20,35 @@ export function runImportWorker(payload, onProgress) {
   });
 }
 
+/** 认不出的字段列成一句人话，别让数据被悄悄丢掉 */
+function ignoredNote(ignoredKeys) {
+  if (!ignoredKeys?.length) return '';
+  const shown = ignoredKeys.slice(0, 3).map((k) => `「${k}」`).join('、');
+  const more = ignoredKeys.length > 3 ? ` 等 ${ignoredKeys.length} 个` : '';
+  return `，忽略了不认识的字段${shown}${more}`;
+}
+
 /** 解析结果写入本地库，返回一句可直接展示的结果说明 */
 export async function applyImport(result, meta = {}) {
-  if (!result?.days?.length) return { ok: false, message: '文件里没有识别到可用的健康数据' };
+  const note = ignoredNote(result?.ignoredKeys);
+  if (!result?.days?.length) {
+    return {
+      ok: false,
+      ignoredKeys: result?.ignoredKeys || [],
+      message: result?.ignoredKeys?.length
+        ? `没识别到可用数据${note}`
+        : '没识别到可用的健康数据，请检查是不是缺少 date 字段',
+    };
+  }
   await mergeHealthDays(result.days, { records: result.recordCount, types: result.types?.length, ...meta });
   const from = result.days[0].date;
   const to = result.days[result.days.length - 1].date;
+  const range = from === to ? from : `${from} ~ ${to}`;
   return {
     ok: true,
     days: result.days.length,
-    message: `已导入 ${result.days.length} 天（${from} ~ ${to}）`,
+    ignoredKeys: result.ignoredKeys || [],
+    message: `已导入 ${result.days.length} 天（${range}）${note}`,
   };
 }
 
