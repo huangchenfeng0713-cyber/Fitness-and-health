@@ -166,25 +166,40 @@ function refreshPortion() {
   const gramsInput = h('input.grams-input', {
     type: 'number', min: 1, step: 5, inputmode: 'numeric',
     'aria-label': '克数',
+    // 输入过程中既不钳制也不回写：一旦在 oninput 里把值改回去，
+    // 用户删到空的那一刻就会被填成 1，等于永远删不干净、改不了数。
     oninput: (e) => {
-      ui.qty = Math.max(1, Number(e.target.value) || 1);
-      ui.grams = computeGrams();
+      const v = Number(e.target.value);
+      if (e.target.value !== '' && Number.isFinite(v) && v > 0) ui.qty = v;
+      syncReadouts({ writeInput: false });
+    },
+    // 收敛放到失焦时：这时用户已经输完，回填一个合法值才不打断输入
+    onblur: (e) => {
+      if (e.target.value === '' || !(Number(e.target.value) > 0)) {
+        ui.qty = Math.max(1, Math.round(ui.grams) || 1);
+      }
       syncReadouts();
     },
   });
 
-  function syncReadouts() {
-    ui.grams = computeGrams();
+  /**
+   * 刷新读数。writeInput=false 时不回写克数输入框 ——
+   * 用户正在里面打字，改它的 value 会把光标顶走、也让人删不掉内容。
+   */
+  function syncReadouts({ writeInput = true } = {}) {
+    const typing = !writeInput || document.activeElement === gramsInput;
+    const pending = gramMode() && gramsInput.value === '';
+    if (!pending) ui.grams = computeGrams();
+
     const unit = gramMode() ? 'g' : unitLabel(servings[ui.unitIdx][0]);
-    qtyValue.textContent = gramMode()
-      ? String(ui.grams)
-      : String(Number(ui.qty.toFixed(2)));
-    qtyUnit.textContent = unit;
+    qtyValue.textContent = pending ? '—'
+      : gramMode() ? String(ui.grams) : String(Number(ui.qty.toFixed(2)));
+    qtyUnit.textContent = pending ? '' : unit;
     gramsHint.textContent = gramMode()
       ? `${p.kcal} kcal / 100g`
       : `≈ ${ui.grams} g`;
-    if (gramMode()) gramsInput.value = ui.grams;
-    refreshPreview();
+    if (gramMode() && !typing) gramsInput.value = ui.grams;
+    refreshPreview(pending);
   }
 
   const bump = (dir) => {
@@ -292,9 +307,11 @@ function refreshPortion() {
   syncReadouts();
 }
 
-function refreshPreview() {
+function refreshPreview(pending = false) {
   if (!nodes.preview || !ui.selected) return;
-  const n = nutrientsFor(ui.selected, ui.grams);
+  const n = pending
+    ? { kcal: 0, protein: 0, fat: 0, carb: 0, sodium: 0 }
+    : nutrientsFor(ui.selected, ui.grams);
   mount(clearEl(nodes.preview), 
     h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
     h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),
@@ -401,7 +418,8 @@ function entryRow(e) {
         // 用 change：输入过程中不落库，避免每敲一个数字就重算重绘
         onchange: async (ev) => {
           const g = Number(ev.target.value);
-          if (g > 0) { await updateEntry(e.id, { grams: g }); toast('已更新', 'ok'); }
+          if (g > 0) { await updateEntry(e.id, { grams: g }); toast('已更新', 'ok'); return; }
+          ev.target.value = num(e.grams);   // 清空或填了非法值就还原，别留个空框
         },
       }),
       h('span.unit', null, 'g'),
