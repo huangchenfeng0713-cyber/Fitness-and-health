@@ -7,7 +7,8 @@ import * as db from './db.js';
 import { todayKey, dayFraction } from './utils.js';
 import { dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays } from '../core/health.js';
+import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
+  findImplausibleDays, clearImplausibleValues, implausibleFields } from '../core/health.js';
 import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
@@ -320,6 +321,27 @@ export async function repairHealthEnergy() {
   const fixed = repairMisscaledEnergy(state.healthDays);
   if (!fixed.length) return 0;
   await db.bulkPut(db.STORES.health, fixed, { merge: true });
+  setHealthDays(await db.getAll(db.STORES.health));
+  recompute();
+  emit();
+  return fixed.length;
+}
+
+/** 哪几天存进来的数值在生理上不可能（多半是导入时日期范围选错，把多天累加成一天） */
+export function listImplausibleDays() {
+  return findImplausibleDays(state.healthDays)
+    .map((d) => ({ date: d.date, fields: implausibleFields(d) }));
+}
+
+/**
+ * 抹掉这些天不可能的数值，其余字段保留。
+ * 这里必须整条覆写而不是 merge —— merge 会把旧记录里的字段原样带回来，
+ * 想删掉的那几个反而删不掉。
+ */
+export async function clearImplausibleHealth() {
+  const fixed = clearImplausibleValues(state.healthDays);
+  if (!fixed.length) return 0;
+  await db.bulkPut(db.STORES.health, fixed);
   setHealthDays(await db.getAll(db.STORES.health));
   recompute();
   emit();

@@ -136,17 +136,37 @@ export function dynamicTDEE({
     ? clamp(basalSoFar / f, bmr * 0.8, bmr * 1.4)
     : bmr;
 
+  /*
+   * 活动能量也要设上限，理由和静息那条一样。
+   *
+   * 凌晨 00:57 报来 2010 kcal 活动能量（近期日均才 310），换算成 35 kcal/分钟
+   * 持续了一小时——世界纪录级选手也做不到。这种数只可能是导入端把多天累加成
+   * 了一天。不拦的话热量目标会被顶到 4455 kcal，比真实需要多出近一倍。
+   *
+   * 天花板取 15 kcal/分钟：接近人类持续输出的极限，真实的大运动量碰不到它，
+   * 而按天累加出来的假数据一定会超。
+   */
+  const MAX_ACTIVE_PER_MIN = 15;
+  const elapsedMin = Math.max(1, f * 1440);
+  const activeCeiling = elapsedMin * MAX_ACTIVE_PER_MIN;
   const curveNow = activityCurve(f);
+  const activeCapped = activeSoFar > activeCeiling;
+  // 超了就不是「削到天花板」而是「这个数不能用」：退回按平时节奏推算，
+  // 拿天花板当真值等于把编出来的数字当依据，只是错得少一点而已。
+  const activeTrusted = activeCapped
+    ? (baselineActive > 0 ? baselineActive * curveNow : 0)
+    : activeSoFar;
+
   let activeFullDay;
   if (baselineActive > 0) {
     // 按"今天相对平时的活跃程度"外推剩余时间
     const expectedByNow = baselineActive * curveNow;
-    const pace = expectedByNow > 30 ? clamp(activeSoFar / expectedByNow, 0.4, 2.0) : 1;
-    activeFullDay = activeSoFar + baselineActive * (1 - curveNow) * pace;
+    const pace = expectedByNow > 30 ? clamp(activeTrusted / expectedByNow, 0.4, 2.0) : 1;
+    activeFullDay = activeTrusted + baselineActive * (1 - curveNow) * pace;
   } else if (curveNow > 0.2) {
-    activeFullDay = activeSoFar / curveNow;
+    activeFullDay = activeTrusted / curveNow;
   } else {
-    activeFullDay = fallbackTDEE ? Math.max(activeSoFar, (fallbackTDEE - bmr) * 0.8) : activeSoFar;
+    activeFullDay = fallbackTDEE ? Math.max(activeTrusted, (fallbackTDEE - bmr) * 0.8) : activeTrusted;
   }
 
   // 食物热效应约占摄入的 10%（按目标摄入估算，避免吃得少反而预算降太多）
@@ -156,7 +176,9 @@ export function dynamicTDEE({
   return {
     basal: round(basalFullDay),
     active: round(activeFullDay),
-    activeSoFar: round(activeSoFar),
+    activeSoFar: round(activeTrusted),
+    activeReported: round(activeSoFar),
+    activeCapped,
     tef,
     tdee: total,
     projected: f < 0.98,
@@ -232,6 +254,10 @@ export function dailyTargets(profile, dynamic = null) {
     staticTdee: stat.tdee,
     tdee: round(tdee),
     tdeeSource: dynamic?.tdee > 0 ? 'apple' : 'formula',
+    // 今天的活动能量数值不可信、已改按平时节奏估算 —— 要让界面能说出这件事，
+    // 否则用户看到一个正常的目标，不会知道自己的快捷指令取错了数据
+    activeCapped: dynamic?.activeCapped === true,
+    activeReported: dynamic?.activeReported ?? null,
     dailyDelta,
     clampedByFloor,
     kcal,

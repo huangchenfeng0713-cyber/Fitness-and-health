@@ -1,6 +1,6 @@
 /** 趋势：体重、热量收支、蛋白达标、活动与睡眠 */
 
-import { h, clearEl, num, shiftDay, formatMinutes, mount } from '../lib/utils.js';
+import { h, clearEl, num, shiftDay, formatHours, mount } from '../lib/utils.js';
 import { lineChart, barChart } from '../lib/charts.js';
 import { state } from '../lib/store.js';
 import { healthInsights } from '../core/health-insights.js';
@@ -118,7 +118,7 @@ export function renderTrends(root) {
       lineChart({ data: activeSeries, color: 'var(--protein)', unit: 'kcal' }),
       '这条线直接决定每天的热量预算：活动多的日子预算会自动上调。') : null,
 
-    sleepSeries.length >= 2 ? chartCard('睡眠', baseline.sleepMinutes ? `平均 ${formatMinutes(baseline.sleepMinutes)}` : null,
+    sleepSeries.length >= 2 ? chartCard('睡眠', baseline.sleepMinutes ? `平均 ${formatHours(baseline.sleepMinutes)}` : null,
       lineChart({ data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时', decimals: 1, unit: '小时' }),
       '长期睡眠不足会升高食欲激素，减脂期尤其明显。') : null,
   );

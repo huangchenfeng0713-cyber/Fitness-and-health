@@ -1,6 +1,6 @@
 /** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
 
-import { h, clearEl, num, formatMinutes, toast, mount, todayKey } from '../lib/utils.js';
+import { h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state, addEntry } from '../lib/store.js';
 import { CATEGORIES, isEstimated } from '../data/foods.js';
@@ -194,7 +194,8 @@ function healthCard(health, derived, rerender) {
     ['步数', health.steps != null ? num(health.steps) : '—'],
     ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)}` : '—', 'kcal'],
     ['锻炼', health.exerciseMinutes ? formatMinutes(health.exerciseMinutes) : '—'],
-    ['睡眠', health.sleepMinutes ? formatMinutes(health.sleepMinutes) : '—'],
+    ['睡眠', health.sleepMinutes ? formatHours(health.sleepMinutes, { unit: false }) : '—',
+      health.sleepMinutes ? '小时' : ''],
     ['体重', num(health.weightKg ?? derived.effectiveProfile.weightKg, 1), 'kg'],
     ['体脂', health.bodyFatPct != null ? num(health.bodyFatPct, 1) : '—', '%'],
   ];

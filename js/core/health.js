@@ -193,13 +193,13 @@ export function createAggregator() {
   const dayOf = (key) => {
     let d = days.get(key);
     if (!d) {
-      d = { date: key, _lastTs: {}, _avg: {} };
+      d = { date: key, _lastTs: {}, _avg: {}, _bySource: {} };
       days.set(key, d);
     }
     return d;
   };
 
-  function addRecord({ type, value, unit, startDate, endDate }) {
+  function addRecord({ type, value, unit, startDate, endDate, sourceName }) {
     const meta = HEALTH_TYPES[type];
     if (!meta) { skipped += 1; return false; }
     seenTypes.add(type);
@@ -215,7 +215,10 @@ export function createAggregator() {
       const minutes = (end.date - start.date) / 60000;
       if (!(minutes > 0) || minutes > 24 * 60) return false;
       const day = dayOf(end.dayKey);
-      day.sleepMinutes = (day.sleepMinutes || 0) + minutes;
+      const src = sourceName || '(unknown)';
+      const bucket = day._bySource.sleepMinutes || (day._bySource.sleepMinutes = {});
+      bucket[src] = (bucket[src] || 0) + minutes;
+      day.sleepMinutes = Math.max(...Object.values(bucket));
       recordCount += 1;
       return true;
     }
@@ -227,7 +230,20 @@ export function createAggregator() {
     recordCount += 1;
 
     if (meta.agg === 'sum') {
-      day[meta.key] = (day[meta.key] || 0) + v;
+      /*
+       * 不能把所有来源直接相加。
+       *
+       * iPhone 和 Apple Watch 会各写一份步数／活动能量，导出文件里两份都在；
+       * 「健康」App 显示时按来源优先级挑一份，而一路加下去就是重复计数——
+       * 实测某天健康 App 显示 8419 步，全加起来变成 16299 步，几乎翻倍。
+       *
+       * 这里按来源分桶累加，最后取最大的那一桶：只有一个来源时结果不变，
+       * 有多个来源时相当于挑最完整的那份，绝不会把同一段路数两遍。
+       */
+      const src = sourceName || '(unknown)';
+      const bucket = day._bySource[meta.key] || (day._bySource[meta.key] = {});
+      bucket[src] = (bucket[src] || 0) + v;
+      day[meta.key] = Math.max(...Object.values(bucket));
     } else if (meta.agg === 'avg') {
       const a = day._avg[meta.key] || (day._avg[meta.key] = { sum: 0, n: 0 });
       a.sum += v; a.n += 1;
@@ -279,6 +295,7 @@ export function feedXmlChunk(chunk, aggregator) {
       unit: attrs.unit,
       startDate: attrs.startDate,
       endDate: attrs.endDate || attrs.startDate,
+      sourceName: attrs.sourceName,
     });
     searchFrom = end + 1;
     consumed = end + 1;
@@ -427,11 +444,55 @@ export function repairMisscaledEnergy(days = []) {
   });
 }
 
+/*
+ * 生理上不可能的数值。
+ *
+ * 这些数不是「偏高」而是「不可能」：成人静息代谢再高也到不了 5000 kcal，
+ * 环法车手一个赛段的活动能量约 7000 kcal。真出现这种数，只可能是导入端把
+ * 多天累加成了一天（快捷指令里日期范围选错最常见），或者单位换算出了岔子。
+ *
+ * 上限故意放得很宽 —— 只拦「不可能」，不拦「少见」，免得误伤真实的大运动量。
+ */
+export const IMPLAUSIBLE_LIMITS = {
+  restingEnergy: 5000,
+  activeEnergy: 8000,
+  hkKcal: 15000,
+  steps: 100000,
+  exerciseMinutes: 1440,
+  sleepMinutes: 1440,
+};
+
+/** 这一天有哪几个字段的数值不可能是真的 */
+export function implausibleFields(day = {}) {
+  return Object.keys(IMPLAUSIBLE_LIMITS).filter((k) => {
+    const v = Number(day[k]);
+    return Number.isFinite(v) && v > IMPLAUSIBLE_LIMITS[k];
+  });
+}
+
+export function findImplausibleDays(days = []) {
+  return days.filter((d) => implausibleFields(d).length > 0);
+}
+
+/**
+ * 把不可能的数值抹掉，其余字段原样保留。
+ * 不猜正确值——猜错了比没有更糟，宁可留空让人重新导入或手动补录。
+ */
+export function clearImplausibleValues(days = []) {
+  return findImplausibleDays(days).map((d) => {
+    const fixed = { ...d };
+    for (const k of implausibleFields(d)) delete fixed[k];
+    return fixed;
+  });
+}
+
 /** 计算近期基线（用于动态 TDEE 与趋势判断） */
 export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey(new Date()), window = 14) {
   const recent = healthDays.filter((d) => d.date < today).slice(-window);
   const avg = (arr, key) => {
-    const vals = arr.map((d) => Number(d[key])).filter((v) => Number.isFinite(v) && v > 0);
+    // 上限过滤不能省：一天坏数据会顺着基线污染之后 14 天的热量预算
+    const cap = IMPLAUSIBLE_LIMITS[key] ?? Infinity;
+    const vals = arr.map((d) => Number(d[key])).filter((v) => Number.isFinite(v) && v > 0 && v <= cap);
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   };
 

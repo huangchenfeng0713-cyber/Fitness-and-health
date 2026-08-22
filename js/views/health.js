@@ -1,7 +1,8 @@
 /** 健康数据：导入 Apple 健康导出文件、手动补录、查看已同步的每日数据 */
 
-import { h, clearEl, num, toast, formatMinutes, mount } from '../lib/utils.js';
-import { state, saveHealthDay, countMisscaledDays, repairHealthEnergy } from '../lib/store.js';
+import { h, clearEl, num, toast, formatMinutes, formatHours, mount } from '../lib/utils.js';
+import { state, saveHealthDay, countMisscaledDays, repairHealthEnergy,
+  listImplausibleDays, clearImplausibleHealth } from '../lib/store.js';
 import { healthInsights, healthSummary } from '../core/health-insights.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
 
@@ -176,7 +177,7 @@ function manualCard(rerender) {
     ['steps', '步数', '步'],
     ['activeEnergy', '活动能量', 'kcal'],
     ['exerciseMinutes', '锻炼时间', '分钟'],
-    ['sleepMinutes', '睡眠', '分钟'],
+    ['sleepMinutes', '睡眠', '小时', 60],
     ['weightKg', '体重', 'kg'],
     ['bodyFatPct', '体脂率', '%'],
     ['waterMl', '饮水', 'ml'],
@@ -186,10 +187,11 @@ function manualCard(rerender) {
     h('div.card-head', null,
       h('h3', null, `手动补录 · ${state.day}`),
       h('span.card-tag', null, '没导出数据时也能用')),
-    h('div.form-grid', null, fields.map(([key, label, unit]) => {
+    h('div.form-grid', null, fields.map(([key, label, unit, scale]) => {
       const input = h('input', {
         type: 'number', step: '0.1', inputmode: 'decimal',
-        value: day[key] != null ? day[key] : '',
+        // scale 是「填进去的单位 → 存起来的单位」的倍数：睡眠按小时填，内部仍按分钟存
+        value: day[key] != null ? (scale ? Math.round((day[key] / scale) * 10) / 10 : day[key]) : '',
         placeholder: unit,
       });
       inputs[key] = input;
@@ -198,9 +200,9 @@ function manualCard(rerender) {
     h('button.primary-btn', {
       onclick: async () => {
         const patch = {};
-        for (const [key] of fields) {
+        for (const [key, , , scale] of fields) {
           const v = inputs[key].value.trim();
-          if (v !== '') patch[key] = Number(v);
+          if (v !== '') patch[key] = scale ? Number(v) * scale : Number(v);
         }
         if (!Object.keys(patch).length) { toast('没有填写任何数值', 'warn'); return; }
         await saveHealthDay(state.day, { ...patch, source: 'manual' });
@@ -238,6 +240,41 @@ function repairCard(rerender) {
     h('p.form-hint', null,
       '只会改动活动能量、静息能量与膳食热量三项；步数、体重、睡眠等一律不动。'
       + '重复点击不会把正确的数据再放大。'));
+}
+
+const FIELD_LABEL = {
+  restingEnergy: '静息能量', activeEnergy: '活动能量', hkKcal: '膳食热量',
+  steps: '步数', exerciseMinutes: '锻炼时间', sleepMinutes: '睡眠',
+};
+
+/*
+ * 和上面那张修正卡不同：这里的数不是量级错了、能算回去，而是根本不可能
+ * （成人静息代谢到不了 5000 kcal）。猜不出真值，只能抹掉让人重新导入，
+ * 留着的话它会一路污染热量预算和之后 14 天的基线。
+ */
+function implausibleCard(rerender) {
+  const bad = listImplausibleDays();
+  if (!bad.length) return null;
+  const sample = bad.slice(0, 3).map((d) => `${d.date}（${d.fields.map((f) => FIELD_LABEL[f] || f).join('、')}）`);
+  return h('section.card.card-danger', null,
+    h('div.card-head', null,
+      h('h3', null, `有 ${bad.length} 天的数值不可能是真的`),
+      h('span.card-tag', null, '建议清掉')),
+    h('p.empty-hint', null,
+      sample.join('；') + (bad.length > 3 ? ` 等 ${bad.length} 天` : '')),
+    h('p.form-hint', { style: { margin: '4px 0 10px' } },
+      '常见原因是快捷指令里的日期范围没选「今天」，把多天累加成了一天。'
+      + '这种数会把热量目标顶高一大截，也会污染近 14 天的基线，'
+      + '所以先抹掉、再重新导入一次更稳妥。'),
+    h('button.primary-btn', {
+      onclick: async (ev) => {
+        ev.currentTarget.disabled = true;
+        const n = await clearImplausibleHealth();
+        toast(`已清掉 ${n} 天的异常数值`, 'ok');
+        rerender();
+      },
+    }, `清掉这 ${bad.length} 天的异常数值`),
+    h('p.form-hint', null, '只抹掉超出生理上限的那几项，同一天里其余字段（体重、睡眠等）原样保留。'));
 }
 
 /** 把同步来的数字翻译成「这意味着什么、该怎么做」 */
@@ -280,7 +317,7 @@ function dataTable() {
     ['activeEnergy', '活动', (v) => (v != null ? `${num(v)}` : '—')],
     ['restingEnergy', '静息', (v) => (v != null ? `${num(v)}` : '—')],
     ['exerciseMinutes', '锻炼', (v) => (v != null ? formatMinutes(v) : '—')],
-    ['sleepMinutes', '睡眠', (v) => (v != null ? formatMinutes(v) : '—')],
+    ['sleepMinutes', '睡眠', (v) => (v != null ? formatHours(v) : '—')],
     ['weightKg', '体重', (v) => (v != null ? num(v, 1) : '—')],
   ];
   return h('section.card', null,
@@ -301,6 +338,7 @@ export function renderHealth(root) {
   clearEl(root);
   mount(root,
     repairCard(rerender),
+    implausibleCard(rerender),
     insightCard(),
     importCard(rerender),
     manualCard(rerender),

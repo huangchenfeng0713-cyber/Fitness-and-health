@@ -129,3 +129,56 @@ test('营养汇总与差额', () => {
   assert.equal(gaps.kcal.remaining, 1499.5);
   assert.equal(gaps.protein.pct, 21);
 });
+
+
+/* ------------------------------------------- 活动能量的合理性上限 */
+
+test('凌晨报来不可能的活动能量时，热量目标不被顶高', () => {
+  // 用户实测：00:57 存进来活动能量 2010 kcal（近期日均 310），
+  // 折合 35 kcal/分钟持续一小时，世界纪录级选手也做不到。
+  // 不拦的话 TDEE 被算成 4142 kcal，目标顶到 4455。
+  const f = 57 / 1440;
+  const bad = dynamicTDEE({
+    bmr: 1580, activeSoFar: 2010, basalSoFar: 23520, dayFraction: f,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  const none = dynamicTDEE({
+    bmr: 1580, activeSoFar: 0, basalSoFar: null, dayFraction: f,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(bad.activeCapped, true, '应识别出这个数不可能');
+  assert.equal(bad.activeReported, 2010, '原始值仍要能读到，便于提示用户');
+  assert.ok(bad.tdee < 2400, `TDEE 应回到正常量级，实得 ${bad.tdee}`);
+  assert.ok(Math.abs(bad.tdee - none.tdee) < 30,
+    `不可信的数据应等同于「今天还没有活动数据」，实得 ${bad.tdee} vs ${none.tdee}`);
+});
+
+test('真实的大运动量不会被上限误伤', () => {
+  // 半天骑车 700 kcal：12 小时里平均不到 1 kcal/分钟，完全正常
+  const hard = dynamicTDEE({
+    bmr: 1580, activeSoFar: 700, basalSoFar: null, dayFraction: 0.5,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(hard.activeCapped, false);
+  assert.equal(hard.activeSoFar, 700, '原样采信');
+  assert.ok(hard.tdee > 2800, `应体现出多出来的消耗，实得 ${hard.tdee}`);
+});
+
+test('一小时高强度训练在上限之内', () => {
+  // 早上 7 点练了一小时，烧掉 600 kcal：10 kcal/分钟，剧烈但可达
+  const f = 8 / 24;
+  const r = dynamicTDEE({
+    bmr: 1600, activeSoFar: 600, basalSoFar: null, dayFraction: f,
+    baselineActive: 300, intakeKcal: 0, fallbackTDEE: 2400,
+  });
+  assert.equal(r.activeCapped, false, '真实训练不该被判成异常');
+});
+
+test('静息能量在一天刚开始时本来就不被采信', () => {
+  // 这条防线原本就有：凌晨按比例外推会把静息放大好几倍
+  const r = dynamicTDEE({
+    bmr: 1580, activeSoFar: 0, basalSoFar: 23520, dayFraction: 57 / 1440,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(r.basal, 1580, '过半天之前一律用公式值');
+});

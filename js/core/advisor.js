@@ -347,8 +347,11 @@ export function buildAdvice(input) {
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
   const budget = mealBudget({ kcalLeft, proteinLeft, now });
+  // 活动能量已经被判为不可信时不能拿它推断训练日，
+  // 否则会出现「凌晨躺床上却被告知今天是训练日、该补蛋白和碳水」这种事
   const isTrainingDay = (health.exerciseMinutes || 0) >= 30
-    || (baseline.activeEnergy > 0 && (health.activeEnergy || 0) > baseline.activeEnergy * 1.25);
+    || (!targets.activeCapped && baseline.activeEnergy > 0
+      && (health.activeEnergy || 0) > baseline.activeEnergy * 1.25);
 
   const ctx = {
     budget,
@@ -459,6 +462,20 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
   const list = [];
   const add = (type, title, text) => list.push({ type, title, text });
 
+  /*
+   * 活动能量不可信时先把话说清楚，再谈预算。
+   * 实测有人在凌晨 1 点被导入 2010 kcal 活动能量（近期日均 310），
+   * 热量目标被顶到 4455。数值已经在 dynamicTDEE 那层挡掉了，但不说出来的话，
+   * 用户只会看到一个正常的目标，不知道自己的快捷指令一直在取错数据。
+   */
+  if (targets.activeCapped) {
+    add('warn', '今天的活动能量数值不可信',
+      `健康数据里今天的活动能量是 ${round(targets.activeReported || 0)} kcal，`
+      + `按现在的时间点算不可能达到（近期日均 ${round(baseline.activeEnergy || 0)} kcal）。`
+      + '热量目标已改按平时的活动节奏估算。'
+      + '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，建议去「健康」页核对一下。');
+  }
+
   // 动态热量预算：把"今天比平时多动/少动"和"预算调整了多少"讲成同一件事
   if (targets.tdeeSource === 'apple' && targets.staticTdee > 0) {
     const budgetDelta = round(targets.tdee - targets.staticTdee);
@@ -477,7 +494,10 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
   }
 
   if (isTrainingDay) {
-    add('info', '今天是训练日', `锻炼 ${round(health.exerciseMinutes || 0)} 分钟、活动能量 ${round(health.activeEnergy || 0)} kcal。训练后 2 小时内补 20-40g 蛋白 + 一份碳水，肌肉合成效率最高。`);
+    add('info', '今天是训练日',
+      `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
+      + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
+      + '。训练后 2 小时内补 20-40g 蛋白 + 一份碳水，肌肉合成效率最高。');
   }
 
   // 蛋白
