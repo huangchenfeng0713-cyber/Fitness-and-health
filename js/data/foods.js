@@ -17,6 +17,7 @@
  *            sweetdrink 含糖饮料 / alcohol 酒精 / natsugar 糖来自天然乳糖，不计入游离糖
  *            est 该品牌未公开完整营养表，数值按同类食品推算
  *            tealevel 可选糖度（营养按全糖录入，由 nutrientsFor 按糖度换算）
+ *            instant 方便面类（名字未必带「面」，靠标记识别）
  */
 
 export const CATEGORIES = {
@@ -47,7 +48,7 @@ export const FOODS = [
   { id: 'mantou', name: '馒头', alias: 'mantou steamed bun', cat: 'staple', n: [223, 7.0, 1.1, 47.0, 1.3, 2.0, 165], s: [['一个', 100]], f: ['refined', 'breakfast'] },
   { id: 'baozi_pork', name: '猪肉包子', alias: 'baozi 包子 肉包', cat: 'staple', n: [227, 8.5, 8.0, 30.0, 1.2, 3.0, 480], s: [['一个', 90]], f: ['breakfast'] },
   { id: 'noodle_cooked', name: '面条（煮熟）', alias: 'miantiao noodle 面 挂面 汤面', cat: 'staple', n: [110, 3.9, 0.5, 22.0, 1.0, 0.4, 180], s: [['一碗', 250]], f: ['refined'] },
-  { id: 'instant_noodle', name: '方便面（含调料）', alias: 'fangbianmian instant noodle', cat: 'staple', n: [470, 9.5, 21.0, 60.0, 2.0, 4.0, 1800], s: [['一包', 100]], f: ['fried', 'refined', 'processed', 'quick'] },
+  { id: 'instant_noodle', name: '方便面（含调料）', alias: 'fangbianmian instant noodle', cat: 'staple', n: [470, 9.5, 21.0, 60.0, 2.0, 4.0, 1800], s: [['一包', 100]], f: ['fried', 'refined', 'processed', 'quick', 'instant'] },
   { id: 'dumpling_pork', name: '猪肉水饺', alias: 'shuijiao dumpling 饺子 shuijiao', cat: 'staple', n: [230, 9.0, 8.5, 28.0, 1.4, 1.5, 480], s: [['一个', 20], ['一盘12个', 240]], f: [] },
   { id: 'sweet_potato', name: '红薯（蒸）', alias: 'hongshu sweet potato', cat: 'staple', n: [90, 1.6, 0.2, 20.7, 2.2, 6.5, 28], s: [['一个中等', 180]], f: ['whole', 'breakfast'] },
   { id: 'potato', name: '土豆（蒸）', alias: 'tudou potato 马铃薯 洋芋', cat: 'staple', n: [81, 2.0, 0.2, 17.8, 1.4, 0.9, 6], s: [['一个中等', 150]], f: ['whole'] },
@@ -637,6 +638,51 @@ export const FOODS = [
   { id: 'luckin_cloud', name: '瑞幸 椰云拿铁', alias: 'luckin ruixing yeyunnatie', cat: 'chain', n: [57, 1.3, 2.6, 7.2, 0.0, 6.4, 26], s: [['大杯 470ml', 470]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'luckin_americano', name: '瑞幸 美式', alias: 'luckin ruixing meishi', cat: 'chain', n: [1, 0.1, 0.0, 0.2, 0.0, 0.0, 2], s: [['大杯 470ml', 470]], f: ['quick', 'est'] },
   { id: 'kudi_latte', name: '库迪 生椰拿铁', alias: 'kudi shengyenatie', cat: 'chain', n: [45, 1.1, 1.9, 6.0, 0.0, 5.3, 23], s: [['大杯 470ml', 470]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+
+  // ---------- 补剂 / 冰品 / 品牌方便面 ----------
+  { id: 'gainer_myprotein', name: 'Myprotein 增肌粉', alias: 'myprotein zengjifen weightgainer', cat: 'dairy', n: [386, 29.0, 5.7, 51.0, 2.0, 10.0, 120], s: [['一份', 100]], f: [] },
+  { id: 'gainer_generic', name: '增肌粉（通用）', alias: 'zengjifen gainer', cat: 'dairy', n: [400, 26.7, 5.3, 60.0, 2.0, 16.0, 147], s: [['一勺', 75]], f: ['est'] },
+  { id: 'creatine', name: '肌酸（一水）', alias: 'jisuan creatine', cat: 'other', n: [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0], s: [['一勺', 5]], f: [] },
+  { id: 'bcaa', name: '支链氨基酸 BCAA', alias: 'bcaa zhilianjianji', cat: 'other', n: [400, 100.0, 0.0, 0.0, 0.0, 0.0, 200], s: [['一份', 10]], f: ['est'] },
+  { id: 'duck_leg_rice', name: '鸭腿饭', alias: 'yatuifan luyatuifan', cat: 'dish', n: [156, 6.7, 5.6, 19.6, 0.6, 1.3, 289], s: [['一份', 450]], f: ['est'] },
+  { id: 'roast_duck_leg', name: '卤鸭腿（单只）', alias: 'luyatui yatui', cat: 'meat', n: [189, 14.4, 13.9, 1.7, 0.0, 1.1, 500], s: [['一只', 180]], f: ['est'] },
+  { id: 'braised_duck', name: '酱鸭', alias: 'jiangya', cat: 'meat', n: [220, 16.0, 16.0, 2.7, 0.0, 2.0, 633], s: [['一份', 150]], f: ['est'] },
+  { id: 'wangwang_bing', name: '旺旺 碎冰冰', alias: 'wangwang suibingbing bingbing', cat: 'snack', n: [75, 0.0, 0.0, 18.8, 0.0, 17.5, 12], s: [['一支', 80]], f: ['quick', 'processed', 'est'] },
+  { id: 'cornetto', name: '和路雪 可爱多甜筒', alias: 'keaiduo cornetto tiantong', cat: 'snack', n: [313, 3.7, 16.4, 37.3, 0.7, 29.9, 90], s: [['一个', 67]], f: ['quick', 'processed', 'est'] },
+  { id: 'magnum', name: '和路雪 梦龙', alias: 'menglong magnum', cat: 'snack', n: [385, 4.6, 26.2, 32.3, 0.9, 29.2, 77], s: [['一支', 65]], f: ['quick', 'processed', 'est'] },
+  { id: 'qiaolezi', name: '伊利 巧乐兹', alias: 'qiaolezi', cat: 'snack', n: [267, 3.3, 13.3, 33.3, 0.7, 26.7, 73], s: [['一支', 75]], f: ['quick', 'processed', 'est'] },
+  { id: 'green_mood', name: '伊利 绿色心情', alias: 'lvsexinqing', cat: 'snack', n: [167, 1.9, 3.8, 32.1, 0.0, 28.2, 51], s: [['一支', 78]], f: ['quick', 'processed', 'est'] },
+  { id: 'laobinggun', name: '老冰棍', alias: 'laobinggun bingun', cat: 'snack', n: [100, 0.4, 0.1, 24.3, 0.0, 22.9, 11], s: [['一支', 70]], f: ['quick', 'processed', 'est'] },
+  { id: 'binggongchang', name: '蒙牛 冰工厂', alias: 'binggongchang', cat: 'snack', n: [93, 0.4, 0.1, 22.9, 0.0, 21.4, 14], s: [['一支', 70]], f: ['quick', 'processed', 'est'] },
+  { id: 'qiancengxue', name: '蒙牛 千层雪', alias: 'qiancengxue', cat: 'snack', n: [240, 3.3, 12.0, 29.3, 0.4, 24.0, 67], s: [['一支', 75]], f: ['quick', 'processed', 'est'] },
+  { id: 'suibian', name: '蒙牛 随变', alias: 'suibian', cat: 'snack', n: [267, 3.3, 14.7, 30.7, 0.7, 24.0, 73], s: [['一支', 75]], f: ['quick', 'processed', 'est'] },
+  { id: 'qiaocuibang', name: '伊利 巧脆棒', alias: 'qiaocuibang', cat: 'snack', n: [279, 3.7, 16.2, 29.4, 0.6, 23.5, 74], s: [['一支', 68]], f: ['quick', 'processed', 'est'] },
+  { id: 'guangming_lenggou', name: '光明 冷狗', alias: 'lenggou guangming', cat: 'snack', n: [267, 4.2, 15.0, 28.3, 0.0, 23.3, 75], s: [['一支', 60]], f: ['quick', 'processed', 'est'] },
+  { id: 'bayi_icecream', name: '八喜 冰淇淋', alias: 'baxi bayi icecream', cat: 'snack', n: [240, 4.0, 14.0, 25.0, 0.0, 22.0, 60], s: [['一杯', 100]], f: ['quick', 'processed', 'est'] },
+  { id: 'haagen_mini', name: '哈根达斯 迷你杯', alias: 'haagendazs hagendasi', cat: 'snack', n: [284, 4.9, 18.5, 24.7, 0.6, 22.2, 68], s: [['一杯', 81]], f: ['quick', 'processed'] },
+  { id: 'zhongxuegao', name: '钟薛高 雪糕', alias: 'zhongxuegao', cat: 'snack', n: [244, 3.8, 14.1, 25.6, 0.4, 21.8, 64], s: [['一片', 78]], f: ['quick', 'processed', 'est'] },
+  { id: 'mixue_sundae', name: '蜜雪冰城 圣代', alias: 'mixue shengdai', cat: 'snack', n: [183, 3.3, 5.8, 29.2, 0.2, 25.0, 67], s: [['一份', 120]], f: ['quick', 'processed', 'est'] },
+  { id: 'mcd_sundae', name: '麦当劳 圣代', alias: 'mcd shengdai', cat: 'snack', n: [166, 3.4, 4.1, 29.0, 0.0, 24.8, 62], s: [['一份', 145]], f: ['quick', 'processed'] },
+  { id: 'kfc_sundae', name: '肯德基 圣代', alias: 'kfc shengdai', cat: 'snack', n: [164, 2.9, 4.3, 28.6, 0.0, 24.3, 61], s: [['一份', 140]], f: ['quick', 'processed', 'est'] },
+  { id: 'ksf_hongshao', name: '康师傅 红烧牛肉面', alias: 'kangshifu hongshaoniuroumian', cat: 'staple', n: [476, 8.7, 19.4, 64.1, 1.9, 4.9, 1845], s: [['一袋', 103]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'ksf_hongshao_cup', name: '康师傅 红烧牛肉面（桶）', alias: 'kangshifu hongshaotong', cat: 'staple', n: [476, 9.0, 19.0, 64.8, 1.9, 4.8, 1857], s: [['一桶', 105]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'ksf_xianglaniurou', name: '康师傅 香辣牛肉面', alias: 'kangshifu xianglaniurou', cat: 'staple', n: [471, 8.7, 19.4, 63.1, 1.9, 4.9, 1796], s: [['一袋', 103]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'ksf_laotan', name: '康师傅 老坛酸菜牛肉面', alias: 'kangshifu laotansuancai', cat: 'staple', n: [455, 8.2, 19.1, 60.0, 1.8, 4.5, 1909], s: [['一袋', 110]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'tongyi_laotan', name: '统一 老坛酸菜牛肉面', alias: 'tongyi laotansuancai', cat: 'staple', n: [433, 7.6, 17.6, 58.8, 1.7, 5.0, 1933], s: [['一袋', 119]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'tongyi_tangdaren', name: '统一 汤达人 日式豚骨', alias: 'tongyi tangdaren tungu', cat: 'staple', n: [398, 8.5, 14.4, 57.6, 2.1, 5.1, 1483], s: [['一桶', 118]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'tongyi_hongshao', name: '统一 红烧牛肉面', alias: 'tongyi hongshaoniurou', cat: 'staple', n: [454, 8.3, 18.5, 61.1, 1.9, 4.6, 1759], s: [['一袋', 108]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'baixiang_xiangla', name: '白象 香辣牛肉面', alias: 'baixiang xianglaniurou', cat: 'staple', n: [444, 8.3, 18.5, 59.3, 1.9, 4.6, 1667], s: [['一袋', 108]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'baixiang_gutang', name: '白象 汤好喝', alias: 'baixiang tanghaohe', cat: 'staple', n: [420, 8.0, 16.1, 58.9, 1.8, 4.5, 1518], s: [['一桶', 112]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'jinmailang_laofanjia', name: '今麦郎 老范家（非油炸）', alias: 'jinmailang laofanjia feiyouzha', cat: 'staple', n: [333, 9.5, 3.8, 66.7, 2.9, 3.8, 1429], s: [['一份', 105]], f: ['quick', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'jinmailang_hongshao', name: '今麦郎 红烧牛肉面', alias: 'jinmailang hongshao', cat: 'staple', n: [457, 8.6, 18.1, 62.9, 1.9, 4.8, 1762], s: [['一袋', 105]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'nissin_demae', name: '出前一丁 麻油味', alias: 'chuqianyiding demae nissin', cat: 'staple', n: [450, 9.0, 19.0, 60.0, 2.0, 3.0, 1600], s: [['一包', 100]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'nissin_cupnoodle', name: '日清 合味道 海鲜杯面', alias: 'heweidao cupnoodle nissin', cat: 'staple', n: [467, 9.3, 18.7, 64.0, 2.0, 5.3, 1800], s: [['一杯', 75]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'nongshim_shin', name: '农心 辛拉面', alias: 'xinlamian shinramyun nongshim', cat: 'staple', n: [417, 8.3, 13.3, 65.8, 2.5, 3.3, 1492], s: [['一包', 120]], f: ['quick', 'fried', 'refined', 'processed', 'instant'] },
+  { id: 'wugu_daochang', name: '五谷道场 非油炸面', alias: 'wugudaochang feiyouzha', cat: 'staple', n: [340, 10.0, 3.0, 68.0, 3.0, 3.0, 1400], s: [['一份', 100]], f: ['quick', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'lamian_shuo', name: '拉面说 日式豚骨拉面', alias: 'lamianshuo', cat: 'staple', n: [188, 6.7, 5.8, 26.7, 1.2, 2.1, 792], s: [['一份', 240]], f: ['quick', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'ksf_bowl_noodle', name: '康师傅 面霸/大食桶', alias: 'kangshifu mianba dashitong', cat: 'staple', n: [462, 9.1, 18.2, 64.3, 2.1, 4.2, 1748], s: [['一桶', 143]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'suanlafen_bag', name: '嗨吃家 酸辣粉（桶装）', alias: 'haichijia suanlafen', cat: 'staple', n: [311, 4.4, 7.4, 56.3, 1.5, 4.4, 1407], s: [['一桶', 135]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'luosifen_bag', name: '螺蛳粉（袋装）', alias: 'luosifen daizhuang', cat: 'staple', n: [160, 3.7, 4.7, 26.0, 1.3, 1.7, 700], s: [['一袋', 300]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
 
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },

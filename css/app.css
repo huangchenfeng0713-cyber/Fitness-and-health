@@ -224,6 +224,11 @@ html, body { height: 100%; }
 .macro-bar { height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; display: flex; }
 .macro-bar-fill { height: 100%; border-radius: 999px; transition: width .35s ease; }
 .macro-bar-fill.over { background: var(--danger); }
+/* 本次记录将要增加的那一段：同色但半透明，和已摄入的实心段区分开 */
+.macro-bar-delta {
+  height: 100%; opacity: .42; transition: width .25s ease;
+  border-radius: 0 999px 999px 0;
+}
 .macro-bar-over { height: 100%; background: var(--danger); opacity: .55; }
 
 .hero-foot {
@@ -489,6 +494,32 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   text-align: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .unit { font-size: 12px; color: var(--faint); }
+
+/* 记完这一笔之后，今日目标会推进到哪 */
+.impact-block {
+  margin-top: 12px; padding: 11px 12px;
+  background: var(--card-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.impact-title {
+  font-size: 11.5px; color: var(--faint); font-weight: 600; margin-bottom: 9px;
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.impact-row + .impact-row { margin-top: 10px; }
+.impact-head {
+  display: flex; align-items: baseline; gap: 4px; font-size: 12.5px; margin-bottom: 4px;
+}
+.impact-name { flex: 1; color: var(--muted); }
+.impact-from { color: var(--faint); font-variant-numeric: tabular-nums; }
+.impact-arrow { color: var(--faint); font-size: 11px; }
+.impact-to { font-weight: 680; font-variant-numeric: tabular-nums; }
+.impact-to.over { color: var(--danger); }
+.impact-target { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+.impact-note {
+  margin: 9px 0 0; font-size: 11.5px; line-height: 1.5;
+}
+.impact-note.warn { color: var(--danger); }
+.impact-note.ok { color: var(--accent); }
 
 .portion-preview {
   display: flex; gap: 6px; margin-top: 12px;
