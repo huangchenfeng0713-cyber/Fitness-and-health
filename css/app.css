@@ -333,12 +333,24 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.form-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+/* grid 子项默认 min-width:auto，日期输入的固有宽度会把格子撑破 */
+.form-grid > * { min-width: 0; }
+.form-field { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); min-width: 0; }
 .form-field input, .form-field select {
   padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--card-2); color: var(--text); width: 100%;
+  background: var(--card-2); color: var(--text);
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+  font-size: 16px;   /* iOS Safari 对小于 16px 的输入框会自动放大页面 */
 }
+/* iOS 的原生日期控件自带内边距和固有宽度，不压一下会溢出容器 */
+.form-field.span-all { grid-column: 1 / -1; }
+.form-field input[type="date"] {
+  -webkit-appearance: none; appearance: none;
+  min-height: 40px; line-height: 1.2; text-align: left;
+}
+.form-field input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.form-field input[type="date"]::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0; }
 .field-hint { font-size: 11px; color: var(--faint); line-height: 1.4; }
 
 .toggle-row {
@@ -369,8 +381,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .search-row { display: flex; gap: 8px; align-items: center; }
 .search-input {
-  flex: 1; padding: 10px 12px; border: 1px solid var(--border);
+  flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border);
   border-radius: var(--radius-sm); background: var(--card-2); color: var(--text);
+  font-size: 16px;   /* 同上：避免 iOS 聚焦时缩放页面 */
 }
 .search-results { margin-top: 10px; display: flex; flex-direction: column; }
 .search-item {
@@ -395,9 +408,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .portion-servings, .portion-meal { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .portion-grams { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .grams-input {
-  flex: 1; padding: 9px 10px; border: 1px solid var(--border);
-  border-radius: var(--radius-sm); background: var(--card-2); text-align: center;
-  font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
+  flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--card-2); color: var(--text);
+  text-align: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .unit { font-size: 12px; color: var(--faint); }
 .portion-preview {
@@ -439,9 +452,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .entry-meta strong { color: var(--muted); font-weight: 600; }
 .entry-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .entry-grams {
-  width: 58px; padding: 5px 6px; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--card-2); text-align: center;
-  font-size: 13px; font-variant-numeric: tabular-nums;
+  width: 62px; flex-shrink: 0; padding: 6px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--card-2); color: var(--text);
+  text-align: center; font-size: 16px; font-variant-numeric: tabular-nums;
 }
 .copy-row { display: flex; justify-content: space-between; margin-top: 12px; }
 
@@ -472,7 +485,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .paste-block[open] summary::before { content: '▾ '; }
 .secondary-btn.full { width: 100%; margin-top: 8px; }
 .paste-area {
-  width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--card-2); color: var(--text); resize: vertical; font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5;
 }
@@ -552,3 +565,17 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ============ 未保存提示 / 布局插槽 ============ */
+.dirty-mark {
+  font-size: 11px; color: var(--warn); font-weight: 600; white-space: nowrap;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  padding: 2px 8px; border-radius: 999px;
+}
+.dirty-mark[hidden] { display: none; }
+
+.primary-btn:disabled { opacity: .4; cursor: default; }
+
+/* 视图里的占位容器：只换里面的内容，外层节点保持不动 */
+.view-stack { display: flex; flex-direction: column; gap: 14px; }
+.slot:empty { display: none; }

@@ -34,8 +34,16 @@ function switchTab(key) {
   current = key;
   location.hash = key;
   renderTabs();
+  syncOnboarding();
   renderCurrent();
   window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+/** 焦点在输入控件里时不要重绘：DOM 一换，iOS 会收起键盘、日期选择器会被当场提交 */
+function isEditing() {
+  const el = document.activeElement;
+  if (!el || !viewRoot?.contains(el)) return false;
+  return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
 }
 
 function renderCurrent() {
@@ -53,7 +61,8 @@ function renderCurrent() {
 /** 首次使用时的引导：先把身体信息填了，否则所有建议都没有依据 */
 function syncOnboarding() {
   const existing = document.querySelector('.onboard');
-  if (state.profile.onboarded) {
+  // 人已经在设置页填表了，横幅只会碍事
+  if (state.profile.onboarded || current === 'settings') {
     existing?.remove();
     return;
   }
@@ -89,14 +98,16 @@ async function boot() {
 
   // 时间在走，剩余预算和"下一餐"也要跟着变
   setInterval(() => {
-    if (state.day !== todayKey()) return;
+    if (state.day !== todayKey() || isEditing()) return;
     recompute();
     if (current === 'today' || current === 'diet') renderCurrent();
   }, 60_000);
 
   // 从后台切回来时刷新一次
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) { recompute(); renderCurrent(); }
+    if (document.hidden || isEditing()) return;
+    recompute();
+    renderCurrent();
   });
 
   window.addEventListener('hashchange', () => {
