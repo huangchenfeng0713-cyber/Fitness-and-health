@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 命令
 
 ```bash
-npm test                                              # 全部测试（node --test，100 用例）
+npm test                                              # 全部测试（node --test，114 用例）
 node --test test/nutrition.test.js                    # 单个文件
 node --test --test-name-pattern='Katch' test/*.test.js  # 按用例名筛选
 npm run serve                                         # python3 -m http.server 8080
