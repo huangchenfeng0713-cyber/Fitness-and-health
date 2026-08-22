@@ -41,6 +41,18 @@ function appendChildren(el, children) {
   }
 }
 
+/**
+ * 往已有节点里挂子元素。
+ *
+ * 别直接用原生 el.append()：它既不展开数组（会得到
+ * "[object HTMLButtonElement]"），也不忽略 null/false
+ * （会渲染出字面量 "null"）。这个包装和 h() 用同一套规则。
+ */
+export function mount(el, ...children) {
+  appendChildren(el, children);
+  return el;
+}
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 

@@ -1,6 +1,6 @@
 /** 设置：身体信息、目标、数据管理 */
 
-import { h, clearEl, num, toast, confirmAction, download } from '../lib/utils.js';
+import { h, clearEl, num, toast, confirmAction, download, mount } from '../lib/utils.js';
 import { state, saveProfile, clearAllData, db } from '../lib/store.js';
 import { ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass } from '../core/nutrition.js';
 
@@ -231,7 +231,7 @@ function dataCard(rerender) {
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
   clearEl(root);
-  root.append(
+  mount(root, 
     profileCard(rerender),
     targetCard(),
     toggleCard(),

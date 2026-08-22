@@ -411,22 +411,57 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .portion-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .portion-head strong { font-size: 15px; margin-right: 6px; }
 .portion-per100 { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
-.portion-servings, .portion-meal { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.portion-grams { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.portion-meal, .unit-row, .qty-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.field-label {
+  font-size: 12px; color: var(--faint); margin-top: 14px; font-weight: 600;
+}
+
+/* 份数步进器：主视觉是「几份」，克数作为副标注 */
+.qty-stepper {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  background: var(--card-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px;
+}
+.qty-readout { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
+.qty-value { font-size: 26px; font-weight: 680; font-variant-numeric: tabular-nums; }
+.qty-unit { font-size: 14px; color: var(--muted); margin-left: 4px; }
+.grams-hint { font-size: 11.5px; color: var(--faint); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+.step-btn.round {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--text); padding: 0;
+}
+.step-btn.round:active { background: var(--border); }
+
+.gram-input-wrap {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  font-size: 12.5px; color: var(--muted);
+}
+.gram-input-wrap[hidden] { display: none; }
+
 .grams-input {
   flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--border);
   border-radius: var(--radius-sm); background: var(--card-2); color: var(--text);
   text-align: center; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
 .unit { font-size: 12px; color: var(--faint); }
+
 .portion-preview {
-  display: flex; gap: 6px; margin-top: 10px;
+  display: flex; gap: 6px; margin-top: 12px;
   background: var(--card-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 9px 6px;
 }
 .np { flex: 1; text-align: center; line-height: 1.25; min-width: 0; }
 .np strong { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
 .np span { font-size: 10.5px; color: var(--faint); }
+
+.portion-tip {
+  margin: 12px 0 0; padding: 9px 11px; font-size: 12px; line-height: 1.6;
+  color: var(--muted); background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
 
 .custom-form {
   margin: 10px 0; padding: 12px; background: var(--card-2);

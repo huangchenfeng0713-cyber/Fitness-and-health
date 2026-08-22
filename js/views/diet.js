@@ -6,12 +6,12 @@
  * 所以外壳只建一次（buildShell），之后只刷新会变的那几块容器。
  */
 
-import { h, clearEl, num, toast, confirmAction, debounce, shiftDay } from '../lib/utils.js';
+import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount } from '../lib/utils.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood,
 } from '../lib/store.js';
-import { searchFoods, nutrientsFor, CATEGORIES, per100 } from '../data/foods.js';
+import { searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
 import { dayNav } from './dashboard.js';
 
@@ -20,6 +20,8 @@ const ui = {
   meal: null,
   selected: null,
   grams: 100,
+  unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按克输入
+  qty: 1,         // 份数
   showCustomForm: false,
 };
 
@@ -73,13 +75,13 @@ function buildShell(root) {
 
   nodes.root = h('div.view-stack', null,
     nodes.dayNav, nodes.quick, nodes.searchCard, nodes.entries);
-  root.append(nodes.root);
+  mount(root, nodes.root);
 }
 
 /* ---------------------------------------------------------------- 各区块 */
 
 function refreshDayNav() {
-  clearEl(nodes.dayNav).append(dayNav());
+  mount(clearEl(nodes.dayNav), dayNav());
 }
 
 /** 顶部实时剩余额度，记账时随时能看到 */
@@ -88,7 +90,7 @@ function refreshQuick() {
   clearEl(nodes.quick);
   if (!d) return;
   const { kcal, protein } = d.advice.gaps;
-  nodes.quick.append(h('div.quick-strip', null,
+  mount(nodes.quick, h('div.quick-strip', null,
     h('div.qs-item', null, h('span', null, '还可吃'),
       h('strong', { class: kcal.remaining < 0 ? 'neg' : '' }, `${num(kcal.remaining)} kcal`)),
     h('div.qs-item', null, h('span', null, '蛋白还差'),
@@ -103,7 +105,7 @@ function refreshFav() {
   if (ui.query) return;
   const favorites = state.favorites.map(findFood).filter(Boolean).slice(0, 10);
   if (!favorites.length) return;
-  nodes.favRow.append(h('div.fav-row', null,
+  mount(nodes.favRow, h('div.fav-row', null,
     h('span.fav-label', null, '常吃'),
     favorites.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name))));
 }
@@ -115,10 +117,10 @@ function refreshResults() {
 
   const results = searchFoods(ui.query, allFoods(), 24);
   if (!results.length) {
-    nodes.results.append(h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'));
+    mount(nodes.results, h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'));
     return;
   }
-  nodes.results.append(h('div.search-results', null, results.map((f) => {
+  mount(nodes.results, h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     return h('button.search-item', { onclick: () => selectFood(f) },
       h('div.search-item-main', null,
@@ -130,52 +132,110 @@ function refreshResults() {
 
 function selectFood(food) {
   ui.selected = food;
+  ui.unitIdx = 0;
+  ui.qty = 1;
   ui.grams = food.s?.[0]?.[1] || 100;
   refreshPortion();
   nodes.portion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/**
+ * 份量面板。
+ *
+ * 以「份数 × 常用单位」为主、克数为辅：没有厨房秤的人报不出
+ * 「185 克」，但能说出「一碗」「半份」。旁边给出实物参照，
+ * 想精确时再切到「克」自己填。
+ */
 function refreshPortion() {
   clearEl(nodes.portion);
   const food = ui.selected;
   if (!food) return;
-  const p = per100(food);
 
+  const p = per100(food);
+  const servings = food.s || [['一份', 100]];
+  const gramMode = () => ui.unitIdx >= servings.length;
+  const step = () => (gramMode() ? 10 : 0.5);
+
+  const computeGrams = () => (gramMode()
+    ? Math.max(1, Math.round(ui.qty))
+    : Math.max(1, Math.round(servings[ui.unitIdx][1] * ui.qty)));
+
+  const qtyValue = h('span.qty-value');
+  const qtyUnit = h('span.qty-unit');
+  const gramsHint = h('div.grams-hint');
   const gramsInput = h('input.grams-input', {
-    type: 'number', value: ui.grams, min: 1, step: 5, inputmode: 'numeric',
-    // 同理：改克数时只更新营养预览，不重建这个输入框
+    type: 'number', min: 1, step: 5, inputmode: 'numeric',
+    'aria-label': '克数',
     oninput: (e) => {
-      ui.grams = Math.max(1, Number(e.target.value) || 1);
-      refreshPreview();
+      ui.qty = Math.max(1, Number(e.target.value) || 1);
+      ui.grams = computeGrams();
+      syncReadouts();
     },
   });
 
-  const setGrams = (g) => {
-    ui.grams = Math.max(1, Math.round(g));
-    gramsInput.value = ui.grams;
+  function syncReadouts() {
+    ui.grams = computeGrams();
+    const unit = gramMode() ? 'g' : unitLabel(servings[ui.unitIdx][0]);
+    qtyValue.textContent = gramMode()
+      ? String(ui.grams)
+      : String(Number(ui.qty.toFixed(2)));
+    qtyUnit.textContent = unit;
+    gramsHint.textContent = gramMode()
+      ? `${p.kcal} kcal / 100g`
+      : `≈ ${ui.grams} g`;
+    if (gramMode()) gramsInput.value = ui.grams;
     refreshPreview();
-    refreshServingChips();
+  }
+
+  const bump = (dir) => {
+    ui.qty = Math.max(step(), Number((ui.qty + dir * step()).toFixed(2)));
+    syncReadouts();
+    refreshQuickChips();
   };
 
-  nodes.servingRow = h('div.portion-servings', null);
+  // 单位切换：食物自带的常用份量 + 一个「克」档
+  const unitRow = h('div.unit-row', null,
+    servings.map(([name, g], i) => h('button', {
+      class: `chip-btn${ui.unitIdx === i ? ' active' : ''}`,
+      onclick: () => {
+        ui.unitIdx = i; ui.qty = 1;
+        rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
+      },
+    }, `${unitLabel(name)}（${g}g）`)),
+    h('button', {
+      class: `chip-btn${gramMode() ? ' active' : ''}`,
+      onclick: () => {
+        ui.unitIdx = servings.length; ui.qty = ui.grams;
+        rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
+      },
+    }, '按克输入'));
+
+  function rebuildUnitRow() {
+    [...unitRow.children].forEach((btn, i) => {
+      const active = i === servings.length ? gramMode() : ui.unitIdx === i;
+      btn.className = `chip-btn${active ? ' active' : ''}`;
+    });
+  }
+
+  const quickChips = h('div.qty-quick');
+  function refreshQuickChips() {
+    const presets = gramMode() ? [50, 100, 150, 200, 300] : [0.5, 1, 1.5, 2, 3];
+    mount(clearEl(quickChips), presets.map((v) => h('button', {
+      class: `chip-btn${Math.abs(ui.qty - v) < 1e-6 ? ' active' : ''}`,
+      onclick: () => { ui.qty = v; syncReadouts(); refreshQuickChips(); },
+    }, gramMode() ? `${v}g` : `${v} ${unitLabel(servings[ui.unitIdx][0])}`)));
+  }
+
+  const gramInputWrap = h('div.gram-input-wrap', null,
+    h('span', null, '克数'), gramsInput, h('span.unit', null, 'g'));
+  function toggleGramInput() { gramInputWrap.hidden = !gramMode(); }
+
   nodes.preview = h('div.portion-preview');
   nodes.mealRow = h('div.portion-meal', null);
   const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
 
-  const refreshServingChips = () => {
-    clearEl(nodes.servingRow).append(
-      (food.s || []).map(([name, g]) => h('button', {
-        class: `chip-btn${ui.grams === g ? ' active' : ''}`,
-        onclick: () => setGrams(g),
-      }, `${name} ${g}g`)),
-      [50, 100, 150, 200].map((g) => h('button', {
-        class: `chip-btn${ui.grams === g ? ' active' : ''}`,
-        onclick: () => setGrams(g),
-      }, `${g}g`)));
-  };
-
   const refreshMealChips = () => {
-    clearEl(nodes.mealRow).append(MEALS.map((m) => h('button', {
+    mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
       onclick: () => { ui.meal = m.key; refreshMealChips(); addBtn.textContent = `记录到${m.label}`; },
     }, m.label)));
@@ -195,10 +255,11 @@ function refreshPortion() {
     refreshPortion();
   };
 
-  refreshServingChips();
   refreshMealChips();
+  refreshQuickChips();
+  toggleGramInput();
 
-  nodes.portion.append(h('div.portion-panel', null,
+  mount(nodes.portion, h('div.portion-panel', null,
     h('div.portion-head', null,
       h('div', null,
         h('strong', null, food.name),
@@ -209,23 +270,32 @@ function refreshPortion() {
         'aria-label': '取消',
         onclick: () => { ui.selected = null; refreshPortion(); },
       }, '×')),
-    nodes.servingRow,
-    h('div.portion-grams', null,
-      h('button.step-btn', { onclick: () => setGrams(ui.grams - 10) }, '−10'),
-      gramsInput,
-      h('span.unit', null, 'g'),
-      h('button.step-btn', { onclick: () => setGrams(ui.grams + 10) }, '+10')),
+
+    h('div.field-label', null, '吃了多少'),
+    unitRow,
+
+    h('div.qty-stepper', null,
+      h('button.step-btn.round', { 'aria-label': '减少', onclick: () => bump(-1) }, '−'),
+      h('div.qty-readout', null, qtyValue, qtyUnit, gramsHint),
+      h('button.step-btn.round', { 'aria-label': '增加', onclick: () => bump(1) }, '+')),
+
+    quickChips,
+    gramInputWrap,
+
+    h('p.portion-tip', null, portionTip(food)),
+
     nodes.preview,
+    h('div.field-label', null, '记到哪一餐'),
     nodes.mealRow,
     addBtn));
 
-  refreshPreview();
+  syncReadouts();
 }
 
 function refreshPreview() {
   if (!nodes.preview || !ui.selected) return;
   const n = nutrientsFor(ui.selected, ui.grams);
-  clearEl(nodes.preview).append(
+  mount(clearEl(nodes.preview), 
     h('div.np', null, h('strong', null, num(n.kcal)), h('span', null, 'kcal')),
     h('div.np', null, h('strong', null, num(n.protein, 1)), h('span', null, '蛋白 g')),
     h('div.np', null, h('strong', null, num(n.fat, 1)), h('span', null, '脂肪 g')),
@@ -255,7 +325,7 @@ function refreshCustomForm() {
     return h('label.form-field', null, h('span', null, label), input);
   }));
 
-  nodes.customBox.append(h('div.custom-form', null,
+  mount(nodes.customBox, h('div.custom-form', null,
     h('p.form-hint', null, '按包装上的「营养成分表（每 100 克）」填写即可。'),
     grid,
     h('button.primary-btn', {
@@ -294,7 +364,7 @@ function refreshEntries() {
   );
 
   if (!entries.length) {
-    nodes.entries.append(h('section.card', null,
+    mount(nodes.entries, h('section.card', null,
       h('div.card-head', null, h('h3', null, '这一天的记录')),
       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
       copyRow()));
@@ -304,7 +374,7 @@ function refreshEntries() {
   const grouped = {};
   for (const e of entries) (grouped[e.meal] ||= []).push(e);
 
-  nodes.entries.append(h('section.card', null,
+  mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '这一天的记录'),
       h('span.card-tag', null,

@@ -1,6 +1,6 @@
 /** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
 
-import { h, clearEl, num, formatDayLabel, formatMinutes, toast, shiftDay, todayKey } from '../lib/utils.js';
+import { h, clearEl, num, formatDayLabel, formatMinutes, toast, shiftDay, todayKey, mount } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state, setDay, addEntry } from '../lib/store.js';
 import { CATEGORIES } from '../data/foods.js';
@@ -222,7 +222,7 @@ export function renderDashboard(root) {
   clearEl(root);
   if (!d) return;
   const { advice, targets, health } = d;
-  root.append(
+  mount(root, 
     dayNav(),
     heroCard(advice, targets, d),
     recommendCard(advice, rerender),

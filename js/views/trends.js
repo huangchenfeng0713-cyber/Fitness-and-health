@@ -1,6 +1,6 @@
 /** 趋势：体重、热量收支、蛋白达标、活动与睡眠 */
 
-import { h, clearEl, num, shiftDay, formatMinutes } from '../lib/utils.js';
+import { h, clearEl, num, shiftDay, formatMinutes, mount } from '../lib/utils.js';
 import { lineChart, barChart } from '../lib/charts.js';
 import { state } from '../lib/store.js';
 
@@ -70,7 +70,7 @@ export function renderTrends(root) {
   const avgProtein = loggedDays ? Math.round(proteinSeries.reduce((a, p) => a + p.y, 0) / Math.max(proteinSeries.length, 1)) : null;
   const baseline = d.baseline;
 
-  root.append(
+  mount(root, 
     rangeSwitch(rerender),
 
     h('section.card.summary-card', null,

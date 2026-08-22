@@ -1,6 +1,6 @@
 /** 健康数据：导入 Apple 健康导出文件、手动补录、查看已同步的每日数据 */
 
-import { h, clearEl, num, toast, formatMinutes } from '../lib/utils.js';
+import { h, clearEl, num, toast, formatMinutes, mount } from '../lib/utils.js';
 import { state, mergeHealthDays, saveHealthDay } from '../lib/store.js';
 
 let importing = false;
@@ -198,7 +198,7 @@ function dataTable() {
 export function renderHealth(root) {
   const rerender = () => renderHealth(root);
   clearEl(root);
-  root.append(
+  mount(root, 
     importCard(rerender),
     manualCard(rerender),
     dataTable(),
