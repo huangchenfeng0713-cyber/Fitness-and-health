@@ -13,7 +13,6 @@ import {
 } from '../lib/store.js';
 import { searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
-import { dayNav } from './dashboard.js';
 
 const ui = {
   query: '',
@@ -35,7 +34,6 @@ const guessMeal = () => ui.meal || currentMeal().key;
 function buildShell(root) {
   clearEl(root);
 
-  nodes.dayNav = h('div.slot');
   nodes.quick = h('div.slot');
   nodes.favRow = h('div.slot');
   nodes.results = h('div.slot');
@@ -74,15 +72,11 @@ function buildShell(root) {
     nodes.portion);
 
   nodes.root = h('div.view-stack', null,
-    nodes.dayNav, nodes.quick, nodes.searchCard, nodes.entries);
+    nodes.quick, nodes.searchCard, nodes.entries);
   mount(root, nodes.root);
 }
 
 /* ---------------------------------------------------------------- 各区块 */
-
-function refreshDayNav() {
-  mount(clearEl(nodes.dayNav), dayNav());
-}
 
 /** 顶部实时剩余额度，记账时随时能看到 */
 function refreshQuick() {
@@ -458,7 +452,6 @@ export function renderDiet(root) {
     refreshResults();
     refreshPortion();
   }
-  refreshDayNav();
   refreshQuick();
   refreshEntries();
 }

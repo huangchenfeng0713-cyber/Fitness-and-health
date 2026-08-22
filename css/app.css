@@ -73,7 +73,8 @@ body {
 #app {
   max-width: 720px;
   margin: 0 auto;
-  padding-bottom: calc(72px + var(--safe-bottom));
+  /* 正好盖住固定的 tab 栏（内容 54px）+ 一点呼吸空间，别多留一整屏白 */
+  padding-bottom: calc(62px + var(--safe-bottom));
 }
 
 /* ============ 顶栏 / 标签栏 ============ */
@@ -86,11 +87,32 @@ body {
   border-bottom: 1px solid var(--border);
   padding-top: var(--safe-top);
 }
-.topbar-inner { padding: 10px calc(16px + var(--safe-right)) 10px calc(16px + var(--safe-left)); display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.01em; }
-.topbar-sub { font-size: 12px; color: var(--faint); }
+.topbar-inner {
+  display: flex; align-items: center; gap: 6px; min-height: 44px;
+  padding: 3px calc(10px + var(--safe-right)) 5px calc(10px + var(--safe-left));
+}
+.topbar h1 {
+  font-size: 17px; margin: 0 0 0 6px; font-weight: 650; letter-spacing: -.01em;
+}
 
-.view { padding: 14px calc(14px + var(--safe-right)) 24px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
+/* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
+.topbar-day {
+  flex: 1; min-width: 0; text-align: center; line-height: 1.15;
+  border: 0; background: none; color: inherit; font-family: inherit;
+  cursor: pointer; padding: 2px 4px;
+}
+.topbar-day strong { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.topbar-date { display: block; font-size: 10.5px; color: var(--faint); margin-top: 1px; }
+.nav-arrow {
+  width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+  border: 0; background: none; color: var(--muted);
+  font-size: 20px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-arrow:active { background: var(--card-2); }
+.nav-arrow:disabled { opacity: .25; cursor: default; }
+
+.view { padding: 12px calc(14px + var(--safe-right)) 6px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 14px; }
 
 .tabbar {
   position: fixed;
@@ -145,19 +167,6 @@ body {
   border-radius: var(--radius-sm); color: var(--text);
 }
 .privacy-note { font-size: 11.5px; color: var(--faint); margin: 10px 0 0; }
-
-/* ============ 日期导航 ============ */
-.day-nav {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 8px 10px;
-}
-.day-nav-center {
-  flex: 1; text-align: center; line-height: 1.25; border: 0; background: none;
-  color: inherit; cursor: pointer; padding: 4px; font-family: inherit;
-}
-.day-nav-center strong { font-size: 15px; }
-.day-nav-date { display: block; font-size: 11px; color: var(--faint); }
 
 /* ============ 主卡（状态 + 热量 + 宏量） ============ */
 .hero { border-top: 3px solid var(--accent); }

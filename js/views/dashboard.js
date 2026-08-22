@@ -1,8 +1,8 @@
 /** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
 
-import { h, clearEl, num, formatDayLabel, formatMinutes, toast, shiftDay, todayKey, mount } from '../lib/utils.js';
+import { h, clearEl, num, formatMinutes, toast, mount } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
-import { state, setDay, addEntry } from '../lib/store.js';
+import { state, addEntry } from '../lib/store.js';
 import { CATEGORIES } from '../data/foods.js';
 import { MEAL_LABEL } from '../core/advisor.js';
 
@@ -10,25 +10,6 @@ const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标
 
 /** 记住哪些区块被展开，重绘时不丢失 */
 const expanded = { recommend: false, avoid: false, insights: false };
-
-/** 日期切换条 */
-export function dayNav() {
-  const isToday = state.day === todayKey();
-  return h('div.day-nav', null,
-    h('button.icon-btn', { onclick: () => setDay(shiftDay(state.day, -1)), 'aria-label': '前一天' }, '‹'),
-    h('button.day-nav-center', {
-      onclick: () => !isToday && setDay(todayKey()),
-      title: isToday ? '' : '点击回到今天',
-    },
-    h('strong', null, formatDayLabel(state.day)),
-    h('span.day-nav-date', null, isToday ? state.day : `${state.day} · 点此回到今天`)),
-    h('button.icon-btn', {
-      onclick: () => setDay(shiftDay(state.day, 1)),
-      disabled: isToday,
-      'aria-label': '后一天',
-    }, '›'),
-  );
-}
 
 /** 可展开区块的通用页脚按钮 */
 function moreToggle(key, total, shown, rerender) {
@@ -222,8 +203,7 @@ export function renderDashboard(root) {
   clearEl(root);
   if (!d) return;
   const { advice, targets, health } = d;
-  mount(root, 
-    dayNav(),
+  mount(root,
     heroCard(advice, targets, d),
     recommendCard(advice, rerender),
     avoidCard(advice, rerender),

@@ -1,7 +1,7 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey, toast } from './lib/utils.js';
-import { initStore, subscribe, state, recompute, saveProfile } from './lib/store.js';
+import { h, $, clearEl, todayKey, toast, formatDayLabel, shiftDay } from './lib/utils.js';
+import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderDiet } from './views/diet.js';
@@ -10,8 +10,9 @@ import { renderTrends } from './views/trends.js';
 import { renderSettings } from './views/settings.js';
 
 const TABS = [
-  { key: 'today', label: '今日', icon: '◎', render: renderDashboard },
-  { key: 'diet', label: '记录', icon: '＋', render: renderDiet },
+  // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
+  { key: 'today', label: '今日', icon: '◎', render: renderDashboard, dated: true },
+  { key: 'diet', label: '记录', icon: '＋', render: renderDiet, dated: true },
   { key: 'health', label: '健康', icon: '♡', render: renderHealth },
   { key: 'trends', label: '趋势', icon: '◫', render: renderTrends },
   { key: 'settings', label: '设置', icon: '⚙', render: renderSettings },
@@ -19,6 +20,44 @@ const TABS = [
 
 let current = 'today';
 let viewRoot = null;
+
+/**
+ * 顶栏。
+ *
+ * 原本是「应用名 + 副标题」一整行，下面再压一张独立的日期卡 ——
+ * 两者都是「当前上下文」，加起来吃掉首屏 23% 的高度。合成一行：
+ * 按天看的页面直接把日期切换放这儿，其余页面显示页名。
+ */
+function renderTopbar() {
+  const bar = $('#topbar-inner');
+  if (!bar) return;
+  clearEl(bar);
+  const tab = TABS.find((t) => t.key === current) || TABS[0];
+
+  if (!tab.dated) {
+    bar.append(h('h1', null, tab.label));
+    return;
+  }
+
+  const isToday = state.day === todayKey();
+  bar.append(
+    h('button.nav-arrow', {
+      onclick: () => setDay(shiftDay(state.day, -1)),
+      'aria-label': '前一天',
+    }, '‹'),
+    h('button.topbar-day', {
+      onclick: () => !isToday && setDay(todayKey()),
+      title: isToday ? '' : '回到今天',
+    },
+    h('strong', null, formatDayLabel(state.day)),
+    h('span.topbar-date', null, isToday ? state.day.slice(5) : `${state.day.slice(5)} · 回今天`)),
+    h('button.nav-arrow', {
+      onclick: () => setDay(shiftDay(state.day, 1)),
+      disabled: isToday,
+      'aria-label': '后一天',
+    }, '›'),
+  );
+}
 
 function renderTabs() {
   const nav = $('#tabbar');
@@ -35,6 +74,7 @@ function switchTab(key) {
   current = key;
   location.hash = key;
   renderTabs();
+  renderTopbar();
   syncOnboarding();
   renderCurrent();
 
@@ -113,12 +153,13 @@ async function boot() {
   }
 
   renderTabs();
+  renderTopbar();
   syncOnboarding();
   renderCurrent();
 
   runUrlImport();
 
-  subscribe(() => { syncOnboarding(); renderCurrent(); });
+  subscribe(() => { renderTopbar(); syncOnboarding(); renderCurrent(); });
 
   // 时间在走，剩余预算和"下一餐"也要跟着变
   setInterval(() => {
