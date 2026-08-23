@@ -2,7 +2,9 @@
 
 import { h, clearEl, num, toast, confirmAction, download, mount } from '../lib/utils.js';
 import { state, saveProfile, clearAllData, db } from '../lib/store.js';
-import { ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass } from '../core/nutrition.js';
+import {
+  ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
+} from '../core/nutrition.js';
 import {
   FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
 } from '../core/feedback.js';
@@ -53,6 +55,8 @@ function profileCard(rerender) {
   const saveBtn = h('button.primary-btn', {
     disabled: !isDirty(),
     onclick: async () => {
+      const checked = validateProfile(draft);
+      if (!checked.valid) { toast(checked.errors[0], 'warn'); return; }
       await saveProfile({ ...draft });
       resetDraft();
       toast('已保存', 'ok');
@@ -122,10 +126,11 @@ function profileCard(rerender) {
     h('div.form-grid', null,
       field('性别', sexSelect),
       // 生日独占一整行：iOS Safari 的原生日期控件固有宽度大，挤在半格里容易溢出
-      field('生日', birthday, '用于计算基础代谢', 'span-all'),
+      field('生日', birthday, '用于估算静息能量；本计算仅适用于成人', 'span-all'),
       field('身高（cm）', numInput('heightCm', '0.5')),
       field('体重（kg）', numInput('weightKg', '0.1'), p.syncWeightFromApple ? '已开启 Apple 健康体重同步，会以最新记录为准' : null),
-      field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '不填则用公式估算'), '填了会改用更准的 Katch-McArdle 公式'),
+      field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '不填则用 Mifflin 公式'),
+        '填入后改用 Katch-McArdle；家用体脂秤（BIA）误差会影响结果，不能视为更准确'),
       // 选项文字长（「轻度活动（每周 1-3 次）」），半格会被截断
       field('日常活动量', activity, '运动消耗由 Apple 健康单独计入，这里选平时的生活强度', 'span-all'),
       field('目标', goal),
@@ -135,7 +140,7 @@ function profileCard(rerender) {
     h('div.stat-row', null,
       h('div.stat', null, h('strong', null, bmiVal ?? '—'), h('span', null, `BMI${cat ? ` · ${cat.label}` : ''}`)),
       h('div.stat', null, h('strong', null, lbm != null ? num(lbm, 1) : '—'), h('span', null, '瘦体重 kg')),
-      h('div.stat', null, h('strong', null, num(state.derived?.bmr)), h('span', null, '基础代谢 kcal')),
+      h('div.stat', null, h('strong', null, num(state.derived?.bmr)), h('span', null, '估算静息能量 kcal')),
       h('div.stat', null, h('strong', null, num(state.derived?.staticTdee)), h('span', null, '估算 TDEE kcal')),
     ),
   );
@@ -146,14 +151,14 @@ function targetCard() {
   if (!d) return null;
   const t = d.targets;
   const rows = [
-    ['热量', `${num(t.kcal)} kcal`, t.tdeeSource === 'apple' ? '按今日真实消耗动态计算' : '按活动系数估算'],
+    ['热量', `${num(t.kcal)} kcal`, t.tdeeSource === 'apple' ? '按今日 Apple 消耗记录动态估算' : '按活动系数估算'],
     ['蛋白质', `${num(t.protein)} g`, t.proteinBasis],
     ['脂肪', `${num(t.fat)} g`, '占总热量 20%~35%'],
     ['碳水', `${num(t.carb)} g`, '总热量减去蛋白与脂肪后的剩余'],
-    ['膳食纤维', `${num(t.fiber)} g`, '每 1000 kcal 约 14g'],
-    ['钠', `${num(t.sodium)} mg`, '约等于 5g 食盐'],
-    ['添加糖', `${num(t.sugar)} g`, '不超过总热量的 10%'],
-    ['饮水', `${num(t.waterMl)} ml`, '约 35 ml/kg 体重'],
+    ['膳食纤维', `${num(t.fiber)} g`, '中国成人参考 25–30g'],
+    ['钠上限', `${num(t.sodium)} mg`, '约等于 5g 食盐'],
+    ['游离糖上限', `${num(t.sugar)} g`, '含糖浆、蜂蜜和果汁中的糖；低于总热量 10%'],
+    ['饮水参考', `${num(t.waterMl)} ml`, '温和气候、低活动；运动或炎热天气需额外补充'],
   ];
   return h('section.card', null,
     h('div.card-head', null,
@@ -164,7 +169,10 @@ function targetCard() {
       h('strong.target-val', null, v),
       h('span.target-note', null, note)))),
     t.clampedByFloor && h('p.warn-note', null,
-      '注意：按目标速率算出的热量低于安全下限，已自动抬高到基础代谢水平。长期低于基础代谢会掉肌肉和代谢率。'),
+      '注意：按目标速率算出的热量低于成人常用饮食计划下限（女 1200 / 男 1500 kcal），已自动上调；如有疾病、孕哺或特殊训练需求，请由专业人员个体化评估。'),
+    t.rateWasClamped && h('p.warn-note', null,
+      `你填写的 ${t.requestedRateKgPerWeek > 0 ? '+' : ''}${t.requestedRateKgPerWeek} kg/周过快，`
+      + `已按体重比例和每日热量调整上限改为 ${t.rateKgPerWeek > 0 ? '+' : ''}${t.rateKgPerWeek} kg/周。`),
   );
 }
 
@@ -178,8 +186,8 @@ function toggleCard() {
     }));
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, '动态调整')),
-    toggle('useAppleEnergy', '用 Apple 健康的真实消耗算预算',
-      '开启后，热量目标 = 当天静息消耗 + 活动消耗 + 食物热效应 ± 目标缺口，每次刷新都会跟着当天的运动量变。关闭则用固定的活动系数。'),
+    toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
+      '开启后，热量目标 = 当天静息消耗 + 活动消耗 ± 目标缺口，不额外叠加固定 TEF；每次刷新都会跟着当天的运动量变。关闭则用固定的活动系数。'),
     toggle('syncWeightFromApple', '体重体脂跟随 Apple 健康',
       '以健康 App 里最新一次记录为准，体重变了目标也会自动跟着变。'),
   );

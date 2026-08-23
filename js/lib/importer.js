@@ -28,10 +28,38 @@ function ignoredNote(ignoredKeys) {
   return `，忽略了不认识的字段${shown}${more}`;
 }
 
+/** 把自动数据清洗说清楚，避免用户误以为原始 XML 的简单求和就是 Health App 官方统计。 */
+function qualityNote(quality) {
+  if (!quality) return '';
+  const notes = [];
+  if (quality.duplicateRecords) notes.push(`去重 ${quality.duplicateRecords} 条重复样本`);
+  if (quality.sleepOverlapMinutes) notes.push(`合并 ${Math.round(quality.sleepOverlapMinutes)} 分钟重叠睡眠`);
+  if (quality.overlapBuckets) {
+    notes.push(`按 ${quality.resolutionMinutes || 5} 分钟区间解析 ${quality.overlapBuckets} 个多来源重叠桶`);
+    if (quality.priorityMode === 'inferred') notes.push('来源顺序为推断值，可在健康页按导出文件 sourceName 覆盖');
+  }
+  if (quality.activitySummaryDays) notes.push(`${quality.activitySummaryDays} 天采用活动圆环日汇总`);
+  if (quality.workoutCount) notes.push(`识别 ${quality.workoutCount} 次锻炼（未重复计入活动能量）`);
+  if (quality.unsupportedRecords) {
+    notes.push(`保留报告 ${quality.unsupportedRecords} 条暂未支持的健康记录`);
+  }
+  if (quality.unsupportedXmlElementCount) {
+    notes.push(`安全跳过 ${quality.unsupportedXmlElementCount} 个暂未支持的 XML 顶层元素`);
+  }
+  if (quality.snapshotBlockedByUnknownElements) {
+    notes.push('因导出含未知顶层结构，已降级为增量合并，不删除旧数据');
+  }
+  if (quality.invalidRecords) notes.push(`隔离 ${quality.invalidRecords} 条异常值`);
+  if (quality.truncatedXml) notes.push('XML 未完整闭合，已降级为增量合并，不删除旧数据');
+  return notes.length ? `；${notes.join('，')}` : '';
+}
+
 /** 解析结果写入本地库，返回一句可直接展示的结果说明 */
 export async function applyImport(result, meta = {}) {
   const note = ignoredNote(result?.ignoredKeys);
-  if (!result?.days?.length) {
+  const cleaned = qualityNote(result?.quality);
+  const isCompleteSnapshot = result?.fullSnapshot === true;
+  if (!result?.days?.length && !isCompleteSnapshot) {
     return {
       ok: false,
       ignoredKeys: result?.ignoredKeys || [],
@@ -40,15 +68,31 @@ export async function applyImport(result, meta = {}) {
         : '没识别到可用的健康数据，请检查是不是缺少 date 字段',
     };
   }
-  await mergeHealthDays(result.days, { records: result.recordCount, types: result.types?.length, ...meta });
-  const from = result.days[0].date;
-  const to = result.days[result.days.length - 1].date;
+  const days = result.days || [];
+  await mergeHealthDays(days, {
+    ...meta,
+    records: result.recordCount,
+    types: result.types?.length,
+    sourceFormat: result.sourceFormat || meta.sourceFormat || 'partial',
+    fullSnapshot: isCompleteSnapshot,
+    snapshotFields: result.snapshotFields || [],
+    workoutCount: result.workouts?.length || 0,
+    exportDate: result.metadata?.exportDate?.value || null,
+    quality: result.quality || null,
+  });
+  const from = days[0]?.date;
+  const to = days[days.length - 1]?.date;
   const range = from === to ? from : `${from} ~ ${to}`;
   return {
     ok: true,
-    days: result.days.length,
+    days: days.length,
     ignoredKeys: result.ignoredKeys || [],
-    message: `已导入 ${result.days.length} 天（${range}）${note}`,
+    quality: result.quality || null,
+    metadata: result.metadata || null,
+    workouts: result.workouts || [],
+    message: days.length
+      ? `已导入 ${days.length} 天（${range}）${note}${cleaned}`
+      : `已同步完整 Apple 健康快照（本次没有可用的按日记录）${note}${cleaned}`,
   };
 }
 

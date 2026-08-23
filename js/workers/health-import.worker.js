@@ -127,8 +127,8 @@ function decompressStream(file, entry, range) {
 }
 
 /** 流式扫描 XML，边读边聚合 */
-async function consumeXmlStream(stream, totalBytes, onProgress) {
-  const aggregator = createAggregator();
+async function consumeXmlStream(stream, totalBytes, onProgress, options = {}) {
+  const aggregator = createAggregator(options);
   const reader = stream.pipeThrough(new TextDecoderStream('utf-8')).getReader();
   let tail = '';
   let bytes = 0;
@@ -144,12 +144,13 @@ async function consumeXmlStream(stream, totalBytes, onProgress) {
       onProgress?.({ bytes, totalBytes, days: aggregator.size });
     }
   }
-  if (tail) feedXmlChunk(`${tail}>`, aggregator);
+  // 文件若在半个 Record 标签处截断，丢弃残片；不能人工补一个 “>” 把损坏数据伪装成有效记录。
+  aggregator.finishDocument(tail);
   return aggregator.result();
 }
 
 /** 处理 .zip */
-async function importZip(file) {
+async function importZip(file, options = {}) {
   post('progress', { stage: '正在读取压缩包目录…', pct: 2 });
   const entries = await readCentralDirectory(file);
   const target = entries.find((e) => /(^|\/)(export|导出)\.xml$/i.test(e.name))
@@ -169,22 +170,22 @@ async function importZip(file) {
       stage: `已解析 ${(bytes / 1048576).toFixed(0)} MB，覆盖 ${days} 天`,
       pct,
     });
-  });
+  }, options);
 }
 
 /** 处理裸 .xml */
-async function importXml(file) {
+async function importXml(file, options = {}) {
   post('progress', { stage: '正在解析 export.xml…', pct: 5 });
   return consumeXmlStream(file.stream(), file.size, ({ bytes, totalBytes, days }) => {
     post('progress', {
       stage: `已解析 ${(bytes / 1048576).toFixed(0)} MB，覆盖 ${days} 天`,
       pct: Math.min(96, 5 + (bytes / Math.max(totalBytes, 1)) * 90),
     });
-  });
+  }, options);
 }
 
 self.onmessage = async (event) => {
-  const { file, text } = event.data || {};
+  const { file, text, sourcePriority } = event.data || {};
   try {
     let result;
     if (text != null) {
@@ -196,8 +197,8 @@ self.onmessage = async (event) => {
       throw new Error('没有收到文件');
     } else {
       const name = (file.name || '').toLowerCase();
-      if (name.endsWith('.zip')) result = await importZip(file);
-      else if (name.endsWith('.xml')) result = await importXml(file);
+      if (name.endsWith('.zip')) result = await importZip(file, { sourcePriority });
+      else if (name.endsWith('.xml')) result = await importXml(file, { sourcePriority });
       else if (name.endsWith('.json')) result = parseHealthJson(JSON.parse(await file.text()));
       else if (name.endsWith('.csv')) result = parseHealthCsv(await file.text());
       else throw new Error('不认识的文件类型，请上传 zip / xml / json / csv');

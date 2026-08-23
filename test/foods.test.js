@@ -2,17 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FOODS, FOOD_BY_ID, CATEGORIES, per100, nutrientsFor,
-  searchFoods, unitLabel, portionTip, freeSugarFactor, PORTION_TIPS,
+  searchFoods, unitLabel, portionTip, freeSugarFactor, freeSugarPer100, PORTION_TIPS,
+  FOOD_META, isEstimated, macroEnergyPer100,
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 280, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 610, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
 });
 
 test('每条记录字段齐全且合理', () => {
   for (const f of FOODS) {
     assert.ok(f.id && typeof f.id === 'string', `缺 id: ${f.name}`);
+    assert.match(f.id, /^[a-z0-9_]+$/, `${f.name} 的 id 只能用小写字母、数字和下划线`);
     assert.ok(f.name && typeof f.name === 'string', `缺名称: ${f.id}`);
     assert.ok(CATEGORIES[f.cat], `${f.name} 的分类 "${f.cat}" 不存在`);
     assert.equal(f.n.length, 7, `${f.name} 的营养数组应有 7 项`);
@@ -92,15 +94,40 @@ test('份量换算：克数与营养线性对应', () => {
   assert.equal(half.kcal, Math.round(p.kcal * 0.5));
   assert.equal(double.kcal, Math.round(p.kcal * 2));
   assert.equal(nutrientsFor(rice, 0).kcal, 0);
+  assert.deepEqual(nutrientsFor(rice, -50), {
+    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, totalSugar: 0, sugar: 0, sodium: 0,
+  }, '负克数必须按 0 处理，不能生成负营养');
 });
 
-test('游离糖系数只对该免除的类别免除', () => {
+test('游离糖可按部分糖扣除，不再强迫乳品整项全算或全免', () => {
   for (const f of FOODS) {
     const factor = freeSugarFactor(f);
-    assert.ok(factor === 0 || factor === 1, `${f.name} 的系数应为 0 或 1`);
+    assert.ok(factor >= 0 && factor <= 1, `${f.name} 的游离糖比例应在 0~1`);
     if (f.cat === 'fruit' || f.cat === 'veg') assert.equal(factor, 0, `${f.name} 的天然糖不该计入`);
-    if (f.cat === 'snack') assert.equal(factor, 1, `${f.name} 的糖应计入`);
   }
+  const yogurt = FOOD_BY_ID.get('yogurt_sweet');
+  assert.ok(freeSugarFactor(yogurt) > 0 && freeSugarFactor(yogurt) < 1,
+    '风味酸奶应只计添加部分，不能把乳糖全算进去');
+  assert.equal(freeSugarPer100(FOOD_BY_ID.get('sb_latte')), 0, '纯拿铁乳糖不算游离糖');
+});
+
+test('总糖与游离糖分开保存，且游离糖不超过总糖', () => {
+  for (const f of FOODS) {
+    const n = nutrientsFor(f, 100);
+    assert.ok(n.sugar <= n.totalSugar + 0.1, `${f.name} 的游离糖超过总糖`);
+  }
+  const yogurt = nutrientsFor(FOOD_BY_ID.get('yogurt_sweet'), 100);
+  assert.equal(yogurt.totalSugar, 13);
+  assert.ok(yogurt.sugar > 8 && yogurt.sugar < 9);
+});
+
+test('新增中国常见食物可搜索，通用复合菜明确标为估算', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const must = ['小米饭', '杂粮饭', '胡辣汤', '重庆小面', '桂林米粉', '酸菜鱼', '毛血旺',
+    '剁椒鱼头', '木须肉', '鱼香茄子', '叉烧', '盐水鸭', '猪蹄', '鸭胗', '素鸡', '腐乳', '杨梅', '枇杷'];
+  assert.deepEqual(must.filter((name) => searchFoods(name).length === 0), []);
+  assert.ok(isEstimated(FOOD_BY_ID.get('pickled_fish')));
+  assert.ok(isEstimated(FOOD_BY_ID.get('tomato_egg')), '通用家常菜也应明确显示估算');
 });
 
 test('连锁快餐品牌都收录了，且搜品牌名首条是主力单品', async () => {
@@ -273,4 +300,204 @@ test('冰品的糖占比合理（糖应占碳水的大部分）', () => {
         `${f.name} 的糖只占碳水的 ${Math.round((p.sugar / p.carb) * 100)}%，冰品不该这样`);
     }
   }
+});
+
+const SECOND_BATCH_IDS = [
+  'oat_latte', 'braised_prawns', 'youpo_noodle', 'shengjian_bao',
+  'chinese_sauerkraut', 'beef_ball', 'spanish_mackerel', 'processed_cheese_slice',
+  'sweet_potato_congee', 'pumpkin_congee', 'salty_soymilk', 'steamed_rice_cake',
+  'black_sesame_paste', 'chive_pocket', 'wuhan_doupi', 'rice_milk',
+  'dapanji', 'scallion_lamb', 'cumin_lamb', 'home_style_tofu', 'braised_tofu',
+  'minced_pork_tofu', 'celery_pork', 'broccoli_shrimp', 'white_boiled_shrimp',
+  'cold_wood_ear', 'smashed_cucumber', 'sour_beef_hotpot',
+  'black_soybean', 'fermented_black_bean', 'wheat_gluten', 'fried_gluten_ball', 'fuzhu_soaked',
+  'sweet_potato_leaves', 'shepherd_purse', 'mustard_greens', 'water_caltrop',
+  'winter_jujube', 'muskmelon', 'passion_fruit', 'mandarin',
+  'twisted_dough_mahua', 'peach_cookie', 'mung_bean_cake', 'rice_crust',
+  'sour_plum_drink', 'almond_drink', 'candied_hawthorn',
+];
+
+test('第二批 48 种中国常见食物完整录入且都带可审计元数据', () => {
+  assert.equal(SECOND_BATCH_IDS.length, 48);
+  for (const id of SECOND_BATCH_IDS) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f, `缺少第二批食物 ${id}`);
+    assert.ok(f.source && typeof f.source === 'object', `${f.name} 缺 source`);
+    assert.ok(f.basis, `${f.name} 缺 basis`);
+    assert.ok(f.state, `${f.name} 缺 state`);
+    assert.ok(Number.isFinite(f.edibleRatio), `${f.name} 缺 edibleRatio`);
+    assert.ok(f.carbBasis, `${f.name} 缺 carbBasis`);
+    if (f.source.type === 'recipe') {
+      assert.ok(f.f.includes('est'), `${f.name} 是通用配方却未标 est`);
+      assert.ok(isEstimated(f), `${f.name} 的 recipe 来源应自动视为估算`);
+    }
+  }
+  assert.ok(FOODS.length >= 664, `第二批完成后应至少 664 条，实际 ${FOODS.length}`);
+});
+
+test('可选食物元数据遵守稳定 schema，旧条目仍可不带元数据', () => {
+  assert.ok(!FOOD_BY_ID.get('rice_white').source, '旧条目不应被强制迁移才能继续使用');
+  for (const f of FOODS) {
+    if (f.source !== undefined) {
+      assert.ok(f.source && typeof f.source === 'object' && !Array.isArray(f.source), `${f.name} 的 source 非对象`);
+      assert.ok(FOOD_META.sourceTypes.includes(f.source.type), `${f.name} 的 source.type 非法`);
+      assert.ok(typeof f.source.ref === 'string' && f.source.ref.trim().length >= 4, `${f.name} 的 source.ref 过短`);
+      if (f.source.accessed !== undefined) {
+        assert.match(f.source.accessed, /^\d{4}-\d{2}-\d{2}$/, `${f.name} 的 accessed 应为 YYYY-MM-DD`);
+      }
+    }
+    if (f.basis !== undefined) assert.ok(FOOD_META.bases.includes(f.basis), `${f.name} 的 basis 非法`);
+    if (f.state !== undefined) assert.ok(FOOD_META.states.includes(f.state), `${f.name} 的 state 非法`);
+    if (f.carbBasis !== undefined) assert.ok(FOOD_META.carbBases.includes(f.carbBasis), `${f.name} 的 carbBasis 非法`);
+    if (f.edibleRatio !== undefined) {
+      assert.ok(Number.isFinite(f.edibleRatio) && f.edibleRatio > 0 && f.edibleRatio <= 1,
+        `${f.name} 的 edibleRatio 必须在 (0, 1]`);
+    }
+  }
+});
+
+test('recipe 来源自动视为估算，并且新增配方显式保留 est 标记', () => {
+  const synthetic = { cat: 'drink', source: { type: 'recipe', ref: '测试配方' }, f: [] };
+  assert.equal(isEstimated(synthetic), true);
+  const recipes = FOODS.filter((f) => f.source?.type === 'recipe');
+  assert.ok(recipes.length >= 40, `只有 ${recipes.length} 条配方来源记录`);
+  assert.deepEqual(recipes.filter((f) => !f.f.includes('est')).map((f) => f.name), [],
+    '配方来源必须同时显式标 est，方便旧版界面兼容');
+});
+
+test('营养、糖层级与语义标记在合理范围内', () => {
+  const allowedFlags = new Set([
+    'fried', 'refined', 'processed', 'whole', 'quick', 'breakfast', 'late', 'cook',
+    'sweetdrink', 'alcohol', 'natsugar', 'est', 'tealevel', 'instant',
+  ]);
+  for (const f of FOODS) {
+    const [kcal, protein, fat, carb, fiber, totalSugar, sodium] = f.n;
+    assert.ok(kcal <= 950, `${f.name} 热量超过物理合理范围`);
+    assert.ok(protein <= 100 && fat <= 100 && carb <= 100, `${f.name} 宏量营养超过 100g/100g`);
+    assert.ok(fiber <= carb + 0.1, `${f.name} 纤维超过碳水`);
+    assert.ok(totalSugar <= carb + 0.1, `${f.name} 总糖超过碳水`);
+    assert.ok(sodium <= 20000, `${f.name} 钠高得异常`);
+    if (f.nfs !== undefined) assert.ok(f.nfs >= 0 && f.nfs <= totalSugar, `${f.name} 的 nfs 超过总糖`);
+    if (f.sf !== undefined) assert.ok(f.sf >= 0 && f.sf <= totalSugar, `${f.name} 的 sf 超过总糖`);
+    assert.ok(freeSugarPer100(f) >= 0 && freeSugarPer100(f) <= totalSugar + 0.1,
+      `${f.name} 的游离糖不在 [0, 总糖]`);
+    for (const flag of f.f) assert.ok(allowedFlags.has(flag), `${f.name} 使用了未知标记 ${flag}`);
+  }
+});
+
+test('新增来源记录按声明的碳水口径复核能量', () => {
+  const off = [];
+  for (const f of FOODS.filter((x) => x.source && !x.f.includes('alcohol'))) {
+    const kcal = f.n[0];
+    const estimated = macroEnergyPer100(f);
+    const tolerance = Math.max(18, kcal * 0.20);
+    if (Math.abs(estimated - kcal) > tolerance) {
+      off.push(`${f.name}: 标注 ${kcal}，宏量折算 ${Math.round(estimated)}`);
+    }
+  }
+  assert.deepEqual(off, [], `来源记录存在能量口径冲突：\n${off.join('\n')}`);
+
+  const base = { n: [0, 1, 1, 10, 2, 0, 0] };
+  assert.equal(macroEnergyPer100({ ...base, carbBasis: 'total' }), 49);
+  assert.equal(macroEnergyPer100({ ...base, carbBasis: 'available' }), 57);
+});
+
+test('名称与 id 不重复，四个历史错配已纠正并补回原食物', () => {
+  const byName = new Map();
+  const duplicateNames = [];
+  for (const f of FOODS) {
+    const key = f.name.normalize('NFKC').trim().toLowerCase();
+    if (byName.has(key)) duplicateNames.push([byName.get(key), f.id, f.name]);
+    else byName.set(key, f.id);
+  }
+  assert.deepEqual(duplicateNames, [], `存在完全同名条目：${JSON.stringify(duplicateNames)}`);
+
+  assert.equal(FOOD_BY_ID.get('kungpao_shrimp').name, '宫保虾球');
+  assert.equal(FOOD_BY_ID.get('liangpi_spicy').name, '麻辣凉皮');
+  assert.equal(FOOD_BY_ID.get('guokui').name, '锅盔（肉馅）');
+  assert.equal(FOOD_BY_ID.get('americano_milk').name, '美式咖啡（加奶）');
+  for (const id of ['braised_prawns', 'youpo_noodle', 'shengjian_bao', 'oat_latte']) {
+    assert.ok(FOOD_BY_ID.has(id), `修正错配后漏补 ${id}`);
+  }
+});
+
+test('高价值合并项已拆分，汤汁与带壳食物的估算边界明确', () => {
+  for (const id of ['chinese_sauerkraut', 'beef_ball', 'spanish_mackerel', 'processed_cheese_slice']) {
+    assert.ok(FOOD_BY_ID.has(id), `未拆分 ${id}`);
+  }
+  for (const id of ['hulatang', 'chongqing_noodle', 'henan_huimian', 'guilin_rice_noodle',
+    'cross_bridge_rice_noodle', 'sour_beef_hotpot']) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f?.note && /汤|汁/.test(f.note), `${f?.name || id} 未说明汤汁口径`);
+  }
+  for (const id of ['braised_prawns', 'broccoli_shrimp', 'white_boiled_shrimp']) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f.s.some(([label]) => /可食部|去壳/.test(label)), `${f.name} 未说明带壳重量口径`);
+  }
+});
+
+test('旧复合菜在数据层显式披露估算，不再只依赖界面兜底', () => {
+  const dishes = FOODS.filter((f) => f.cat === 'dish');
+  assert.ok(dishes.length >= 130);
+  assert.deepEqual(dishes.filter((f) => !f.f.includes('est')).map((f) => f.name), [],
+    '所有通用菜肴都应显式标 est，导出数据也能识别估算值');
+  assert.deepEqual(dishes.filter((f) => !f.note?.trim()).map((f) => f.name), [],
+    '通用菜肴需要说明配方或汤汁边界');
+
+  for (const id of ['beef_noodle', 'malatang', 'hotpot_clear', 'boiled_fish', 'ramen',
+    'suanla_fen', 'luosifen', 'miso_soup', 'tom_yum']) {
+    assert.match(FOOD_BY_ID.get(id).note, /汤|锅底|油汤/, `${id} 未说明汤汁是否计入`);
+  }
+});
+
+test('连锁食品只有可复核 label 来源才允许不标估算', () => {
+  const exact = FOODS.filter((f) => f.cat === 'chain' && !isEstimated(f));
+  assert.equal(exact.length, 1, '本轮只核对了巨无霸的当前官网单份营养，不应扩大精确来源范围');
+  for (const f of exact) {
+    assert.equal(f.source?.type, 'label', `${f.name} 没有 label 来源却显示为精确值`);
+    assert.match(f.source.ref, /麦当劳中国官网/, `${f.name} 缺可复核来源说明`);
+    assert.equal(f.id, 'mcd_bigmac', `${f.name} 尚无本轮逐项核验依据，不应取消估算标记`);
+  }
+  for (const id of ['kfc_spicy_burger', 'bk_whopper', 'ph_supreme', 'subway_chicken', 'mcd_nuggets']) {
+    assert.ok(isEstimated(FOOD_BY_ID.get(id)), `${id} 未保存当前官方标签，应保守标估算`);
+    assert.ok(FOOD_BY_ID.get(id).f.includes('est'), `${id} 的数据层也应显式标 est`);
+  }
+});
+
+test('鲜干龙眼、甜咸豆花和近义但不同的名称已拆清', () => {
+  assert.equal(FOOD_BY_ID.get('longan').name, '龙眼（鲜）');
+  assert.equal(FOOD_BY_ID.get('dried_longan').name, '桂圆干（龙眼肉）');
+  assert.equal(FOOD_BY_ID.get('douhua').name, '豆腐脑（咸口）');
+  assert.equal(FOOD_BY_ID.get('sweet_douhua').name, '豆花（甜口）');
+  assert.ok(searchFoods('桂圆干').some((f) => f.id === 'dried_longan'));
+  assert.ok(searchFoods('甜豆花').some((f) => f.id === 'sweet_douhua'));
+  assert.equal(FOOD_BY_ID.get('yinsijuan').name, '银丝卷（蒸）');
+  assert.equal(FOOD_BY_ID.get('mayo').name, '蛋黄酱（原味）');
+  assert.ok(FOODS.length >= 666, `拆分后应至少 666 条，实际 ${FOODS.length}`);
+});
+
+test('带骨壳旧条目按可食部记录，毛重比例不会再被当作可吃重量', () => {
+  for (const id of ['chicken_wing', 'roast_chicken_leg', 'crab', 'crayfish',
+    'garlic_scallop', 'salt_pepper_shrimp', 'roast_duck_leg']) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f.s.some(([label]) => /可食部|去骨|去壳/.test(label)), `${f.name} 份量未注明可食部`);
+    assert.ok(f.note && /可食|骨|壳/.test(f.note), `${f.name} 缺带骨壳边界说明`);
+  }
+  assert.ok(FOOD_BY_ID.get('crab').s[0][1] < 100, '一只中等蟹不应把 150g 毛重全算成蟹肉');
+  assert.ok(FOOD_BY_ID.get('crayfish').s[0][1] < 150, '小龙虾不应把整盘带壳重量全算成虾肉');
+});
+
+test('完整谷薯、豆和坚果的内源糖不计入 WHO 游离糖', () => {
+  const intrinsic = [
+    'sweet_potato', 'corn', 'purple_potato', 'water_caltrop',
+    'soybean', 'black_soybean', 'chickpea', 'edamame',
+    'almond', 'cashew', 'pistachio', 'macadamia', 'egg_whole', 'seaweed_sheet',
+  ];
+  for (const id of intrinsic) {
+    const f = FOOD_BY_ID.get(id);
+    assert.equal(f.nfs, f.n[5], `${f.name} 的内源糖应显式落在 nfs`);
+    assert.equal(freeSugarPer100(f), 0, `${f.name} 不应产生游离糖`);
+  }
+  assert.ok(freeSugarPer100(FOOD_BY_ID.get('sweet_douhua')) > 5,
+    '甜豆花的糖水仍应计入游离糖，不能因豆制品类别被整体豁免');
 });

@@ -100,6 +100,20 @@ export async function bulkPut(store, values, { merge = false } = {}) {
   });
 }
 
+/** 在同一个事务里写入完整行并删除已失效的主键，供全量快照同步使用。 */
+export async function bulkSync(store, values = [], deleteKeys = []) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, 'readwrite');
+    const os = t.objectStore(store);
+    for (const key of deleteKeys) os.delete(key);
+    for (const value of values) os.put(value);
+    t.oncomplete = () => resolve({ written: values.length, deleted: deleteKeys.length });
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+
 export async function getDietByDate(date) {
   const db = await openDB();
   const idx = db.transaction(STORES.diet, 'readonly').objectStore(STORES.diet).index('date');

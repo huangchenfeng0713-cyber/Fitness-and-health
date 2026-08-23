@@ -160,7 +160,9 @@ function refreshResults() {
         h('strong', null, f.name),
         h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / 100g`)),
       h('div.search-item-tags', null,
-        isEstimated(f) && h('span.chip.chip-est', { title: '该品牌未公开完整营养表，数值按同类食品推算' }, '估算'),
+        isEstimated(f) && h('span.chip.chip-est', {
+          title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
+        }, '估算'),
         h('span.chip', null, CATEGORIES[f.cat] || '自定义')));
   })));
 }
@@ -357,7 +359,7 @@ function refreshPortion() {
 
     h('p.portion-tip', null, portionTip(food)),
     isEstimated(food) && h('p.form-hint', null,
-      '该品牌未公开完整营养表，以上数值按同类食品推算，用于估算参考。'),
+      '营养会随配方、烹调或品牌而变化，以上数值为估算参考。'),
 
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),

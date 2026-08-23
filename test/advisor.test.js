@@ -159,13 +159,14 @@ test('每个餐次都能给出可执行的建议', () => {
   }
 });
 
-test('游离糖：完整水果与纯奶不计入添加糖上限，果汁和甜饮料计入', async () => {
+test('游离糖：完整水果与纯奶不计入上限，风味酸奶只计添加部分', async () => {
   const { nutrientsFor, freeSugarFactor, FOOD_BY_ID: FB } = await import('../js/data/foods.js');
   assert.equal(nutrientsFor(FB.get('watermelon'), 300).sugar, 0, '西瓜的果糖不算添加糖');
   assert.equal(nutrientsFor(FB.get('milk_whole'), 250).sugar, 0, '牛奶的乳糖不算添加糖');
   assert.ok(nutrientsFor(FB.get('cola'), 330).sugar > 30, '一罐可乐应算 35g 左右游离糖');
   assert.ok(nutrientsFor(FB.get('juice_orange'), 250).sugar > 20, '果汁按游离糖计');
-  assert.equal(freeSugarFactor(FB.get('yogurt_sweet')), 1, '含糖风味酸奶要计入');
+  assert.ok(freeSugarFactor(FB.get('yogurt_sweet')) > 0 && freeSugarFactor(FB.get('yogurt_sweet')) < 1,
+    '含糖风味酸奶只计添加部分，乳糖仍应扣除');
   // 热量与其它宏量不受影响
   assert.ok(nutrientsFor(FB.get('watermelon'), 300).carb > 20);
 });
