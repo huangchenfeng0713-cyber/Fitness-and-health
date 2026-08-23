@@ -516,6 +516,17 @@ test('缺少 date 时不产出垃圾数据', () => {
   assert.equal(r.days.length, 0);
 });
 
+test('完整应用备份选错入口时给出正确恢复路径', () => {
+  assert.throws(() => parseHealthJson({
+    app: 'health-diet-tracker',
+    version: 1,
+    health: [{ date: '2026-08-23', steps: 8000 }],
+    diet: [],
+    settings: [],
+    customFoods: [],
+  }), /完整应用备份.*设置 → 数据管理 → 导入备份/);
+});
+
 test('日期字段的多种叫法都认得', () => {
   for (const k of ['date', 'Date', 'day', '日期']) {
     const { days } = parseHealthJson({ [k]: '2026-08-22', steps: 100 });
