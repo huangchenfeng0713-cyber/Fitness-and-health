@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { healthInsights, healthSummary } from '../js/core/health-insights.js';
 
-const mkDays = (n, fn) => Array.from({ length: n }, (_, i) => ({
-  date: new Date(Date.UTC(2026, 7, 1 + i)).toISOString().slice(0, 10),
+const mkDaysFrom = (start, n, fn) => Array.from({ length: n }, (_, i) => ({
+  date: new Date(Date.parse(`${start}T00:00:00Z`) + i * 86400000).toISOString().slice(0, 10),
   ...fn(i),
 }));
+const mkDays = (n, fn) => mkDaysFrom('2026-08-01', n, fn);
 
 const titles = (r) => r.map((x) => x.title).join(' | ');
 const byKey = (r, k) => r.find((x) => x.key === k);
@@ -34,11 +35,13 @@ test('所有文案都不含未展开的字符串拼接或模板残留', () => {
   }
 });
 
-test('步数分档：久坐 / 中间 / 达标', () => {
+test('步数分档使用谨慎的参考表述，不把步数等同久坐或健康结论', () => {
   const at = (v) => healthInsights(mkDays(10, () => ({ steps: v })));
   assert.equal(byKey(at(3000), 'steps').level, 'warn');
   assert.equal(byKey(at(6000), 'steps').level, 'info');
   assert.equal(byKey(at(9000), 'steps').level, 'good');
+  assert.match(byKey(at(3000), 'steps').text, /不能单独代表/);
+  assert.match(byKey(at(9000), 'steps').text, /不能替代/);
 });
 
 test('运动量按 WHO 每周 150 分钟判定', () => {
@@ -49,11 +52,34 @@ test('运动量按 WHO 每周 150 分钟判定', () => {
   assert.equal(byKey(ok, 'exercise').level, 'good');
 });
 
-test('睡眠分档，且能识别作息不规律', () => {
+test('周运动量按日历跨度折算，并把明确的零运动日计为 0', () => {
+  const days = mkDays(14, (i) => ({
+    steps: 7000,
+    exerciseMinutes: i === 2 || i === 9 ? 75 : 0,
+  }));
+  const hit = byKey(healthInsights(days), 'exercise');
+  assert.equal(hit.metric, 75, '14 天共 150 分钟应折算为每周 75 分钟');
+  assert.equal(hit.level, 'warn');
+  assert.equal(healthSummary(days).exerciseMinutes, 11, '摘要日均也应包含零运动日');
+});
+
+test('日历数据大面积缺测时不把缺测日当作零运动日下结论', () => {
+  const sparse = [
+    { date: '2026-08-01', exerciseMinutes: 60 },
+    { date: '2026-08-07', exerciseMinutes: 60 },
+    { date: '2026-08-14', exerciseMinutes: 60 },
+  ];
+  assert.equal(byKey(healthInsights(sparse), 'exercise'), undefined);
+  assert.equal(healthSummary(sparse).exerciseMinutes, null);
+});
+
+test('睡眠分档只描述睡眠时长波动，不推断作息规律性', () => {
   const bad = healthInsights(mkDays(10, () => ({ sleepMinutes: 5.5 * 60 })));
   assert.equal(byKey(bad, 'sleep').level, 'bad');
   const irregular = healthInsights(mkDays(10, (i) => ({ sleepMinutes: (i % 2 ? 5.5 : 9.5) * 60 })));
-  assert.ok(/波动/.test(titles(irregular)), `未识别作息不规律：${titles(irregular)}`);
+  assert.ok(/波动/.test(titles(irregular)), `未识别睡眠时长波动：${titles(irregular)}`);
+  assert.doesNotMatch(irregular.map((x) => x.text).join(' | '), /作息不规律|比较规律/);
+  assert.match(byKey(irregular, 'sleep_var').text, /不能代表入睡或起床时间/);
 });
 
 test('减重过快会被拦下（>1% 体重/周）', () => {
@@ -66,14 +92,38 @@ test('减重过快会被拦下（>1% 体重/周）', () => {
   assert.match(w.text, /肌肉/);
 });
 
-test('体重趋势与目标相反时给出具体的热量调整建议', () => {
+test('体重趋势偏离目标但不足 28 天时不贸然调整热量', () => {
   const wrong = healthInsights(
     mkDays(14, (i) => ({ weightKg: 70 + i * 0.05 })),  // 在涨，但目标是减
     { targets: { rateKgPerWeek: -0.5 } },
   );
   const w = byKey(wrong, 'weight');
   assert.equal(w.level, 'warn');
-  assert.match(w.text, /调整约 [+-]?\d+ kcal/);
+  assert.match(w.text, /至少积累 28 天/);
+  assert.doesNotMatch(w.text, /调整约 [+-]?\d+ kcal/);
+});
+
+test('至少 28 天后才按实际与目标差值建议热量调整，且单次不超过 ±250 kcal', () => {
+  const wrong = healthInsights(
+    mkDaysFrom('2026-06-01', 35, (i) => ({ weightKg: 70 + i * 0.05 })),
+    { targets: { rateKgPerWeek: -0.5 }, windowDays: 35 },
+  );
+  const w = byKey(wrong, 'weight');
+  assert.equal(w.level, 'warn');
+  assert.match(w.text, /基于 35 个日历日/);
+  assert.match(w.text, /调整约 -250 kcal/);
+  assert.match(w.text, /单次最多 ±250 kcal/);
+});
+
+test('体重实际趋势和目标同方向但差值超出容差时仍会提醒', () => {
+  const slow = healthInsights(
+    mkDays(14, (i) => ({ weightKg: 70 - i * 0.02 })), // -0.14 kg/周，明显慢于 -0.5
+    { targets: { rateKgPerWeek: -0.5 } },
+  );
+  const w = byKey(slow, 'weight');
+  assert.equal(w.level, 'warn');
+  assert.match(w.title, /偏离目标/);
+  assert.match(w.text, /观察容差/);
 });
 
 test('体重与目标一致时给正反馈', () => {
@@ -88,6 +138,31 @@ test('静息心率持续上升会提醒', () => {
   const rising = healthInsights(mkDays(14, (i) => ({ restingHR: 60 + i * 0.4 })));
   assert.equal(byKey(rising, 'rhr').level, 'warn');
   assert.match(byKey(rising, 'rhr').title, /上升/);
+  assert.match(byKey(rising, 'rhr').text, /可能|不能只凭趋势/);
+});
+
+test('体脂结论必须结合体重，并提示 BIA 的测量局限', () => {
+  const together = healthInsights(mkDays(14, (i) => ({
+    weightKg: 70 - i * 0.06,
+    bodyFatPct: 22 - i * 0.04,
+  })));
+  const bf = byKey(together, 'bodyfat');
+  assert.equal(bf.level, 'info');
+  assert.match(bf.text, /体重趋势和体脂读数同时下降/);
+  assert.match(bf.text, /不能据此断定/);
+  assert.match(bf.text, /BIA/);
+  assert.doesNotMatch(bf.text, /减的主要是脂肪，方向是对的/);
+});
+
+test('体重与体脂方向不一致时不武断判断肌肉流失', () => {
+  const conflict = healthInsights(mkDays(14, (i) => ({
+    weightKg: 70 - i * 0.06,
+    bodyFatPct: 20 + i * 0.04,
+  })));
+  const bf = byKey(conflict, 'bodyfat');
+  assert.match(bf.text, /方向不一致/);
+  assert.match(bf.text, /不能据此判断肌肉流失/);
+  assert.doesNotMatch(bf.text, /通常意味着肌肉在流失/);
 });
 
 test('饮食记录太少会提醒（否则收支算不准）', () => {
@@ -107,6 +182,28 @@ test('摘要指标取近窗口均值', () => {
   assert.equal(s.sleepHours, 7.5);
   assert.equal(s.weightKg, 70);
   assert.equal(s.restingHR, null, '没有的数据应为 null 而不是 0');
+});
+
+test('窗口先按日期排序，并以截止日期取日历窗口', () => {
+  const shuffled = [
+    { date: '2026-08-10', steps: 10000 },
+    { date: '2026-08-08', steps: 2000 },
+    { date: '2026-08-09', steps: 6000 },
+    { date: '2026-08-07', steps: 500 },
+  ];
+  assert.equal(healthSummary(shuffled, 2).steps, 8000, '应取 8 月 9-10 日，而不是数组末两项');
+  assert.equal(healthSummary(shuffled, 2, '2026-08-09').steps, 4000, '截止 8 月 9 日应取 8-9 日');
+});
+
+test('未来数据不会进入摘要或健康解读', () => {
+  const days = [
+    ...mkDays(3, () => ({ steps: 6000 })),
+    { date: '2099-01-01', steps: 999999, restingHR: 250 },
+  ];
+  const summary = healthSummary(days, 14);
+  assert.equal(summary.steps, 6000);
+  assert.equal(summary.restingHR, null);
+  assert.equal(byKey(healthInsights(days), 'rhr'), undefined);
 });
 
 test('识别出被单位缺陷缩小过的历史能量数据', () => {

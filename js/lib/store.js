@@ -5,9 +5,13 @@
 
 import * as db from './db.js';
 import { todayKey, dayFraction } from './utils.js';
-import { dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE } from '../core/nutrition.js';
+import {
+  dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
+} from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays } from '../core/health.js';
+import {
+  computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays, isPlausibleHealthValue,
+} from '../core/health.js';
 import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
@@ -194,7 +198,10 @@ export async function setDay(dayKey) {
 
 export async function saveProfile(patch) {
   // 只要用户动过设置，就不再显示首次引导
-  state.profile = { ...state.profile, ...patch, onboarded: true };
+  const next = { ...state.profile, ...patch, onboarded: true };
+  const checked = validateProfile(next);
+  if (!checked.valid) throw new RangeError(checked.errors.join('；'));
+  state.profile = next;
   await db.setSetting('profile', state.profile);
   recompute();
   emit();
@@ -328,6 +335,10 @@ export async function repairHealthEnergy() {
 
 /** 手动写入 / 修改某天的健康数据 */
 export async function saveHealthDay(date, patch) {
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (key === 'source' || value == null || value === '') continue;
+    if (!isPlausibleHealthValue(key, value)) throw new RangeError(`${key} 的数值超出可接受范围`);
+  }
   const existing = state.healthByDate.get(date) || { date };
   const row = { ...existing, ...patch, date, source: patch.source || existing.source || 'manual' };
   await db.put(db.STORES.health, row);

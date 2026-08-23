@@ -86,7 +86,7 @@ export function renderTrends(root) {
 
     (() => {
       const list = healthInsights(state.healthDays, {
-        targets, dietDaily: state.dietDaily, windowDays: range,
+        targets, dietDaily: state.dietDaily, windowDays: range, asOfDate: state.day,
       }).filter((i) => i.key !== 'nodata');
       return list.length ? h('section.card', null,
         h('div.card-head', null, h('h3', null, '这些数据说明什么'),

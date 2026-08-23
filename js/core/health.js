@@ -67,6 +67,16 @@ const SUM_KEYS = new Set(
   Object.values(HEALTH_TYPES).filter((t) => t.agg === 'sum').map((t) => t.key),
 );
 
+const HEALTH_BY_KEY = new Map(Object.values(HEALTH_TYPES).map((t) => [t.key, t]));
+
+/**
+ * 仅对会由手机/手表连续生成的累计量做多来源消重。
+ * 饮食和饮水通常是用户主动记录的离散事件，来源不同也可能是不同餐次，不能按日取最大值。
+ */
+const DEVICE_CUMULATIVE_KEYS = new Set([
+  'steps', 'activeEnergy', 'restingEnergy', 'exerciseMinutes', 'standMinutes', 'distanceKm',
+]);
+
 /** 内部字段名集合，用于「用户直接写内部字段名」的情况 */
 const INTERNAL_KEYS = new Set(Object.values(HEALTH_TYPES).map((t) => t.key));
 
@@ -98,7 +108,7 @@ export function normalizeValue(kind, value, unit) {
       const raw = String(unit || '').trim();
       if (/^kj$/i.test(raw)) return v / 4.184;
       if (raw === 'cal') return v / 1000;
-      if (raw === 'J') return v / 4184;
+      if (/^j$/i.test(raw)) return v / 4184;
       return v; // kcal / Cal / KCAL
     }
     case 'mass':
@@ -136,6 +146,7 @@ export function normalizeValue(kind, value, unit) {
       // 而第三方导出常直接写 18.1，按数值大小区分。
       return v > 0 && v <= 1 ? v * 100 : v;
     case 'time':
+    case 'sleep':
       if (u === 'hr' || u === 'h') return v * 60;
       if (u === 's' || u === 'sec') return v / 60;
       return v; // min
@@ -150,15 +161,41 @@ export function normalizeValue(kind, value, unit) {
  */
 export function parseAppleDate(str) {
   if (!str) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})\s*([+-]\d{2}):?(\d{2})?/.exec(String(str).trim());
+  const input = String(str).trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (dateOnly) {
+    const [, y, mo, d] = dateOnly;
+    const local = new Date(Number(y), Number(mo) - 1, Number(d));
+    if (local.getFullYear() !== Number(y)
+      || local.getMonth() !== Number(mo) - 1
+      || local.getDate() !== Number(d)) return null;
+    return { date: local, dayKey: input, offsetMinutes: -local.getTimezoneOffset() };
+  }
+
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?\s*([+-]\d{2}):?(\d{2})?/.exec(input);
   if (!m) {
-    const d = new Date(str);
-    return Number.isNaN(d.getTime()) ? null : { date: d, dayKey: toDayKey(d) };
+    const parsed = new Date(input);
+    if (Number.isNaN(parsed.getTime())) return null;
+    // ISO 字符串已经声明了日历日；不能再按运行浏览器的时区把它前移/后移。
+    const declared = /^(\d{4})-(\d{2})-(\d{2})[T ]/.exec(input);
+    return {
+      date: parsed,
+      dayKey: declared ? `${declared[1]}-${declared[2]}-${declared[3]}` : toDayKey(parsed),
+      offsetMinutes: -parsed.getTimezoneOffset(),
+    };
   }
   const [, y, mo, d, h, mi, s, oh, om] = m;
   const iso = `${y}-${mo}-${d}T${h}:${mi}:${s}${oh}:${om || '00'}`;
   const date = new Date(iso);
-  return { date: Number.isNaN(date.getTime()) ? null : date, dayKey: `${y}-${mo}-${d}` };
+  if (Number.isNaN(date.getTime())) return null;
+  const check = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)));
+  if (check.getUTCFullYear() !== Number(y)
+    || check.getUTCMonth() !== Number(mo) - 1
+    || check.getUTCDate() !== Number(d)
+    || Number(h) > 23 || Number(mi) > 59 || Number(s) > 59) return null;
+  const sign = oh.startsWith('-') ? -1 : 1;
+  const offsetMinutes = sign * (Math.abs(Number(oh)) * 60 + Number(om || 0));
+  return { date, dayKey: `${y}-${mo}-${d}`, offsetMinutes };
 }
 
 /** Date → YYYY-MM-DD（本地时区） */
@@ -180,26 +217,78 @@ export function parseAttrs(tag) {
 
 const SLEEP_ASLEEP = /Asleep/i;
 
+/** 宽松的生理/设备量级校验：只隔离明显损坏的数据，不对正常极值做截断。 */
+export function isPlausibleHealthValue(key, value) {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v < 0) return false;
+  const limits = {
+    steps: [0, 250000], activeEnergy: [0, 30000], restingEnergy: [0, 10000],
+    exerciseMinutes: [0, 1440], standMinutes: [0, 1440], distanceKm: [0, 1000],
+    weightKg: [1, 500], bodyFatPct: [1, 75], leanMassKg: [1, 350], heightCm: [50, 260],
+    restingHR: [20, 250], vo2max: [5, 120], sleepMinutes: [0, 1440],
+    hkKcal: [0, 30000], hkProtein: [0, 5000], hkFat: [0, 5000], hkCarb: [0, 5000],
+    hkFiber: [0, 1000], hkSugar: [0, 5000], hkSodium: [0, 1000000], waterMl: [0, 100000],
+  };
+  const range = limits[key];
+  return !range || (v >= range[0] && v <= range[1]);
+}
+
 /**
  * 按天聚合器。
  * 累加型直接相加；快照型（体重等）保留当天最后一条；睡眠按「入睡时段」归到起床那天。
  */
 export function createAggregator() {
   const days = new Map();
+  const sleepIntervals = [];
+  const sleepWakeDays = new Set();
+  const recentFingerprints = new Set();
+  const fingerprintQueue = [];
   let recordCount = 0;
   let skipped = 0;
+  let duplicateRecords = 0;
+  let invalidRecords = 0;
   const seenTypes = new Set();
 
   const dayOf = (key) => {
     let d = days.get(key);
     if (!d) {
-      d = { date: key, _lastTs: {}, _avg: {} };
+      d = { date: key, _lastTs: {}, _avg: {}, _sourceSums: {} };
       days.set(key, d);
     }
     return d;
   };
 
-  function addRecord({ type, value, unit, startDate, endDate }) {
+  const rememberFingerprint = (fingerprint) => {
+    if (recentFingerprints.has(fingerprint)) return false;
+    recentFingerprints.add(fingerprint);
+    fingerprintQueue.push(fingerprint);
+    // 完整导出可有数百万条记录；有界窗口既能去掉同步产生的相邻重复，也不破坏流式内存上限。
+    if (fingerprintQueue.length > 100000) recentFingerprints.delete(fingerprintQueue.shift());
+    return true;
+  };
+
+  const addSourceSum = (dayKey, key, source, value) => {
+    const day = dayOf(dayKey);
+    const bySource = day._sourceSums[key] || (day._sourceSums[key] = new Map());
+    bySource.set(source, (bySource.get(source) || 0) + value);
+  };
+
+  /** 将极少见的跨午夜累计样本按持续时间拆到两个本地日。 */
+  const sumParts = (start, end, value) => {
+    const startMs = start.date?.getTime();
+    const endMs = end?.date?.getTime();
+    if (!(endMs > startMs)) return [[start.dayKey, value]];
+    const duration = endMs - startMs;
+    if (duration > 24 * 60 * 60 * 1000 || start.dayKey === end.dayKey) return [[start.dayKey, value]];
+    const [y, m, d] = start.dayKey.split('-').map(Number);
+    const offset = Number.isFinite(start.offsetMinutes) ? start.offsetMinutes : 0;
+    const nextMidnight = Date.UTC(y, m - 1, d + 1) - offset * 60000;
+    if (!(nextMidnight > startMs && nextMidnight < endMs)) return [[start.dayKey, value]];
+    const firstRatio = (nextMidnight - startMs) / duration;
+    return [[start.dayKey, value * firstRatio], [end.dayKey, value * (1 - firstRatio)]];
+  };
+
+  function addRecord({ type, value, unit, startDate, endDate, sourceName = '', device = '' }) {
     const meta = HEALTH_TYPES[type];
     if (!meta) { skipped += 1; return false; }
     seenTypes.add(type);
@@ -208,31 +297,47 @@ export function createAggregator() {
     if (!start?.dayKey) { skipped += 1; return false; }
 
     if (meta.agg === 'sleep') {
-      // 睡眠：只统计真正入睡的片段，归到「醒来那天」
+      // 先保留真正入睡的区间；result() 再统一求并集、拼成会话并归到最终醒来日。
       if (!SLEEP_ASLEEP.test(String(value))) return false;
       const end = parseAppleDate(endDate);
-      if (!start.date || !end?.date) return false;
+      if (!start.date || !end?.date) { skipped += 1; invalidRecords += 1; return false; }
       const minutes = (end.date - start.date) / 60000;
-      if (!(minutes > 0) || minutes > 24 * 60) return false;
-      const day = dayOf(end.dayKey);
-      day.sleepMinutes = (day.sleepMinutes || 0) + minutes;
+      if (!(minutes > 0) || minutes > 24 * 60) { skipped += 1; invalidRecords += 1; return false; }
+      const fingerprint = [type, value, startDate, endDate, sourceName, device].join('|');
+      if (!rememberFingerprint(fingerprint)) { duplicateRecords += 1; return false; }
+      sleepIntervals.push({ start: start.date.getTime(), end: end.date.getTime(), wakeDay: end.dayKey });
+      sleepWakeDays.add(end.dayKey);
       recordCount += 1;
       return true;
     }
 
     const v = normalizeValue(meta.kind, value, unit);
-    if (v == null) { skipped += 1; return false; }
+    if (v == null || !isPlausibleHealthValue(meta.key, v)) {
+      skipped += 1; invalidRecords += 1; return false;
+    }
 
-    const day = dayOf(start.dayKey);
+    const end = parseAppleDate(endDate || startDate) || start;
+    const source = String(sourceName || device || '未知来源').trim() || '未知来源';
+    const fingerprint = [type, value, unit, startDate, endDate || startDate, source, device].join('|');
+    if (!rememberFingerprint(fingerprint)) { duplicateRecords += 1; return false; }
+
     recordCount += 1;
 
     if (meta.agg === 'sum') {
-      day[meta.key] = (day[meta.key] || 0) + v;
+      for (const [dayKey, part] of sumParts(start, end, v)) {
+        if (DEVICE_CUMULATIVE_KEYS.has(meta.key)) addSourceSum(dayKey, meta.key, source, part);
+        else {
+          const day = dayOf(dayKey);
+          day[meta.key] = (day[meta.key] || 0) + part;
+        }
+      }
     } else if (meta.agg === 'avg') {
+      const day = dayOf(start.dayKey);
       const a = day._avg[meta.key] || (day._avg[meta.key] = { sum: 0, n: 0 });
       a.sum += v; a.n += 1;
       day[meta.key] = a.sum / a.n;
     } else {
+      const day = dayOf(start.dayKey);
       // last：以时间戳最新的一条为准
       const ts = start.date ? start.date.getTime() : 0;
       if (day._lastTs[meta.key] == null || ts >= day._lastTs[meta.key]) {
@@ -244,20 +349,79 @@ export function createAggregator() {
   }
 
   function result() {
+    const sleepByDay = new Map();
+    let rawSleepMinutes = 0;
+    let unionSleepMinutes = 0;
+    if (sleepIntervals.length) {
+      const sorted = [...sleepIntervals].sort((a, b) => a.start - b.start || a.end - b.end);
+      const sessionGap = 90 * 60 * 1000;
+      let session = [];
+      let sessionEnd = -Infinity;
+      const finishSession = () => {
+        if (!session.length) return;
+        let unionStart = session[0].start;
+        let unionEnd = session[0].end;
+        let minutes = 0;
+        let wake = session[0];
+        for (const interval of session) {
+          rawSleepMinutes += (interval.end - interval.start) / 60000;
+          if (interval.end > wake.end) wake = interval;
+          if (interval.start <= unionEnd) unionEnd = Math.max(unionEnd, interval.end);
+          else {
+            minutes += (unionEnd - unionStart) / 60000;
+            unionStart = interval.start; unionEnd = interval.end;
+          }
+        }
+        minutes += (unionEnd - unionStart) / 60000;
+        unionSleepMinutes += minutes;
+        sleepByDay.set(wake.wakeDay, (sleepByDay.get(wake.wakeDay) || 0) + minutes);
+        session = [];
+      };
+      for (const interval of sorted) {
+        if (session.length && interval.start > sessionEnd + sessionGap) finishSession();
+        session.push(interval);
+        sessionEnd = Math.max(sessionEnd, interval.end);
+      }
+      finishSession();
+    }
+
     const out = [];
-    for (const [key, day] of days) {
+    const allKeys = new Set([...days.keys(), ...sleepByDay.keys()]);
+    let multiSourceDays = 0;
+    for (const key of allKeys) {
+      const day = days.get(key) || { date: key, _sourceSums: {} };
       const clean = { date: key, source: 'apple' };
       for (const [k, v] of Object.entries(day)) {
         if (k.startsWith('_') || k === 'date') continue;
         clean[k] = typeof v === 'number' ? Math.round(v * 100) / 100 : v;
       }
-      out.push(clean);
+      for (const [metricKey, bySource] of Object.entries(day._sourceSums || {})) {
+        const totals = [...bySource.values()];
+        if (totals.length > 1) multiSourceDays += 1;
+        // export.xml 不包含用户在 Health App 中设置的完整来源优先级。
+        // 取单来源日总量最大值可避免静默双算；导入结果会明确标出这是近似消重。
+        clean[metricKey] = Math.round(Math.max(...totals) * 100) / 100;
+      }
+      if (sleepByDay.has(key)) clean.sleepMinutes = Math.round(sleepByDay.get(key) * 100) / 100;
+      if (Object.keys(clean).length > 2) out.push(clean);
     }
     out.sort((a, b) => (a.date < b.date ? -1 : 1));
-    return { days: out, recordCount, skipped, types: [...seenTypes] };
+    return {
+      days: out, recordCount, skipped, types: [...seenTypes],
+      quality: {
+        duplicateRecords,
+        invalidRecords,
+        multiSourceDays,
+        sleepOverlapMinutes: Math.round(Math.max(0, rawSleepMinutes - unionSleepMinutes) * 10) / 10,
+      },
+    };
   }
 
-  return { addRecord, result, get size() { return days.size; } };
+  return {
+    addRecord,
+    result,
+    get size() { return new Set([...days.keys(), ...sleepWakeDays]).size; },
+  };
 }
 
 /**
@@ -279,6 +443,8 @@ export function feedXmlChunk(chunk, aggregator) {
       unit: attrs.unit,
       startDate: attrs.startDate,
       endDate: attrs.endDate || attrs.startDate,
+      sourceName: attrs.sourceName,
+      device: attrs.device,
     });
     searchFrom = end + 1;
     consumed = end + 1;
@@ -297,13 +463,27 @@ export function feedXmlChunk(chunk, aggregator) {
 export function parseHealthJson(json) {
   const days = new Map();
   const ignored = new Set();
+  let recordCount = 0;
+  let skipped = 0;
+  let invalidRecords = 0;
 
-  const put = (dayKey, key, value, mode = 'sum') => {
-    if (!dayKey || value == null || !Number.isFinite(Number(value))) return;
+  const put = (dayKey, key, value, mode = 'sum', timestamp = 0) => {
+    if (!dayKey || !isPlausibleHealthValue(key, value)) return false;
     let d = days.get(dayKey);
-    if (!d) { d = { date: dayKey, source: 'apple' }; days.set(dayKey, d); }
-    if (mode === 'sum' && SUM_KEYS.has(key)) d[key] = (d[key] || 0) + Number(value);
-    else d[key] = Number(value);
+    if (!d) {
+      d = { date: dayKey, source: 'apple', _avg: {}, _lastTs: {} };
+      days.set(dayKey, d);
+    }
+    const v = Number(value);
+    if (mode === 'sum') d[key] = (d[key] || 0) + v;
+    else if (mode === 'avg') {
+      const a = d._avg[key] || (d._avg[key] = { sum: 0, n: 0 });
+      a.sum += v; a.n += 1; d[key] = a.sum / a.n;
+    } else if (d._lastTs[key] == null || timestamp >= d._lastTs[key]) {
+      d._lastTs[key] = timestamp;
+      d[key] = v;
+    }
+    return true;
   };
 
   const metrics = json?.data?.metrics || json?.metrics || (Array.isArray(json) && json[0]?.data ? json : null);
@@ -311,15 +491,23 @@ export function parseHealthJson(json) {
     for (const metric of metrics) {
       const key = resolveKey(metric.name || metric.type || '');
       if (!key) { if (metric.name) ignored.add(String(metric.name)); continue; }
-      const meta = Object.values(HEALTH_TYPES).find((t) => t.key === key);
+      const meta = HEALTH_BY_KEY.get(key);
       for (const point of metric.data || []) {
         const stamp = parseAppleDate(point.date || point.startDate || point.timestamp);
-        if (!stamp?.dayKey) continue;
+        if (!stamp?.dayKey) { skipped += 1; continue; }
         let value = point.qty ?? point.value ?? point.Avg ?? point.avg;
-        if (key === 'sleepMinutes' && point.asleep != null) value = Number(point.asleep) * 60;
-        if (value == null) continue;
-        const norm = meta ? normalizeValue(meta.kind, value, metric.units) : Number(value);
-        put(stamp.dayKey, key, norm, SUM_KEYS.has(key) ? 'sum' : 'last');
+        let units = point.units ?? point.unit ?? metric.units ?? metric.unit;
+        if (key === 'sleepMinutes' && point.asleep != null) {
+          value = point.asleep;
+          units ||= 'hr';
+        }
+        if (value == null || String(value).trim() === '') { skipped += 1; continue; }
+        const norm = meta ? normalizeValue(meta.kind, value, units) : Number(value);
+        const mode = meta?.agg === 'avg' ? 'avg' : meta?.agg === 'last' ? 'last' : 'sum';
+        if (norm == null || !put(stamp.dayKey, key, norm, mode, stamp.date?.getTime() || 0)) {
+          skipped += 1; invalidRecords += 1; continue;
+        }
+        recordCount += 1;
       }
     }
   }
@@ -333,58 +521,120 @@ export function parseHealthJson(json) {
 
   if (rows) {
     for (const row of rows) {
-      if (!row || typeof row !== 'object') continue;
+      if (!row || typeof row !== 'object') { skipped += 1; continue; }
       const dateEntry = Object.entries(row).find(([k]) => DATE_KEYS.has(normalizeKey(k)));
       const stamp = dateEntry ? parseAppleDate(dateEntry[1]) : null;
-      const dayKey = stamp?.dayKey
-        || (typeof dateEntry?.[1] === 'string' ? dateEntry[1].slice(0, 10) : null);
-      if (!dayKey) continue;
+      const dayKey = stamp?.dayKey;
+      if (!dayKey) { skipped += 1; continue; }
+      let accepted = false;
       for (const [k, v] of Object.entries(row)) {
-        if (DATE_KEYS.has(normalizeKey(k))) continue;
+        if (DATE_KEYS.has(normalizeKey(k)) || normalizeKey(k) === 'units' || /unit$/i.test(k)) continue;
         const key = resolveKey(k);
         if (!key) { ignored.add(String(k)); continue; }
-        put(dayKey, key, v, 'last');
+        if (v == null || String(v).trim() === '') continue;
+        const meta = HEALTH_BY_KEY.get(key);
+        const unit = row.units?.[k] ?? row.units?.[key] ?? row[`${k}Unit`] ?? row[`${key}Unit`];
+        const norm = meta ? normalizeValue(meta.kind, v, unit) : Number(v);
+        if (norm == null || !put(dayKey, key, norm, 'last', stamp.date?.getTime() || 0)) {
+          skipped += 1; invalidRecords += 1; continue;
+        }
+        accepted = true;
       }
+      if (accepted) recordCount += 1;
     }
   }
 
   const out = [...days.values()].map((d) => {
-    const c = { ...d };
+    const c = {};
+    for (const [k, v] of Object.entries(d)) if (!k.startsWith('_')) c[k] = v;
     for (const [k, v] of Object.entries(c)) if (typeof v === 'number') c[k] = Math.round(v * 100) / 100;
     return c;
   });
   out.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return { days: out, recordCount: out.length, skipped: 0, types: [], ignoredKeys: [...ignored] };
+  return {
+    days: out, recordCount, skipped, types: [], ignoredKeys: [...ignored],
+    quality: { invalidRecords, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
+  };
 }
 
 /** 解析 CSV（首行为表头，需含 date 列） */
 export function parseHealthCsv(text) {
-  const lines = String(text).split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return { days: [], recordCount: 0, skipped: 0, types: [] };
-  const split = (line) => line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
-  const header = split(lines[0]);
-  const dateIdx = header.findIndex((h) => DATE_KEYS.has(normalizeKey(h)) || /date|日期|day/i.test(h));
-  if (dateIdx === -1) return { days: [], recordCount: 0, skipped: lines.length - 1, types: [] };
-
-  const rows = [];
-  const ignored = new Set();
-  for (let i = 1; i < lines.length; i += 1) {
-    const cells = split(lines[i]);
-    const stamp = parseAppleDate(cells[dateIdx]);
-    const dayKey = stamp?.dayKey || cells[dateIdx]?.slice(0, 10);
-    if (!dayKey) continue;
-    const row = { date: dayKey, source: 'apple' };
-    header.forEach((h, idx) => {
-      if (idx === dateIdx) return;
-      const key = resolveKey(h);
-      const v = Number(cells[idx]);
-      if (key && Number.isFinite(v)) row[key] = v;
-      else if (!key && h.trim()) ignored.add(h.trim());
-    });
-    if (Object.keys(row).length > 2) rows.push(row);
+  const input = String(text).replace(/^\uFEFF/, '');
+  const table = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < input.length; i += 1) {
+    const ch = input[i];
+    if (quoted) {
+      if (ch === '"' && input[i + 1] === '"') { cell += '"'; i += 1; }
+      else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && input[i + 1] === '\n') i += 1;
+      row.push(cell); cell = '';
+      if (row.some((v) => v.trim() !== '')) table.push(row);
+      row = [];
+    } else cell += ch;
   }
+  row.push(cell);
+  if (row.some((v) => v.trim() !== '')) table.push(row);
+  if (quoted || table.length < 2) return { days: [], recordCount: 0, skipped: Math.max(0, table.length - 1), types: [] };
+
+  const header = table[0].map((h) => h.trim());
+  const specs = header.map((raw) => {
+    const m = /^(.*?)(?:\s*(?:\(([^)]+)\)|\[([^\]]+)\]))?$/.exec(raw);
+    const base = (m?.[1] || raw).trim();
+    return { raw, base, unit: (m?.[2] || m?.[3] || '').trim(), key: resolveKey(base) };
+  });
+  const dateIdx = specs.findIndex((s) => DATE_KEYS.has(normalizeKey(s.base)) || /date|日期|day/i.test(s.base));
+  if (dateIdx === -1) return { days: [], recordCount: 0, skipped: table.length - 1, types: [] };
+
+  const days = new Map();
+  const ignored = new Set();
+  let recordCount = 0;
+  let skipped = 0;
+  let invalidRecords = 0;
+  const numeric = (raw) => {
+    const s = String(raw ?? '').trim();
+    if (!s) return null;
+    const normalized = /^[-+]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s) ? s.replace(/,/g, '') : s;
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  for (let i = 1; i < table.length; i += 1) {
+    const cells = table[i];
+    if (cells.length !== header.length) { skipped += 1; continue; }
+    const stamp = parseAppleDate(cells[dateIdx]);
+    const dayKey = stamp?.dayKey;
+    if (!dayKey) { skipped += 1; continue; }
+    const current = days.get(dayKey) || { date: dayKey, source: 'apple' };
+    let accepted = false;
+    specs.forEach((spec, idx) => {
+      if (idx === dateIdx) return;
+      if (!spec.key) { if (spec.raw) ignored.add(spec.raw); return; }
+      const v = numeric(cells[idx]);
+      if (v == null) return;
+      const meta = HEALTH_BY_KEY.get(spec.key);
+      const norm = meta ? normalizeValue(meta.kind, v, spec.unit) : v;
+      if (norm == null || !isPlausibleHealthValue(spec.key, norm)) {
+        invalidRecords += 1; return;
+      }
+      current[spec.key] = norm;
+      accepted = true;
+    });
+    if (accepted) { days.set(dayKey, current); recordCount += 1; }
+    else skipped += 1;
+  }
+  const rows = [...days.values()];
   rows.sort((a, b) => (a.date < b.date ? -1 : 1));
-  return { days: rows, recordCount: rows.length, skipped: 0, types: [], ignoredKeys: [...ignored] };
+  return {
+    days: rows, recordCount, skipped, types: [], ignoredKeys: [...ignored],
+    quality: { invalidRecords, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,25 +651,34 @@ export const ENERGY_FIELDS = ['activeEnergy', 'restingEnergy', 'hkKcal'];
  *  - 全天静息能量低于 50 kcal 在生理上不可能（成人躺一天也有 1200+）
  *  - 活动能量低于 20 kcal 却走了一千步以上，同样只可能是量级错了
  */
-export function findMisscaledEnergyDays(days = []) {
-  return days.filter((d) => {
-    const resting = Number(d.restingEnergy);
-    const active = Number(d.activeEnergy);
-    const steps = Number(d.steps) || 0;
-    if (resting > 0 && resting < 50) return true;
-    if (active > 0 && active < 20 && steps > 1000) return true;
-    return false;
-  });
+function misscaledEnergyFields(day, today) {
+  if (!day?.date || day.date >= today) return [];
+  const resting = Number(day.restingEnergy);
+  const active = Number(day.activeEnergy);
+  const intake = Number(day.hkKcal);
+  const steps = Number(day.steps) || 0;
+  const restingBad = resting > 0 && resting < 50;
+  const activeBad = active > 0 && active < 20 && (steps > 1000 || restingBad);
+  const fields = [];
+  if (restingBad) fields.push('restingEnergy');
+  if (activeBad) fields.push('activeEnergy');
+  // 膳食热量低本身完全可能；只有同一天活动和静息都呈现旧缺陷的千分之一量级时才联动修复。
+  if (intake > 0 && intake < 10 && restingBad && activeBad) fields.push('hkKcal');
+  return fields;
+}
+
+export function findMisscaledEnergyDays(days = [], today = toDayKey(new Date())) {
+  return days.filter((d) => misscaledEnergyFields(d, today).length > 0);
 }
 
 /**
  * 把受影响的日子的能量字段乘回 1000。
  * 返回需要写回的记录，不改原数组。
  */
-export function repairMisscaledEnergy(days = []) {
-  return findMisscaledEnergyDays(days).map((d) => {
+export function repairMisscaledEnergy(days = [], today = toDayKey(new Date())) {
+  return findMisscaledEnergyDays(days, today).map((d) => {
     const fixed = { ...d };
-    for (const key of ENERGY_FIELDS) {
+    for (const key of misscaledEnergyFields(d, today)) {
       const v = Number(fixed[key]);
       if (Number.isFinite(v) && v > 0) fixed[key] = Math.round(v * 1000 * 100) / 100;
     }
@@ -429,22 +688,32 @@ export function repairMisscaledEnergy(days = []) {
 
 /** 计算近期基线（用于动态 TDEE 与趋势判断） */
 export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey(new Date()), window = 14) {
-  const recent = healthDays.filter((d) => d.date < today).slice(-window);
+  const dayNumber = (key) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key));
+    return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000 : NaN;
+  };
+  const todayNo = dayNumber(today);
+  const healthHistory = [...healthDays]
+    .filter((d) => Number.isFinite(dayNumber(d.date)) && d.date < today)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  const recent = healthHistory.filter((d) => dayNumber(d.date) >= todayNo - window);
   const avg = (arr, key) => {
-    const vals = arr.map((d) => Number(d[key])).filter((v) => Number.isFinite(v) && v > 0);
+    const vals = arr
+      .filter((d) => d[key] != null && String(d[key]).trim() !== '')
+      .map((d) => Number(d[key]))
+      .filter((v) => Number.isFinite(v) && v >= 0);
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   };
 
-  const weights = healthDays
-    .filter((d) => Number(d.weightKg) > 0)
-    .slice(-28)
+  const weights = healthHistory
+    .filter((d) => dayNumber(d.date) >= todayNo - 28 && Number(d.weightKg) > 0)
     .map((d) => ({ date: d.date, w: Number(d.weightKg) }));
 
   let weightTrend = null;
-  if (weights.length >= 4) {
+  if (weights.length >= 4 && dayNumber(weights.at(-1).date) - dayNumber(weights[0].date) >= 7) {
     // 用最小二乘拟合 kg/天，再换算成 kg/周
-    const t0 = new Date(weights[0].date).getTime();
-    const xs = weights.map((p) => (new Date(p.date).getTime() - t0) / 86400000);
+    const t0 = dayNumber(weights[0].date);
+    const xs = weights.map((p) => dayNumber(p.date) - t0);
     const ys = weights.map((p) => p.w);
     const n = xs.length;
     const mx = xs.reduce((a, b) => a + b, 0) / n;
@@ -454,7 +723,9 @@ export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey
     if (den > 0) weightTrend = Math.round((num / den) * 7 * 100) / 100;
   }
 
-  const dietRecent = dietDays.filter((d) => d.date < today).slice(-window);
+  const dietRecent = [...dietDays]
+    .filter((d) => Number.isFinite(dayNumber(d.date)) && d.date < today && dayNumber(d.date) >= todayNo - window)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
   const kcalIntake = dietRecent.length
     ? dietRecent.reduce((a, d) => a + (d.kcal || 0), 0) / dietRecent.length
     : null;

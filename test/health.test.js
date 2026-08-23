@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeValue, parseAppleDate, parseAttrs, createAggregator, feedXmlChunk,
-  parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
+  parseHealthJson, parseHealthCsv, computeBaseline, toDayKey, isPlausibleHealthValue,
 } from '../js/core/health.js';
 
 test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
@@ -14,6 +14,7 @@ test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡
   assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 才是小卡');
   assert.ok(Math.abs(normalizeValue('energy', 418.4, 'kJ') - 100) < 1e-9);
   assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'j') - 1) < 1e-9, '小写 j 也应识别');
 });
 
 test('单位换算覆盖 HealthKit 其它常见单位', () => {
@@ -39,6 +40,9 @@ test('Apple 时间戳带时区偏移，日期取本地日', () => {
   assert.equal(parseAppleDate('2026-08-21 23:50:00 -0700').dayKey, '2026-08-21',
     '西半球的深夜记录仍归当地当天');
   assert.equal(parseAppleDate(''), null);
+  assert.equal(parseAppleDate('2026-08-20').dayKey, '2026-08-20', '裸日期不应受运行时区影响');
+  assert.equal(parseAppleDate('2024-02-29').dayKey, '2024-02-29');
+  assert.equal(parseAppleDate('2026-02-29'), null, '非法日期不能被自动滚到三月');
 });
 
 test('属性解析', () => {
@@ -84,6 +88,40 @@ test('睡眠只统计入睡片段，并归到醒来那天', () => {
   assert.equal(days[0].sleepMinutes, 420, '仅 Asleep 片段共 7 小时，卧床不算');
 });
 
+test('睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleep', '2026-08-19 23:00:00 +0800', '2026-08-20 07:00:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore', '2026-08-19 23:00:00 +0800', '2026-08-19 23:50:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepREM', '2026-08-19 23:50:00 +0800', '2026-08-20 00:30:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore', '2026-08-20 00:30:00 +0800', '2026-08-20 07:00:00 +0800'),
+  ].join('\n'), agg);
+  const result = agg.result();
+  assert.deepEqual(result.days.map((d) => d.date), ['2026-08-20']);
+  assert.equal(result.days[0].sleepMinutes, 480, 'legacy 总段与分期重叠时不能翻倍');
+  assert.equal(result.quality.sleepOverlapMinutes, 480);
+});
+
+test('XML 精确重复去重，多设备累计量不再静默相加', () => {
+  const stamp = '2026-08-20 09:00:00 +0800';
+  const end = '2026-08-20 10:00:00 +0800';
+  const row = (source, value) => `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${source}" unit="count" startDate="${stamp}" endDate="${end}" value="${value}"/>`;
+  const agg = createAggregator();
+  feedXmlChunk([row('Apple Watch', 1000), row('Apple Watch', 1000), row('iPhone', 800)].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].steps, 1000, '跨来源采用单来源日总量最大值近似，不能得到 1800/2800');
+  assert.equal(result.quality.duplicateRecords, 1);
+  assert.equal(result.quality.multiSourceDays, 1);
+});
+
+test('跨午夜累计样本按持续时间拆分到两个本地日', () => {
+  const agg = createAggregator();
+  feedXmlChunk(rec('HKQuantityTypeIdentifierStepCount', 100, '2026-08-20 23:55:00 +0800', '2026-08-21 00:05:00 +0800', 'count'), agg);
+  const { days } = agg.result();
+  assert.equal(days[0].steps, 50);
+  assert.equal(days[1].steps, 50);
+});
+
 test('分块流式解析：标签被切成两半也不丢数据', () => {
   const xml = [
     rec('HKQuantityTypeIdentifierStepCount', 500, '2026-08-20 09:00:00 +0800', '2026-08-20 09:10:00 +0800', 'count'),
@@ -127,6 +165,21 @@ test('Health Auto Export 风格的 JSON', () => {
   assert.equal(days[0].weightKg, 71.4);
 });
 
+test('JSON 平均型按日求平均，最近值按时间而不是数组顺序', () => {
+  const { days } = parseHealthJson({ data: { metrics: [
+    { name: 'resting_heart_rate', units: 'count/min', data: [
+      { date: '2026-08-20 20:00:00 +0800', qty: 80 },
+      { date: '2026-08-20 08:00:00 +0800', qty: 60 },
+    ] },
+    { name: 'weight_body_mass', units: 'lb', data: [
+      { date: '2026-08-20 20:00:00 +0800', qty: 154.3 },
+      { date: '2026-08-20 08:00:00 +0800', qty: 150 },
+    ] },
+  ] } });
+  assert.equal(days[0].restingHR, 70);
+  assert.ok(Math.abs(days[0].weightKg - 70) < 0.1, 'point/metric 单位应换算且取时间最新值');
+});
+
 test('扁平 JSON（快捷指令粘贴的格式）', () => {
   const { days } = parseHealthJson([
     { date: '2026-08-20', steps: 8600, activeEnergy: 520, weightKg: 71.2 },
@@ -141,6 +194,26 @@ test('CSV 导入', () => {
   assert.equal(days.length, 2);
   assert.equal(days[0].steps, 8600);
   assert.equal(days[1].weightKg, 71.0);
+});
+
+test('CSV 支持引号逗号、空值、BOM、单位表头与重复日期合并', () => {
+  const csv = '\uFEFFdate,steps,weight[lb],active_energy(kJ)\r\n'
+    + '2026-08-20,"1,234",,418.4\r\n'
+    + '2026-08-20,"2,345",154.3,836.8\r\n';
+  const result = parseHealthCsv(csv);
+  assert.equal(result.days.length, 1);
+  assert.equal(result.days[0].steps, 2345, '同日重复行按后值合并，而不是产出重复日期');
+  assert.ok(Math.abs(result.days[0].weightKg - 70) < 0.1);
+  assert.ok(Math.abs(result.days[0].activeEnergy - 200) < 1e-9);
+});
+
+test('异常健康值被隔离而不是写入', () => {
+  assert.equal(isPlausibleHealthValue('steps', -1), false);
+  assert.equal(isPlausibleHealthValue('weightKg', 900), false);
+  const { days, quality } = parseHealthJson({ date: '2026-08-20', steps: -10, weight: 70 });
+  assert.equal(days[0].steps, undefined);
+  assert.equal(days[0].weightKg, 70);
+  assert.equal(quality.invalidRecords, 1);
 });
 
 test('CSV 缺少日期列时明确失败而不是产生垃圾数据', () => {
@@ -246,6 +319,32 @@ test('修正只动能量字段，其余原样保留', async () => {
   assert.equal(fixed[0].steps, 8000, '步数不该被改');
   assert.equal(fixed[0].weightKg, 71.2, '体重不该被改');
   assert.equal(fixed[0].sleepMinutes, 430, '睡眠不该被改');
+});
+
+test('历史能量修复逐字段处理，且不会碰当天未同步完的静息能量', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const fixed = repairMisscaledEnergy([
+    { date: '2026-08-01', steps: 8000, restingEnergy: 1.48, activeEnergy: 550, hkKcal: 1900 },
+    { date: '2026-08-20', steps: 100, restingEnergy: 40, activeEnergy: 5 },
+  ], '2026-08-20');
+  assert.equal(fixed.length, 1);
+  assert.equal(fixed[0].restingEnergy, 1480);
+  assert.equal(fixed[0].activeEnergy, 550);
+  assert.equal(fixed[0].hkKcal, 1900);
+});
+
+test('基线先排序并截断当前日，不能偷看未来体重', () => {
+  const health = [
+    { date: '2026-09-01', weightKg: 90, activeEnergy: 900 },
+    { date: '2026-08-08', weightKg: 69.8, activeEnergy: 400 },
+    { date: '2026-08-01', weightKg: 70.1, activeEnergy: 300 },
+    { date: '2026-08-05', weightKg: 70.0, activeEnergy: 350 },
+    { date: '2026-08-09', weightKg: 69.7, activeEnergy: 450 },
+  ];
+  const b = computeBaseline(health, [], '2026-08-10', 14);
+  assert.equal(b.latestWeight, 69.7);
+  assert.ok(b.activeEnergy < 500);
+  assert.ok(b.weightTrend < 0);
 });
 
 test('修正是幂等的：再跑一次不会把正确数据放大一千倍', async () => {

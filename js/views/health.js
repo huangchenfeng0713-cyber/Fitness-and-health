@@ -3,6 +3,7 @@
 import { h, clearEl, num, toast, formatMinutes, mount } from '../lib/utils.js';
 import { state, saveHealthDay, countMisscaledDays, repairHealthEnergy } from '../lib/store.js';
 import { healthInsights, healthSummary } from '../core/health-insights.js';
+import { isPlausibleHealthValue } from '../core/health.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
 
 let importing = false;
@@ -185,6 +186,8 @@ function manualCard(rerender) {
           if (v !== '') patch[key] = Number(v);
         }
         if (!Object.keys(patch).length) { toast('没有填写任何数值', 'warn'); return; }
+        const invalid = Object.entries(patch).find(([key, value]) => !isPlausibleHealthValue(key, value));
+        if (invalid) { toast(`${invalid[0]} 的数值不合理，请检查单位`, 'warn'); return; }
         await saveHealthDay(state.day, { ...patch, source: 'manual' });
         toast('已保存', 'ok');
         rerender();
@@ -224,10 +227,11 @@ function repairCard(rerender) {
 
 /** 把同步来的数字翻译成「这意味着什么、该怎么做」 */
 function insightCard() {
-  const summary = healthSummary(state.healthDays);
+  const summary = healthSummary(state.healthDays, 14, state.day);
   const list = healthInsights(state.healthDays, {
     targets: state.derived?.targets,
     dietDaily: state.dietDaily,
+    asOfDate: state.day,
   });
 
   const cells = [
@@ -236,13 +240,13 @@ function insightCard() {
     ['日均锻炼', summary.exerciseMinutes, '分钟'],
     ['日均睡眠', summary.sleepHours, '小时'],
     ['静息心率', summary.restingHR, 'bpm'],
-    ['体脂率', summary.bodyFatPct, '%'],
+    ['平均体脂率', summary.bodyFatPct, '%'],
   ].filter(([, v]) => v != null);
 
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '健康解读'),
-      h('span.card-tag', null, summary.days ? `基于近 ${summary.days} 天` : '')),
+      h('span.card-tag', null, summary.days ? `基于 ${summary.days} 个记录日` : '')),
     cells.length ? h('div.health-strip', null, cells.map(([k, v, u]) => h('div.health-cell', null,
       h('div.health-value', null, num(v, u === '小时' || u === '%' ? 1 : 0), h('span.health-unit', null, u)),
       h('div.health-label', null, k)))) : null,

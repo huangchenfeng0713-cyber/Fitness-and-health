@@ -2,17 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FOODS, FOOD_BY_ID, CATEGORIES, per100, nutrientsFor,
-  searchFoods, unitLabel, portionTip, freeSugarFactor, PORTION_TIPS,
+  searchFoods, unitLabel, portionTip, freeSugarFactor, freeSugarPer100, PORTION_TIPS,
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 280, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 610, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
 });
 
 test('每条记录字段齐全且合理', () => {
   for (const f of FOODS) {
     assert.ok(f.id && typeof f.id === 'string', `缺 id: ${f.name}`);
+    assert.match(f.id, /^[a-z0-9_]+$/, `${f.name} 的 id 只能用小写字母、数字和下划线`);
     assert.ok(f.name && typeof f.name === 'string', `缺名称: ${f.id}`);
     assert.ok(CATEGORIES[f.cat], `${f.name} 的分类 "${f.cat}" 不存在`);
     assert.equal(f.n.length, 7, `${f.name} 的营养数组应有 7 项`);
@@ -92,15 +93,40 @@ test('份量换算：克数与营养线性对应', () => {
   assert.equal(half.kcal, Math.round(p.kcal * 0.5));
   assert.equal(double.kcal, Math.round(p.kcal * 2));
   assert.equal(nutrientsFor(rice, 0).kcal, 0);
+  assert.deepEqual(nutrientsFor(rice, -50), {
+    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, totalSugar: 0, sugar: 0, sodium: 0,
+  }, '负克数必须按 0 处理，不能生成负营养');
 });
 
-test('游离糖系数只对该免除的类别免除', () => {
+test('游离糖可按部分糖扣除，不再强迫乳品整项全算或全免', () => {
   for (const f of FOODS) {
     const factor = freeSugarFactor(f);
-    assert.ok(factor === 0 || factor === 1, `${f.name} 的系数应为 0 或 1`);
+    assert.ok(factor >= 0 && factor <= 1, `${f.name} 的游离糖比例应在 0~1`);
     if (f.cat === 'fruit' || f.cat === 'veg') assert.equal(factor, 0, `${f.name} 的天然糖不该计入`);
-    if (f.cat === 'snack') assert.equal(factor, 1, `${f.name} 的糖应计入`);
   }
+  const yogurt = FOOD_BY_ID.get('yogurt_sweet');
+  assert.ok(freeSugarFactor(yogurt) > 0 && freeSugarFactor(yogurt) < 1,
+    '风味酸奶应只计添加部分，不能把乳糖全算进去');
+  assert.equal(freeSugarPer100(FOOD_BY_ID.get('sb_latte')), 0, '纯拿铁乳糖不算游离糖');
+});
+
+test('总糖与游离糖分开保存，且游离糖不超过总糖', () => {
+  for (const f of FOODS) {
+    const n = nutrientsFor(f, 100);
+    assert.ok(n.sugar <= n.totalSugar + 0.1, `${f.name} 的游离糖超过总糖`);
+  }
+  const yogurt = nutrientsFor(FOOD_BY_ID.get('yogurt_sweet'), 100);
+  assert.equal(yogurt.totalSugar, 13);
+  assert.ok(yogurt.sugar > 8 && yogurt.sugar < 9);
+});
+
+test('新增中国常见食物可搜索，通用复合菜明确标为估算', async () => {
+  const { isEstimated } = await import('../js/data/foods.js');
+  const must = ['小米饭', '杂粮饭', '胡辣汤', '重庆小面', '桂林米粉', '酸菜鱼', '毛血旺',
+    '剁椒鱼头', '木须肉', '鱼香茄子', '叉烧', '盐水鸭', '猪蹄', '鸭胗', '素鸡', '腐乳', '杨梅', '枇杷'];
+  assert.deepEqual(must.filter((name) => searchFoods(name).length === 0), []);
+  assert.ok(isEstimated(FOOD_BY_ID.get('pickled_fish')));
+  assert.ok(isEstimated(FOOD_BY_ID.get('tomato_egg')), '通用家常菜也应明确显示估算');
 });
 
 test('连锁快餐品牌都收录了，且搜品牌名首条是主力单品', async () => {

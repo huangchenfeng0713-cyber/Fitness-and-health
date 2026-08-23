@@ -65,7 +65,7 @@ function heroCard(advice, targets, derived) {
     h('div.hero-micros', null,
       microChip('纤维', gaps.fiber, 'g'),
       microChip('钠', gaps.sodium, 'mg'),
-      microChip('添加糖', gaps.sugar, 'g')),
+      microChip('游离糖', gaps.sugar, 'g')),
   );
 }
 

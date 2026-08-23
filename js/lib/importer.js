@@ -28,9 +28,21 @@ function ignoredNote(ignoredKeys) {
   return `，忽略了不认识的字段${shown}${more}`;
 }
 
+/** 把自动数据清洗说清楚，避免用户误以为原始 XML 的简单求和就是 Health App 官方统计。 */
+function qualityNote(quality) {
+  if (!quality) return '';
+  const notes = [];
+  if (quality.duplicateRecords) notes.push(`去重 ${quality.duplicateRecords} 条重复样本`);
+  if (quality.sleepOverlapMinutes) notes.push(`合并 ${Math.round(quality.sleepOverlapMinutes)} 分钟重叠睡眠`);
+  if (quality.multiSourceDays) notes.push(`${quality.multiSourceDays} 个多来源指标按单来源日总量最大值近似消重`);
+  if (quality.invalidRecords) notes.push(`隔离 ${quality.invalidRecords} 条异常值`);
+  return notes.length ? `；${notes.join('，')}` : '';
+}
+
 /** 解析结果写入本地库，返回一句可直接展示的结果说明 */
 export async function applyImport(result, meta = {}) {
   const note = ignoredNote(result?.ignoredKeys);
+  const cleaned = qualityNote(result?.quality);
   if (!result?.days?.length) {
     return {
       ok: false,
@@ -48,7 +60,8 @@ export async function applyImport(result, meta = {}) {
     ok: true,
     days: result.days.length,
     ignoredKeys: result.ignoredKeys || [],
-    message: `已导入 ${result.days.length} 天（${range}）${note}`,
+    quality: result.quality || null,
+    message: `已导入 ${result.days.length} 天（${range}）${note}${cleaned}`,
   };
 }
 

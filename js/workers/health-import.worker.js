@@ -144,7 +144,7 @@ async function consumeXmlStream(stream, totalBytes, onProgress) {
       onProgress?.({ bytes, totalBytes, days: aggregator.size });
     }
   }
-  if (tail) feedXmlChunk(`${tail}>`, aggregator);
+  // 文件若在半个 Record 标签处截断，丢弃残片；不能人工补一个 “>” 把损坏数据伪装成有效记录。
   return aggregator.result();
 }
 

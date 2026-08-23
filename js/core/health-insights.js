@@ -15,7 +15,65 @@ const round = (v, d = 0) => {
 
 const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
-/** 标准差，用来衡量作息是否规律 */
+const DAY_MS = 86400000;
+const WEIGHT_RATE_TOLERANCE = 0.15;
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+const hasHealthMeasurement = (day) => Object.entries(day).some(([key, value]) => (
+  !['date', 'source'].includes(key) && Number.isFinite(Number(value))
+));
+
+/** 只接受真实存在的 YYYY-MM-DD，避免 Date 对无效日期的宽松纠正。 */
+function validDayKey(value) {
+  const key = typeof value === 'string' ? value.slice(0, 10) : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
+  const ms = Date.parse(`${key}T00:00:00Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === key ? key : null;
+}
+
+function todayKey() {
+  const d = new Date();
+  return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
+    .map((v, i) => (i === 0 ? String(v) : String(v).padStart(2, '0')))
+    .join('-');
+}
+
+const dayNumber = (key) => Date.parse(`${key}T00:00:00Z`) / DAY_MS;
+
+const calendarSpan = (points) => {
+  if (!points.length) return 0;
+  return dayNumber(points[points.length - 1].date) - dayNumber(points[0].date) + 1;
+};
+
+/**
+ * 清理并按日历窗口取数：同日记录合并、日期排序、排除未来数据。
+ * 未指定截止日期时，以不晚于今天的最新记录日为窗口终点，便于查看历史导入。
+ */
+function windowedDays(healthDays, windowDays = 14, asOfDate = null) {
+  const byDate = new Map();
+  for (const raw of healthDays || []) {
+    const date = validDayKey(raw?.date);
+    if (!date) continue;
+    byDate.set(date, { ...(byDate.get(date) || {}), ...raw, date });
+  }
+
+  const hardLimit = todayKey();
+  const available = [...byDate.values()]
+    .filter((d) => d.date <= hardLimit && hasHealthMeasurement(d))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!available.length) return [];
+
+  const requested = validDayKey(asOfDate);
+  const cutoff = requested
+    ? (requested < hardLimit ? requested : hardLimit)
+    : available[available.length - 1].date;
+  const n = Math.max(1, Math.floor(Number(windowDays) || 14));
+  const start = dayNumber(cutoff) - n + 1;
+  return available.filter((d) => d.date <= cutoff && dayNumber(d.date) >= start);
+}
+
+/** 标准差，只用来衡量睡眠时长波动，不能代表入睡/起床时间是否规律。 */
 function stdev(arr) {
   if (arr.length < 2) return null;
   const m = avg(arr);
@@ -25,8 +83,8 @@ function stdev(arr) {
 /** 最小二乘斜率（单位/天） */
 function slopePerDay(points) {
   if (points.length < 3) return null;
-  const t0 = new Date(points[0].date).getTime();
-  const xs = points.map((p) => (new Date(p.date).getTime() - t0) / 86400000);
+  const t0 = dayNumber(points[0].date);
+  const xs = points.map((p) => dayNumber(p.date) - t0);
   const ys = points.map((p) => p.value);
   const n = xs.length;
   const mx = avg(xs);
@@ -42,17 +100,20 @@ function slopePerDay(points) {
 
 const series = (days, key) => days
   .map((d) => ({ date: d.date, value: Number(d[key]) }))
-  .filter((p) => Number.isFinite(p.value) && p.value > 0);
+  .filter((p) => Number.isFinite(p.value) && p.value > 0)
+  .sort((a, b) => a.date.localeCompare(b.date));
 
 /**
  * 生成健康解读。
  * @param {Array} healthDays 每日 Apple 健康数据
- * @param {object} opts { targets, dietDaily, windowDays }
+ * @param {object} opts { targets, dietDaily, windowDays, asOfDate/endDate }
  * @returns {Array<{key,level,title,text,metric}>} level: good | info | warn | bad
  */
 export function healthInsights(healthDays = [], opts = {}) {
-  const { targets = null, dietDaily = [], windowDays = 14 } = opts;
-  const days = healthDays.slice(-windowDays);
+  const {
+    targets = null, dietDaily = [], windowDays = 14, asOfDate = null, endDate = null,
+  } = opts;
+  const days = windowedDays(healthDays, windowDays, asOfDate || endDate);
   const out = [];
   const add = (key, level, title, text, metric) => out.push({ key, level, title, text, metric });
 
@@ -71,34 +132,46 @@ export function healthInsights(healthDays = [], opts = {}) {
     const lowDays = steps.filter((p) => p.value < 4000).length;
     if (m < 5000) {
       add('steps', 'warn', `日均 ${m} 步，偏少`,
-        '低于 5000 步属于久坐水平。不用一步到位冲一万，先把目标定在 7000 步——'
-        + '这个量级对应的全因死亡风险下降已经接近平台期。通勤早下一站、午饭后走 15 分钟就能补上大半。',
+        '这提示日常步行量可能偏低，但步数不能单独代表久坐时间、运动强度或健康风险。'
+        + '可以先在当前基础上逐步增加，例如通勤多走一段、午饭后步行 15 分钟；不必一次冲到一万步。',
         m);
     } else if (m < 7500) {
       add('steps', 'info', `日均 ${m} 步`,
-        `已经脱离久坐区间。再往上加到 7000-8000 步，心血管获益还有明显提升空间；超过 10000 步之后收益增长就变缓了。`,
+        '处在本应用的中间参考区间。若身体状况允许，可以循序增加到约 7000-8000 步；'
+        + '同时仍要结合运动强度和连续久坐时间判断，不能只看步数。',
         m);
     } else {
       add('steps', 'good', `日均 ${m} 步，达标`,
-        `维持在这个水平就很好。${lowDays > 0 ? `近 ${days.length} 天里有 ${lowDays} 天不足 4000 步，注意别出现连续几天的断档。` : '而且没有明显的断档。'}`,
+        `达到本应用的步数参考区间。${lowDays > 0 ? `近 ${days.length} 个有记录日里有 ${lowDays} 天不足 4000 步，可以留意是否连续偏低。` : '记录期内没有明显的低步数日。'}`
+        + '步数仍不能替代对中高强度运动和久坐时间的评估。',
         m);
     }
   }
 
   // ---------------- 运动强度 ----------------
-  const exercise = series(days, 'exerciseMinutes');
-  if (exercise.length >= 3) {
-    const weekly = round((avg(exercise.map((p) => p.value)) || 0) * 7);
-    const activeDays = exercise.filter((p) => p.value >= 20).length;
+  const hasExerciseMetric = days.some((d) => hasOwn(d, 'exerciseMinutes')
+    && Number.isFinite(Number(d.exerciseMinutes)) && Number(d.exerciseMinutes) >= 0);
+  const daySpan = calendarSpan(days);
+  const coverage = daySpan > 0 ? days.length / daySpan : 0;
+  // 日级健康记录存在、但没有 exerciseMinutes 时，在已经确认导入过该指标的前提下按 0 计；
+  // 完全缺失的日历日不冒充 0，覆盖率不足时不下结论。
+  if (hasExerciseMetric && daySpan >= 7 && coverage >= 0.7) {
+    const exerciseValues = days.map((d) => {
+      const v = Number(d.exerciseMinutes);
+      return Number.isFinite(v) && v >= 0 ? v : 0;
+    });
+    const weekly = round((exerciseValues.reduce((sum, v) => sum + v, 0) / daySpan) * 7);
+    const activeDays = exerciseValues.filter((v) => v >= 20).length;
     if (weekly < 150) {
       add('exercise', 'warn', `每周锻炼约 ${weekly} 分钟，不足`,
         `WHO 建议成人每周至少 150 分钟中等强度活动，还差 ${round(150 - weekly)} 分钟。`
-        + `拆成每周 5 次、每次 30 分钟最容易坚持。另外每周两次力量训练能显著减缓年龄相关的肌肉流失。`,
+        + `这是按 ${daySpan} 个日历日折算的结果（${days.length} 天有健康记录，明确的零运动日计为 0）。`
+        + '可以拆成每周 5 次、每次约 30 分钟；另外每周安排两次肌力训练。',
         weekly);
     } else {
       add('exercise', 'good', `每周锻炼约 ${weekly} 分钟，达标`,
-        `已达到 WHO 的 150 分钟建议，近 ${days.length} 天有 ${activeDays} 天进行了 20 分钟以上的活动。`
-        + `如果还没有做力量训练，加入每周两次会让减脂期的肌肉保留明显更好。`,
+        `按 ${daySpan} 个日历日折算，达到 WHO 的每周 150 分钟建议；${days.length} 天有健康记录，其中 ${activeDays} 天记录了至少 20 分钟活动。`
+        + '若尚未安排肌力训练，可以逐步加入每周两次。',
         weekly);
     }
   }
@@ -112,8 +185,8 @@ export function healthInsights(healthDays = [], opts = {}) {
     const shortDays = hours.filter((v) => v < 6.5).length;
     if (m < 6.5) {
       add('sleep', 'bad', `日均睡眠 ${m} 小时，明显不足`,
-        `成人建议 7-9 小时。长期睡不够会升高饥饿素、压低瘦素，直接表现为白天更想吃高糖高脂的东西——`
-        + `减脂期这一项常常比少吃几百千卡更关键。`,
+        '成人通常建议每晚睡够 7 小时。长期睡眠不足可能影响食欲调节、注意力和恢复；'
+        + '先尝试把睡眠机会逐步增加，并结合白天状态观察。',
         m);
     } else if (m < 7) {
       add('sleep', 'warn', `日均睡眠 ${m} 小时，略少`,
@@ -121,12 +194,12 @@ export function healthInsights(healthDays = [], opts = {}) {
         m);
     } else {
       add('sleep', 'good', `日均睡眠 ${m} 小时`,
-        `落在建议区间内。${sd > 1.2 ? `不过波动较大（标准差 ${sd} 小时），作息不规律同样会影响食欲激素，尽量固定起床时间。` : '而且比较规律，继续保持。'}`,
+        `落在建议区间内。${sd > 1.2 ? `不过睡眠时长波动较大（标准差 ${sd} 小时）；这不能直接说明入睡和起床时间是否规律。` : '睡眠时长波动较小，继续保持。'}`,
         m);
     }
     if (sd > 1.5 && m >= 7) {
       add('sleep_var', 'info', `睡眠时长波动较大（±${sd} 小时）`,
-        '固定起床时间比固定入睡时间更容易做到，也更能稳住生物钟。');
+        '这只反映每晚睡眠时长差异，不能代表入睡或起床时间的规律性。可以先检查短睡日出现在哪些情境。');
     }
   }
 
@@ -138,39 +211,60 @@ export function healthInsights(healthDays = [], opts = {}) {
     const weekly = slope != null ? round(slope * 7, 1) : null;
     if (m > 80) {
       add('rhr', 'warn', `静息心率 ${m} bpm，偏高`,
-        '成人静息心率通常在 60-100，但长期高于 80 与心血管风险上升相关。'
-        + '规律有氧运动是最有效的降低手段；若同时伴有心悸、乏力，建议就医评估。', m);
+        '成人静息心率常见参考范围约为 60-100 bpm，但年龄、体能、药物和测量条件都会影响读数，单凭平均值不能判断疾病。'
+        + '如果持续高于个人平时水平，或伴有心悸、胸闷、乏力等不适，建议就医评估。', m);
     } else if (weekly != null && weekly >= 1.5) {
       add('rhr', 'warn', `静息心率近期上升（+${weekly} bpm/周）`,
-        '持续上升常见于训练过量、睡眠不足、压力大或正在感冒。先检查这几项，必要时安排一两天完全休息。', m);
+        '这种变化可能与训练负荷、睡眠、压力、感染或测量条件变化有关，不能只凭趋势确定原因。'
+        + '先复核同一时段的连续测量；若持续上升或伴有不适，再咨询医生。', m);
     } else {
       add('rhr', 'good', `静息心率 ${m} bpm`,
-        `处在健康区间${weekly != null && weekly <= -0.5 ? '，并且在下降——通常说明有氧能力在改善' : ''}。`, m);
+        `处在成人常见参考范围${weekly != null && weekly <= -0.5 ? '，近期读数下降可能与体能或测量条件变化有关' : ''}；仍应结合个人基线和症状看待。`, m);
     }
   }
 
   // ---------------- 体重与体成分 ----------------
   const weight = series(days, 'weightKg');
+  let weightPerWeek = null;
+  let weightSpan = 0;
   if (weight.length >= 4) {
     const slope = slopePerDay(weight);
-    const perWeek = slope != null ? round(slope * 7, 2) : null;
+    weightPerWeek = slope != null ? slope * 7 : null;
+    const perWeek = weightPerWeek != null ? round(weightPerWeek, 2) : null;
+    weightSpan = calendarSpan(weight);
     const latest = weight[weight.length - 1].value;
-    const goalRate = targets?.rateKgPerWeek ?? 0;
+    const rawGoal = targets?.rateKgPerWeek;
+    const parsedGoal = Number(rawGoal);
+    const hasGoalRate = rawGoal !== null && rawGoal !== '' && Number.isFinite(parsedGoal);
+    const goalRate = hasGoalRate ? parsedGoal : null;
+    const rateGap = hasGoalRate && weightPerWeek != null ? weightPerWeek - goalRate : null;
     const pctPerWeek = perWeek != null && latest > 0 ? Math.abs(perWeek / latest) * 100 : null;
 
     if (perWeek != null) {
       if (pctPerWeek != null && pctPerWeek > 1) {
         add('weight', 'warn', `体重变化 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周，速度偏快`,
-          `相当于每周 ${round(pctPerWeek, 1)}% 体重。超过 1%/周时，掉的往往不只是脂肪——`
-          + `肌肉和水分占比会明显上升，代谢也更容易下调。把热量缺口收小一些更划算。`, perWeek);
-      } else if (goalRate !== 0 && Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(perWeek) > 0.15) {
-        const adjust = round(((perWeek - goalRate) * 7700) / 7) * -1;
-        add('weight', 'warn', `体重趋势与目标相反（${perWeek > 0 ? '+' : ''}${perWeek} kg/周）`,
-          `目标是 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。说明真实消耗与估算有偏差，`
-          + `建议把每日热量目标调整约 ${adjust > 0 ? '+' : ''}${adjust} kcal，再观察两周。`, perWeek);
-      } else {
+          `相当于每周 ${round(pctPerWeek, 1)}% 体重。${perWeek < 0
+            ? '减重过快时，变化往往不只来自脂肪，肌肉和水分也可能占较大比例；建议收小热量缺口。'
+            : '增重过快时也可能混有水分变化；建议复核目标、饮食记录和连续几周趋势。'}`, perWeek);
+      } else if (rateGap != null && Math.abs(rateGap) > WEIGHT_RATE_TOLERANCE) {
+        const enoughForAdjustment = weightSpan >= 28 && weight.length >= 8;
+        const direction = Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(goalRate) > 0
+          ? '与目标方向不同' : '偏离目标';
+        let advice = `实际趋势与目标相差 ${round(Math.abs(rateGap), 2)} kg/周，超过 ${WEIGHT_RATE_TOLERANCE} kg/周的观察容差。`;
+        if (enoughForAdjustment) {
+          const adjust = clamp(round((-rateGap * 7700) / 7), -250, 250);
+          advice += `基于 ${weightSpan} 个日历日的趋势，可先把每日热量目标调整约 ${adjust > 0 ? '+' : ''}${adjust} kcal（单次最多 ±250 kcal），再观察至少两周。`;
+        } else {
+          advice += `目前只有 ${weightSpan} 个日历日的跨度，先保持方案；至少积累 28 天且有足够称重记录后，再考虑调整热量。`;
+        }
+        add('weight', 'warn', `体重趋势${direction}（${perWeek > 0 ? '+' : ''}${perWeek} kg/周）`,
+          `目标是 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。${advice}`, perWeek);
+      } else if (hasGoalRate) {
         add('weight', 'good', `体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
-          `与目标（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）基本一致。体重每天上下 1kg 是水分波动，看趋势线不要看单日数字。`, perWeek);
+          `与目标（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）的差值在 ±${WEIGHT_RATE_TOLERANCE} kg/周观察容差内。体重单日变化常受水分影响，应继续看多周趋势。`, perWeek);
+      } else {
+        add('weight', 'info', `体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
+          '尚未提供目标变化速度，因此只展示趋势，不判断是否达标。体重单日变化常受水分影响，应继续看多周趋势。', perWeek);
       }
     }
 
@@ -188,11 +282,21 @@ export function healthInsights(healthDays = [], opts = {}) {
     const perWeek = slope != null ? round(slope * 7, 2) : null;
     const latest = round(bodyFat[bodyFat.length - 1].value, 1);
     if (perWeek != null && Math.abs(perWeek) >= 0.1) {
-      add('bodyfat', perWeek < 0 ? 'good' : 'info',
+      let interpretation;
+      if (weightPerWeek == null) {
+        interpretation = '同一窗口缺少足够的体重趋势，不能判断体成分是否真的发生了变化。';
+      } else if (perWeek < 0 && weightPerWeek < -WEIGHT_RATE_TOLERANCE) {
+        interpretation = '体重趋势和体脂读数同时下降，与减脂方向一致，但不能据此断定减少的主要是脂肪。';
+      } else if (perWeek > 0 && weightPerWeek > WEIGHT_RATE_TOLERANCE) {
+        interpretation = '体重趋势和体脂读数同时上升，需要继续观察，但不能仅凭这组读数断定脂肪增加。';
+      } else if (Math.abs(weightPerWeek) <= WEIGHT_RATE_TOLERANCE) {
+        interpretation = '体重趋势基本稳定，单独的体脂读数变化不足以判断脂肪或肌肉变化。';
+      } else {
+        interpretation = '体重趋势与体脂读数方向不一致，更应先排查水分状态和测量条件，不能据此判断肌肉流失或脂肪变化。';
+      }
+      add('bodyfat', 'info',
         `体脂率 ${latest}%，${perWeek < 0 ? '在下降' : '在上升'}（${perWeek > 0 ? '+' : ''}${perWeek} %/周）`,
-        perWeek < 0
-          ? '体重和体脂同时下降，说明减的主要是脂肪，方向是对的。'
-          : '若体重没怎么变而体脂上升，通常意味着肌肉在流失——检查蛋白质是否吃够、有没有力量训练。',
+        `${interpretation}家用 BIA 体脂秤会受饮水、进食、运动和测量时段影响，尽量在相近条件下测量并看长期趋势。`,
         latest);
     }
   }
@@ -234,9 +338,9 @@ export function healthInsights(healthDays = [], opts = {}) {
   return out;
 }
 
-/** 汇总卡片用的关键指标 */
-export function healthSummary(healthDays = [], windowDays = 14) {
-  const days = healthDays.slice(-windowDays);
+/** 汇总卡片用的关键指标；asOfDate 可用于查看某个历史截止日。 */
+export function healthSummary(healthDays = [], windowDays = 14, asOfDate = null) {
+  const days = windowedDays(healthDays, windowDays, asOfDate);
   const pick = (key) => {
     const vals = series(days, key).map((p) => p.value);
     return vals.length ? round(avg(vals), key === 'weightKg' || key === 'bodyFatPct' ? 1 : 0) : null;
@@ -245,7 +349,17 @@ export function healthSummary(healthDays = [], windowDays = 14) {
     days: days.length,
     steps: pick('steps'),
     activeEnergy: pick('activeEnergy'),
-    exerciseMinutes: pick('exerciseMinutes'),
+    exerciseMinutes: (() => {
+      const span = calendarSpan(days);
+      const hasMetric = days.some((d) => hasOwn(d, 'exerciseMinutes')
+        && Number.isFinite(Number(d.exerciseMinutes)) && Number(d.exerciseMinutes) >= 0);
+      if (!hasMetric || span <= 0 || days.length / span < 0.7) return null;
+      const total = days.reduce((sum, d) => {
+        const v = Number(d.exerciseMinutes);
+        return sum + (Number.isFinite(v) && v >= 0 ? v : 0);
+      }, 0);
+      return round(total / span);
+    })(),
     sleepHours: (() => {
       const v = pick('sleepMinutes');
       return v != null ? round(v / 60, 1) : null;

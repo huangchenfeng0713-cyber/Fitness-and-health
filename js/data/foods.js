@@ -9,8 +9,8 @@
  *   cat      分类
  *   n        每 100g：[热量kcal, 蛋白g, 脂肪g, 碳水g, 膳食纤维g, 糖g, 钠mg]
  *   s        常用份量 [[名称, 克数], ...]
- *   sf       仅茶饮：点「无糖」时仍残留的糖（每 100g）。奶的乳糖、珍珠芋圆的
- *            糖水、水果自带的糖不会随糖度归零，只有加进去的那部分才可调。
+ *   sf       仅茶饮：点「无糖」时仍残留的总糖（每 100g）
+ *   nfs      其中不属于 WHO 游离糖的部分（乳糖、完整果肉内源糖等，每 100g）
  *   f        语义标记（无法从营养数字推导的部分）
  *            fried 油炸 / refined 精制 / processed 加工肉或深加工 / whole 全谷物
  *            quick 便利店随手可得 / breakfast 适合早餐 / late 适合睡前 / cook 需烹饪
@@ -71,14 +71,14 @@ export const FOODS = [
   { id: 'beef_steak', name: '西冷牛排', alias: 'niupai steak', cat: 'meat', n: [212, 24.0, 12.8, 0, 0, 0, 70], s: [['一块', 200]], f: [] },
   { id: 'lamb', name: '羊肉（瘦）', alias: 'yangrou lamb', cat: 'meat', n: [203, 19.0, 14.1, 0, 0, 0, 69], s: [['一份', 100]], f: [] },
   { id: 'duck', name: '烤鸭（带皮）', alias: 'kaoya duck', cat: 'meat', n: [436, 16.6, 38.4, 6.0, 0, 1.0, 83], s: [['一份', 100]], f: [] },
-  { id: 'sausage', name: '香肠 / 火腿肠', alias: 'xiangchang sausage', cat: 'meat', n: [508, 12.0, 48.0, 6.0, 0, 3.0, 1300], s: [['一根', 60]], f: ['processed', 'quick'] },
+  { id: 'sausage', name: '中式香肠 / 腊肠', alias: 'xiangchang lachang sausage', cat: 'meat', n: [508, 12.0, 48.0, 6.0, 0, 3.0, 1300], s: [['一根', 60]], f: ['processed', 'quick'] },
   { id: 'bacon', name: '培根', alias: 'peigen bacon', cat: 'meat', n: [381, 22.4, 30.6, 2.0, 0, 1.0, 1500], s: [['一片', 25]], f: ['processed'] },
   { id: 'ham_lean', name: '低脂火腿片', alias: 'huotui ham', cat: 'meat', n: [120, 18.0, 4.0, 2.5, 0, 1.5, 1000], s: [['一片', 25]], f: ['processed', 'quick'] },
   { id: 'chicken_liver', name: '鸡肝', alias: 'jigan liver', cat: 'meat', n: [121, 16.6, 4.8, 2.8, 0, 0, 92], s: [['一份', 80]], f: [] },
 
   // ---------- 水产 ----------
   { id: 'salmon', name: '三文鱼', alias: 'sanwenyu salmon', cat: 'seafood', n: [208, 20.4, 13.4, 0, 0, 0, 59], s: [['一块', 120]], f: [] },
-  { id: 'basa', name: '巴沙鱼 / 龙利鱼', alias: 'bashayu basa', cat: 'seafood', n: [90, 15.0, 3.0, 0, 0, 0, 100], s: [['一片', 150]], f: ['cook'] },
+  { id: 'basa', name: '巴沙鱼', alias: 'bashayu basa', cat: 'seafood', n: [90, 15.0, 3.0, 0, 0, 0, 100], s: [['一片', 150]], f: ['cook'] },
   { id: 'cod', name: '鳕鱼', alias: 'xueyu cod', cat: 'seafood', n: [88, 20.4, 0.5, 0, 0, 0, 130], s: [['一块', 120]], f: ['cook'] },
   { id: 'shrimp', name: '虾仁', alias: 'xiaren shrimp 虾 基围虾', cat: 'seafood', n: [93, 18.6, 0.8, 2.8, 0, 0, 165], s: [['一份', 100]], f: ['cook'] },
   { id: 'crucian', name: '鲫鱼', alias: 'jiyu crucian', cat: 'seafood', n: [108, 17.1, 2.7, 3.8, 0, 0, 41], s: [['一条', 200]], f: [] },
@@ -98,7 +98,7 @@ export const FOODS = [
   { id: 'milk_skim', name: '脱脂牛奶', alias: 'tuozhi skim milk', cat: 'dairy', n: [35, 3.4, 0.2, 5.0, 0, 5.0, 52], s: [['一盒', 250]], f: ['quick', 'late', 'natsugar'] },
   { id: 'yogurt_plain', name: '无糖酸奶', alias: 'suannai yogurt 酸奶 无糖', cat: 'dairy', n: [61, 3.5, 3.2, 4.7, 0, 4.7, 45], s: [['一盒', 150]], f: ['quick', 'late', 'breakfast', 'natsugar'] },
   { id: 'yogurt_greek', name: '希腊酸奶（0脂）', alias: 'xila greek yogurt', cat: 'dairy', n: [59, 10.0, 0.4, 3.6, 0, 3.6, 36], s: [['一盒', 150]], f: ['quick', 'late', 'natsugar'] },
-  { id: 'yogurt_sweet', name: '风味酸奶（含糖）', alias: 'fengwei suannai', cat: 'dairy', n: [92, 3.0, 2.7, 13.5, 0, 13.0, 60], s: [['一盒', 180]], f: ['quick'] },
+  { id: 'yogurt_sweet', name: '风味酸奶（含糖）', alias: 'fengwei suannai', cat: 'dairy', n: [92, 3.0, 2.7, 13.5, 0, 13.0, 60], s: [['一盒', 180]], nfs: 4.7, f: ['quick', 'est'] },
   { id: 'cheese', name: '奶酪 / 芝士片', alias: 'nailao cheese', cat: 'dairy', n: [328, 25.7, 23.5, 3.5, 0, 2.0, 580], s: [['一片', 20]], f: ['quick', 'natsugar'] },
   { id: 'whey', name: '乳清蛋白粉', alias: 'ruqing whey protein', cat: 'dairy', n: [380, 78.0, 5.0, 8.0, 0, 3.0, 300], s: [['一勺', 30]], f: ['quick'] },
 
@@ -144,7 +144,7 @@ export const FOODS = [
   { id: 'grapefruit', name: '西柚', alias: 'xiyou grapefruit', cat: 'fruit', n: [42, 0.8, 0.1, 10.7, 1.6, 7.0, 0], s: [['半个', 200]], f: [] },
 
   // ---------- 坚果种子 ----------
-  { id: 'almond', name: '巴旦木 / 杏仁', alias: 'badanmu almond', cat: 'nut', n: [579, 21.2, 49.9, 21.6, 12.5, 4.4, 1], s: [['一小把', 25]], f: ['quick'] },
+  { id: 'almond', name: '巴旦木 / 扁桃仁', alias: 'badanmu biantaoren almond', cat: 'nut', n: [579, 21.2, 49.9, 21.6, 12.5, 4.4, 1], s: [['一小把', 25]], f: ['quick'] },
   { id: 'walnut', name: '核桃仁', alias: 'hetao walnut', cat: 'nut', n: [654, 15.2, 65.2, 13.7, 6.7, 2.6, 2], s: [['一小把', 25]], f: ['quick'] },
   { id: 'peanut', name: '花生（炒）', alias: 'huasheng peanut', cat: 'nut', n: [589, 24.0, 48.0, 21.0, 8.0, 4.0, 445], s: [['一小把', 25]], f: [] },
   { id: 'cashew', name: '腰果', alias: 'yaoguo cashew', cat: 'nut', n: [559, 17.3, 36.7, 41.6, 3.6, 5.9, 251], s: [['一小把', 25]], f: ['quick'] },
@@ -324,7 +324,7 @@ export const FOODS = [
   { id: 'wine_red', name: '红酒', alias: 'hongjiu', cat: 'drink', n: [85, 0.1, 0, 2.6, 0, 0.6, 4], s: [['一杯', 150]], f: ['alcohol'] },
   { id: 'sake', name: '清酒', alias: 'qingjiu sake', cat: 'drink', n: [134, 0.5, 0, 5.0, 0, 0, 2], s: [['一小杯', 100]], f: ['alcohol'] },
   { id: 'protein_shake', name: '蛋白奶昔（即饮）', alias: 'danbai naixi', cat: 'drink', n: [50, 8.0, 1.0, 2.5, 0, 2.0, 90], s: [['一瓶', 330]], f: ['quick'] },
-  { id: 'coconut_milk_drink', name: '椰奶', alias: 'yenai', cat: 'drink', n: [104, 1.0, 7.0, 9.5, 0, 8.0, 30], s: [['一盒', 245]], f: ['sweetdrink', 'quick'] },
+  { id: 'coconut_milk_drink', name: '椰汁饮料（含糖）', alias: 'yezhi yenai coconut drink', cat: 'drink', n: [104, 1.0, 7.0, 9.5, 0, 8.0, 30], s: [['一盒', 245]], f: ['sweetdrink', 'quick', 'est'] },
   { id: 'soup_broth', name: '清汤 / 蔬菜汤', alias: 'qingtang', cat: 'drink', n: [18, 1.0, 0.8, 1.8, 0.3, 0.5, 380], s: [['一碗', 300]], f: [] },
 
   // ---------- 零食（补充） ----------
@@ -592,22 +592,22 @@ export const FOODS = [
   { id: 'yoshinoya_beef', name: '吉野家 牛肉饭（中碗）', alias: 'yoshinoya jiyejia niuroufan', cat: 'chain', n: [144, 4.9, 4.4, 21.1, 0.7, 2.7, 311], s: [['中碗', 450]], f: ['quick', 'processed', 'est'] },
 
   // ---------- 茶饮 / 咖啡连锁（营养按全糖录入，糖度由界面换算） ----------
-  { id: 'tea_boba', name: '珍珠奶茶', alias: 'zhenzhunaicha bobo boba naicha', cat: 'chain', n: [94, 1.2, 2.8, 16.0, 0.2, 9.6, 24], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_boba', name: '珍珠奶茶', alias: 'zhenzhunaicha bobo boba naicha', cat: 'chain', n: [94, 1.2, 2.8, 16.0, 0.2, 9.6, 24], s: [['中杯 500ml', 500]], sf: 1.2, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_milk_plain', name: '奶茶（不加料）', alias: 'naicha', cat: 'chain', n: [66, 1.0, 1.6, 11.6, 0.0, 7.2, 22], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_milk_green', name: '奶绿', alias: 'nailv naicha', cat: 'chain', n: [68, 1.0, 2.0, 11.2, 0.0, 6.8, 22], s: [['中杯 500ml', 500]], sf: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_cheese_top', name: '芝士奶盖茶', alias: 'zhishinaigai naigaicha', cat: 'chain', n: [64, 1.4, 3.4, 7.0, 0.0, 5.6, 28], s: [['中杯 500ml', 500]], sf: 1.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_brownsugar_boba', name: '黑糖珍珠鲜奶', alias: 'heitangzhenzhuxiannai heitang', cat: 'chain', n: [96, 1.8, 3.0, 15.2, 0.2, 10.4, 26], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_grass_jelly', name: '烧仙草', alias: 'shaoxiancao', cat: 'chain', n: [84, 1.2, 2.4, 14.4, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_taro_boba', name: '芋圆奶茶', alias: 'yuyuannaicha', cat: 'chain', n: [90, 1.2, 2.6, 15.2, 0.3, 8.4, 24], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
-  { id: 'tea_fruit', name: '水果茶', alias: 'shuiguocha guocha', cat: 'chain', n: [46, 0.2, 0.1, 11.2, 0.3, 10.0, 4], s: [['中杯 500ml', 500]], sf: 2.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
-  { id: 'tea_lemon', name: '柠檬茶', alias: 'ningmengcha', cat: 'chain', n: [40, 0.1, 0.0, 9.8, 0.1, 9.0, 3], s: [['中杯 500ml', 500]], sf: 0.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_fruit', name: '水果茶', alias: 'shuiguocha guocha', cat: 'chain', n: [46, 0.2, 0.1, 11.2, 0.3, 10.0, 4], s: [['中杯 500ml', 500]], sf: 2.8, nfs: 0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'tea_lemon', name: '柠檬茶', alias: 'ningmengcha', cat: 'chain', n: [40, 0.1, 0.0, 9.8, 0.1, 9.0, 3], s: [['中杯 500ml', 500]], sf: 0.8, nfs: 0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_yogurt_fruit', name: '水果酸奶昔', alias: 'suannaixi', cat: 'chain', n: [76, 1.6, 1.8, 13.2, 0.3, 10.4, 30], s: [['中杯 500ml', 500]], sf: 2.8, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'tea_pure', name: '纯茶（乌龙/茉莉）', alias: 'chuncha wulong molihua', cat: 'chain', n: [2, 0.0, 0.0, 0.3, 0.0, 0.0, 3], s: [['中杯 500ml', 500]], f: ['quick', 'est'] },
   { id: 'mixue_boba', name: '蜜雪冰城 珍珠奶茶', alias: 'mixue miyuebingcheng zhenzhunaicha', cat: 'chain', n: [84, 1.0, 2.4, 14.6, 0.2, 8.4, 22], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'mixue_lemon', name: '蜜雪冰城 冰鲜柠檬水', alias: 'mixue ningmengshui', cat: 'chain', n: [36, 0.1, 0.0, 9.0, 0.1, 8.4, 2], s: [['大杯 500ml', 500]], sf: 0.4, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'mixue_icecream_tea', name: '蜜雪冰城 冰淇淋红茶', alias: 'mixue bingqilinhongcha', cat: 'chain', n: [56, 0.6, 1.4, 10.2, 0.0, 8.8, 16], s: [['中杯 500ml', 500]], sf: 2.0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'mixue_shake', name: '蜜雪冰城 摇摇奶昔', alias: 'mixue yaoyaonaixi', cat: 'chain', n: [78, 1.2, 2.2, 13.2, 0.1, 10.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
-  { id: 'heytea_grape', name: '喜茶 多肉葡萄', alias: 'heytea xicha duoroputao', cat: 'chain', n: [60, 0.4, 1.0, 12.4, 0.2, 10.8, 12], s: [['中杯 500ml', 500]], sf: 3.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'heytea_grape', name: '喜茶 多肉葡萄', alias: 'heytea xicha duoroputao', cat: 'chain', n: [60, 0.4, 1.0, 12.4, 0.2, 10.8, 12], s: [['中杯 500ml', 500]], sf: 3.2, nfs: 0, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'heytea_cheese_grape', name: '喜茶 芝芝葡萄', alias: 'heytea xicha zhizhiputao', cat: 'chain', n: [66, 1.2, 2.6, 9.6, 0.2, 8.0, 26], s: [['中杯 500ml', 500]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'heytea_berry', name: '喜茶 芝芝莓莓', alias: 'heytea xicha zhizhimeimei', cat: 'chain', n: [64, 1.2, 2.6, 9.0, 0.3, 7.6, 26], s: [['中杯 500ml', 500]], sf: 2.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'heytea_brownsugar', name: '喜茶 烤黑糖波波牛乳', alias: 'heytea xicha kaoheitangbobo', cat: 'chain', n: [94, 1.8, 3.0, 14.8, 0.2, 10.0, 26], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
@@ -628,7 +628,7 @@ export const FOODS = [
   { id: 'chayan_youlan', name: '茶颜悦色 幽兰拿铁', alias: 'chayanyuese youlannatie', cat: 'chain', n: [71, 1.5, 2.9, 9.6, 0.1, 5.8, 27], s: [['中杯 480ml', 480]], sf: 2.1, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'bawang_boya', name: '霸王茶姬 伯牙绝弦', alias: 'bawangchaji boyajuexian', cat: 'chain', n: [47, 1.3, 1.3, 7.4, 0.0, 6.0, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'bawang_osmanthus', name: '霸王茶姬 桂馥兰香', alias: 'bawangchaji guifulanxiang', cat: 'chain', n: [45, 1.3, 1.3, 7.0, 0.0, 5.5, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
-  { id: 'sb_latte', name: '星巴克 拿铁', alias: 'starbucks xingbake natie', cat: 'chain', n: [54, 2.8, 2.8, 4.2, 0.0, 4.2, 37], s: [['中杯 355ml', 355]], f: ['quick', 'est', 'sweetdrink'] },
+  { id: 'sb_latte', name: '星巴克 拿铁', alias: 'starbucks xingbake natie', cat: 'chain', n: [54, 2.8, 2.8, 4.2, 0.0, 4.2, 37], s: [['中杯 355ml', 355]], f: ['quick', 'est', 'natsugar'] },
   { id: 'sb_mocha', name: '星巴克 摩卡', alias: 'starbucks xingbake moka', cat: 'chain', n: [85, 2.8, 3.4, 10.7, 0.3, 9.0, 39], s: [['中杯 355ml', 355]], sf: 4.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'sb_matcha_latte', name: '星巴克 抹茶拿铁', alias: 'starbucks xingbake mochanatie', cat: 'chain', n: [68, 2.8, 2.5, 8.7, 0.3, 7.9, 39], s: [['中杯 355ml', 355]], sf: 4.2, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
   { id: 'sb_frappuccino', name: '星巴克 星冰乐', alias: 'starbucks xingbingle', cat: 'chain', n: [85, 1.1, 3.1, 13.2, 0.0, 12.7, 51], s: [['中杯 355ml', 355]], sf: 3.4, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
@@ -684,6 +684,48 @@ export const FOODS = [
   { id: 'suanlafen_bag', name: '嗨吃家 酸辣粉（桶装）', alias: 'haichijia suanlafen', cat: 'staple', n: [311, 4.4, 7.4, 56.3, 1.5, 4.4, 1407], s: [['一桶', 135]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
   { id: 'luosifen_bag', name: '螺蛳粉（袋装）', alias: 'luosifen daizhuang', cat: 'staple', n: [160, 3.7, 4.7, 26.0, 1.3, 1.7, 700], s: [['一袋', 300]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
 
+  // ---------- 2026 中国常见食物补充（通用配方均明确标 est） ----------
+  { id: 'millet_rice', name: '小米饭', alias: 'xiaomifan millet rice', cat: 'staple', n: [114, 3.1, 1.0, 23.8, 1.2, 0.1, 2], s: [['小碗', 150], ['中碗', 200]], f: ['whole', 'breakfast', 'est'] },
+  { id: 'mixed_grain_rice', name: '杂粮饭', alias: 'zaliangfan mixed grain rice', cat: 'staple', n: [120, 3.2, 1.1, 23.8, 2.0, 0.4, 4], s: [['小碗', 150], ['中碗', 200]], f: ['whole', 'est'] },
+  { id: 'eight_treasure_congee', name: '八宝粥（无额外糖）', alias: 'babaozhou eight treasure congee', cat: 'staple', n: [72, 2.3, 0.6, 14.5, 1.7, 1.5, 8], s: [['一碗', 300]], f: ['whole', 'breakfast', 'est'] },
+  { id: 'cornmeal_congee', name: '玉米面粥', alias: 'yumimianzhou cornmeal congee', cat: 'staple', n: [45, 1.2, 0.4, 9.2, 0.9, 0.3, 2], s: [['一碗', 300]], f: ['whole', 'breakfast', 'est'] },
+  { id: 'scallion_pancake', name: '葱油饼', alias: 'congyoubing scallion pancake', cat: 'staple', n: [320, 7.0, 16.0, 36.0, 1.5, 1.5, 650], s: [['一张', 100]], f: ['fried', 'refined', 'breakfast', 'est'] },
+  { id: 'fagao', name: '发糕', alias: 'fagao steamed sponge cake', cat: 'staple', n: [230, 5.5, 1.0, 50.0, 1.2, 10.0, 180], s: [['一块', 80]], f: ['refined', 'breakfast', 'est'] },
+  { id: 'cifantuan', name: '粢饭团', alias: 'cifantuan rice roll', cat: 'staple', n: [210, 5.5, 6.5, 32.0, 1.0, 2.0, 450], s: [['一个', 220]], f: ['breakfast', 'est'] },
+  { id: 'hulatang', name: '胡辣汤', alias: 'hulatang pepper soup', cat: 'dish', n: [45, 2.6, 2.0, 4.0, 0.6, 0.8, 520], s: [['一碗', 350]], f: ['breakfast', 'est'] },
+  { id: 'chongqing_noodle', name: '重庆小面', alias: 'chongqingxiaomian', cat: 'dish', n: [165, 5.0, 7.0, 22.0, 1.0, 1.5, 650], s: [['一碗', 450]], f: ['refined', 'est'] },
+  { id: 'henan_huimian', name: '河南烩面', alias: 'henanhuimian', cat: 'dish', n: [120, 6.0, 3.5, 16.0, 1.0, 1.0, 620], s: [['一碗', 550]], f: ['refined', 'est'] },
+  { id: 'guilin_rice_noodle', name: '桂林米粉', alias: 'guilinmifen', cat: 'dish', n: [125, 6.0, 3.5, 18.0, 0.8, 1.2, 650], s: [['一碗', 500]], f: ['refined', 'est'] },
+  { id: 'cross_bridge_rice_noodle', name: '过桥米线', alias: 'guoqiaomixian yunnan', cat: 'dish', n: [105, 5.5, 3.0, 15.0, 0.8, 1.0, 550], s: [['一碗', 600]], f: ['refined', 'est'] },
+
+  { id: 'pickled_fish', name: '酸菜鱼', alias: 'suancaiyu pickled fish', cat: 'dish', n: [145, 13.0, 8.5, 3.0, 1.0, 1.5, 950], s: [['一份', 400]], f: ['est'] },
+  { id: 'maoxuewang', name: '毛血旺', alias: 'maoxuewang', cat: 'dish', n: [165, 10.0, 12.0, 5.0, 1.0, 1.5, 1200], s: [['一份', 400]], f: ['est'] },
+  { id: 'chopped_pepper_fish_head', name: '剁椒鱼头', alias: 'duojiaoyutou', cat: 'dish', n: [155, 14.0, 10.0, 3.0, 0.8, 1.0, 1100], s: [['一份可食部', 350]], f: ['est'] },
+  { id: 'tomato_beef_brisket', name: '番茄炖牛腩', alias: 'fanqiedunniunan tomato beef', cat: 'dish', n: [145, 10.0, 8.0, 7.0, 1.0, 3.0, 550], s: [['一份', 300]], f: ['est'] },
+  { id: 'mushu_pork', name: '木须肉', alias: 'muxurou', cat: 'dish', n: [150, 10.0, 10.0, 5.0, 1.0, 2.0, 600], s: [['一份', 250]], f: ['est'] },
+  { id: 'beijing_sauce_pork', name: '京酱肉丝', alias: 'jingjiangrousi', cat: 'dish', n: [210, 15.0, 12.0, 12.0, 0.5, 8.0, 800], s: [['一份', 200]], f: ['est'] },
+  { id: 'garlic_sprout_pork', name: '蒜薹炒肉', alias: 'suantaichaorou', cat: 'dish', n: [170, 9.0, 12.0, 7.0, 1.5, 2.5, 650], s: [['一份', 250]], f: ['est'] },
+  { id: 'zucchini_egg', name: '西葫芦炒蛋', alias: 'xihuluchaodan', cat: 'dish', n: [110, 6.0, 8.0, 4.0, 1.0, 2.0, 450], s: [['一份', 250]], f: ['est'] },
+  { id: 'yuxiang_eggplant', name: '鱼香茄子', alias: 'yuxiangqiezi', cat: 'dish', n: [180, 3.0, 14.0, 12.0, 2.2, 6.0, 750], s: [['一份', 250]], f: ['est'] },
+  { id: 'char_siu', name: '叉烧', alias: 'chashao char siu', cat: 'meat', n: [290, 23.0, 16.0, 15.0, 0, 10.0, 1000], s: [['一份', 100]], f: ['processed', 'est'] },
+  { id: 'roast_goose', name: '烧鹅（带皮）', alias: 'shaoe roast goose', cat: 'meat', n: [340, 18.0, 28.0, 5.0, 0, 2.0, 650], s: [['一份可食部', 100]], f: ['est'] },
+  { id: 'salted_duck_nanjing', name: '南京盐水鸭', alias: 'nanjing yanshuiya', cat: 'meat', n: [230, 17.0, 17.0, 2.0, 0, 1.0, 1000], s: [['一份可食部', 150]], f: ['processed', 'est'] },
+
+  { id: 'pork_trotter_braised', name: '卤猪蹄', alias: 'luzhuti zhutizi pork trotter', cat: 'meat', n: [260, 23.0, 18.0, 3.0, 0, 1.5, 650], s: [['一份可食部', 150]], f: ['est'] },
+  { id: 'pork_intestine_cooked', name: '猪大肠（熟，未调味）', alias: 'zhudachang pork intestine', cat: 'meat', n: [196, 6.9, 18.7, 0, 0, 0, 116], s: [['一份可食部', 100]], f: ['cook'] },
+  { id: 'duck_gizzard', name: '鸭胗', alias: 'yazhen duck gizzard', cat: 'meat', n: [118, 19.0, 3.0, 2.0, 0, 0, 70], s: [['一份', 100]], f: ['cook'] },
+  { id: 'duck_egg_boiled', name: '鸭蛋（煮）', alias: 'yadan boiled duck egg', cat: 'egg', n: [180, 12.6, 13.0, 3.1, 0, 0.5, 146], s: [['一个可食部', 65]], f: ['quick'] },
+  { id: 'mock_chicken', name: '素鸡', alias: 'suji mock chicken', cat: 'soy', n: [194, 16.5, 12.5, 4.2, 0.9, 0.6, 500], s: [['一份', 100]], f: ['processed', 'est'] },
+  { id: 'fermented_tofu', name: '腐乳', alias: 'furu fermented tofu', cat: 'soy', n: [135, 11.3, 8.2, 5.1, 0.5, 1.2, 2800], s: [['一块', 10]], f: ['processed', 'est'] },
+  { id: 'yangmei', name: '杨梅', alias: 'yangmei waxberry', cat: 'fruit', n: [30, 0.8, 0.2, 6.7, 1.0, 5.7, 1], s: [['一份可食部', 150]], f: [] },
+  { id: 'loquat', name: '枇杷', alias: 'pipa loquat', cat: 'fruit', n: [41, 0.8, 0.2, 9.3, 0.8, 7.0, 4], s: [['一份可食部', 150]], f: [] },
+
+  // 曾被合并但营养差异明显的条目，拆开后搜索不再把它们当作同一种食物。
+  { id: 'ham_sausage', name: '火腿肠', alias: 'huotuichang ham sausage', cat: 'meat', n: [212, 13.0, 16.0, 10.0, 0, 3.0, 900], s: [['一根', 50]], f: ['processed', 'quick', 'est'] },
+  { id: 'sole_fish', name: '龙利鱼（鳎目鱼）', alias: 'longliyu sole fish tamuyu', cat: 'seafood', n: [83, 17.7, 1.4, 0, 0, 0, 80], s: [['一片可食部', 150]], f: ['cook', 'est'] },
+  { id: 'apricot_kernel', name: '甜杏仁 / 杏仁', alias: 'xingren tianxingren apricot kernel', cat: 'nut', n: [562, 22.0, 45.0, 23.0, 10.0, 4.0, 5], s: [['一小把', 20]], f: ['quick', 'est'] },
+  { id: 'coconut_milk_unsweetened', name: '椰浆（无糖）', alias: 'yejiang coconut milk unsweetened', cat: 'drink', n: [200, 2.0, 20.0, 3.0, 0, 2.0, 15], s: [['半杯', 100]], f: ['natsugar', 'est'] },
+
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },
   { id: 'sugar', name: '白砂糖', alias: 'tang sugar', cat: 'other', n: [400, 0, 0, 99.9, 0, 99.9, 1], s: [['一勺', 8]], f: ['refined'] },
@@ -714,7 +756,8 @@ export const PORTION_TIPS = {
 
 /** 该条营养是否为推算值（品牌未公开完整营养表） */
 export function isEstimated(food) {
-  return (food.f || []).includes('est');
+  // 通用复合菜会随油、盐、汤汁和份量显著波动；没有配方来源字段前一律明确显示为估算。
+  return food.cat === 'dish' || (food.f || []).includes('est');
 }
 
 export function portionTip(food) {
@@ -735,17 +778,33 @@ export const FOOD_BY_ID = new Map(FOODS.map((f) => [f.id, f]));
 /** 把 n 数组展开成具名对象（每 100g） */
 export function per100(food) {
   const [kcal, protein, fat, carb, fiber, sugar, sodium] = food.n;
-  return { kcal, protein, fat, carb, fiber, sugar, sodium };
+  return { kcal, protein, fat, carb, fiber, sugar, totalSugar: sugar, sodium };
 }
 
 /**
- * 游离糖系数（WHO 定义）：完整水果和蔬菜里的糖、以及奶类的乳糖属于内源性糖，
- * 不计入「添加糖 / 游离糖」上限；果汁虽然来自水果，但榨汁后按游离糖计。
+ * 每 100g 的游离糖（WHO 定义）。n[5] 始终是总糖；这里只扣除有依据的内源性糖，
+ * 茶饮糖度只缩放可调糖，固定配料糖仍保留。
  */
+export function freeSugarPer100(food, levelKey = DEFAULT_SUGAR_LEVEL) {
+  const base = per100(food);
+  const adjusted = applySugarLevel(food, base, levelKey);
+  let nonFree = 0;
+  if (food.cat === 'fruit' || food.cat === 'veg' || (food.f || []).includes('natsugar')) {
+    nonFree = adjusted.sugar;
+  } else if (Number.isFinite(Number(food.nfs))) {
+    nonFree = Number(food.nfs);
+  } else if (hasSugarLevel(food)) {
+    // 旧茶饮数据没有逐一拆分时，把“无糖仍有的糖”保守视作乳糖/完整配料内源糖；
+    // 果汁、水果泥等明确属于游离糖的条目必须显式写 nfs: 0。
+    nonFree = Math.min(Number(food.sf) || 0, adjusted.sugar);
+  }
+  return Math.max(0, Math.round((adjusted.sugar - Math.min(nonFree, adjusted.sugar)) * 10) / 10);
+}
+
+/** 兼容建议引擎的比例接口；风味乳品等可以是 0~1 之间，不再强迫二选一。 */
 export function freeSugarFactor(food) {
-  if (food.cat === 'fruit' || food.cat === 'veg') return 0;
-  if ((food.f || []).includes('natsugar')) return 0;
-  return 1;
+  const total = per100(food).sugar;
+  return total > 0 ? freeSugarPer100(food) / total : 0;
 }
 
 /**
@@ -768,13 +827,14 @@ export function hasSugarLevel(food) {
 }
 
 export function sugarLevel(key) {
-  return SUGAR_LEVELS.find((l) => l.key === key) || SUGAR_LEVELS[0];
+  const found = SUGAR_LEVELS.find((l) => l.key === key);
+  if (!found) throw new RangeError(`不认识的糖度：${key}`);
+  return found;
 }
 
 /**
  * 按糖度换算每 100g 的热量与糖。
- * 只有「加进去的糖」随档位缩放；奶的乳糖、珍珠芋圆的糖水、水果自带的糖
- * （即 sf）点无糖时依然在，不该一起归零。
+ * 只有「可调糖」随档位缩放；sf 是无糖档仍存在的总糖，其中有多少不属于游离糖由 nfs 说明。
  */
 function applySugarLevel(food, p, levelKey) {
   if (!hasSugarLevel(food) || !levelKey || levelKey === 'full') return p;
@@ -793,12 +853,12 @@ function applySugarLevel(food, p, levelKey) {
 const ATWATER_CARB = 4;
 
 /**
- * 按克数换算营养。sugar 一栏是游离糖，与每日添加糖上限对应。
+ * 按克数换算营养。totalSugar 是总糖；sugar 是 WHO 游离糖，与每日上限对应。
  * @param {string} [levelKey] 茶饮糖度，缺省按全糖
  */
 export function nutrientsFor(food, grams, levelKey) {
   const p = applySugarLevel(food, per100(food), levelKey);
-  const k = (Number(grams) || 0) / 100;
+  const k = Math.max(0, Number(grams) || 0) / 100;
   const r = (v) => Math.round(v * k * 10) / 10;
   return {
     kcal: Math.round(p.kcal * k),
@@ -806,7 +866,8 @@ export function nutrientsFor(food, grams, levelKey) {
     fat: r(p.fat),
     carb: r(p.carb),
     fiber: r(p.fiber),
-    sugar: r(p.sugar * freeSugarFactor(food)),
+    totalSugar: r(p.sugar),
+    sugar: r(freeSugarPer100(food, levelKey || DEFAULT_SUGAR_LEVEL)),
     sodium: Math.round(p.sodium * k),
   };
 }

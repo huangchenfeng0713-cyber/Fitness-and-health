@@ -5,7 +5,7 @@
  * 纯函数模块，不依赖 DOM。
  */
 
-import { FOODS, per100, nutrientsFor, freeSugarFactor } from '../data/foods.js';
+import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
 import { clamp, round, ATWATER } from './nutrition.js';
 
 /** 餐次定义：时间窗 + 该餐在全天热量中的默认占比 */
@@ -26,7 +26,7 @@ export function deriveTags(food) {
   const density = p.kcal; // kcal / 100g
   const proteinRatio = p.kcal > 0 ? (p.protein * ATWATER.protein) / p.kcal : 0;
 
-  const freeSugar = p.sugar * freeSugarFactor(food);
+  const freeSugar = freeSugarPer100(food);
   // 纤维要看「每 100 kcal 含多少」：薯片每 100g 有 4g 纤维，但那是 548 kcal 换来的
   const fiberPer100kcal = p.kcal > 0 ? (p.fiber / p.kcal) * 100 : 0;
   const sugarRatio = p.kcal > 0 ? (freeSugar * ATWATER.carb) / p.kcal : 0;
@@ -36,7 +36,7 @@ export function deriveTags(food) {
   if (density <= 80) tags.add('low-density');
   if (density >= 300) tags.add('high-density');
   if (fiberPer100kcal >= 2 && p.fiber >= 1) tags.add('high-fiber');
-  if (freeSugar >= 15 || (sugarRatio >= 0.4 && freeSugar >= 5)) tags.add('high-sugar');
+  if (freeSugar >= 8 || (sugarRatio >= 0.3 && freeSugar >= 5)) tags.add('high-sugar');
   if (p.sodium >= 600) tags.add('high-sodium');
   if (p.fat >= 20) tags.add('high-fat');
   return tags;
@@ -269,7 +269,7 @@ function buildAvoidList(ctx, limit = 5) {
     if (sodiumOver && tags.has('high-sodium')) {
       push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（目标 ${gaps.sodium.target} mg），它每 100g 还要再加 ${p.sodium} mg`, 3);
     } else if (sugarOver && (tags.has('sweetdrink') || tags.has('high-sugar'))) {
-      push(food, 'sugar', `今日添加糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 100g 还含 ${round(p.sugar * freeSugarFactor(food), 1)}g 游离糖`, 3);
+      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 100g 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
     } else if (kcalTight && proteinShort && p.kcal >= 250 && proteinPer100kcal < 6) {
       push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它 ${p.kcal} kcal/100g 却几乎不含蛋白`, 3);
     } else if (kcalTight && p.kcal >= 300) {
@@ -431,7 +431,7 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     return {
       level: 'warn',
       headline: `还有 ${kcalLeft} kcal 没吃，偏少了`,
-      detail: `长期大幅低于目标会掉基础代谢和肌肉。接下来 ${budget.meal.label} 建议吃到约 ${budget.kcal} kcal。`,
+      detail: `长期大幅低于目标不利于保留肌肉和持续执行。接下来 ${budget.meal.label} 建议吃到约 ${budget.kcal} kcal。`,
     };
   }
   if (gaps.sodium.pct > 110) {
