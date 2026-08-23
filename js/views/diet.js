@@ -20,6 +20,7 @@ import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
 
 const ui = {
   query: '',
+  category: null,
   meal: null,
   selected: null,
   grams: 100,
@@ -41,6 +42,7 @@ function buildShell(root) {
 
   nodes.quick = h('div.slot');
   nodes.favRow = h('div.slot');
+  nodes.categories = h('div.slot');
   nodes.results = h('div.slot');
   nodes.portion = h('div.slot');
   nodes.customBox = h('div.slot');
@@ -58,6 +60,10 @@ function buildShell(root) {
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
       ui.query = e.target.value;
+      if (ui.category) {
+        ui.category = null;
+        refreshCategories();
+      }
       refreshResults();
     }, 160),
   });
@@ -71,9 +77,14 @@ function buildShell(root) {
   }, '+ 自定义');
 
   nodes.searchCard = h('section.card', null,
+    h('div.card-head.search-card-head', null,
+      h('div', null,
+        h('h3', null, '记录吃了什么'),
+        h('p.card-desc', null, '搜索名称、拼音或品牌，也可以按分类浏览 800+ 种食物。'))),
     h('div.search-row', null, nodes.searchInput, nodes.customToggle),
     nodes.customBox,
     nodes.favRow,
+    nodes.categories,
     nodes.results,
     nodes.portion);
 
@@ -102,12 +113,29 @@ function refreshQuick() {
 
 function refreshFav() {
   clearEl(nodes.favRow);
-  if (ui.query) return;
+  if (ui.query || ui.category) return;
   const favorites = state.favorites.map(findFood).filter(Boolean).slice(0, 10);
   if (!favorites.length) return;
   mount(nodes.favRow, h('div.fav-row', null,
     h('span.fav-label', null, '常吃'),
     favorites.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name))));
+}
+
+function refreshCategories() {
+  clearEl(nodes.categories);
+  mount(nodes.categories, h('div.category-browser', null,
+    h('span.category-label', null, '分类'),
+    h('div.category-scroll', null,
+      Object.entries(CATEGORIES).map(([key, label]) => h('button.chip-btn', {
+        class: ui.category === key ? 'active' : '',
+        onclick: () => {
+          ui.category = ui.category === key ? null : key;
+          ui.query = '';
+          nodes.searchInput.value = '';
+          refreshCategories();
+          refreshResults();
+        },
+      }, label)))));
 }
 
 /**
@@ -145,15 +173,19 @@ function suggestionBlock() {
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query) { refreshSuggestions(); return; }
+  if (!ui.query && !ui.category) { refreshSuggestions(); return; }
   clearEl(nodes.suggest);
 
-  const results = searchFoods(ui.query, allFoods(), 24);
+  const results = ui.query
+    ? searchFoods(ui.query, allFoods(), 24)
+    : allFoods().filter((food) => food.cat === ui.category).slice(0, 36);
   if (!results.length) {
     mount(nodes.results, h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'));
     return;
   }
-  mount(nodes.results, h('div.search-results', null, results.map((f) => {
+  mount(nodes.results,
+    ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${results.length} 项`),
+    h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     return h('button.search-item', { onclick: () => selectFood(f) },
       h('div.search-item-main', null,
@@ -164,7 +196,7 @@ function refreshResults() {
           title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
         }, '估算'),
         h('span.chip', null, CATEGORIES[f.cat] || '自定义')));
-  })));
+    })));
 }
 
 function selectFood(food) {
@@ -575,6 +607,7 @@ export function renderDiet(root) {
   if (nodes.root?.parentNode !== root) {
     buildShell(root);
     refreshCustomForm();
+    refreshCategories();
     refreshResults();
     refreshPortion();
   }

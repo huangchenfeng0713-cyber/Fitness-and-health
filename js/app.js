@@ -11,12 +11,20 @@ import { renderSettings } from './views/settings.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
-  { key: 'today', label: '今日', icon: '◎', render: renderDashboard, dated: true },
-  { key: 'diet', label: '记录', icon: '＋', render: renderDiet, dated: true },
-  { key: 'health', label: '健康', icon: '♡', render: renderHealth },
-  { key: 'trends', label: '趋势', icon: '◫', render: renderTrends },
-  { key: 'settings', label: '设置', icon: '⚙', render: renderSettings },
+  { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
+  { key: 'diet', label: '饮食', icon: 'add', render: renderDiet, dated: true },
+  { key: 'health', label: '数据', icon: 'data', render: renderHealth },
+  { key: 'trends', label: '趋势', icon: 'trend', render: renderTrends },
+  { key: 'settings', label: '设置', icon: 'settings', render: renderSettings },
 ];
+
+const TAB_ICON = {
+  today: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.7 1.7"/></svg>',
+  add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  data: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h3l2-6 4 11 2-5h5"/></svg>',
+  trend: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17V9M12 17V5M19 17v-7"/><path d="M3 20h18"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>',
+};
 
 let current = 'today';
 let viewRoot = null;
@@ -66,7 +74,9 @@ function renderTabs() {
     nav.append(h('button', {
       class: `tab${current === tab.key ? ' active' : ''}`,
       onclick: () => switchTab(tab.key),
-    }, h('span.tab-icon', null, tab.icon), h('span.tab-label', null, tab.label)));
+      'aria-current': current === tab.key ? 'page' : null,
+      'aria-label': tab.label,
+    }, h('span.tab-icon', { html: TAB_ICON[tab.icon] }), h('span.tab-label', null, tab.label)));
   }
 }
 
@@ -131,7 +141,9 @@ function syncOnboarding() {
 function runUrlImport() {
   importFromUrlHash().then((outcome) => {
     if (!outcome) return;
-    toast(outcome.message, outcome.ok ? 'ok' : 'error');
+    toast(outcome.ok
+      ? (outcome.days ? `同步完成：已更新 ${outcome.days} 天健康数据` : 'Apple 健康快照已同步')
+      : outcome.message, outcome.ok ? 'ok' : 'error');
     if (outcome.ok) renderCurrent();
   }).catch((err) => {
     console.error('URL 导入失败', err);

@@ -1,6 +1,6 @@
 /**
  * 健康数据导入的公共入口。
- * 健康页（带进度条）和 URL 自动导入都走这里，避免两处各写一遍。
+ * 数据页（带进度条）和 URL 自动导入都走这里，避免两处各写一遍。
  */
 
 import { mergeHealthDays } from './store.js';
@@ -36,7 +36,7 @@ function qualityNote(quality) {
   if (quality.sleepOverlapMinutes) notes.push(`合并 ${Math.round(quality.sleepOverlapMinutes)} 分钟重叠睡眠`);
   if (quality.overlapBuckets) {
     notes.push(`按 ${quality.resolutionMinutes || 5} 分钟区间解析 ${quality.overlapBuckets} 个多来源重叠桶`);
-    if (quality.priorityMode === 'inferred') notes.push('来源顺序为推断值，可在健康页按导出文件 sourceName 覆盖');
+    if (quality.priorityMode === 'inferred') notes.push('来源顺序为推断值，可在数据页按导出文件 sourceName 覆盖');
   }
   if (quality.activitySummaryDays) notes.push(`${quality.activitySummaryDays} 天采用活动圆环日汇总`);
   if (quality.workoutCount) notes.push(`识别 ${quality.workoutCount} 次锻炼（未重复计入活动能量）`);
@@ -105,19 +105,18 @@ export async function applyImport(result, meta = {}) {
  * 手势时读剪贴板，读之前系统还要再弹一次「粘贴」确认。
  *
  * 所以这条路最少也要点一下，真正的零操作做不到。能省的是后面那一串：
- * 放一个按钮在今日页，就是「开 App 点一下」，而不是「切到健康页、展开粘贴框、
- * 长按粘贴、再点解析导入」。
+ * 数据同步入口统一放在“数据”页；URL 自动导入仍可由快捷指令直接触发。
  */
 export async function importFromClipboard() {
   if (!navigator.clipboard?.readText) {
-    return { ok: false, message: '这个浏览器不给网页读剪贴板，请到「健康」页用粘贴框' };
+    return { ok: false, message: '这个浏览器不给网页读剪贴板，请到「数据」页手动粘贴' };
   }
   let text;
   try {
     text = (await navigator.clipboard.readText())?.trim();
   } catch {
     // 用户在系统的「粘贴」确认里点了取消，也会走到这儿
-    return { ok: false, message: '没读到剪贴板，请到「健康」页用粘贴框' };
+    return { ok: false, message: '没读到剪贴板，请到「数据」页手动粘贴' };
   }
   if (!text) return { ok: false, message: '剪贴板是空的，先跑一次快捷指令' };
   try {

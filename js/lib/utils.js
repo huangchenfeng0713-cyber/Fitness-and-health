@@ -122,13 +122,22 @@ let toastTimer = null;
 export function toast(message, kind = 'info') {
   let el = document.getElementById('toast');
   if (!el) {
-    el = h('div.toast', { id: 'toast' });
+    el = h('div.toast', {
+      id: 'toast',
+      role: 'status',
+      'aria-live': 'polite',
+      'aria-atomic': 'true',
+    });
     document.body.append(el);
   }
-  el.textContent = message;
+  const text = String(message ?? '');
+  el.textContent = text;
+  el.dataset.long = text.length > 42 ? 'true' : 'false';
   el.className = `toast show ${kind}`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = 'toast'; }, 2600);
+  // 短提示停留 2.8 秒；较长的错误说明多留一点阅读时间，但不再把整份导入报告塞进提示框。
+  const duration = Math.min(6000, Math.max(2800, 1800 + text.length * 38));
+  toastTimer = setTimeout(() => { el.className = 'toast'; }, duration);
 }
 
 /** 简易确认框（用原生 confirm，避免额外依赖） */

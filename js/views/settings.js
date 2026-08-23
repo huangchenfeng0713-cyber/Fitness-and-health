@@ -1,7 +1,7 @@
-/** 设置：身体信息、目标、数据管理 */
+/** 设置：身体信息、目标与计算偏好。所有导入、备份和恢复统一放在“数据”页。 */
 
-import { h, clearEl, num, toast, confirmAction, download, mount } from '../lib/utils.js';
-import { state, saveProfile, clearAllData, db } from '../lib/store.js';
+import { h, clearEl, num, toast, mount } from '../lib/utils.js';
+import { state, saveProfile } from '../lib/store.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
 } from '../core/nutrition.js';
@@ -194,57 +194,14 @@ function toggleCard() {
       onchange: (e) => saveProfile({ [key]: e.target.checked }),
     }));
   return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '动态调整')),
+    h('div.card-head', null,
+      h('div', null,
+        h('h3', null, '热量计算方式'),
+        h('p.card-desc', null, '决定每日目标使用设备记录还是固定公式；不会改变已记录的饮食。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '开启后，热量目标 = 当天静息消耗 + 活动消耗 ± 目标缺口，不额外叠加固定 TEF；导入新快照时才会更新，旧快照不会随时钟漂移。关闭则用固定的活动系数。'),
     toggle('syncWeightFromApple', '体重体脂跟随 Apple 健康',
       '以健康 App 里最新一次记录为准，体重变了目标也会自动跟着变。'),
-  );
-}
-
-function dataCard(rerender) {
-  return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '数据管理')),
-    h('p.form-hint', null, '所有数据都存在这台设备的浏览器里。换设备或清缓存前，记得先导出备份。'),
-    h('div.btn-row', null,
-      h('button.secondary-btn', {
-        onclick: async () => {
-          const payload = await db.exportAll();
-          download(`健康饮食备份-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2));
-          toast('备份已下载', 'ok');
-        },
-      }, '导出备份'),
-      h('label.secondary-btn', null, '导入备份',
-        h('input', {
-          type: 'file', accept: '.json', hidden: true,
-          onchange: async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            try {
-              const counts = await db.importAll(JSON.parse(await file.text()));
-              toast(`已导入：健康 ${counts.health} 天 / 饮食 ${counts.diet} 条`, 'ok');
-              window.location.reload();
-            } catch (err) {
-              toast(`导入失败：${err.message}`, 'error');
-            }
-            e.target.value = '';
-          },
-        })),
-      h('button.secondary-btn.danger', {
-        onclick: async () => {
-          if (!confirmAction('确定清空全部数据？此操作不可撤销，建议先导出备份。')) return;
-          await clearAllData();
-          resetDraft();
-          toast('已清空');
-          rerender();
-        },
-      }, '清空全部数据'),
-    ),
-    h('div.stat-row', null,
-      h('div.stat', null, h('strong', null, state.healthDays.length), h('span', null, '健康数据天数')),
-      h('div.stat', null, h('strong', null, state.dietDaily.length), h('span', null, '有饮食记录的天数')),
-      h('div.stat', null, h('strong', null, state.customFoods.length), h('span', null, '自定义食物')),
-    ),
   );
 }
 
@@ -329,12 +286,13 @@ export function renderSettings(root) {
     profileCard(rerender),
     targetCard(),
     toggleCard(),
-    dataCard(rerender),
     feedbackCard(),
     h('section.card.about', null,
       h('div.card-head', null, h('h3', null, '关于')),
       h('p', null, `版本 v${APP_VERSION}`),
       h('p', null, '这是一个纯本地运行的网页应用：没有账号、没有后端、不联网上传任何数据。'),
+      h('p', null, 'Apple 健康同步、应用备份与恢复、手动补录都已统一放在“数据”栏目。'),
+      h('a.inline-link', { href: '#health' }, '前往数据中心'),
       h('p', null, '所有营养建议基于通用膳食指南与常见食物成分表，用于日常管理参考，不能替代医生或注册营养师的意见。有慢性病、正在服药或处于孕期哺乳期，请遵医嘱。'),
     ),
   );
