@@ -13,13 +13,23 @@ const diag = buildDiagnostics({
   language: 'zh-CN', standalone: true,
 });
 
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
 /** 从 issue 链接里把某个查询参数解出来 */
 const param = (url, key) => new URL(url).searchParams.get(key);
 
 test('版本号与 package.json 一致', () => {
   // 没有构建步骤，版本号只能手抄一份，靠这条盯着它别漂移
-  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   assert.equal(APP_VERSION, pkg.version);
+});
+
+test('版本号在设置页、README 与离线缓存中同步标注', () => {
+  const settings = readFileSync(new URL('../js/views/settings.js', import.meta.url), 'utf8');
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const serviceWorker = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.match(settings, /版本 v\$\{APP_VERSION\}/, '设置页“关于”必须展示运行时版本号');
+  assert.ok(readme.includes(`当前版本：**v${pkg.version}**`), 'README 版本号未同步');
+  assert.ok(serviceWorker.includes(`health-diet-v${pkg.version}`), '离线缓存版本号未同步');
 });
 
 test('反馈类型齐全，未知 key 回落到第一个', () => {
@@ -66,7 +76,7 @@ test('超长 UA 会被截断，免得挤占正文额度', () => {
 
 test('环境信息渲染成 markdown 列表，空字段不占行', () => {
   const text = formatDiagnostics(diag);
-  assert.match(text, /- 应用版本：1\.0\.0/);
+  assert.ok(text.includes(`- 应用版本：${APP_VERSION}`));
   assert.match(text, /- 数据规模：健康 128 天 \/ 饮食 40 天 \/ 自定义食物 3 种/);
   assert.match(text, /- 加到主屏幕运行：是/);
 
