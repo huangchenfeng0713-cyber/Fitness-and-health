@@ -6,7 +6,7 @@ import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
 } from '../core/nutrition.js';
 import {
-  FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
+  APP_VERSION, FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
 } from '../core/feedback.js';
 
 function field(label, control, hint, extraClass = '') {
@@ -324,6 +324,7 @@ export function renderSettings(root) {
     feedbackCard(),
     h('section.card.about', null,
       h('div.card-head', null, h('h3', null, '关于')),
+      h('p', null, `版本 v${APP_VERSION}`),
       h('p', null, '这是一个纯本地运行的网页应用：没有账号、没有后端、不联网上传任何数据。'),
       h('p', null, '所有营养建议基于通用膳食指南与常见食物成分表，用于日常管理参考，不能替代医生或注册营养师的意见。有慢性病、正在服药或处于孕期哺乳期，请遵医嘱。'),
     ),
