@@ -29,6 +29,31 @@ test('餐次预算按剩余餐次的份额分配，不是平均分', () => {
   assert.ok(b.kcal > 1000 / b.restMealCount, '占比高的餐次拿到更多预算');
 });
 
+test('热量不足以承载蛋白缺口时，不生成物理上不可能的餐次目标', () => {
+  const b = mealBudget({ kcalLeft: 42, proteinLeft: 16, now: at('23:48') });
+  assert.equal(b.kcal, 42);
+  assert.equal(b.proteinFeasible, false);
+  assert.equal(b.maxProteinByKcal, 10.5);
+  assert.equal(b.protein, 10.5, '42 kcal 理论上最多只能承载 10.5g 纯蛋白');
+
+  const a = buildAdvice({
+    targets: { ...targets, kcal: 2194, protein: 106 },
+    profile,
+    intake: { ...zero, kcal: 2152, protein: 90 },
+    entries: [],
+    now: at('23:48'),
+  });
+  assert.match(a.status.headline, /无法补齐 16g 蛋白/);
+  assert.match(a.status.detail, /至少需要 64 kcal/);
+  assert.ok(!/零热量.*高蛋白/.test(a.status.detail));
+});
+
+test('蛋白已经达标时不显示负数缺口', () => {
+  const a = advise({ kcal: 900, protein: targets.protein + 12 });
+  assert.match(a.status.headline, /蛋白已达标/);
+  assert.doesNotMatch(a.status.headline, /蛋白还差 -/);
+});
+
 test('标签从营养数字推导', () => {
   const chicken = deriveTags(FOOD_BY_ID.get('chicken_breast'));
   assert.ok(chicken.has('high-protein') && chicken.has('protein-dense'));
@@ -202,6 +227,17 @@ test('样本够了才给平均摄入偏差，且写明真实天数', () => {
     '7700 kcal/kg 只是能量换算，措辞不能说成一定会瘦多少');
   const prot = a.insights.find((i) => /蛋白达标/.test(i.title));
   assert.ok(/有记录的 5 天/.test(prot.title), `蛋白达标率的分母也要真实：${prot.title}`);
+});
+
+test('首页的短期体重斜率不直接给出激进热量调整', () => {
+  const a = buildAdvice({
+    targets, profile, intake: zero, entries: [], now: at('12:30'),
+    baseline: { weightTrend: 1.2, loggedDays: 0 },
+  });
+  const insight = a.insights.find((i) => /体重趋势/.test(i.title));
+  assert.ok(insight);
+  assert.doesNotMatch(insight.text, /调整约 [+-]?\d+ kcal/);
+  assert.match(insight.text, /至少积累 28 天/);
 });
 
 test('没填生日时会说明年龄是估算的', () => {

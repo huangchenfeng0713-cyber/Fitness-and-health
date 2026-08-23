@@ -47,8 +47,9 @@ function heroCard(advice, targets, derived) {
           size: 108,
           stroke: 10,
           label: num(Math.abs(left)),
-          sub: over ? 'kcal 超出' : 'kcal 可吃',
-          color: over ? 'var(--danger)' : 'var(--accent)',
+          sub: over ? 'kcal 超出' : 'kcal 热量余量',
+          color: over ? 'var(--danger)'
+            : status.level === 'warn' ? 'var(--warn)' : 'var(--accent)',
         })),
       h('div.hero-macros', null,
         macroMini('蛋白质', gaps.protein, 'var(--protein)'),
@@ -59,15 +60,35 @@ function heroCard(advice, targets, derived) {
       h('span', null, `已吃 ${num(gaps.kcal.eaten)}`),
       h('span', null, `目标 ${num(targets.kcal)}`),
       h('span', null, derived.dynamic
-        ? `预计消耗 ${num(targets.tdee)}`
+        ? `预计总消耗 ${num(targets.tdee)}`
         : `基础代谢 ${num(targets.bmr)}`),
-      h('span', null, `${targets.dailyDelta > 0 ? '盈余' : targets.dailyDelta < 0 ? '赤字' : '平衡'} ${num(Math.abs(targets.dailyDelta))}`)),
+      h('span', null, `${targets.dailyDelta > 0 ? '计划盈余' : targets.dailyDelta < 0 ? '计划赤字' : '计划平衡'} ${num(Math.abs(targets.dailyDelta))}`)),
+
+    energyFreshness(derived),
 
     h('div.hero-micros', null,
       microChip('纤维', gaps.fiber, 'g'),
-      microChip('钠', gaps.sodium, 'mg'),
-      microChip('游离糖', gaps.sugar, 'g')),
+      microChip('钠上限', gaps.sodium, 'mg'),
+      microChip('游离糖上限', gaps.sugar, 'g')),
   );
+}
+
+function energyFreshness(derived) {
+  const meta = derived.energyData;
+  if (derived.demoMode) {
+    return h('p.data-freshness.warn', null, '当前使用演示身体数据，热量与营养目标不是你的个性化结果。请到“设置”填写真实信息。');
+  }
+  if (meta?.missingObservationTime) {
+    return h('p.data-freshness.warn', null, '这份能量数据缺少覆盖时间，已停止动态外推并改用公式估算。重新导入即可修复。');
+  }
+  if (!meta?.observedAt || !derived.dynamic) return null;
+  const observed = new Date(meta.observedAt);
+  const clock = observed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const age = meta.ageMinutes >= 120
+    ? `，距今约 ${Math.max(2, Math.round(meta.ageMinutes / 60))} 小时`
+    : meta.ageMinutes > 5 ? `，距今 ${meta.ageMinutes} 分钟` : '';
+  return h(`p.data-freshness${meta.stale ? '.warn' : ''}`, null,
+    `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`);
 }
 
 function microChip(label, g, unit) {
@@ -88,7 +109,9 @@ function recommendCard(advice, rerender) {
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '现在吃什么'),
-      h('span.card-tag', null, `${MEAL_LABEL[meal]} · ${num(advice.budget.kcal)} kcal / ${num(advice.budget.protein, 0)}g 蛋白`)),
+      h('span.card-tag', null, advice.budget.proteinFeasible
+        ? `${MEAL_LABEL[meal]} · ${num(advice.budget.kcal)} kcal / ${num(advice.budget.protein, 0)}g 蛋白`
+        : `${MEAL_LABEL[meal]} · ${num(advice.budget.kcal)} kcal / 蛋白最多约 ${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length
       ? [
         h('div.rec-list', null, list.map((item) => recRow(item, meal))),
@@ -212,7 +235,7 @@ function healthCard(health, derived, rerender) {
         : '这一天还没有健康数据。到「健康」页导入 Apple 健康的导出文件，或手动补录。'),
     needsImport && clipboardImportBtn(rerender),
     needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
-      '缺「活动能量」，热量预算暂时按公式估算。导入后会按当天真实消耗重算。'),
+      '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
   );
 }
 

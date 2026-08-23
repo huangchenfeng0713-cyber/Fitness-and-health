@@ -7,8 +7,20 @@ import {
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 610, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 752, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
+});
+
+test('v1.2 扩充食物可搜索，复合菜和包装食品明确披露估算', () => {
+  const must = ['砂锅粥', '刀削面', '灌汤包', '意大利面', '兔肉', '鸭血', '黄鳝', '罗非鱼',
+    '天贝', '马苏里拉', '荷兰豆', '桑葚', '农家小炒肉', '夫妻肺片', '冒菜', '亲子丼',
+    '魔芋爽', '苏打饼干', '龟苓膏', '双皮奶', '酒酿', '藕粉', '西梅汁'];
+  assert.deepEqual(must.filter((name) => searchFoods(name).length === 0), []);
+  for (const id of ['casserole_congee', 'farm_pork_stirfry', 'maocai', 'konjac_snack']) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(isEstimated(food), `${food.name} 应显示为估算`);
+    assert.ok(food.source && food.basis && food.state && food.carbBasis, `${food.name} 缺可审计元数据`);
+  }
 });
 
 test('每条记录字段齐全且合理', () => {

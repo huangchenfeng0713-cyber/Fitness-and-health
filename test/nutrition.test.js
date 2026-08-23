@@ -25,8 +25,8 @@ test('有体脂率时改用 Katch-McArdle', () => {
 });
 
 test('年龄由生日推算，跨生日前后差一岁', () => {
-  assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date('2026-02-28')), 30);
-  assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date('2026-03-01')), 31);
+  assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date(2026, 1, 28)), 30);
+  assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date(2026, 2, 1)), 31);
   assert.equal(ageFrom({}), 30, '缺数据时回落到 30');
 });
 
@@ -94,6 +94,9 @@ test('非法身体信息和过高自定义蛋白不会生成伪精确结果', ()
   assert.throws(() => dailyTargets({ ...male, rateKgPerWeek: 'x' }), /目标速率/);
   assert.throws(() => proteinTarget({ ...male, proteinPerKg: 8 }, 'cut'), /蛋白质/);
   assert.throws(() => dailyTargets({ ...male, sex: 'unknown' }), /性别/);
+  assert.match(validateProfile({ ...male, goal: 'cut', rateKgPerWeek: 0.3 }).errors.join('；'), /不能为正数/);
+  assert.match(validateProfile({ ...male, goal: 'bulk', rateKgPerWeek: -0.3 }).errors.join('；'), /不能为负数/);
+  assert.match(validateProfile({ ...male, goal: 'maintain', rateKgPerWeek: 0.1 }).errors.join('；'), /应为 0/);
 });
 
 test('中国成人纤维与饮水参考口径', () => {
@@ -122,6 +125,16 @@ test('动态 TDEE：活动多的一天预算更高', () => {
   assert.ok(busy.tdee > lazy.tdee + 500);
 });
 
+test('动态 TDEE 优先使用健康快照覆盖时间，不受页面当前时间参数影响', () => {
+  const base = {
+    bmr: 1600, activeSoFar: 250, basalSoFar: 800,
+    baselineResting: 1600, baselineActive: 400, observationFraction: 0.5,
+  };
+  const noon = dynamicTDEE({ ...base, dayFraction: 0.5 });
+  const night = dynamicTDEE({ ...base, dayFraction: 0.95 });
+  assert.deepEqual(night, noon, '同一份 12:00 快照不能因为页面到了深夜而改变预计消耗');
+});
+
 test('动态 TDEE：清晨不会把静息能量外推成天文数字', () => {
   // 凌晨 4 点（f≈0.17）只有 340 kcal 静息数据，早期版本会外推成 ~2000
   const early = dynamicTDEE({ bmr: 1640, basalSoFar: 340, activeSoFar: 0, dayFraction: 0.17, baselineActive: 500 });
@@ -141,6 +154,51 @@ test('动态 TDEE 与 Apple 静息+活动口径一致，不重复叠加固定 TE
   const full = dynamicTDEE({ bmr: 1600, basalSoFar: 1600, activeSoFar: 500, dayFraction: 1, intakeKcal: 2200 });
   assert.equal(full.tdee, 2100);
   assert.equal(full.tef, 0);
+});
+
+test('活动字段缺失不等于零：优先基线，无基线才用活动系数补足', () => {
+  const withBaseline = dynamicTDEE({
+    bmr: 1600, basalSoFar: 800, activeSoFar: null, observationFraction: 0.5,
+    baselineActive: 450, fallbackTDEE: 2200,
+  });
+  assert.equal(withBaseline.activeSource, 'device-baseline');
+  assert.equal(withBaseline.active, 450);
+  assert.equal(withBaseline.measured, 800, '缺失活动不能伪装成设备累计值');
+
+  const fallback = dynamicTDEE({
+    bmr: 1600, basalSoFar: 800, activeSoFar: null, observationFraction: 0.5,
+    fallbackTDEE: 2200,
+  });
+  assert.equal(fallback.activeSource, 'formula-fallback');
+  assert.equal(fallback.active, 600);
+  assert.equal(fallback.tdee, 2200);
+  assert.equal(dailyTargets({ ...male }, fallback).tdeeSource, 'apple',
+    '静息部分已采用今天设备记录，仍属于混合设备估算');
+
+  const explicitZero = dynamicTDEE({
+    bmr: 1600, basalSoFar: 800, activeSoFar: 0, observationFraction: 0.5,
+    fallbackTDEE: 2200,
+  });
+  assert.equal(explicitZero.activeSource, 'device-today');
+  assert.equal(explicitZero.active, 0, '明确记录的 0 才能按零活动处理');
+
+  const tooEarlyForEither = dynamicTDEE({
+    bmr: 1600, basalSoFar: 250, activeSoFar: null, observationFraction: 0.15,
+    fallbackTDEE: 2200,
+  });
+  assert.equal(dailyTargets({ ...male }, tooEarlyForEither).tdeeSource, 'formula',
+    '静息和活动都回退公式时，界面不能伪装成 Apple 动态目标');
+});
+
+test('异常活动且无历史基线时回退到静态活动量，而不是把活动清零', () => {
+  const result = dynamicTDEE({
+    bmr: 1600, basalSoFar: 800, activeSoFar: 12000, observationFraction: 0.5,
+    fallbackTDEE: 2200,
+  });
+  assert.equal(result.activeCapped, true);
+  assert.equal(result.activeSource, 'formula-fallback');
+  assert.equal(result.active, 600);
+  assert.equal(result.measured, 800, '被拒绝的活动值不能混入设备累计');
 });
 
 test('营养汇总与差额', () => {

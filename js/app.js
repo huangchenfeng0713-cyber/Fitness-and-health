@@ -121,7 +121,9 @@ function syncOnboarding() {
     h('h2', null, '先花 30 秒填一下身体信息'),
     h('p', null, '热量与蛋白目标都由这些数据算出来。填完就能开始记录，之后随时能在「设置」里改。'),
     h('button.primary-btn', { onclick: () => switchTab('settings') }, '去填写'),
-    h('button.text-btn', { onclick: () => saveProfile({}) }, '先看看再说'),
+    h('button.text-btn', {
+      onclick: () => saveProfile({ demoMode: true, onboarded: true }),
+    }, '使用演示数据预览'),
   ));
 }
 
@@ -230,18 +232,31 @@ async function boot() {
 
   subscribe(() => { renderTopbar(); syncOnboarding(); renderCurrent(); });
 
-  // 时间在走，剩余预算和"下一餐"也要跟着变
-  setInterval(() => {
-    if (state.day !== todayKey() || isEditing()) return;
+  // 时间在走，“下一餐”仍要刷新；热量外推使用健康快照时间，不再跟当前时钟漂移。
+  // 只在用户原本跟随“今天”时自动跨日，避免把正在查看历史日期的人强行拉走。
+  let clockDay = todayKey();
+  const refreshClock = async () => {
+    if (isEditing()) return;
+    const nextDay = todayKey();
+    const wasFollowingToday = state.day === clockDay;
+    if (nextDay !== clockDay) {
+      clockDay = nextDay;
+      if (wasFollowingToday) {
+        await setDay(nextDay);
+        return;
+      }
+    }
+    if (state.day !== nextDay) return;
     recompute();
     if (current === 'today' || current === 'diet') renderCurrent();
-  }, 60_000);
+  };
+  setInterval(refreshClock, 60_000);
 
   // 从后台切回来时刷新一次
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', async () => {
     if (document.hidden || isEditing()) return;
-    recompute();
-    renderCurrent();
+    await refreshClock();
+    if (current !== 'today' && current !== 'diet') renderCurrent();
   });
 
   window.addEventListener('hashchange', () => {

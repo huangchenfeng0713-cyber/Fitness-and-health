@@ -4,7 +4,7 @@
  *
  * 主要能力：
  *  1. 基础代谢 BMR（Mifflin-St Jeor / Katch-McArdle）
- *  2. 静态 TDEE（活动系数）与动态 TDEE（结合 Apple 健康当日实际消耗）
+ *  2. 静态 TDEE（活动系数）与动态 TDEE（结合 Apple 设备当日能量记录）
  *  3. 热量 / 蛋白质 / 脂肪 / 碳水 / 纤维 / 钠 / 糖 / 饮水 的每日目标
  *  4. 当日预算的实时再分配（按已过时间、已摄入量）
  */
@@ -27,8 +27,8 @@ export const ATWATER = { protein: 4, carb: 4, fat: 9, alcohol: 7 };
  * 1.725 / 1.9）。要说清楚：这组数字是营养实践里的**惯例**，不是某项测量的结果，
  * 不同教科书给的档位也略有出入。
  *
- * 它只在「没有 Apple 健康数据」时决定 TDEE。一旦当天有实测的活动能量，
- * dynamicTDEE 会改用「静息 + 实测活动」，不再乘这个系数或重复叠加固定 TEF，
+ * 它只在「没有 Apple 健康数据」时决定 TDEE。一旦当天有设备活动能量记录，
+ * dynamicTDEE 会改用「静息 + 活动」，不再乘这个系数或重复叠加固定 TEF，
  * 所以不存在把运动量算两遍的问题。
  */
 export const ACTIVITY_LEVELS = {
@@ -74,10 +74,16 @@ export function ageFrom(profile, today = new Date()) {
 
 /** 年龄到底是填的还是兜底猜的 —— Mifflin-St Jeor 里年龄每差 10 岁就是 50 kcal */
 export function ageIsEstimated(profile, today = new Date()) {
-  if (Number(profile?.age) > 0) return false;
-  if (!profile?.birthday) return true;
-  const b = new Date(profile.birthday);
-  if (Number.isNaN(b.getTime())) return true;
+  // 设置页没有“年龄”输入框；默认档案用 ageEstimated 标记 30 岁占位值。
+  // API/测试显式传入的 age 仍视为用户给定，保持向后兼容。
+  if (!profile?.birthday) return profile?.ageEstimated === true || !(Number(profile?.age) > 0);
+  // YYYY-MM-DD 不能直接交给 Date 解析：规范会按 UTC 午夜处理，在美洲时区会落到前一天。
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(profile.birthday));
+  const b = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(NaN);
+  if (Number.isNaN(b.getTime()) || b.getFullYear() !== Number(match?.[1])
+    || b.getMonth() !== Number(match?.[2]) - 1 || b.getDate() !== Number(match?.[3])) return true;
   let a = today.getFullYear() - b.getFullYear();
   const m = today.getMonth() - b.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < b.getDate())) a -= 1;
@@ -105,7 +111,14 @@ export function validateProfile(profile) {
   }
   if (!ACTIVITY_LEVELS[profile.activity]) errors.push('活动水平无效');
   if (!GOALS[profile.goal]) errors.push('目标类型无效');
-  if (profile.rateKgPerWeek != null && !Number.isFinite(Number(profile.rateKgPerWeek))) errors.push('目标速率必须是数字');
+  if (profile.rateKgPerWeek != null && !Number.isFinite(Number(profile.rateKgPerWeek))) {
+    errors.push('目标速率必须是数字');
+  } else if (profile.rateKgPerWeek != null && GOALS[profile.goal]) {
+    const rate = Number(profile.rateKgPerWeek);
+    if (profile.goal === 'cut' && rate > 0) errors.push('减脂目标的体重变化不能为正数');
+    if (profile.goal === 'bulk' && rate < 0) errors.push('增肌目标的体重变化不能为负数');
+    if (profile.goal === 'maintain' && Math.abs(rate) > 0.001) errors.push('维持体重时目标速率应为 0');
+  }
   if (profile.proteinPerKg != null
     && (!Number.isFinite(Number(profile.proteinPerKg)) || Number(profile.proteinPerKg) < 0.5
       || Number(profile.proteinPerKg) > 3.5)) errors.push('自定义蛋白质需在 0.5–3.5 g/kg');
@@ -203,29 +216,34 @@ export function activityCurve(dayFraction) {
 }
 
 /**
- * 动态 TDEE：用 Apple 健康当天真实消耗推算全天总消耗。
+ * 动态 TDEE：用 Apple 设备当天累计能量推算全天总消耗。
  * @param {object} opts
  *  - bmr: 基础代谢
  *  - activeSoFar: 当日已产生的活动能量 kcal（Apple 健康）
  *  - basalSoFar: 当日已产生的静息能量 kcal（Apple 健康，可选）
- *  - dayFraction: 当日已过时间比例 0~1
+ *  - observationFraction: 健康快照覆盖到的一天比例 0~1
+ *  - dayFraction: 旧调用兼容字段；未提供 observationFraction 时才使用
  *  - baselineActive: 近期平均每日活动能量（用于外推剩余时间），可选
  * Apple 的静息 + 活动能量本身就是设备口径的总消耗拆分；不再额外叠加固定 10% TEF，
  * 避免目标页和趋势页同一天相差 150–250 kcal。
  */
 export function dynamicTDEE({
   bmr,
-  activeSoFar = 0,
+  activeSoFar = null,
   basalSoFar = null,
   baselineResting = null,
+  observationFraction = null,
   dayFraction = 1,
   baselineActive = null,
   fallbackTDEE = null,
 }) {
   const baseBmr = Number(bmr);
   if (!(baseBmr > 0) || !Number.isFinite(baseBmr)) throw new RangeError('BMR 必须是正数');
-  const activeNow = Math.max(0, Number(activeSoFar) || 0);
-  const fraction = Number(dayFraction);
+  const activeValue = Number(activeSoFar);
+  const hasActiveToday = activeSoFar != null && Number.isFinite(activeValue) && activeValue >= 0;
+  const activeNow = hasActiveToday ? activeValue : 0;
+  // dayFraction 仅为旧调用兼容；新调用必须传健康快照的覆盖时间，而不是页面当前时间。
+  const fraction = observationFraction == null ? Number(dayFraction) : Number(observationFraction);
   const f = Number.isFinite(fraction) ? clamp(fraction, 0, 1) : 1;
   const basalNow = Number(basalSoFar);
   const hasBasalToday = Number.isFinite(basalNow) && basalNow > 0;
@@ -239,11 +257,11 @@ export function dynamicTDEE({
   /*
    * 静息部分，按「依据够不够硬」排序取值：
    *
-   *   1. 今天实测（过了大半天才敢外推）—— 最贴近今天的真实情况
-   *   2. 近 14 天实测日均 —— 完整天的实测值，不含任何外推
+   *   1. 今天设备累计（过了大半天才敢外推）—— 最贴近今天的记录
+   *   2. 近 14 天设备记录日均 —— 完整天的记录值，不含外推
    *   3. Mifflin-St Jeor / Katch-McArdle 公式值 —— 纯估算，兜底
    *
-   * 原先跳过第 2 档直接落到公式：明明有十几天 Apple 实测的完整静息能量摆在那儿，
+   * 原先跳过第 2 档直接落到公式：明明有十几天 Apple 设备记录的完整静息能量摆在那儿，
    * 却拿公式去猜，这不合理。
    *
    * 第 1 档限定 f ≥ 0.4 是因为一天刚开始时按比例外推会被严重放大
@@ -272,25 +290,35 @@ export function dynamicTDEE({
   const elapsedMin = Math.max(1, f * 1440);
   const activeCeiling = elapsedMin * MAX_ACTIVE_PER_MIN;
   const curveNow = activityCurve(f);
-  const activeCapped = activeNow > activeCeiling;
+  const activeCapped = hasActiveToday && activeNow > activeCeiling;
   // 超了就不是「削到天花板」而是「这个数不能用」：退回按平时节奏推算，
   // 拿天花板当真值等于把编出来的数字当依据，只是错得少一点而已。
-  const activeTrusted = activeCapped
+  const activeAccepted = hasActiveToday && !activeCapped ? activeNow : 0;
+  const activeTrusted = activeCapped || !hasActiveToday
     ? (hasBaselineActive ? baselineActiveValue * curveNow : 0)
     : activeNow;
 
   let activeFullDay;
-  if (hasBaselineActive) {
+  let activeSource;
+  if ((activeCapped || !hasActiveToday) && !hasBaselineActive) {
+    // 活动字段缺失或已判为异常，且没有近期设备基线时，只能用静态 TDEE 中的
+    // 活动增量兜底；把缺测当作 0 会系统性低估全天消耗。
+    activeFullDay = hasFallbackTdee ? Math.max(0, fallbackTdeeValue - baseBmr) : 0;
+    activeSource = 'formula-fallback';
+  } else if (hasBaselineActive) {
     // 按"今天相对平时的活跃程度"外推剩余时间
     const expectedByNow = baselineActiveValue * curveNow;
     const pace = expectedByNow > 30 ? clamp(activeTrusted / expectedByNow, 0.4, 2.0) : 1;
     activeFullDay = activeTrusted + baselineActiveValue * (1 - curveNow) * pace;
+    activeSource = activeCapped || !hasActiveToday ? 'device-baseline' : 'device-today';
   } else if (curveNow > 0.2) {
     activeFullDay = activeTrusted / curveNow;
+    activeSource = 'device-today';
   } else {
     activeFullDay = hasFallbackTdee
       ? Math.max(activeTrusted, (fallbackTdeeValue - baseBmr) * 0.8)
       : activeTrusted;
+    activeSource = 'device-today';
   }
 
   // Apple 的静息能量与活动能量已经是设备的总消耗拆分；固定再加 TEF 会重复计算。
@@ -302,13 +330,14 @@ export function dynamicTDEE({
     basal: round(basalFullDay),
     basalSource,
     active: round(activeFullDay),
-    activeSoFar: round(activeTrusted),
-    activeReported: round(activeNow),
+    activeSource,
+    activeSoFar: round(activeAccepted),
+    activeReported: hasActiveToday ? round(activeNow) : null,
     activeCapped,
     tef,
     tdee: total,
-    // 到此刻为止真正被测到的消耗，不含任何外推——界面要能把「实测」和「预计」分开说
-    measured: round((hasBasalToday ? basalNow : 0) + activeTrusted),
+    // 到快照覆盖时刻为止的设备累计，不含任何外推；字段名为历史兼容保留
+    measured: round((hasBasalToday ? basalNow : 0) + activeAccepted),
     projected: f < 0.98,
   };
 }
@@ -339,7 +368,7 @@ export function proteinTarget(profile, goalKey) {
 /**
  * 计算完整的每日营养目标。
  * @param {object} profile 身体信息与目标设置
- * @param {object} [dynamic] 动态消耗结果（有则用真实消耗替代活动系数）
+ * @param {object} [dynamic] 动态消耗结果（有则用设备能量估算替代活动系数）
  */
 export function dailyTargets(profile, dynamic = null) {
   assertValidProfile(profile);
@@ -352,7 +381,10 @@ export function dailyTargets(profile, dynamic = null) {
   const maxRate = weight * 0.01;
   const rateByWeight = clamp(requestedRate, -maxRate, maxRate);
 
-  const tdee = dynamic?.tdee > 0 ? dynamic.tdee : stat.tdee;
+  const hasDynamicTdee = dynamic?.tdee > 0;
+  const hasDeviceContribution = hasDynamicTdee
+    && (dynamic.basalSource !== 'formula' || dynamic.activeSource !== 'formula-fallback');
+  const tdee = hasDynamicTdee ? dynamic.tdee : stat.tdee;
   // 固定 7700 只是短期预算近似；先限制到体重的 1%/周，再限制常用的 500–750 kcal 调整范围。
   const requestedDailyDelta = (rateByWeight * KCAL_PER_KG_FAT) / 7;
   const plannedDelta = clamp(requestedDailyDelta, -750, 500);
@@ -403,10 +435,11 @@ export function dailyTargets(profile, dynamic = null) {
     staticTdee: stat.tdee,
     ageEstimated: stat.ageEstimated === true,
     basalSource: dynamic?.basalSource || 'formula',
+    activeSource: dynamic?.activeSource || 'formula-fallback',
     measuredKcal: dynamic?.measured ?? null,
     carbBelowRda: round(carb) < CARB_RDA_G,
     tdee: round(tdee),
-    tdeeSource: dynamic?.tdee > 0 ? 'apple' : 'formula',
+    tdeeSource: hasDeviceContribution ? 'apple' : 'formula',
     // 今天的活动能量数值不可信、已改按平时节奏估算 —— 要让界面能说出这件事，
     // 否则用户看到一个正常的目标，不会知道自己的快捷指令取错了数据
     activeCapped: dynamic?.activeCapped === true,

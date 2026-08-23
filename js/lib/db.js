@@ -146,23 +146,53 @@ export async function exportAll() {
 /** 导入备份 */
 export async function importAll(payload) {
   if (payload?.app !== 'health-diet-tracker') throw new Error('不是本应用导出的备份文件');
-  const counts = {};
-  for (const store of [STORES.health, STORES.settings, STORES.customFoods]) {
-    const rows = payload[store] || [];
-    await clear(store);
-    if (rows.length) await bulkPut(store, rows);
-    counts[store] = rows.length;
+  if (payload.version != null
+    && (!Number.isInteger(Number(payload.version)) || Number(payload.version) < 1)) {
+    throw new Error('备份文件版本无效');
   }
-  await clear(STORES.diet);
+  if (Number(payload.version) > DB_VERSION) {
+    throw new Error('备份来自更新版本的应用，请先升级后再导入');
+  }
+
+  const names = Object.values(STORES);
+  const rowsByStore = {};
+  for (const store of names) {
+    const rows = payload[store] ?? [];
+    if (!Array.isArray(rows)) throw new Error(`备份中的 ${store} 不是数组`);
+    if (rows.some((row) => !row || typeof row !== 'object' || Array.isArray(row))) {
+      throw new Error(`备份中的 ${store} 含有无效记录`);
+    }
+    rowsByStore[store] = rows;
+  }
+  if (rowsByStore.health.some((row) => typeof row.date !== 'string')) {
+    throw new Error('健康数据缺少日期主键');
+  }
+  if (rowsByStore.settings.some((row) => typeof row.key !== 'string')) {
+    throw new Error('设置数据缺少键名');
+  }
+  if (rowsByStore.customFoods.some((row) => typeof row.id !== 'string')) {
+    throw new Error('自定义食物缺少 id');
+  }
+
+  // 所有清空和写入放在同一个事务：任意一条写入失败，IndexedDB 会整体回滚，
+  // 不会再留下“健康数据已清空、饮食只恢复一半”的状态。
   const db = await openDB();
-  const diet = payload.diet || [];
   await new Promise((resolve, reject) => {
-    const t = db.transaction(STORES.diet, 'readwrite');
-    const os = t.objectStore(STORES.diet);
-    for (const row of diet) os.put(row);
+    const t = db.transaction(names, 'readwrite');
+    try {
+      for (const store of names) {
+        const os = t.objectStore(store);
+        os.clear();
+        for (const row of rowsByStore[store]) os.put(row);
+      }
+    } catch (err) {
+      t.abort();
+      reject(err);
+      return;
+    }
     t.oncomplete = resolve;
     t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('备份导入已回滚'));
   });
-  counts.diet = diet.length;
-  return counts;
+  return Object.fromEntries(names.map((store) => [store, rowsByStore[store].length]));
 }

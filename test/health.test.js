@@ -416,6 +416,14 @@ test('扁平 JSON（快捷指令粘贴的格式）', () => {
   assert.equal(days[1].steps, 12000);
 });
 
+test('JSON 能量累计值保留覆盖时间，供动态预算冻结外推基准', () => {
+  const result = parseHealthJson({
+    date: '2026-08-21 12:34:00 +0800', activeEnergyKcal: 320, restingEnergyKcal: 810,
+  });
+  assert.equal(result.days.length, 1);
+  assert.equal(result.days[0].energyObservedAt, '2026-08-21T04:34:00.000Z');
+});
+
 test('CSV 导入', () => {
   const { days } = parseHealthCsv('date,steps,active_energy,weight\n2026-08-20,8600,520,71.2\n2026-08-21,9100,610,71.0\n');
   assert.equal(days.length, 2);
@@ -506,6 +514,17 @@ test('认不出的字段会被列出来，而不是悄悄丢掉', () => {
 test('缺少 date 时不产出垃圾数据', () => {
   const r = parseHealthJson({ steps: 100, weight: 59 });
   assert.equal(r.days.length, 0);
+});
+
+test('完整应用备份选错入口时给出正确恢复路径', () => {
+  assert.throws(() => parseHealthJson({
+    app: 'health-diet-tracker',
+    version: 1,
+    health: [{ date: '2026-08-23', steps: 8000 }],
+    diet: [],
+    settings: [],
+    customFoods: [],
+  }), /完整应用备份.*设置 → 数据管理 → 导入备份/);
 });
 
 test('日期字段的多种叫法都认得', () => {

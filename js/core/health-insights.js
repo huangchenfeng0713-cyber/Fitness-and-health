@@ -149,17 +149,14 @@ export function healthInsights(healthDays = [], opts = {}) {
   }
 
   // ---------------- 运动强度 ----------------
-  const hasExerciseMetric = days.some((d) => hasOwn(d, 'exerciseMinutes')
-    && Number.isFinite(Number(d.exerciseMinutes)) && Number(d.exerciseMinutes) >= 0);
   const daySpan = calendarSpan(days);
-  const coverage = daySpan > 0 ? days.length / daySpan : 0;
-  // 日级健康记录存在、但没有 exerciseMinutes 时，在已经确认导入过该指标的前提下按 0 计；
-  // 完全缺失的日历日不冒充 0，覆盖率不足时不下结论。
-  if (hasExerciseMetric && daySpan >= 7 && coverage >= 0.7) {
-    const exerciseValues = days.map((d) => {
-      const v = Number(d.exerciseMinutes);
-      return Number.isFinite(v) && v >= 0 ? v : 0;
-    });
+  const exerciseDays = days.filter((d) => hasOwn(d, 'exerciseMinutes')
+    && Number.isFinite(Number(d.exerciseMinutes)) && Number(d.exerciseMinutes) >= 0);
+  const exerciseCoverage = daySpan > 0 ? exerciseDays.length / daySpan : 0;
+  // 只有字段明确存在的 0 才是零运动；同一天有步数或体重但缺 exerciseMinutes，
+  // 仍然属于该指标缺测，不能自动补 0。
+  if (daySpan >= 7 && exerciseCoverage >= 0.7) {
+    const exerciseValues = exerciseDays.map((d) => Number(d.exerciseMinutes));
     const weekly = round((exerciseValues.reduce((sum, v) => sum + v, 0) / daySpan) * 7);
     const activeDays = exerciseValues.filter((v) => v >= 20).length;
     if (weekly < 150) {
@@ -190,7 +187,7 @@ export function healthInsights(healthDays = [], opts = {}) {
         m);
     } else if (m < 7) {
       add('sleep', 'warn', `日均睡眠 ${m} 小时，略少`,
-        `离 7 小时还差一点，近 ${days.length} 天有 ${shortDays} 天不足 6.5 小时。提前 30 分钟上床通常比周末补觉有效。`,
+        `离 7 小时还差一点，近 ${days.length} 天有 ${shortDays} 天不足 6.5 小时。可以先把每晚睡眠机会稳定增加约 30 分钟，并结合白天状态观察。`,
         m);
     } else {
       add('sleep', 'good', `日均睡眠 ${m} 小时`,
@@ -272,7 +269,7 @@ export function healthInsights(healthDays = [], opts = {}) {
     const swing = round(Math.max(...daily) - Math.min(...daily), 1);
     if (swing > 2.5) {
       add('weight_swing', 'info', `近期体重波动 ${swing} kg`,
-        '短期大幅波动通常是水钠潴留（重口味、高碳水、月经周期、力量训练后炎症反应），不是真的胖了或瘦了。');
+        '短期大幅波动可能主要来自水分与糖原变化（如重口味、高碳水、月经周期或训练后反应），不能仅凭这些单点判断脂肪增减。');
     }
   }
 
@@ -308,7 +305,7 @@ export function healthInsights(healthDays = [], opts = {}) {
     if (sd > m * 0.55) {
       add('energy_var', 'info', `每天活动消耗差异很大（平均 ${m}，波动 ±${sd} kcal）`,
         '训练日和休息日的消耗差出几百千卡时，用固定热量目标就会一天吃不够、一天吃超。'
-        + '本应用已按当天真实消耗动态调整预算，记得每天同步健康数据。', m);
+        + '本应用会按当天设备记录估算预算；记得同步健康数据，并留意首页的“数据截至”时间。', m);
     }
   }
 
@@ -351,13 +348,10 @@ export function healthSummary(healthDays = [], windowDays = 14, asOfDate = null)
     activeEnergy: pick('activeEnergy'),
     exerciseMinutes: (() => {
       const span = calendarSpan(days);
-      const hasMetric = days.some((d) => hasOwn(d, 'exerciseMinutes')
+      const measured = days.filter((d) => hasOwn(d, 'exerciseMinutes')
         && Number.isFinite(Number(d.exerciseMinutes)) && Number(d.exerciseMinutes) >= 0);
-      if (!hasMetric || span <= 0 || days.length / span < 0.7) return null;
-      const total = days.reduce((sum, d) => {
-        const v = Number(d.exerciseMinutes);
-        return sum + (Number.isFinite(v) && v >= 0 ? v : 0);
-      }, 0);
+      if (span <= 0 || measured.length / span < 0.7) return null;
+      const total = measured.reduce((sum, d) => sum + Number(d.exerciseMinutes), 0);
       return round(total / span);
     })(),
     sleepHours: (() => {

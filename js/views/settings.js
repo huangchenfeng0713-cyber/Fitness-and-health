@@ -57,7 +57,9 @@ function profileCard(rerender) {
     onclick: async () => {
       const checked = validateProfile(draft);
       if (!checked.valid) { toast(checked.errors[0], 'warn'); return; }
-      await saveProfile({ ...draft });
+      await saveProfile({
+        ...draft, ageEstimated: !draft.birthday, demoMode: false, onboarded: true,
+      });
       resetDraft();
       toast('已保存', 'ok');
       rerender();
@@ -150,8 +152,15 @@ function targetCard() {
   const d = state.derived;
   if (!d) return null;
   const t = d.targets;
+  const energyBasis = t.tdeeSource !== 'apple'
+    ? '按活动系数估算'
+    : t.activeSource === 'formula-fallback'
+      ? '静息采用设备记录，缺失活动按活动系数补足'
+      : t.activeSource === 'device-baseline'
+        ? '活动采用近期设备记录基线估算'
+        : '按今日 Apple 能量记录动态估算';
   const rows = [
-    ['热量', `${num(t.kcal)} kcal`, t.tdeeSource === 'apple' ? '按今日 Apple 消耗记录动态估算' : '按活动系数估算'],
+    ['热量', `${num(t.kcal)} kcal`, energyBasis],
     ['蛋白质', `${num(t.protein)} g`, t.proteinBasis],
     ['脂肪', `${num(t.fat)} g`, '占总热量 20%~35%'],
     ['碳水', `${num(t.carb)} g`, '总热量减去蛋白与脂肪后的剩余'],
@@ -187,7 +196,7 @@ function toggleCard() {
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, '动态调整')),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
-      '开启后，热量目标 = 当天静息消耗 + 活动消耗 ± 目标缺口，不额外叠加固定 TEF；每次刷新都会跟着当天的运动量变。关闭则用固定的活动系数。'),
+      '开启后，热量目标 = 当天静息消耗 + 活动消耗 ± 目标缺口，不额外叠加固定 TEF；导入新快照时才会更新，旧快照不会随时钟漂移。关闭则用固定的活动系数。'),
     toggle('syncWeightFromApple', '体重体脂跟随 Apple 健康',
       '以健康 App 里最新一次记录为准，体重变了目标也会自动跟着变。'),
   );
