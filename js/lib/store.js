@@ -22,6 +22,7 @@ export const DEFAULT_PROFILE = {
   sex: 'male',
   birthday: '',
   age: 30,
+  ageEstimated: true,
   heightCm: 172,
   weightKg: 65,
   bodyFatPct: null,
@@ -29,9 +30,10 @@ export const DEFAULT_PROFILE = {
   goal: 'maintain',
   rateKgPerWeek: null,
   proteinPerKg: null,
-  useAppleEnergy: true,   // 用 Apple 健康的真实消耗动态调整热量预算
+  useAppleEnergy: true,   // 用 Apple 设备记录动态估算热量预算
   syncWeightFromApple: true,
   appleSourcePriority: [], // 可选：export.xml sourceName 的统一优先顺序
+  demoMode: false,
   onboarded: false,
 };
 
@@ -50,6 +52,24 @@ export const state = {
   lastImport: null,
   derived: null,
 };
+
+/**
+ * v1.2 开始严格校验目标和速率的方向。旧版本允许保存“减脂 + 正数”这类组合，
+ * 如果直接拿来计算会让升级后的应用在启动时抛错。迁移时以用户选的目标为准，
+ * 只纠正速率符号，不改变幅度；维持目标归零。
+ */
+export function migrateStoredProfile(stored = null) {
+  const source = stored && typeof stored === 'object' ? stored : {};
+  const next = { ...DEFAULT_PROFILE, ...source };
+  const rate = Number(next.rateKgPerWeek);
+  if (Number.isFinite(rate)) {
+    if (next.goal === 'cut' && rate > 0) next.rateKgPerWeek = -rate;
+    if (next.goal === 'bulk' && rate < 0) next.rateKgPerWeek = Math.abs(rate);
+    if (next.goal === 'maintain' && Math.abs(rate) > 0.001) next.rateKgPerWeek = 0;
+  }
+  if (next.birthday) next.ageEstimated = false;
+  return next;
+}
 
 export function subscribe(fn) {
   listeners.add(fn);
@@ -83,7 +103,11 @@ export async function initStore() {
     db.getAll(db.STORES.diet),
   ]);
 
-  state.profile = { ...DEFAULT_PROFILE, ...(profile || {}) };
+  state.profile = migrateStoredProfile(profile);
+  // 把兼容修复写回去，避免之后每次启动都重复迁移。首次启动没有旧档案时不主动落库。
+  if (profile && JSON.stringify(profile) !== JSON.stringify(state.profile)) {
+    await db.setSetting('profile', state.profile);
+  }
   state.favorites = favorites || [];
   state.lastImport = lastImport;
   state.customFoods = customFoods || [];
@@ -120,7 +144,7 @@ function rebuildDietDaily(entries) {
 export function recompute(now = new Date()) {
   const p = state.profile;
   const health = state.healthByDate.get(state.day) || {};
-  const isToday = state.day === todayKey();
+  const isToday = state.day === todayKey(now);
 
   // 体重优先用 Apple 健康当天（或最近一次）的记录
   const effectiveProfile = { ...p };
@@ -140,19 +164,28 @@ export function recompute(now = new Date()) {
   const intake = sumNutrients(state.dietEntries);
 
   let dynamic = null;
+  let energyData = {
+    observedAt: null, ageMinutes: null, stale: false, missingObservationTime: false,
+  };
   const hasEnergyData = Number(health.activeEnergy) > 0 || Number(health.restingEnergy) > 0;
   if (p.useAppleEnergy && hasEnergyData) {
-    dynamic = dynamicTDEE({
-      bmr,
-      activeSoFar: Number(health.activeEnergy) || 0,
-      basalSoFar: Number(health.restingEnergy) || null,
-      // 近 14 天 Apple 实测的静息能量日均：比公式估算更有据，优先于 bmr 使用
-      baselineResting: baseline.restingEnergy,
-      dayFraction: isToday ? dayFraction(now) : 1,
-      baselineActive: baseline.activeEnergy,
-      intakeKcal: intake.kcal,
-      fallbackTDEE: stat.tdee,
-    });
+    energyData = resolveEnergyObservation(health, state.lastImport, state.day, now);
+    // 历史完整日不需要时间戳；今天若不知道累计值覆盖到几点，宁可回退到静态估算，
+    // 也不能拿同一份旧快照跟着当前时钟反复外推。
+    const canProject = !isToday || energyData.observedAt != null;
+    if (canProject) {
+      dynamic = dynamicTDEE({
+        bmr,
+        // 缺字段和明确记录为 0 不是一回事：缺失时应由近期基线或静态公式补足。
+        activeSoFar: health.activeEnergy != null ? Number(health.activeEnergy) : null,
+        basalSoFar: Number(health.restingEnergy) || null,
+        // 近 14 天 Apple 设备记录的静息能量日均，优先于单次公式估算
+        baselineResting: baseline.restingEnergy,
+        observationFraction: isToday ? energyData.dayFraction : 1,
+        baselineActive: baseline.activeEnergy,
+        fallbackTDEE: stat.tdee,
+      });
+    }
   }
 
   const targets = dailyTargets(effectiveProfile, dynamic);
@@ -172,9 +205,43 @@ export function recompute(now = new Date()) {
 
   state.derived = {
     effectiveProfile, health, baseline, dynamic, targets, intake, advice, isToday, bmr,
-    staticTdee: stat.tdee,
+    staticTdee: stat.tdee, energyData, demoMode: p.demoMode === true || p.onboarded !== true,
   };
   return state.derived;
+}
+
+/**
+ * 找到这份累计能量真正覆盖到的时刻。今天的目标只按该时刻外推并保持不变，
+ * 当前钟表继续前进不会再让同一份健康快照改变热量预算。
+ */
+export function resolveEnergyObservation(health, lastImport, day, now = new Date()) {
+  const isToday = day === todayKey(now);
+  if (!isToday) {
+    return { observedAt: null, dayFraction: 1, ageMinutes: null, stale: false, missingObservationTime: false };
+  }
+
+  let observed = new Date(health?.energyObservedAt || '');
+  if (Number.isNaN(observed.getTime()) || todayKey(observed) !== day) {
+    const imported = new Date(lastImport?.at || '');
+    const range = lastImport?.range;
+    const coversDay = Array.isArray(range) ? day >= range[0] && day <= range[1] : lastImport?.days > 0;
+    observed = !Number.isNaN(imported.getTime()) && todayKey(imported) === day && coversDay
+      ? imported : new Date(NaN);
+  }
+  if (Number.isNaN(observed.getTime())) {
+    return {
+      observedAt: null, dayFraction: null, ageMinutes: null, stale: false,
+      missingObservationTime: true,
+    };
+  }
+  const ageMinutes = Math.max(0, Math.round((now.getTime() - observed.getTime()) / 60000));
+  return {
+    observedAt: observed.toISOString(),
+    dayFraction: dayFraction(observed),
+    ageMinutes,
+    stale: ageMinutes >= 120,
+    missingObservationTime: false,
+  };
 }
 
 /** 取指定日期当天或之前最近一次的健康指标 */
@@ -205,8 +272,9 @@ export async function setDay(dayKey) {
 }
 
 export async function saveProfile(patch) {
-  // 只要用户动过设置，就不再显示首次引导
-  const next = { ...state.profile, ...patch, onboarded: true };
+  // 是否完成首次引导由调用方明确写入。只改同步开关或来源优先级，不能把默认身体数据
+  // 悄悄当成用户已经确认过的真实档案。
+  const next = { ...state.profile, ...patch };
   const checked = validateProfile(next);
   if (!checked.valid) throw new RangeError(checked.errors.join('；'));
   state.profile = next;
@@ -312,7 +380,19 @@ export async function removeCustomFood(id) {
 export async function mergeHealthDays(days, meta = {}) {
   const isCompleteSnapshot = isCompleteAppleSnapshot(meta);
   if (!days?.length && !isCompleteSnapshot) return 0;
-  const incomingDays = days || [];
+  const importedAt = new Date();
+  const today = todayKey(importedAt);
+  const incomingDays = (days || []).map((day) => {
+    const hasEnergy = Number(day.activeEnergy) > 0 || Number(day.restingEnergy) > 0;
+    if (!hasEnergy || day.date !== today) return day;
+    const observed = new Date(day.energyObservedAt || '');
+    // 只有日期而没有钟点的 JSON/CSV 会被解析成 00:00。对“今天累计值”来说，
+    // 导入时刻比午夜更接近真实覆盖终点；有明确钟点的快捷指令则原样保留。
+    const looksLikeDateOnly = !Number.isNaN(observed.getTime()) && dayFraction(observed) < 1 / 1440;
+    return (!day.energyObservedAt || looksLikeDateOnly)
+      ? { ...day, energyObservedAt: importedAt.toISOString() }
+      : day;
+  });
   const existing = await db.getAll(db.STORES.health);
   const importId = `health-${Date.now().toString(36)}`;
   if (isCompleteSnapshot) {
@@ -324,7 +404,7 @@ export async function mergeHealthDays(days, meta = {}) {
   }
   setHealthDays(await db.getAll(db.STORES.health));
   state.lastImport = {
-    at: new Date().toISOString(),
+    at: importedAt.toISOString(),
     days: incomingDays.length,
     range: incomingDays.length
       ? [incomingDays[0].date, incomingDays[incomingDays.length - 1].date]
@@ -381,7 +461,11 @@ export async function saveHealthDay(date, patch) {
     if (!isPlausibleHealthValue(key, value)) throw new RangeError(`${key} 的数值超出可接受范围`);
   }
   const existing = state.healthByDate.get(date) || { date };
-  const row = stampManualPatch(existing, { ...patch, date });
+  const hasEnergyPatch = patch?.activeEnergy != null || patch?.restingEnergy != null;
+  const timedPatch = hasEnergyPatch && date === todayKey()
+    ? { ...patch, energyObservedAt: new Date().toISOString() }
+    : patch;
+  const row = stampManualPatch(existing, { ...timedPatch, date });
   await db.put(db.STORES.health, row);
   setHealthDays(await db.getAll(db.STORES.health));
   recompute();

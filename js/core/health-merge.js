@@ -13,6 +13,7 @@ export const APPLE_HEALTH_FIELDS = new Set([
   'workoutDistanceKm',
   'workouts',
   'activityGoals',
+  'energyObservedAt',
 ]);
 
 const metaKeys = new Set(['date', 'source', '_fieldProvenance', '_importQuality']);

@@ -61,7 +61,12 @@ export function renderTrends(root) {
     const eaten = dietByDate.get(date)?.kcal;
     const hd = health.get(date);
     if (eaten == null || !hd) return null;
-    const burn = (Number(hd.restingEnergy) || d.bmr) + (Number(hd.activeEnergy) || 0);
+    const hasResting = Number(hd.restingEnergy) > 0;
+    const hasActive = Number(hd.activeEnergy) > 0;
+    // 历史收支不能用“今天的 BMR / 近期活动均值”替缺失字段，否则会把当前假设
+    // 倒灌进过去。只接受同日静息与活动能量都齐全的点。
+    if (!hasResting || !hasActive) return null;
+    const burn = Number(hd.restingEnergy) + Number(hd.activeEnergy);
     return Math.round(eaten - burn);
   });
 
@@ -77,11 +82,11 @@ export function renderTrends(root) {
     h('section.card.summary-card', null,
       h('div.summary-grid', null,
         summaryItem('记录天数', `${loggedDays}`, `近 ${range} 天`),
-        summaryItem('平均摄入', avgKcal != null ? `${avgKcal}` : '—', `目标 ${targets.kcal} kcal`),
-        summaryItem('平均蛋白', avgProtein != null ? `${avgProtein}g` : '—', `目标 ${targets.protein} g`),
-        summaryItem('蛋白达标', `${proteinHit}/${loggedDays || 0}`, '天'),
-        summaryItem('体重趋势', baseline.weightTrend != null ? `${baseline.weightTrend > 0 ? '+' : ''}${baseline.weightTrend}` : '—', 'kg/周'),
-        summaryItem('平均活动', baseline.activeEnergy != null ? `${Math.round(baseline.activeEnergy)}` : '—', 'kcal/天'),
+        summaryItem('平均摄入', avgKcal != null ? `${avgKcal}` : '—', `当前目标 ${targets.kcal} kcal`),
+        summaryItem('平均蛋白', avgProtein != null ? `${avgProtein}g` : '—', `当前目标 ${targets.protein} g`),
+        summaryItem('按当前目标达标', `${proteinHit}/${loggedDays || 0}`, '天'),
+        summaryItem('28日体重趋势', baseline.weightTrend != null ? `${baseline.weightTrend > 0 ? '+' : ''}${baseline.weightTrend}` : '—', 'kg/周'),
+        summaryItem('14日平均活动', baseline.activeEnergy != null ? `${Math.round(baseline.activeEnergy)}` : '—', 'kcal/天'),
       )),
 
     (() => {
@@ -104,23 +109,23 @@ export function renderTrends(root) {
 
     chartCard('每日热量摄入', avgKcal != null ? `平均 ${avgKcal} kcal` : null,
       barChart({ data: kcalSeries, target: targets.kcal, unit: ' kcal' }),
-      '超过目标 5% 的日子会标红，明显偏低的日子会变淡。'),
+      '参考线使用现在的目标（不是各历史日期当时的目标）；超过 5% 的柱会标红，明显偏低的柱会变淡。'),
 
     chartCard('每日蛋白摄入', `达标 ${proteinHit} 天`,
       barChart({ data: proteinSeries, target: targets.protein, unit: ' g' }),
-      `达标线按目标的 90%（${Math.round(targets.protein * 0.9)}g）计算。`),
+      `参考线使用现在目标的 90%（${Math.round(targets.protein * 0.9)}g），不代表历史日期当时的目标。`),
 
     balanceSeries.length >= 2 ? chartCard('热量收支（摄入 − 消耗）', null,
       lineChart({ data: balanceSeries, color: 'var(--warn)', target: 0, targetLabel: '收支平衡', unit: 'kcal' }),
-      '低于 0 表示当天处于赤字。累计约 7700 kcal 赤字对应减掉 1kg 脂肪。') : null,
+      '只绘制同日饮食、静息能量和活动能量都齐全的数据；低于 0 表示摄入低于设备估算消耗。7700 kcal/kg 仅用于脂肪当量换算，不等于体重一定这样变化。') : null,
 
     activeSeries.length >= 2 ? chartCard('活动能量', baseline.activeEnergy != null ? `平均 ${Math.round(baseline.activeEnergy)} kcal` : null,
       lineChart({ data: activeSeries, color: 'var(--protein)', unit: 'kcal' }),
-      '这条线直接决定每天的热量预算：活动多的日子预算会自动上调。') : null,
+      '活动能量来自设备估算。新数据导入后会调整当日预算；旧快照不会随时钟自动变化。') : null,
 
     sleepSeries.length >= 2 ? chartCard('睡眠', baseline.sleepMinutes ? `平均 ${formatHours(baseline.sleepMinutes)}` : null,
       lineChart({ data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时', decimals: 1, unit: '小时' }),
-      '长期睡眠不足会升高食欲激素，减脂期尤其明显。') : null,
+      '长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。') : null,
   );
 }
 

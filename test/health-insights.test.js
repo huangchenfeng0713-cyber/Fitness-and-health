@@ -73,6 +73,15 @@ test('日历数据大面积缺测时不把缺测日当作零运动日下结论',
   assert.equal(healthSummary(sparse).exerciseMinutes, null);
 });
 
+test('有其它健康数据但缺运动字段时，也不能把缺测日补成零', () => {
+  const partial = mkDays(14, (i) => ({
+    steps: 7000,
+    ...(i === 2 || i === 9 ? { exerciseMinutes: 75 } : {}),
+  }));
+  assert.equal(byKey(healthInsights(partial), 'exercise'), undefined);
+  assert.equal(healthSummary(partial).exerciseMinutes, null);
+});
+
 test('睡眠分档只描述睡眠时长波动，不推断作息规律性', () => {
   const bad = healthInsights(mkDays(10, () => ({ sleepMinutes: 5.5 * 60 })));
   assert.equal(byKey(bad, 'sleep').level, 'bad');

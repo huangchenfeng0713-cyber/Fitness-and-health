@@ -91,7 +91,7 @@ function refreshQuick() {
   if (!d) return;
   const { kcal, protein } = d.advice.gaps;
   mount(nodes.quick, h('div.quick-strip', null,
-    h('div.qs-item', null, h('span', null, '还可吃'),
+    h('div.qs-item', null, h('span', null, '热量余量'),
       h('strong', { class: kcal.remaining < 0 ? 'neg' : '' }, `${num(kcal.remaining)} kcal`)),
     h('div.qs-item', null, h('span', null, '蛋白还差'),
       h('strong', { class: protein.remaining <= 0 ? 'pos' : '' }, `${num(Math.max(protein.remaining, 0), 1)} g`)),

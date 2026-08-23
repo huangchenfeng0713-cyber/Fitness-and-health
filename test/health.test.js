@@ -416,6 +416,14 @@ test('扁平 JSON（快捷指令粘贴的格式）', () => {
   assert.equal(days[1].steps, 12000);
 });
 
+test('JSON 能量累计值保留覆盖时间，供动态预算冻结外推基准', () => {
+  const result = parseHealthJson({
+    date: '2026-08-21 12:34:00 +0800', activeEnergyKcal: 320, restingEnergyKcal: 810,
+  });
+  assert.equal(result.days.length, 1);
+  assert.equal(result.days[0].energyObservedAt, '2026-08-21T04:34:00.000Z');
+});
+
 test('CSV 导入', () => {
   const { days } = parseHealthCsv('date,steps,active_energy,weight\n2026-08-20,8600,520,71.2\n2026-08-21,9100,610,71.0\n');
   assert.equal(days.length, 2);

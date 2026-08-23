@@ -72,6 +72,9 @@ const SOURCE_MCDONALDS_CN = Object.freeze({
 const META_RECIPE_READY = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
+const META_RECIPE_RAW = Object.freeze({
+  source: SOURCE_RECIPE, basis: '100g', state: 'raw', edibleRatio: 1, carbBasis: 'total',
+});
 const META_RECIPE_COOKED = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'cooked', edibleRatio: 1, carbBasis: 'total',
 });
@@ -83,6 +86,12 @@ const META_CNFCT_COOKED = Object.freeze({
 });
 const META_USDA_RAW = Object.freeze({
   source: SOURCE_USDA, basis: '100g', state: 'raw', edibleRatio: 1, carbBasis: 'total',
+});
+const META_USDA_COOKED = Object.freeze({
+  source: SOURCE_USDA, basis: '100g', state: 'cooked', edibleRatio: 1, carbBasis: 'total',
+});
+const META_USDA_READY = Object.freeze({
+  source: SOURCE_USDA, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
 
 export const FOODS = [
@@ -841,6 +850,99 @@ export const FOODS = [
   { id: 'almond_drink', name: '杏仁露（含糖）', alias: 'xingrenlu almond drink', cat: 'drink', n: [45, 0.8, 1.5, 7.0, 0.2, 6.0, 35], s: [['一杯', 250]], ...META_RECIPE_READY, f: ['sweetdrink', 'processed', 'est'] },
   { id: 'candied_hawthorn', name: '冰糖葫芦', alias: 'bingtanghulu candied hawthorn', cat: 'snack', n: [180, 0.5, 0.2, 44.0, 2.5, 38.0, 10], s: [['一串可食部', 80]], ...META_RECIPE_READY, note: '按去核山楂和糖衣可食部计', f: ['processed', 'quick', 'est'] },
 
+  // ---------- v1.2 食物库扩充：基础食材、地方主食、常见菜肴与包装食品 ----------
+  { id: 'casserole_congee', name: '砂锅粥（通用）', alias: 'shaguozhou casserole congee', cat: 'staple', n: [75, 4.0, 2.0, 10.5, 0.8, 0.5, 400], s: [['一碗', 450]], ...META_RECIPE_READY, note: '按米粥、少量肉或海鲜及整碗汤汁估算；不同配料和盐量差异较大', f: ['est'] },
+  { id: 'knife_cut_noodle', name: '刀削面（熟面）', alias: 'daoxiaomian knife cut noodle', cat: 'staple', n: [135, 4.5, 0.8, 27.5, 1.0, 0.5, 120], s: [['一碗熟面', 250]], ...META_RECIPE_COOKED, note: '仅按煮熟面条计，不含浇头和汤汁', f: ['refined', 'est'] },
+  { id: 'grilled_cold_noodle', name: '烤冷面', alias: 'kaolengmian grilled cold noodle', cat: 'staple', n: [260, 7.5, 9.0, 39.0, 1.5, 5.0, 700], s: [['一份', 220]], ...META_RECIPE_READY, note: '按冷面片、鸡蛋、酱料和少量油的街边通用配方估算', f: ['refined', 'processed', 'est'] },
+  { id: 'soup_dumpling', name: '灌汤包', alias: 'guantangbao soup dumpling', cat: 'staple', n: [230, 8.5, 10.0, 27.0, 1.0, 2.0, 550], s: [['一个', 45], ['一笼6个', 270]], ...META_RECIPE_READY, f: ['breakfast', 'est'] },
+  { id: 'spaghetti_cooked', name: '意大利面（煮熟，无酱）', alias: 'yidalimian spaghetti pasta 意面', cat: 'staple', n: [158, 5.8, 0.9, 30.9, 1.8, 0.6, 1], s: [['一盘熟面', 200]], ...META_USDA_COOKED, note: '只计煮熟面条；肉酱、奶油酱和芝士需另记', f: ['refined'] },
+  { id: 'macaroni_cooked', name: '通心粉（煮熟，无酱）', alias: 'tongxinfen macaroni pasta', cat: 'staple', n: [157, 5.8, 0.9, 30.9, 1.8, 0.6, 1], s: [['一碗熟面', 180]], ...META_USDA_COOKED, note: '只计煮熟通心粉，不含酱汁', f: ['refined'] },
+  { id: 'oatmeal_porridge', name: '燕麦粥（清水煮）', alias: 'yanmaizhou oatmeal porridge', cat: 'staple', n: [71, 2.5, 1.5, 12.0, 1.7, 0.3, 2], s: [['一碗', 300]], ...META_RECIPE_COOKED, note: '按燕麦片与清水煮制，不含奶、糖或坚果', f: ['whole', 'breakfast', 'est'] },
+  { id: 'croissant_plain', name: '羊角包 / 可颂（原味）', alias: 'yangjiaobao kesong croissant', cat: 'staple', n: [406, 8.2, 21.0, 45.8, 2.6, 11.3, 467], s: [['一个', 60]], ...META_USDA_READY, f: ['refined', 'breakfast', 'quick'] },
+  { id: 'baguette', name: '法棍面包', alias: 'fagun baguette french bread', cat: 'staple', n: [274, 8.5, 1.1, 57.6, 2.3, 2.5, 540], s: [['一段', 80]], ...META_USDA_READY, f: ['refined', 'quick'] },
+  { id: 'english_muffin', name: '英式松饼', alias: 'yingshisongbing english muffin', cat: 'staple', n: [235, 8.0, 1.8, 46.0, 2.7, 2.5, 430], s: [['一个', 60]], ...META_USDA_READY, f: ['refined', 'breakfast', 'quick'] },
+  { id: 'waffle_plain', name: '华夫饼（原味）', alias: 'huafubing waffle', cat: 'snack', n: [291, 7.9, 14.1, 33.0, 1.2, 8.0, 511], s: [['一块', 70]], ...META_USDA_READY, f: ['refined', 'breakfast', 'processed'] },
+  { id: 'scone_plain', name: '司康（原味）', alias: 'sikang scone', cat: 'snack', n: [353, 6.5, 14.5, 50.7, 1.7, 14.0, 420], s: [['一个', 65]], ...META_USDA_READY, f: ['refined', 'breakfast', 'processed'] },
+  { id: 'qingtuan', name: '青团', alias: 'qingtuan green rice cake', cat: 'snack', n: [230, 4.0, 5.0, 44.0, 1.5, 14.0, 100], s: [['一个', 60]], ...META_RECIPE_READY, note: '按糯米皮和甜豆沙馅通用配方估算，肉松蛋黄等馅料差异很大', f: ['processed', 'est'] },
+  { id: 'glutinous_rice_cake', name: '糍粑（原味）', alias: 'ciba glutinous rice cake', cat: 'staple', n: [220, 4.0, 2.0, 48.0, 1.0, 4.0, 40], s: [['一块', 80]], ...META_RECIPE_READY, note: '按蒸熟糯米成品估算；红糖、黄豆粉和煎炸用油需另计', f: ['refined', 'est'] },
+  { id: 'rice_sheet', name: '米皮（熟）', alias: 'mipi rice sheet', cat: 'staple', n: [110, 2.0, 0.3, 24.5, 0.5, 0.2, 30], s: [['一份米皮', 250]], ...META_RECIPE_COOKED, note: '仅按熟米皮计，不含辣油、芝麻酱和配菜', f: ['refined', 'est'] },
+  { id: 'rice_vermicelli_cooked', name: '粉干（煮熟）', alias: 'fengan rice vermicelli cooked', cat: 'staple', n: [112, 2.1, 0.3, 25.0, 0.6, 0.1, 10], s: [['一碗熟粉', 250]], ...META_RECIPE_COOKED, note: '仅按煮熟粉干计，不含汤、油和浇头', f: ['refined', 'est'] },
+  { id: 'wheat_vermicelli_cooked', name: '面线（煮熟）', alias: 'mianxian wheat vermicelli', cat: 'staple', n: [125, 4.2, 0.5, 26.0, 1.0, 0.4, 140], s: [['一碗熟面线', 250]], ...META_RECIPE_COOKED, note: '仅按熟面线计，部分干面线本身含盐较高', f: ['refined', 'est'] },
+  { id: 'alkaline_noodle_cooked', name: '碱水面（煮熟）', alias: 'jianshuimian alkaline noodle', cat: 'staple', n: [138, 4.8, 0.8, 28.0, 1.0, 0.5, 250], s: [['一碗熟面', 250]], ...META_RECIPE_COOKED, note: '只计熟面条，不含拌酱、汤或浇头', f: ['refined', 'est'] },
+  { id: 'instant_glass_noodle', name: '方便粉丝（含调料，干）', alias: 'fangbianfensi instant glass noodle', cat: 'staple', n: [350, 7.0, 1.0, 78.0, 4.0, 2.0, 1800], s: [['一桶干料', 100]], source: SOURCE_RECIPE, basis: '100g', state: 'dry', edibleRatio: 1, carbBasis: 'total', note: '非特定品牌代表值，按干粉丝与整包调料计；实际以包装标签为准', f: ['refined', 'processed', 'quick', 'instant', 'est'] },
+
+  { id: 'rabbit_raw', name: '兔肉（瘦，生）', alias: 'turou rabbit meat', cat: 'meat', n: [102, 19.7, 2.2, 0, 0, 0, 45], s: [['一份可食部', 100]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'goose_raw', name: '鹅肉（带皮，生）', alias: 'erou goose meat', cat: 'meat', n: [251, 17.9, 19.9, 0, 0, 0, 73], s: [['一份可食部', 100]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'beef_tripe_cooked', name: '牛肚（熟，未调味）', alias: 'niudu beef tripe', cat: 'meat', n: [85, 12.1, 3.4, 1.9, 0, 0, 45], s: [['一份可食部', 100]], ...META_CNFCT_COOKED, f: [] },
+  { id: 'beef_omasum_cooked', name: '牛百叶（熟，未调味）', alias: 'niubaiye beef omasum tripe', cat: 'meat', n: [72, 12.5, 2.0, 0, 0, 0, 70], s: [['一份可食部', 100]], ...META_CNFCT_COOKED, f: [] },
+  { id: 'duck_blood', name: '鸭血（熟）', alias: 'yaxue duck blood', cat: 'meat', n: [55, 12.4, 0.4, 0.5, 0, 0, 195], s: [['一盒', 300], ['一份', 100]], ...META_CNFCT_COOKED, f: ['quick'] },
+  { id: 'pork_blood', name: '猪血（熟）', alias: 'zhuxue pork blood', cat: 'meat', n: [55, 12.2, 0.3, 0.9, 0, 0, 56], s: [['一份', 150]], ...META_CNFCT_COOKED, f: [] },
+  { id: 'eel_raw', name: '黄鳝（生）', alias: 'huangshan shanyu eel', cat: 'seafood', n: [89, 18.0, 1.4, 1.2, 0, 0, 70], s: [['一份去骨可食部', 120]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'carp_raw', name: '鲤鱼（生）', alias: 'liyu carp', cat: 'seafood', n: [109, 17.6, 4.1, 0, 0, 0, 53], s: [['一块可食部', 120]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'pomfret_raw', name: '鲳鱼（生）', alias: 'changyu pomfret', cat: 'seafood', n: [140, 18.5, 7.3, 0, 0, 0, 62], s: [['一块可食部', 120]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'tilapia_raw', name: '罗非鱼（生）', alias: 'luofeiyu tilapia', cat: 'seafood', n: [96, 20.1, 1.7, 0, 0, 0, 52], s: [['一块可食部', 150]], ...META_USDA_RAW, f: ['cook'] },
+  { id: 'saury_raw', name: '秋刀鱼（生）', alias: 'qiudaoyu saury', cat: 'seafood', n: [314, 18.5, 25.9, 0, 0, 0, 60], s: [['一条可食部', 100]], ...META_RECIPE_RAW, note: '按去头去骨可食部的常见高脂秋刀鱼代表值估算', f: ['cook', 'est'] },
+  { id: 'jellyfish_ready', name: '海蜇（即食，未拌油）', alias: 'haizhe jellyfish', cat: 'seafood', n: [74, 13.0, 0.3, 4.0, 0, 0, 330], s: [['一份', 100]], ...META_RECIPE_READY, note: '按漂洗后的即食海蜇代表值；盐渍程度会显著影响钠', f: ['processed', 'est'] },
+  { id: 'crab_stick', name: '蟹棒 / 蟹柳', alias: 'xiebang xieliu crab stick surimi', cat: 'seafood', n: [95, 7.0, 0.5, 15.0, 0, 6.0, 850], s: [['一根', 20]], ...META_RECIPE_READY, note: '非特定品牌鱼糜制品代表值，以包装标签为准', f: ['processed', 'quick', 'est'] },
+  { id: 'shrimp_ball', name: '虾丸', alias: 'xiawan shrimp ball', cat: 'seafood', n: [140, 12.0, 5.0, 13.0, 0.5, 2.0, 750], s: [['一个', 25]], ...META_RECIPE_READY, note: '非特定品牌代表值，淀粉、虾肉比例和钠差异较大', f: ['processed', 'est'] },
+  { id: 'pork_ball', name: '贡丸（猪肉丸）', alias: 'gongwan pork ball', cat: 'meat', n: [190, 12.0, 13.0, 9.0, 0.5, 2.0, 800], s: [['一个', 25]], ...META_RECIPE_READY, note: '非特定品牌通用配方估算', f: ['processed', 'est'] },
+
+  { id: 'tempeh', name: '天贝', alias: 'tianbei tempeh fermented soybean', cat: 'soy', n: [195, 19.9, 11.4, 7.6, 3.9, 0, 9], s: [['一份', 100]], ...META_USDA_READY, f: ['whole', 'cook'] },
+  { id: 'mozzarella', name: '马苏里拉奶酪', alias: 'masulila mozzarella cheese', cat: 'dairy', n: [300, 22.2, 22.4, 2.2, 0, 1.0, 627], s: [['一小把碎奶酪', 30]], nfs: 1.0, ...META_USDA_READY, f: ['quick', 'natsugar'] },
+  { id: 'kefir_plain', name: '开菲尔（原味无加糖）', alias: 'kaifeier kefir fermented milk', cat: 'dairy', n: [62, 3.5, 3.5, 4.7, 0, 4.7, 50], s: [['一杯', 200]], nfs: 4.7, ...META_USDA_READY, f: ['quick', 'natsugar'] },
+  { id: 'sweet_soy_drink', name: '豆奶（含糖，通用）', alias: 'dounai sweet soy drink', cat: 'drink', n: [60, 2.5, 1.5, 9.0, 0.5, 6.0, 55], s: [['一盒', 250]], nfs: 1.0, ...META_RECIPE_READY, note: '非特定品牌含糖豆奶代表值，实际优先使用包装标签', f: ['sweetdrink', 'processed', 'quick', 'est'] },
+  { id: 'tofu_noodle', name: '豆腐丝 / 千张丝（即食）', alias: 'doufusi qianzhangsi tofu noodle', cat: 'soy', n: [160, 19.0, 7.0, 6.0, 1.0, 1.0, 500], s: [['一份', 80]], ...META_RECIPE_READY, note: '按未额外拌油的豆制品代表值估算，卤制品钠可能更高', f: ['processed', 'quick', 'est'] },
+
+  { id: 'snow_pea', name: '荷兰豆（生）', alias: 'helandou snow pea', cat: 'veg', n: [42, 2.8, 0.2, 7.5, 2.6, 4.0, 4], s: [['一份', 150]], ...META_USDA_RAW, f: ['cook'] },
+  { id: 'beetroot', name: '甜菜根（生）', alias: 'tiancaigen beetroot beet', cat: 'veg', n: [43, 1.6, 0.2, 10.0, 2.8, 6.8, 78], s: [['一份', 150]], ...META_USDA_RAW, f: [] },
+  { id: 'watercress', name: '西洋菜（生）', alias: 'xiyangcai watercress', cat: 'veg', n: [22, 2.3, 0.1, 3.3, 0.5, 0.2, 41], s: [['一份', 150]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'bitter_lettuce', name: '苦菊（生）', alias: 'kuju bitter lettuce endive', cat: 'veg', n: [20, 1.2, 0.2, 3.4, 1.5, 1.2, 30], s: [['一份', 120]], ...META_RECIPE_RAW, note: '按常见生食叶菜代表值估算', f: ['quick', 'est'] },
+  { id: 'lily_bulb', name: '鲜百合（鳞茎）', alias: 'xianbaihe lily bulb', cat: 'veg', n: [166, 3.2, 0.1, 38.8, 1.7, 2.5, 6], s: [['一份可食部', 100]], ...META_CNFCT_RAW, f: ['cook'] },
+  { id: 'bamboo_fungus', name: '竹荪（水发）', alias: 'zhusun bamboo fungus', cat: 'veg', n: [20, 1.5, 0.1, 4.5, 3.0, 0, 10], s: [['一份', 100]], ...META_RECIPE_COOKED, note: '由干竹荪泡发后的代表值折算，不含汤和调味', f: ['cook', 'est'] },
+  { id: 'wakame', name: '裙带菜（水发）', alias: 'qundaicai wakame', cat: 'veg', n: [45, 3.0, 0.6, 9.1, 0.5, 0.7, 872], s: [['一份', 80]], ...META_RECIPE_COOKED, note: '盐渍产品是否充分漂洗会显著影响钠', f: ['processed', 'est'] },
+  { id: 'nectarine', name: '油桃', alias: 'youtao nectarine', cat: 'fruit', n: [44, 1.1, 0.3, 10.6, 1.7, 7.9, 0], s: [['一个可食部', 150]], ...META_USDA_RAW, f: ['quick'] },
+  { id: 'mulberry', name: '桑葚', alias: 'sangshen mulberry', cat: 'fruit', n: [43, 1.4, 0.4, 9.8, 1.7, 8.1, 10], s: [['一盒', 125]], ...META_USDA_RAW, f: ['quick'] },
+  { id: 'cranberry_raw', name: '蔓越莓（鲜）', alias: 'manyuemei cranberry fresh', cat: 'fruit', n: [46, 0.4, 0.1, 12.2, 4.6, 4.0, 2], s: [['一份', 100]], ...META_USDA_RAW, note: '鲜果值；不等同于通常大量加糖的蔓越莓干', f: [] },
+  { id: 'sunflower_seed_kernel', name: '葵花籽仁（原味）', alias: 'kuihuaziren sunflower seed kernel', cat: 'nut', n: [584, 20.8, 51.5, 20.0, 8.6, 2.6, 9], s: [['一小把', 25]], ...META_USDA_RAW, f: ['quick'] },
+  { id: 'pine_nut', name: '松子仁', alias: 'songziren pine nut', cat: 'nut', n: [673, 13.7, 68.4, 13.1, 3.7, 3.6, 2], s: [['一小把', 20]], ...META_USDA_RAW, f: ['quick'] },
+
+  { id: 'farm_pork_stirfry', name: '农家小炒肉', alias: 'nongjiaxiaochaorou pork stir fry', cat: 'dish', n: [210, 12.0, 16.0, 6.0, 1.0, 2.0, 750], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'sweet_sour_pork_canton', name: '咕咾肉', alias: 'gulaorou sweet sour pork', cat: 'dish', n: [245, 14.0, 14.0, 16.0, 0.5, 10.0, 700], s: [['一份', 250]], ...META_RECIPE_READY, f: ['fried', 'est'] },
+  { id: 'salt_baked_chicken', name: '盐焗鸡', alias: 'yanjuji salt baked chicken', cat: 'dish', n: [215, 24.0, 13.0, 2.0, 0, 1.0, 750], s: [['一份去骨可食部', 150]], ...META_RECIPE_READY, note: '按带皮可食部估算，不计骨重', f: ['est'] },
+  { id: 'lotus_stirfry', name: '荷塘小炒', alias: 'hetangxiaochao lotus root stir fry', cat: 'dish', n: [95, 3.5, 5.0, 10.0, 3.0, 3.0, 450], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'mushroom_soup', name: '菌菇汤（清汤）', alias: 'jungutang mushroom soup', cat: 'dish', n: [35, 2.0, 1.5, 4.0, 1.0, 1.0, 350], s: [['一碗', 350]], ...META_RECIPE_READY, note: '按菌菇和整碗清汤计，奶油菌菇汤不适用', f: ['est'] },
+  { id: 'dough_drop_soup', name: '疙瘩汤', alias: 'gedatang dough drop soup', cat: 'dish', n: [70, 3.0, 1.5, 11.5, 0.7, 0.8, 450], s: [['一碗', 400]], ...META_RECIPE_READY, note: '按面疙瘩、少量蛋菜和整碗汤汁估算', f: ['est'] },
+  { id: 'kelp_salad', name: '凉拌海带丝', alias: 'liangbanhaidaisi kelp salad', cat: 'dish', n: [65, 1.5, 4.0, 7.0, 2.0, 3.0, 650], s: [['一份', 150]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'sliced_beef_offal', name: '夫妻肺片', alias: 'fuqifeipian sliced beef offal', cat: 'dish', n: [190, 17.0, 12.0, 7.0, 0.5, 2.0, 1000], s: [['一份', 200]], ...META_RECIPE_READY, note: '按牛肉、牛杂和红油调味汁的通用配方估算', f: ['est'] },
+  { id: 'braised_duck_neck', name: '卤鸭脖', alias: 'luyabo braised duck neck', cat: 'meat', n: [220, 18.0, 15.0, 4.0, 0, 2.0, 1200], s: [['一根去骨可食部', 60]], ...META_RECIPE_READY, note: '营养和份量均按去骨可食部估算', f: ['processed', 'est'] },
+  { id: 'braised_duck_wing', name: '卤鸭翅', alias: 'luyachi braised duck wing', cat: 'meat', n: [245, 19.0, 18.0, 3.0, 0, 1.0, 1100], s: [['一只去骨可食部', 35]], ...META_RECIPE_READY, note: '营养和份量均按去骨可食部估算', f: ['processed', 'est'] },
+  { id: 'grilled_sausage', name: '烤肠（通用）', alias: 'kaochang grilled sausage', cat: 'meat', n: [260, 11.0, 21.0, 8.0, 0.5, 3.0, 900], s: [['一根', 60]], ...META_RECIPE_READY, note: '非特定品牌淀粉肠或肉肠代表值，实际差异很大', f: ['processed', 'quick', 'est'] },
+  { id: 'fried_skewers', name: '炸串（混合）', alias: 'zhachuan fried skewers', cat: 'dish', n: [270, 12.0, 18.0, 14.0, 1.0, 2.0, 1000], s: [['一份可食部', 250]], ...META_RECIPE_READY, note: '按肉类、豆制品、蔬菜和酱料混合估算，不含竹签重量', f: ['fried', 'est'] },
+  { id: 'maocai', name: '冒菜', alias: 'maocai spicy hot pot bowl', cat: 'dish', n: [125, 7.0, 8.0, 7.0, 2.0, 2.0, 950], s: [['一人份（含少量汤）', 500]], ...META_RECIPE_READY, note: '按食材全部吃完并摄入约四分之一汤汁估算；喝汤会显著增加钠和油脂', f: ['est'] },
+  { id: 'sizzling_beef', name: '铁板牛肉', alias: 'tieban niurou sizzling beef', cat: 'dish', n: [180, 14.0, 12.0, 6.0, 1.0, 2.0, 700], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'oyakodon', name: '亲子丼', alias: 'qinzijing oyakodon chicken egg rice', cat: 'dish', n: [165, 8.0, 5.0, 24.0, 0.7, 3.0, 500], s: [['一碗', 450]], ...META_RECIPE_READY, note: '按米饭、鸡肉、鸡蛋和酱汁的整碗成品估算', f: ['est'] },
+  { id: 'gyudon', name: '牛丼 / 日式牛肉饭', alias: 'niujing gyudon beef bowl', cat: 'dish', n: [175, 8.0, 6.0, 24.0, 0.8, 4.0, 600], s: [['一碗', 450]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'eel_rice', name: '鳗鱼饭', alias: 'manyufan eel rice unadon', cat: 'dish', n: [200, 8.0, 5.0, 31.0, 0.5, 5.0, 500], s: [['一碗', 400]], ...META_RECIPE_READY, f: ['est'] },
+  { id: 'sushi_hand_roll', name: '寿司手卷（通用）', alias: 'shoushishoujuan sushi hand roll', cat: 'dish', n: [170, 7.0, 4.0, 28.0, 1.0, 3.0, 450], s: [['一个', 120]], ...META_RECIPE_READY, note: '按米饭、海苔、鱼或蛋和少量酱料估算', f: ['est'] },
+
+  { id: 'konjac_snack', name: '魔芋爽（调味）', alias: 'moyushuang konjac snack', cat: 'snack', n: [80, 1.0, 3.0, 12.0, 4.0, 4.0, 1200], s: [['一小包', 20]], ...META_RECIPE_READY, note: '非特定品牌代表值，钠和油脂以包装标签为准', f: ['processed', 'quick', 'est'] },
+  { id: 'soda_cracker', name: '苏打饼干', alias: 'sudabinggan soda cracker', cat: 'snack', n: [430, 9.0, 13.0, 70.0, 3.0, 8.0, 700], s: [['一小包', 30]], ...META_RECIPE_READY, note: '非特定品牌代表值', f: ['refined', 'processed', 'quick', 'est'] },
+  { id: 'granola_cereal', name: '谷物麦片 / 格兰诺拉', alias: 'guwumai pian granola cereal', cat: 'staple', n: [450, 10.0, 16.0, 68.0, 8.0, 22.0, 250], s: [['一份', 40]], ...META_RECIPE_READY, note: '按含坚果和糖浆的即食谷物麦片估算；不等同于原味燕麦片', f: ['whole', 'processed', 'breakfast', 'quick', 'est'] },
+  { id: 'guilinggao', name: '龟苓膏（含糖）', alias: 'guilinggao herbal jelly', cat: 'snack', n: [40, 0.2, 0, 9.8, 0.5, 8.0, 20], s: [['一杯', 250]], ...META_RECIPE_READY, note: '按含糖即食产品估算；无糖产品应另建包装标签记录', f: ['quick', 'est'] },
+  { id: 'double_skin_milk', name: '双皮奶', alias: 'shuangpinai double skin milk pudding', cat: 'snack', n: [145, 5.0, 7.0, 17.0, 0, 15.0, 80], s: [['一碗', 180]], nfs: 4.5, ...META_RECIPE_READY, f: ['est'] },
+  { id: 'fermented_rice', name: '酒酿 / 醪糟', alias: 'jiuniang laozao fermented rice', cat: 'snack', n: [85, 1.5, 0.2, 19.0, 0, 13.0, 5], s: [['一小碗', 150]], ...META_RECIPE_READY, note: '按含米粒和酒酿汁的通用成品估算，发酵程度会改变糖与酒精含量', f: ['est'] },
+  { id: 'lotus_root_starch', name: '藕粉（干粉，无加糖）', alias: 'oufen lotus root starch', cat: 'staple', n: [372, 0.2, 0.1, 92.0, 1.0, 0, 10], s: [['一小袋干粉', 30]], source: SOURCE_RECIPE, basis: '100g', state: 'dry', edibleRatio: 1, carbBasis: 'total', note: '按无糖纯藕粉干重计；冲调水不增加营养，含糖产品应优先看标签', f: ['refined', 'breakfast', 'est'] },
+  { id: 'prune_juice', name: '西梅汁（100%）', alias: 'ximeizhi prune juice', cat: 'drink', n: [71, 0.6, 0, 17.5, 0.7, 16.5, 4], s: [['一杯', 250]], ...META_USDA_READY, f: ['sweetdrink', 'quick'] },
+  { id: 'ice_jelly', name: '冰粉（含糖水）', alias: 'bingfen ice jelly', cat: 'snack', n: [65, 0.2, 0.1, 16.0, 0.5, 14.0, 10], s: [['一碗', 300]], ...META_RECIPE_READY, note: '按冰粉冻、糖水和少量配料估算，红糖与配料用量决定热量', f: ['est'] },
+  { id: 'butter_cookie', name: '曲奇饼干', alias: 'quqi butter cookie', cat: 'snack', n: [502, 6.0, 24.0, 66.0, 2.0, 28.0, 330], s: [['两块', 25]], ...META_RECIPE_READY, note: '非特定品牌代表值', f: ['refined', 'processed', 'quick', 'est'] },
+  { id: 'sandwich_cookie', name: '夹心饼干', alias: 'jiaxinbinggan sandwich cookie', cat: 'snack', n: [485, 5.0, 21.0, 69.0, 2.0, 36.0, 380], s: [['两块', 30]], ...META_RECIPE_READY, note: '非特定品牌代表值', f: ['refined', 'processed', 'quick', 'est'] },
+  { id: 'prawn_cracker', name: '虾条 / 虾片（膨化）', alias: 'xiatiao xiapian prawn cracker', cat: 'snack', n: [510, 5.0, 27.0, 63.0, 2.0, 4.0, 750], s: [['一小包', 30]], ...META_RECIPE_READY, note: '非特定品牌膨化食品代表值', f: ['fried', 'processed', 'quick', 'est'] },
+  { id: 'mochi', name: '麻薯（甜馅）', alias: 'mashu mochi', cat: 'snack', n: [270, 3.0, 5.0, 53.0, 1.0, 25.0, 80], s: [['一个', 40]], ...META_RECIPE_READY, f: ['refined', 'processed', 'est'] },
+  { id: 'rice_cracker_snow', name: '雪饼', alias: 'xuebing rice cracker snow', cat: 'snack', n: [465, 5.0, 17.0, 70.0, 2.0, 12.0, 600], s: [['两片', 20]], ...META_RECIPE_READY, note: '非特定品牌代表值', f: ['refined', 'processed', 'quick', 'est'] },
+  { id: 'fruit_hawthorn_roll', name: '果丹皮', alias: 'guodanpi hawthorn fruit roll', cat: 'snack', n: [330, 1.0, 0.5, 80.0, 4.0, 65.0, 20], s: [['一条', 25]], ...META_RECIPE_READY, note: '按加糖山楂制品估算', f: ['processed', 'quick', 'est'] },
+  { id: 'preserved_plum', name: '话梅 / 陈皮梅', alias: 'huamei chenpimei preserved plum', cat: 'snack', n: [260, 2.0, 0.5, 63.0, 5.0, 50.0, 1200], s: [['三颗可食部', 15]], ...META_RECIPE_READY, note: '非特定品牌蜜饯代表值，糖和钠差异很大', f: ['processed', 'quick', 'est'] },
+  { id: 'dried_prune', name: '西梅干', alias: 'ximeigan dried prune', cat: 'fruit', n: [240, 2.2, 0.4, 64.0, 7.1, 38.0, 2], s: [['一小把', 30]], ...META_USDA_READY, note: '按无额外加糖的干西梅计；糖为完整果干内源糖', f: ['quick'] },
+
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },
   { id: 'sugar', name: '白砂糖', alias: 'tang sugar', cat: 'other', n: [400, 0, 0, 99.9, 0, 99.9, 1], s: [['一勺', 8]], f: ['refined'] },
@@ -876,11 +978,14 @@ const LEGACY_BROTH_NOTES = Object.freeze({
 // 这些旧条目都是原味完整谷薯、豆、坚果种子或蛋；用 nfs 明确总糖中的非游离部分。
 const INTRINSIC_SUGAR_IDS = new Set([
   'oats', 'rice_brown', 'sweet_potato', 'potato', 'corn', 'quinoa', 'purple_potato',
-  'yam', 'taro', 'millet_congee', 'black_rice', 'water_caltrop',
+  'yam', 'taro', 'millet_congee', 'black_rice', 'water_caltrop', 'spaghetti_cooked',
+  'macaroni_cooked', 'oatmeal_porridge', 'rice_sheet', 'rice_vermicelli_cooked',
+  'wheat_vermicelli_cooked', 'alkaline_noodle_cooked',
   'soybean', 'black_soybean', 'chickpea', 'mung_bean', 'red_bean', 'edamame',
-  'fuzhu', 'tofu_firm', 'tofu_silken', 'fuzhu_soaked', 'wheat_gluten', 'soy_milk_black',
+  'fuzhu', 'tofu_firm', 'tofu_silken', 'fuzhu_soaked', 'wheat_gluten', 'soy_milk_black', 'tempeh',
   'almond', 'walnut', 'cashew', 'peanut', 'pistachio', 'sunflower_seed', 'pumpkin_seed',
   'sesame', 'chia', 'flaxseed', 'hazelnut', 'macadamia', 'apricot_kernel',
+  'sunflower_seed_kernel', 'pine_nut',
   'egg_whole', 'egg_white', 'egg_fried', 'duck_egg_boiled', 'quail_egg', 'seaweed_sheet',
 ]);
 

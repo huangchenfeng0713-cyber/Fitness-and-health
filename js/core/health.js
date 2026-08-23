@@ -36,8 +36,10 @@ export const HEALTH_TYPES = {
 /** Health Auto Export / 快捷指令常见字段名 → 内部字段 */
 export const ALIAS_KEYS = {
   step_count: 'steps', steps: 'steps', 步数: 'steps',
-  active_energy: 'activeEnergy', active_energy_burned: 'activeEnergy', 活动能量: 'activeEnergy', 活动卡路里: 'activeEnergy',
-  basal_energy_burned: 'restingEnergy', resting_energy: 'restingEnergy', 静息能量: 'restingEnergy',
+  active_energy: 'activeEnergy', active_energy_burned: 'activeEnergy', active_energy_kcal: 'activeEnergy',
+  活动能量: 'activeEnergy', 活动卡路里: 'activeEnergy',
+  basal_energy_burned: 'restingEnergy', resting_energy: 'restingEnergy',
+  resting_energy_kcal: 'restingEnergy', basal_energy_kcal: 'restingEnergy', 静息能量: 'restingEnergy',
   apple_exercise_time: 'exerciseMinutes', exercise_time: 'exerciseMinutes', 锻炼时间: 'exerciseMinutes',
   apple_stand_time: 'standMinutes',
   walking_running_distance: 'distanceKm', distance: 'distanceKm', 距离: 'distanceKm',
@@ -79,6 +81,7 @@ const DEVICE_CUMULATIVE_KEYS = new Set([
 
 /** ActivitySummary 的站立圆环是“达标小时数”，不能伪装成 AppleStandTime 的分钟数。 */
 export const ACTIVITY_SUMMARY_KEYS = new Set(['activeEnergy', 'exerciseMinutes', 'standHours']);
+const ENERGY_OBSERVATION_KEYS = new Set(['activeEnergy', 'restingEnergy']);
 
 /** 完整 Apple export.xml 能权威替换的每日字段。 */
 export const HEALTH_FIELD_KEYS = new Set([
@@ -300,7 +303,10 @@ export function createAggregator(options = {}) {
   const dayOf = (key) => {
     let d = days.get(key);
     if (!d) {
-      d = { date: key, _lastTs: {}, _avg: {}, _sourceBuckets: {}, _activitySummary: null };
+      d = {
+        date: key, _lastTs: {}, _avg: {}, _sourceBuckets: {}, _activitySummary: null,
+        _energyObservedMs: 0,
+      };
       days.set(key, d);
     }
     return d;
@@ -485,6 +491,10 @@ export function createAggregator(options = {}) {
 
     if (meta.agg === 'sum') {
       for (const part of intervalParts(start, end, v)) {
+        if (ENERGY_OBSERVATION_KEYS.has(meta.key)) {
+          const day = dayOf(part.dayKey);
+          day._energyObservedMs = Math.max(day._energyObservedMs || 0, part.endMs || part.startMs || 0);
+        }
         if (DEVICE_CUMULATIVE_KEYS.has(meta.key)) {
           addBucketPart(meta.key, { source, device, userEntered, rank }, part);
         } else {
@@ -701,7 +711,9 @@ export function createAggregator(options = {}) {
     const out = [];
     const allKeys = new Set([...days.keys(), ...sleepByDay.keys()]);
     for (const key of allKeys) {
-      const day = days.get(key) || { date: key, _sourceBuckets: {}, _activitySummary: null };
+      const day = days.get(key) || {
+        date: key, _sourceBuckets: {}, _activitySummary: null, _energyObservedMs: 0,
+      };
       const clean = { date: key, source: 'apple' };
       for (const [k, v] of Object.entries(day)) {
         if (k.startsWith('_') || k === 'date') continue;
@@ -742,6 +754,16 @@ export function createAggregator(options = {}) {
           clean[metricKey] = Math.round(summary[metricKey] * 100) / 100;
         }
         clean.activityGoals = summary.goals;
+      }
+      // 动态预算必须按「这份累计能量覆盖到几点」外推。丢掉这个时间戳后，
+      // 页面每分钟都会拿同一份旧快照除以更晚的当前时间，预算便会凭空下降。
+      let energyObservedMs = day._energyObservedMs || 0;
+      if (summary && exportMetadata.exportDate?.value) {
+        const exported = parseAppleDate(exportMetadata.exportDate.value);
+        if (exported?.dayKey === key) energyObservedMs = Math.max(energyObservedMs, exported.date?.getTime() || 0);
+      }
+      if ((clean.activeEnergy != null || clean.restingEnergy != null) && energyObservedMs > 0) {
+        clean.energyObservedAt = new Date(energyObservedMs).toISOString();
       }
       if (day._workouts?.length) {
         clean.workouts = day._workouts;
@@ -1019,7 +1041,7 @@ export function parseHealthJson(json) {
     if (!dayKey || !isPlausibleHealthValue(key, value)) return false;
     let d = days.get(dayKey);
     if (!d) {
-      d = { date: dayKey, source: 'apple', _avg: {}, _lastTs: {} };
+      d = { date: dayKey, source: 'apple', _avg: {}, _lastTs: {}, _energyObservedMs: 0 };
       days.set(dayKey, d);
     }
     const v = Number(value);
@@ -1030,6 +1052,9 @@ export function parseHealthJson(json) {
     } else if (d._lastTs[key] == null || timestamp >= d._lastTs[key]) {
       d._lastTs[key] = timestamp;
       d[key] = v;
+    }
+    if (ENERGY_OBSERVATION_KEYS.has(key) && timestamp > 0) {
+      d._energyObservedMs = Math.max(d._energyObservedMs || 0, timestamp);
     }
     return true;
   };
@@ -1095,6 +1120,9 @@ export function parseHealthJson(json) {
   const out = [...days.values()].map((d) => {
     const c = {};
     for (const [k, v] of Object.entries(d)) if (!k.startsWith('_')) c[k] = v;
+    if ((c.activeEnergy != null || c.restingEnergy != null) && d._energyObservedMs > 0) {
+      c.energyObservedAt = new Date(d._energyObservedMs).toISOString();
+    }
     for (const [k, v] of Object.entries(c)) if (typeof v === 'number') c[k] = Math.round(v * 100) / 100;
     return c;
   });
@@ -1172,6 +1200,12 @@ export function parseHealthCsv(text) {
         invalidRecords += 1; return;
       }
       current[spec.key] = norm;
+      if (ENERGY_OBSERVATION_KEYS.has(spec.key) && stamp.date) {
+        const previous = Date.parse(current.energyObservedAt || '');
+        if (!Number.isFinite(previous) || stamp.date.getTime() >= previous) {
+          current.energyObservedAt = stamp.date.toISOString();
+        }
+      }
       accepted = true;
     });
     if (accepted) { days.set(dayKey, current); recordCount += 1; }

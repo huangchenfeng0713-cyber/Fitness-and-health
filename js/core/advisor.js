@@ -107,10 +107,19 @@ export function mealBudget({ kcalLeft, proteinLeft, now = new Date() }) {
   const totalShare = rest.reduce((s, m) => s + m.share, 0) || 1;
   const cur = rest[0];
   const ratio = cur.share / totalShare;
+  const kcal = round(Math.max(kcalLeft, 0) * ratio);
+  const requestedProtein = round(Math.max(proteinLeft, 0) * ratio, 1);
+  // 蛋白质本身至少提供 4 kcal/g。分别计算两个缺口会生成“42 kcal 补 16g 蛋白”
+  // 这种物理上不可能的指令，因此先用热量约束住这一餐可显示的蛋白预算。
+  const maxProteinByKcal = round(kcal / ATWATER.protein, 1);
+  const proteinFeasible = requestedProtein <= maxProteinByKcal + 0.05;
   return {
     meal: cur,
-    kcal: round(Math.max(kcalLeft, 0) * ratio),
-    protein: round(Math.max(proteinLeft, 0) * ratio, 1),
+    kcal,
+    protein: round(Math.min(requestedProtein, maxProteinByKcal), 1),
+    requestedProtein,
+    maxProteinByKcal,
+    proteinFeasible,
     restMealCount: rest.length,
   };
 }
@@ -213,7 +222,7 @@ function scoreFood(food, ctx) {
     if (nut.kcal > 250) score -= 8;
   }
   if (mealKey === 'late' || hour >= 21) {
-    if (tags.has('late') || (p.kcal <= 120 && nut.fat <= 6 && tags.has('quick'))) { score += 12; reasons.push('睡前吃也没负担'); }
+    if (tags.has('late') || (p.kcal <= 120 && nut.fat <= 6 && tags.has('quick'))) { score += 12; reasons.push('份量较轻，适合深夜少量食用'); }
     else score -= 12;
     if (needsCooking) score -= 14;
     if (tags.has('high-fat') || tags.has('fried')) score -= 12;
@@ -275,7 +284,7 @@ function buildAvoidList(ctx, limit = 5) {
     } else if (kcalTight && p.kcal >= 300) {
       push(food, 'kcal', `热量预算只剩 ${Math.max(kcalLeft, 0)} kcal，一份就会吃超`, 2);
     } else if (lateNight && (tags.has('fried') || tags.has('high-fat') || tags.has('high-sugar'))) {
-      push(food, 'late', `${p.kcal} kcal/100g，临睡前高油高糖会影响睡眠与次日食欲`, 2);
+      push(food, 'late', `${p.kcal} kcal/100g，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
     } else if (fatOver && p.fat >= 25) {
       push(food, 'fat', `脂肪已接近上限（${gaps.fat.eaten}g / ${gaps.fat.target}g），它含 ${p.fat}g 脂肪/100g`, 2);
     } else if (goal === 'cut' && tags.has('fried') && p.kcal >= 300) {
@@ -420,7 +429,17 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     return {
       level: 'warn',
       headline: `热量刚好吃满并略超 ${Math.abs(kcalLeft)} kcal`,
-      detail: `蛋白完成 ${proteinPct}%。若蛋白还没达标，可以用零热量或极低热量的高蛋白食物（如蛋白粉冲水、脱脂奶）补齐。`,
+      detail: proteinLeft > 0
+        ? `蛋白完成 ${proteinPct}%。蛋白质本身含有热量，今天无法在不继续增加热量的情况下补齐；不必硬补，明天把蛋白提前分配到前几餐。`
+        : `蛋白已经完成 ${proteinPct}%。今天无需补偿性少吃，下一餐回到正常预算即可。`,
+    };
+  }
+  if (proteinLeft > 0 && proteinLeft * ATWATER.protein > kcalLeft + 1) {
+    const minimumOver = Math.ceil(proteinLeft * ATWATER.protein - kcalLeft);
+    return {
+      level: 'warn',
+      headline: `热量只剩 ${round(kcalLeft)} kcal，无法补齐 ${round(proteinLeft)}g 蛋白`,
+      detail: `这些蛋白即使不带脂肪和碳水也至少需要 ${round(proteinLeft * ATWATER.protein)} kcal。可选择守住热量余量，或优先补蛋白并接受至少约 ${minimumOver} kcal 的超出；今天不必为了凑数强行进食。`,
     };
   }
   if (proteinLeft > gaps.protein.target * 0.5 && dayProgress > 0.6) {
@@ -441,7 +460,7 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     return {
       level: 'warn',
       headline: `钠摄入超标 ${gaps.sodium.pct - 100}%`,
-      detail: `已摄入 ${gaps.sodium.eaten} mg（目标 ${gaps.sodium.target} mg）。今天余下的选择请避开加工肉、腌制品和重口味外卖，并多喝水。`,
+      detail: `已摄入 ${gaps.sodium.eaten} mg（建议上限 ${gaps.sodium.target} mg）。今天余下的选择请避开加工肉、腌制品和重口味汤汁；如有医生规定的限盐或限水方案，以医嘱为准。`,
     };
   }
   const pace = kcalPct - expected;
@@ -450,9 +469,10 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     : pace > 0
       ? `比当前时间进度（${expected}%）吃得快一些，后面几餐留意份量`
       : `比当前时间进度（${expected}%）吃得慢一些，别把缺口全压到晚上`;
+  const proteinText = proteinLeft > 0 ? `蛋白还差 ${round(proteinLeft)}g` : '蛋白已达标';
   return {
     level: 'good',
-    headline: `还能吃 ${kcalLeft} kcal，蛋白还差 ${round(proteinLeft)}g`,
+    headline: `还有 ${kcalLeft} kcal 热量余量，${proteinText}`,
     detail: `热量完成 ${kcalPct}%，蛋白完成 ${proteinPct}%，${paceText}。${budget.meal.label}建议 ${budget.kcal} kcal、${budget.protein}g 蛋白。`,
   };
 }
@@ -489,19 +509,24 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     add('info', `碳水目标 ${targets.carb}g，低于 130g 的推荐摄入量`,
       '130 g/天 是美国 IOM 给出的碳水推荐摄入量，依据是大脑的葡萄糖利用量。'
       + '当前配比里蛋白和脂肪占得较多，把碳水挤到了这个水平以下。'
-      + '短期没问题，长期建议要么提高总热量，要么把蛋白目标调低一些。');
+      + '是否适合长期采用取决于个人情况；可考虑提高总热量、调整宏量配比，或向专业人员咨询。');
   }
 
   // 动态热量预算：把"今天比平时多动/少动"和"预算调整了多少"讲成同一件事
   if (targets.tdeeSource === 'apple' && targets.staticTdee > 0) {
     const budgetDelta = round(targets.tdee - targets.staticTdee);
     const activeDelta = baseline.activeEnergy > 0 ? round((health.activeEnergy || 0) - baseline.activeEnergy) : null;
+    const sourceText = targets.activeSource === 'formula-fallback'
+      ? '按设备静息记录并用活动系数补足缺失活动'
+      : targets.activeSource === 'device-baseline'
+        ? '按设备静息记录与近期活动基线'
+        : '按 Apple 设备记录外推';
     if (Math.abs(budgetDelta) >= 80) {
       const up = budgetDelta > 0;
       add(
         up ? 'up' : 'down',
         `今日热量预算${up ? '上调' : '下调'} ${Math.abs(budgetDelta)} kcal`,
-        `按 Apple 健康的实际消耗，今天预计总消耗 ${round(targets.tdee)} kcal（按活动系数估算是 ${round(targets.staticTdee)} kcal），因此目标定为 ${targets.kcal} kcal。`
+        `${sourceText}，今天预计总消耗 ${round(targets.tdee)} kcal（完全按活动系数估算是 ${round(targets.staticTdee)} kcal），因此目标定为 ${targets.kcal} kcal。`
         + (activeDelta != null
           ? `当前活动能量 ${round(health.activeEnergy || 0)} kcal，近期平均 ${round(baseline.activeEnergy)} kcal。`
           : ''),
@@ -513,7 +538,7 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     add('info', '今天是训练日',
       `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
       + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
-      + '。训练后 2 小时内补 20-40g 蛋白 + 一份碳水，肌肉合成效率最高。');
+      + '。在全天总量充足的前提下，可把约 20–40g 高质量蛋白安排在训练前后；训练量大或恢复时间紧时再搭配碳水。');
   }
 
   // 蛋白
@@ -521,22 +546,22 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     const eq = proteinEquivalent(gaps.protein.remaining);
     add('protein', `蛋白还差 ${round(gaps.protein.remaining)}g`, `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。目标依据：${targets.proteinBasis}。`);
   } else if (gaps.protein.pct >= 100) {
-    add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。蛋白吃够是保住肌肉最关键的一步。`);
+    add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。充足蛋白是维持瘦体重的重要因素之一。`);
   }
 
   // 纤维
   if (gaps.fiber.remaining > gaps.fiber.target * 0.5 && now.getHours() >= 14) {
-    add('fiber', `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`, '再加一份深色蔬菜或一个带皮水果，能明显提升饱腹感、减少晚间加餐冲动。');
+    add('fiber', `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`, '可再加一份蔬菜、完整水果或全谷物；这通常有助于饱腹，但实际感受因人而异。');
   }
 
   // 糖
   if (gaps.sugar.pct > 100) {
-    add('warn', `糖已超标（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`, '主要来源通常是含糖饮料和甜点。换成无糖茶或黑咖啡，单这一项每天就能省下几百千卡。');
+    add('warn', `游离糖已超出建议上限（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`, '可先检查含糖饮料、果汁、糖浆和甜点；换成不加糖的饮品能减少对应的糖和热量。');
   }
 
   // 钠
   if (gaps.sodium.pct > 100) {
-    add('warn', `钠已超标（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '高钠会让体重短期虚高 1-2kg（水潴留），别误判成长胖。今天多喝水，明天口味清淡一些。');
+    add('warn', `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '高钠可能带来短期水分与体重波动，幅度因人而异。余下餐次尽量少选腌制品、加工肉和重口味汤汁；如有医生规定的限水或限盐方案，以医嘱为准。');
   }
 
   /*
@@ -586,17 +611,17 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     const goalRate = targets.rateKgPerWeek;
     add(
       'info',
-      `体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
+      `初步体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
       goalRate !== 0 && Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(perWeek) > 0.15
-        ? `与目标方向（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）相反，说明真实消耗与估算有偏差。建议把每日热量目标调整约 ${round(((perWeek - goalRate) * 7700) / 7 * -1)} kcal。`
-        : `目标为 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周，当前执行${Math.abs(perWeek - goalRate) < 0.2 ? '基本一致' : '有偏差，可微调热量目标'}。`,
+        ? `与目标方向（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）相反。短期水分会干扰斜率，先核对饮食记录并继续观察；至少积累 28 天且有足够称重点后，再按小步幅调整热量。`
+        : `目标为 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。短期趋势易受水分影响；是否调整热量请以至少 28 天的趋势页判断为准。`,
     );
   }
 
   // 饮水
   if (health.waterMl != null && targets.waterMl) {
     const left = targets.waterMl - health.waterMl;
-    if (left > 500) add('info', `饮水还差 ${round(left)} ml`, `目标 ${targets.waterMl} ml。餐前一杯水能有效降低这一餐的总摄入。`);
+    if (left > 500) add('info', `饮水参考还差 ${round(left)} ml`, `通用参考为 ${targets.waterMl} ml，可在余下时间分次补充；炎热、运动和医生要求会改变个人需要。`);
   }
 
   if (!entries.length && gaps.kcal.eaten <= 0 && now.getHours() >= 12) {
