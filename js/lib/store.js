@@ -7,7 +7,8 @@ import * as db from './db.js';
 import { todayKey, dayFraction } from './utils.js';
 import { dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays } from '../core/health.js';
+import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
+  findImplausibleDays, clearImplausibleValues, implausibleFields } from '../core/health.js';
 import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
@@ -137,6 +138,8 @@ export function recompute(now = new Date()) {
       bmr,
       activeSoFar: Number(health.activeEnergy) || 0,
       basalSoFar: Number(health.restingEnergy) || null,
+      // 近 14 天 Apple 实测的静息能量日均：比公式估算更有据，优先于 bmr 使用
+      baselineResting: baseline.restingEnergy,
       dayFraction: isToday ? dayFraction(now) : 1,
       baselineActive: baseline.activeEnergy,
       intakeKcal: intake.kcal,
@@ -153,7 +156,8 @@ export function recompute(now = new Date()) {
     health,
     baseline: {
       ...baseline,
-      proteinHitDays: countProteinHitDays(targets.protein, baseline.days),
+      // 分母用「有饮食记录的天数」，不是日历天数——否则会把没记的日子算成没达标
+      proteinHitDays: countProteinHitDays(targets.protein, baseline.loggedDays),
     },
     now: isToday ? now : new Date(`${state.day}T20:00:00`),
   });
@@ -320,6 +324,27 @@ export async function repairHealthEnergy() {
   const fixed = repairMisscaledEnergy(state.healthDays);
   if (!fixed.length) return 0;
   await db.bulkPut(db.STORES.health, fixed, { merge: true });
+  setHealthDays(await db.getAll(db.STORES.health));
+  recompute();
+  emit();
+  return fixed.length;
+}
+
+/** 哪几天存进来的数值在生理上不可能（多半是导入时日期范围选错，把多天累加成一天） */
+export function listImplausibleDays() {
+  return findImplausibleDays(state.healthDays)
+    .map((d) => ({ date: d.date, fields: implausibleFields(d) }));
+}
+
+/**
+ * 抹掉这些天不可能的数值，其余字段保留。
+ * 这里必须整条覆写而不是 merge —— merge 会把旧记录里的字段原样带回来，
+ * 想删掉的那几个反而删不掉。
+ */
+export async function clearImplausibleHealth() {
+  const fixed = clearImplausibleValues(state.healthDays);
+  if (!fixed.length) return 0;
+  await db.bulkPut(db.STORES.health, fixed);
   setHealthDays(await db.getAll(db.STORES.health));
   recompute();
   emit();

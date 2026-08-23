@@ -4,10 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="description" content="同步 Apple 健康数据、记录每日饮食，实时判断热量与蛋白摄入并给出该吃什么、该避开什么的建议。">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- 用 default 而不是 black-translucent：后者会让网页整块伸到状态栏底下，
+     一旦 env(safe-area-inset-top) 没及时算出来（iOS 首帧的老毛病），标题就被
+     状态栏的半透明层压住，看着像蒙了层毛玻璃。default 由系统把网页顶下来，
+     状态栏那条用 theme-color 上色，和 --bg 同一个值，接缝看不出来。 -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="健康饮食">
 <title>健康饮食助手</title>
 <link rel="manifest" href="manifest.webmanifest">

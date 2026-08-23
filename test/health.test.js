@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeValue, parseAppleDate, parseAttrs, createAggregator, feedXmlChunk,
   parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
+  findImplausibleDays, clearImplausibleValues, implausibleFields,
 } from '../js/core/health.js';
 
 test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
@@ -263,4 +264,151 @@ test('正常数据不会被误伤', async () => {
     { date: '2026-08-03', weightKg: 71 },                                        // 只有体重
   ];
   assert.deepEqual(repairMisscaledEnergy(normal), []);
+});
+
+
+/* ---------------------------------------------------- 多来源去重 */
+
+const recFrom = (src, type, value, start, end = start, unit = '') =>
+  `<Record type="${type}" sourceName="${src}" unit="${unit}" startDate="${start}" endDate="${end}" value="${value}"/>`;
+
+test('iPhone 与 Apple Watch 各写一份步数时不重复计数', () => {
+  // 实测：健康 App 当天显示 8419 步，把导出文件里所有来源加起来变成 16299 步。
+  // 两台设备记的是同一段路，加起来就是把人走的路数了两遍。
+  const agg = createAggregator();
+  feedXmlChunk([
+    recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 5000, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'count'),
+    recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 3419, '2026-08-22 15:00:00 +0800', '2026-08-22 15:30:00 +0800', 'count'),
+    recFrom('Apple Watch', 'HKQuantityTypeIdentifierStepCount', 4600, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'count'),
+    recFrom('Apple Watch', 'HKQuantityTypeIdentifierStepCount', 3280, '2026-08-22 15:00:00 +0800', '2026-08-22 15:30:00 +0800', 'count'),
+  ].join('\n'), agg);
+  const { days } = agg.result();
+  assert.equal(days[0].steps, 8419, '应取最完整的那个来源，而不是 16299');
+});
+
+test('只有一个来源时结果和原来完全一样', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 1200, '2026-08-20 09:00:00 +0800', '2026-08-20 09:10:00 +0800', 'count'),
+    recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 800, '2026-08-20 10:00:00 +0800', '2026-08-20 10:10:00 +0800', 'count'),
+  ].join('\n'), agg);
+  assert.equal(agg.result().days[0].steps, 2000);
+});
+
+test('活动能量与静息能量同样按来源去重', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    recFrom('Watch', 'HKQuantityTypeIdentifierActiveEnergyBurned', 300, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'Cal'),
+    recFrom('某健身 App', 'HKQuantityTypeIdentifierActiveEnergyBurned', 280, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'Cal'),
+    recFrom('Watch', 'HKQuantityTypeIdentifierBasalEnergyBurned', 1600, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'Cal'),
+  ].join('\n'), agg);
+  const d = agg.result().days[0];
+  assert.equal(d.activeEnergy, 300, '两个来源记的是同一段运动，取一份');
+  assert.equal(d.restingEnergy, 1600);
+});
+
+test('睡眠也不会因为手机与手表各记一份而翻倍', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    recFrom('Watch', 'HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore',
+      '2026-08-21 23:00:00 +0800', '2026-08-22 06:00:00 +0800'),
+    recFrom('某睡眠 App', 'HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore',
+      '2026-08-21 23:10:00 +0800', '2026-08-22 05:50:00 +0800'),
+  ].join('\n'), agg);
+  const d = agg.result().days.find((x) => x.date === '2026-08-22');
+  assert.equal(Math.round(d.sleepMinutes), 420, '取较完整的 7 小时，而不是两份相加的 13 小时以上');
+});
+
+/* ---------------------------------------------------- 不可能的数值 */
+
+test('识别生理上不可能的数值', () => {
+  // 用户实测：08-23 凌晨存进来 静息 23520 kcal、活动 2010 kcal
+  const days = [
+    { date: '2026-08-22', restingEnergy: 1626, activeEnergy: 346, steps: 8419 },
+    { date: '2026-08-23', restingEnergy: 23520, activeEnergy: 2010, steps: 0 },
+  ];
+  const bad = findImplausibleDays(days);
+  assert.equal(bad.length, 1);
+  assert.equal(bad[0].date, '2026-08-23');
+  assert.deepEqual(implausibleFields(bad[0]), ['restingEnergy']);
+  assert.deepEqual(implausibleFields(days[0]), [], '正常的一天不该被误伤');
+});
+
+test('大运动量不会被当成异常', () => {
+  // 环法赛段级别的一天：活动能量 6500 kcal、40000 步，都是真实可达的
+  assert.deepEqual(implausibleFields({ date: '2026-08-01', activeEnergy: 6500, steps: 40000, restingEnergy: 2100 }), []);
+});
+
+test('清掉异常值时只删该删的那几项', () => {
+  const days = [{ date: '2026-08-23', restingEnergy: 23520, activeEnergy: 2010, weightKg: 59, steps: 0 }];
+  const [fixed] = clearImplausibleValues(days);
+  assert.equal(fixed.restingEnergy, undefined, '不可能的静息能量被抹掉');
+  assert.equal(fixed.activeEnergy, 2010, '2010 没超过上限，不该被牵连');
+  assert.equal(fixed.weightKg, 59, '体重原样保留');
+  assert.equal(fixed.date, '2026-08-23');
+});
+
+test('基线平均值把不可能的数挡在外面', () => {
+  // 否则一天坏数据会顺着基线污染之后 14 天的热量预算
+  const days = [
+    { date: '2026-08-20', restingEnergy: 1600, activeEnergy: 300 },
+    { date: '2026-08-21', restingEnergy: 1600, activeEnergy: 300 },
+    { date: '2026-08-22', restingEnergy: 23520, activeEnergy: 300 },
+  ];
+  const b = computeBaseline(days, [], '2026-08-23');
+  assert.equal(Math.round(b.restingEnergy), 1600, '异常那天不参与平均');
+});
+
+
+/* ---------------------------------------------------- 样本量必须是真的 */
+
+test('摄入均值的分母是「记了饮食的天数」，不是日历天数', () => {
+  // 用户实测：14 天健康数据 + 只记了 1 天饮食，
+  // 原先报出「近 14 天平均低于目标 3168 kcal/天，每周 2.88 kg 脂肪赤字」——
+  // 那 13 天不是饿着，只是没记，这个结论是凭空造的。
+  const healthDays = [];
+  for (let i = 1; i <= 14; i += 1) {
+    const d = new Date(Date.UTC(2026, 7, 23) - i * 86400000).toISOString().slice(0, 10);
+    healthDays.push({ date: d, steps: 5000, activeEnergy: 300, restingEnergy: 1600 });
+  }
+  healthDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const dietDays = [{ date: '2026-08-22', kcal: 1287, protein: 75 }];
+
+  const b = computeBaseline(healthDays, dietDays, '2026-08-23');
+  assert.equal(b.healthDaysCounted, 14);
+  assert.equal(b.loggedDays, 1, '只有 1 天有饮食记录');
+  assert.equal(b.kcalIntake, 1287, '均值本身没错，错的是曾经把它当成 14 天的均值');
+  assert.equal(b.windowDays, 14);
+});
+
+test('记满之后分母跟着变大', () => {
+  const healthDays = [];
+  const dietDays = [];
+  for (let i = 1; i <= 6; i += 1) {
+    const d = new Date(Date.UTC(2026, 7, 23) - i * 86400000).toISOString().slice(0, 10);
+    healthDays.push({ date: d, steps: 5000, activeEnergy: 300 });
+    dietDays.push({ date: d, kcal: 2000, protein: 120 });
+  }
+  healthDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  dietDays.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const b = computeBaseline(healthDays, dietDays, '2026-08-23');
+  assert.equal(b.loggedDays, 6);
+  assert.equal(b.kcalIntake, 2000);
+});
+
+test('焦耳单位不区分大小写（只有 cal / Cal 那一对需要区分）', () => {
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'j') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 41.84, 'kJ') - 10) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 41.84, 'kj') - 10) < 1e-9);
+  assert.equal(normalizeValue('energy', 530, 'Cal'), 530, 'Cal 仍必须是千卡');
+  assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 仍是小卡');
+});
+
+test('单位换算用的是精确换算因子', () => {
+  assert.ok(Math.abs(normalizeValue('mass', 1, 'lb') - 0.45359237) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('length', 1, 'in') - 2.54) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('length', 1, 'ft') - 30.48) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('distance', 1, 'mi') - 1.609344) < 1e-12);
+  assert.ok(Math.abs(normalizeValue('volume', 1, 'l') - 1000) < 1e-12);
 });

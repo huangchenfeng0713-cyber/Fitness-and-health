@@ -19,11 +19,21 @@
   --danger: #d64545;
   --ok: #0f9d76;
 
-  /* 抽成变量：一处定义、多处复用，测试里也能覆写来模拟刘海高度 */
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+  /*
+   * 安全区分两层：
+   *   --env-*  是系统原样报上来的值，只在这儿出现一次；
+   *   --safe-* 是布局真正用的值，app.js 每次重排都会重新算一遍写到 <html> 上。
+   * 分层是因为 iOS 独立运行时 env() 首帧常常还是 0，得等一次重排才给真值，
+   * 光靠 CSS 拿不到「已经量过、并且补过底」的结果。JS 没跑起来时下面这行兜底。
+   */
+  --env-top: env(safe-area-inset-top, 0px);
+  --env-bottom: env(safe-area-inset-bottom, 0px);
+  --env-left: env(safe-area-inset-left, 0px);
+  --env-right: env(safe-area-inset-right, 0px);
+  --safe-top: var(--env-top);
+  --safe-bottom: var(--env-bottom);
+  --safe-left: var(--env-left);
+  --safe-right: var(--env-right);
 
   --radius: 16px;
   --radius-sm: 10px;
@@ -95,12 +105,19 @@ body {
  * 滚动容器的高度天然就是顶栏与 tab 栏之间的空间，不需要任何补偿。
  * 顺带让顶栏不必再 position: sticky —— 它已经在滚动容器外面了。
  */
-html, body { height: 100%; }
+html, body { height: 100%; overflow: hidden; }
 #app {
+  /*
+   * 定死在视口上，而不是用 100dvh 量高度。
+   * 100dvh 在 iOS 独立运行时会跟 env() 一起在首帧算错，表现是壳子比屏幕矮一截
+   * （tab 栏下面空出一条）或者高出一截（tab 栏文字被切掉）；而且只要文档能滚，
+   * 随手一划整页就会跟着位移，顶栏被推进状态栏里。position: fixed 之后
+   * 高度永远等于视口，文档也压根没有可滚的部分，只有 .view 自己滚。
+   */
+  position: fixed;
+  top: 0; bottom: 0; left: 0; right: 0;
   max-width: 720px;
   margin: 0 auto;
-  height: 100vh;
-  height: 100dvh;   /* iOS 地址栏收放时不跳动 */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -116,11 +133,13 @@ html, body { height: 100%; }
   padding-top: var(--safe-top);
 }
 .topbar-inner {
-  display: flex; align-items: center; gap: 6px; min-height: 44px;
-  padding: 3px calc(10px + var(--safe-right)) 5px calc(10px + var(--safe-left));
+  display: flex; align-items: center; gap: 6px; min-height: 40px;
+  padding: 2px calc(10px + var(--safe-right)) 4px calc(10px + var(--safe-left));
 }
+/* 页名。原来 17px / 650 / 负字距，中文落到 PingFang 上又细又挤，
+   看着不像标题像行说明文字。加大加重、去掉负字距 —— 负字距是给西文标题用的。 */
 .topbar h1 {
-  font-size: 17px; margin: 0 0 0 6px; font-weight: 650; letter-spacing: -.01em;
+  font-size: 19px; margin: 0 0 0 6px; font-weight: 700; letter-spacing: 0;
 }
 
 /* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
@@ -129,7 +148,7 @@ html, body { height: 100%; }
   border: 0; background: none; color: inherit; font-family: inherit;
   cursor: pointer; padding: 2px 4px;
 }
-.topbar-day strong { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+.topbar-day strong { font-size: 17px; font-weight: 700; letter-spacing: 0; }
 .topbar-date { display: block; font-size: 10.5px; color: var(--faint); margin-top: 1px; }
 .nav-arrow {
   width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;

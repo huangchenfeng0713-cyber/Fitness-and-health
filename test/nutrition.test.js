@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   basalMetabolicRate, staticTDEE, dailyTargets, dynamicTDEE, activityCurve,
   leanBodyMass, bmi, bmiCategory, ageFrom, proteinTarget, sumNutrients, computeGaps,
+  ATWATER, KCAL_PER_KG_FAT, CARB_RDA_G, ACTIVITY_LEVELS, ageIsEstimated,
 } from '../js/core/nutrition.js';
 
 const male = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, activity: 'light', goal: 'maintain' };
@@ -128,4 +129,189 @@ test('营养汇总与差额', () => {
   const gaps = computeGaps({ kcal: 2000, protein: 120 }, total);
   assert.equal(gaps.kcal.remaining, 1499.5);
   assert.equal(gaps.protein.pct, 21);
+});
+
+
+/* ------------------------------------------- 活动能量的合理性上限 */
+
+test('凌晨报来不可能的活动能量时，热量目标不被顶高', () => {
+  // 用户实测：00:57 存进来活动能量 2010 kcal（近期日均 310），
+  // 折合 35 kcal/分钟持续一小时，世界纪录级选手也做不到。
+  // 不拦的话 TDEE 被算成 4142 kcal，目标顶到 4455。
+  const f = 57 / 1440;
+  const bad = dynamicTDEE({
+    bmr: 1580, activeSoFar: 2010, basalSoFar: 23520, dayFraction: f,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  const none = dynamicTDEE({
+    bmr: 1580, activeSoFar: 0, basalSoFar: null, dayFraction: f,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(bad.activeCapped, true, '应识别出这个数不可能');
+  assert.equal(bad.activeReported, 2010, '原始值仍要能读到，便于提示用户');
+  assert.ok(bad.tdee < 2400, `TDEE 应回到正常量级，实得 ${bad.tdee}`);
+  assert.ok(Math.abs(bad.tdee - none.tdee) < 30,
+    `不可信的数据应等同于「今天还没有活动数据」，实得 ${bad.tdee} vs ${none.tdee}`);
+});
+
+test('真实的大运动量不会被上限误伤', () => {
+  // 半天骑车 700 kcal：12 小时里平均不到 1 kcal/分钟，完全正常
+  const hard = dynamicTDEE({
+    bmr: 1580, activeSoFar: 700, basalSoFar: null, dayFraction: 0.5,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(hard.activeCapped, false);
+  assert.equal(hard.activeSoFar, 700, '原样采信');
+  assert.ok(hard.tdee > 2800, `应体现出多出来的消耗，实得 ${hard.tdee}`);
+});
+
+test('一小时高强度训练在上限之内', () => {
+  // 早上 7 点练了一小时，烧掉 600 kcal：10 kcal/分钟，剧烈但可达
+  const f = 8 / 24;
+  const r = dynamicTDEE({
+    bmr: 1600, activeSoFar: 600, basalSoFar: null, dayFraction: f,
+    baselineActive: 300, intakeKcal: 0, fallbackTDEE: 2400,
+  });
+  assert.equal(r.activeCapped, false, '真实训练不该被判成异常');
+});
+
+test('静息能量在一天刚开始时本来就不被采信', () => {
+  // 这条防线原本就有：凌晨按比例外推会把静息放大好几倍
+  const r = dynamicTDEE({
+    bmr: 1580, activeSoFar: 0, basalSoFar: 23520, dayFraction: 57 / 1440,
+    baselineActive: 310, intakeKcal: 0, fallbackTDEE: 2423,
+  });
+  assert.equal(r.basal, 1580, '过半天之前一律用公式值');
+});
+
+
+/* ==================================================================
+ * 公式对文献值。这一组不是回归测试，是「防止有人把公式改成拍脑袋的数」——
+ * 每条都能追到出处，改动时必须先说明依据。
+ * ================================================================== */
+
+test('Mifflin-St Jeor 与原文公式逐项吻合', () => {
+  // Mifflin MD et al., Am J Clin Nutr 1990;51:241-247
+  //   男：10W + 6.25H − 5A + 5      女：10W + 6.25H − 5A − 161
+  const cases = [
+    { p: { sex: 'male', age: 30, heightCm: 175, weightKg: 72 }, want: 10 * 72 + 6.25 * 175 - 5 * 30 + 5 },
+    { p: { sex: 'female', age: 28, heightCm: 162, weightKg: 55 }, want: 10 * 55 + 6.25 * 162 - 5 * 28 - 161 },
+    { p: { sex: 'male', age: 55, heightCm: 168, weightKg: 90 }, want: 10 * 90 + 6.25 * 168 - 5 * 55 + 5 },
+  ];
+  for (const { p, want } of cases) {
+    const r = basalMetabolicRate(p);
+    assert.equal(r.formula, 'Mifflin-St Jeor');
+    assert.equal(r.kcal, Math.round(want), JSON.stringify(p));
+  }
+});
+
+test('Katch-McArdle 与原文公式吻合，且优先于 Mifflin', () => {
+  // Katch & McArdle：BMR = 370 + 21.6 × 瘦体重(kg)
+  const p = { sex: 'male', age: 30, heightCm: 175, weightKg: 80, bodyFatPct: 20 };
+  const lbm = 80 * 0.8;                       // 64 kg
+  const r = basalMetabolicRate(p);
+  assert.equal(r.formula, 'Katch-McArdle', '填了体脂率就该用体成分公式');
+  assert.equal(r.kcal, Math.round(370 + 21.6 * lbm));
+  assert.equal(r.lbm, 64);
+});
+
+test('Atwater 系数就是 4/4/9/7', () => {
+  // 通用 Atwater 系数：蛋白 4、碳水 4、脂肪 9、乙醇 7 kcal/g
+  assert.deepEqual(ATWATER, { protein: 4, carb: 4, fat: 9, alcohol: 7 });
+});
+
+test('脂肪当量沿用 Wishnofsky 的 7700 kcal/kg', () => {
+  // Wishnofsky M, Am J Clin Nutr 1958（原文 3500 kcal/lb）
+  assert.equal(KCAL_PER_KG_FAT, 7700);
+  assert.ok(Math.abs(KCAL_PER_KG_FAT * 0.45359237 - 3492) < 10, '换算回英制应接近 3500 kcal/lb');
+});
+
+test('微量目标对齐各自的权威推荐值', () => {
+  const t = dailyTargets({ ...male, weightKg: 72, activity: 'light' });
+  // 膳食纤维：IOM/DRI 14 g / 1000 kcal
+  assert.equal(t.fiber, Math.round(Math.min(40, Math.max(20, (t.kcal / 1000) * 14))));
+  // 钠：WHO 建议成人 < 2000 mg/天（约合 5 g 食盐）
+  assert.equal(t.sodium, 2000);
+  // 添加糖：WHO 建议游离糖 < 总能量的 10%
+  assert.equal(t.sugar, Math.round((t.kcal * 0.1) / 4));
+});
+
+test('脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）', () => {
+  for (const p of [male, female, { ...male, weightKg: 100 }, { ...female, weightKg: 45 }]) {
+    const t = dailyTargets(p);
+    const pct = (t.fat * 9) / t.kcal;
+    assert.ok(pct >= 0.195 && pct <= 0.355, `${JSON.stringify(p)} 得到 ${(pct * 100).toFixed(1)}%`);
+  }
+});
+
+test('碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过', () => {
+  assert.equal(CARB_RDA_G, 130);
+  // 高蛋白 + 低热量的组合最容易把碳水挤到 130g 以下
+  const t = dailyTargets({ sex: 'female', age: 30, heightCm: 158, weightKg: 48, activity: 'sedentary', goal: 'cut', proteinPerKg: 2.4 });
+  if (t.carb < CARB_RDA_G) assert.equal(t.carbBelowRda, true);
+  const t2 = dailyTargets({ ...male, activity: 'active' });
+  if (t2.carb >= CARB_RDA_G) assert.equal(t2.carbBelowRda, false);
+});
+
+test('活动系数用的是流传最广的那组惯例值', () => {
+  assert.deepEqual(
+    Object.values(ACTIVITY_LEVELS).map((l) => l.factor),
+    [1.2, 1.375, 1.55, 1.725, 1.9],
+  );
+});
+
+test('有 Apple 实测数据时不再乘活动系数，不会把运动算两遍', () => {
+  const p = { ...male, activity: 'active' };   // 系数 1.725
+  const stat = staticTDEE(p);
+  const dyn = dynamicTDEE({
+    bmr: stat.bmr, activeSoFar: 500, basalSoFar: null, dayFraction: 1,
+    baselineActive: 500, intakeKcal: 2000, fallbackTDEE: stat.tdee,
+  });
+  // 动态值 = 静息 + 实测活动 + TEF，与 1.725 无关
+  assert.equal(dyn.tdee, Math.round(stat.bmr + 500 + Math.max(2000, stat.tdee) * 0.1));
+  assert.ok(dyn.tdee < stat.tdee + 500, '不应该在系数之上再叠一份活动能量');
+});
+
+/* --------------------------- 依据的优先级 --------------------------- */
+
+test('静息能量优先用实测，公式只是兜底', () => {
+  const base = { bmr: 1580, activeSoFar: 200, dayFraction: 0.5, baselineActive: 310, intakeKcal: 800, fallbackTDEE: 2423 };
+  assert.equal(dynamicTDEE({ ...base }).basalSource, 'formula');
+  assert.equal(dynamicTDEE({ ...base, baselineResting: 1610 }).basalSource, 'measured-baseline');
+  assert.equal(dynamicTDEE({ ...base, baselineResting: 1610 }).basal, 1610, '有实测就该用实测值');
+  const today = dynamicTDEE({ ...base, baselineResting: 1610, basalSoFar: 820 });
+  assert.equal(today.basalSource, 'measured-today');
+  assert.equal(today.basal, 1640, '今天实测 820 kcal 过半天 → 全天 1640');
+});
+
+test('实测消耗与预计消耗分开返回，界面不能把预计说成实测', () => {
+  const r = dynamicTDEE({
+    bmr: 1580, activeSoFar: 240, basalSoFar: 800, baselineResting: 1600,
+    dayFraction: 0.5, baselineActive: 310, intakeKcal: 900, fallbackTDEE: 2400,
+  });
+  assert.equal(r.measured, 1040, '实测部分只含已经发生的 800 + 240');
+  assert.equal(r.projected, true);
+  assert.ok(r.tdee > r.measured, '全天预计必然大于此刻实测');
+});
+
+test('年龄是填的还是兜底猜的，必须能分辨', () => {
+  assert.equal(ageIsEstimated({ birthday: '1996-03-02' }), false);
+  assert.equal(ageIsEstimated({ age: 41 }), false);
+  assert.equal(ageIsEstimated({}), true, '什么都没填时用的是默认 30 岁');
+  assert.equal(ageIsEstimated({ birthday: '乱写' }), true);
+  assert.equal(ageFrom({}), 30);
+  assert.equal(dailyTargets({ sex: 'male', heightCm: 175, weightKg: 72 }).ageEstimated, true);
+  assert.equal(dailyTargets({ sex: 'male', heightCm: 175, weightKg: 72, birthday: '1996-03-02' }).ageEstimated, false);
+});
+
+test('蛋白目标落在文献给出的区间内', () => {
+  // ISSN 立场声明：运动人群 1.4~2.0 g/kg 体重
+  // Morton 等 2018 meta 分析：增肌摄入约 1.6 g/kg
+  // Helms 等 2014（自然健美备赛）：减脂期 2.3~3.1 g/kg 瘦体重
+  const noBf = proteinTarget({ weightKg: 72, heightCm: 175 }, 'bulk');
+  assert.ok(noBf.grams / 72 >= 1.4 && noBf.grams / 72 <= 2.0, `${noBf.grams / 72} g/kg`);
+
+  const withBf = proteinTarget({ weightKg: 80, heightCm: 178, bodyFatPct: 20 }, 'cut');
+  const perLbm = withBf.grams / 64;
+  assert.ok(perLbm >= 2.3 && perLbm <= 3.1, `减脂期 ${perLbm} g/kg 瘦体重应落在 Helms 区间`);
 });

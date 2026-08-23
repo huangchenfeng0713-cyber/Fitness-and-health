@@ -1,10 +1,11 @@
 /** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
 
-import { h, clearEl, num, formatMinutes, toast, mount } from '../lib/utils.js';
+import { h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state, addEntry } from '../lib/store.js';
 import { CATEGORIES, isEstimated } from '../data/foods.js';
 import { MEAL_LABEL } from '../core/advisor.js';
+import { importFromClipboard } from '../lib/importer.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
 
@@ -156,13 +157,45 @@ function insightsCard(advice, rerender) {
 
 /* ---------------------------------------------------------------- 健康 */
 
-function healthCard(health, derived) {
+/*
+ * 一键导入。
+ *
+ * 网页读不到 HealthKit，同步只能靠快捷指令；快捷指令那头能配成定时自动化自己跑，
+ * 但交到网页手里必须有一次用户手势（iOS 读剪贴板前还要再弹一次系统确认）。
+ * 既然那一下省不掉，就把它放在最省事的位置：今天没数据时，这张卡片上直接出按钮，
+ * 不用再切到健康页去找粘贴框。
+ */
+function clipboardImportBtn(rerender) {
+  let busy = false;
+  const btn = h('button.secondary-btn.full', {
+    onclick: async () => {
+      if (busy) return;
+      busy = true;
+      btn.disabled = true;
+      btn.textContent = '读取中…';
+      const outcome = await importFromClipboard();
+      toast(outcome.message, outcome.ok ? 'ok' : 'warn');
+      busy = false;
+      // 成功时 mergeHealthDays 会触发整页重绘，这里只管失败后把按钮还原
+      btn.disabled = false;
+      btn.textContent = '一键导入（读剪贴板）';
+      if (!outcome.ok) rerender();
+    },
+  }, '一键导入（读剪贴板）');
+  return btn;
+}
+
+function healthCard(health, derived, rerender) {
   const has = Object.keys(health).some((k) => !['date', 'source'].includes(k));
+  const isToday = state.day === todayKey();
+  // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
+  const needsImport = isToday && (!has || health.activeEnergy == null);
   const items = [
     ['步数', health.steps != null ? num(health.steps) : '—'],
     ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)}` : '—', 'kcal'],
     ['锻炼', health.exerciseMinutes ? formatMinutes(health.exerciseMinutes) : '—'],
-    ['睡眠', health.sleepMinutes ? formatMinutes(health.sleepMinutes) : '—'],
+    ['睡眠', health.sleepMinutes ? formatHours(health.sleepMinutes, { unit: false }) : '—',
+      health.sleepMinutes ? '小时' : ''],
     ['体重', num(health.weightKg ?? derived.effectiveProfile.weightKg, 1), 'kg'],
     ['体脂', health.bodyFatPct != null ? num(health.bodyFatPct, 1) : '—', '%'],
   ];
@@ -174,7 +207,12 @@ function healthCard(health, derived) {
       ? h('div.health-strip', null, items.map(([k, v, u]) => h('div.health-cell', null,
         h('div.health-value', null, v, u && h('span.health-unit', null, u)),
         h('div.health-label', null, k))))
-      : h('p.empty-hint', null, '这一天还没有健康数据。到「健康」页导入 Apple 健康的导出文件，或手动补录。'),
+      : h('p.empty-hint', null, isToday
+        ? '今天还没有健康数据。跑一次快捷指令把数据拷进剪贴板，然后点下面这个按钮。'
+        : '这一天还没有健康数据。到「健康」页导入 Apple 健康的导出文件，或手动补录。'),
+    needsImport && clipboardImportBtn(rerender),
+    needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
+      '缺「活动能量」，热量预算暂时按公式估算。导入后会按当天真实消耗重算。'),
   );
 }
 
@@ -210,7 +248,7 @@ export function renderDashboard(root) {
     recommendCard(advice, rerender),
     avoidCard(advice, rerender),
     insightsCard(advice, rerender),
-    healthCard(health, d),
+    healthCard(health, d, rerender),
     entriesCard(),
   );
 }
