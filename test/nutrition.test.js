@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   basalMetabolicRate, staticTDEE, dailyTargets, dynamicTDEE, activityCurve,
   leanBodyMass, bmi, bmiCategory, ageFrom, proteinTarget, sumNutrients, computeGaps,
-  ATWATER, KCAL_PER_KG_FAT, CARB_RDA_G, ACTIVITY_LEVELS, ageIsEstimated,
+  validateProfile, ATWATER, KCAL_PER_KG_FAT, CARB_RDA_G, ACTIVITY_LEVELS, ageIsEstimated,
 } from '../js/core/nutrition.js';
 
 const male = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, activity: 'light', goal: 'maintain' };
@@ -55,18 +55,20 @@ test('减脂目标产生赤字，增肌产生盈余', () => {
   assert.ok(bulk.kcal > keep.kcal);
 });
 
-test('热量目标不会低于安全下限', () => {
+test('过激速率会按体重比例、每日赤字和成人常用下限共同限制', () => {
   const extreme = dailyTargets({ ...female, rateKgPerWeek: -1.5 });
   assert.ok(extreme.clampedByFloor, '过激的目标速率应触发下限保护');
   assert.ok(extreme.kcal >= 1200);
-  assert.ok(extreme.kcal >= basalMetabolicRate(female).kcal);
+  assert.ok(extreme.rateWasClamped);
+  assert.ok(Math.abs(extreme.rateKgPerWeek) <= female.weightKg * 0.01 + 0.01);
+  assert.ok(extreme.dailyDelta >= -750);
 });
 
-test('宏量营养素分配自洽：三大宏量的热量之和接近总热量', () => {
+test('宏量营养素分配自洽：三大宏量的热量之和与总热量闭合', () => {
   for (const p of [male, female, { ...male, goal: 'bulk' }, { ...male, bodyFatPct: 25, goal: 'cut' }]) {
     const t = dailyTargets(p);
     const fromMacros = t.protein * 4 + t.fat * 9 + t.carb * 4;
-    assert.ok(Math.abs(fromMacros - t.kcal) / t.kcal < 0.06,
+    assert.ok(Math.abs(fromMacros - t.kcal) <= 4,
       `${JSON.stringify(p.goal)}: 宏量合计 ${fromMacros} 与目标 ${t.kcal} 偏差过大`);
     assert.ok(t.fat >= p.weightKg * 0.7, '脂肪不应低于必需量');
     assert.ok(t.carb >= 50, '碳水有保底');
@@ -84,6 +86,22 @@ test('蛋白质目标：减脂 > 维持，且以瘦体重为基准更高', () =>
 test('自定义 g/kg 覆盖默认算法', () => {
   const t = proteinTarget({ ...male, proteinPerKg: 2 }, 'cut');
   assert.equal(t.grams, 144);
+});
+
+test('非法身体信息和过高自定义蛋白不会生成伪精确结果', () => {
+  assert.equal(validateProfile({}).valid, false);
+  assert.throws(() => basalMetabolicRate({}), /身体|性别|体重/);
+  assert.throws(() => dailyTargets({ ...male, rateKgPerWeek: 'x' }), /目标速率/);
+  assert.throws(() => proteinTarget({ ...male, proteinPerKg: 8 }, 'cut'), /蛋白质/);
+  assert.throws(() => dailyTargets({ ...male, sex: 'unknown' }), /性别/);
+});
+
+test('中国成人纤维与饮水参考口径', () => {
+  const m = dailyTargets(male);
+  const f = dailyTargets(female);
+  assert.ok(m.fiber >= 25 && m.fiber <= 30);
+  assert.equal(m.waterMl, 1700);
+  assert.equal(f.waterMl, 1500);
 });
 
 test('活动曲线：凌晨为 0，深夜为 1，单调不减', () => {
@@ -119,6 +137,12 @@ test('动态 TDEE 会把已发生的活动外推到全天', () => {
   assert.ok(midday.projected, '未过完的一天应标记为预估');
 });
 
+test('动态 TDEE 与 Apple 静息+活动口径一致，不重复叠加固定 TEF', () => {
+  const full = dynamicTDEE({ bmr: 1600, basalSoFar: 1600, activeSoFar: 500, dayFraction: 1, intakeKcal: 2200 });
+  assert.equal(full.tdee, 2100);
+  assert.equal(full.tef, 0);
+});
+
 test('营养汇总与差额', () => {
   const total = sumNutrients([
     { kcal: 300, protein: 20, fat: 10, carb: 30, fiber: 2, sugar: 3, sodium: 400 },
@@ -126,6 +150,7 @@ test('营养汇总与差额', () => {
   ]);
   assert.equal(total.kcal, 500.5);
   assert.equal(total.protein, 25.5);
+  assert.equal(total.totalSugar, 0, '旧条目没有 totalSugar 时不应凭空猜测');
   const gaps = computeGaps({ kcal: 2000, protein: 120 }, total);
   assert.equal(gaps.kcal.remaining, 1499.5);
   assert.equal(gaps.protein.pct, 21);
@@ -162,7 +187,8 @@ test('真实的大运动量不会被上限误伤', () => {
   });
   assert.equal(hard.activeCapped, false);
   assert.equal(hard.activeSoFar, 700, '原样采信');
-  assert.ok(hard.tdee > 2800, `应体现出多出来的消耗，实得 ${hard.tdee}`);
+  assert.ok(hard.active > 1100, `应把高于平时的活动节奏外推到全天，实得 ${hard.active}`);
+  assert.equal(hard.tdee, 1580 + hard.active, 'Apple 口径只合计静息与活动，不重复叠加 TEF');
 });
 
 test('一小时高强度训练在上限之内', () => {
@@ -194,9 +220,9 @@ test('Mifflin-St Jeor 与原文公式逐项吻合', () => {
   // Mifflin MD et al., Am J Clin Nutr 1990;51:241-247
   //   男：10W + 6.25H − 5A + 5      女：10W + 6.25H − 5A − 161
   const cases = [
-    { p: { sex: 'male', age: 30, heightCm: 175, weightKg: 72 }, want: 10 * 72 + 6.25 * 175 - 5 * 30 + 5 },
-    { p: { sex: 'female', age: 28, heightCm: 162, weightKg: 55 }, want: 10 * 55 + 6.25 * 162 - 5 * 28 - 161 },
-    { p: { sex: 'male', age: 55, heightCm: 168, weightKg: 90 }, want: 10 * 90 + 6.25 * 168 - 5 * 55 + 5 },
+    { p: { ...male, age: 30, heightCm: 175, weightKg: 72 }, want: 10 * 72 + 6.25 * 175 - 5 * 30 + 5 },
+    { p: { ...female, age: 28, heightCm: 162, weightKg: 55 }, want: 10 * 55 + 6.25 * 162 - 5 * 28 - 161 },
+    { p: { ...male, age: 55, heightCm: 168, weightKg: 90 }, want: 10 * 90 + 6.25 * 168 - 5 * 55 + 5 },
   ];
   for (const { p, want } of cases) {
     const r = basalMetabolicRate(p);
@@ -207,7 +233,7 @@ test('Mifflin-St Jeor 与原文公式逐项吻合', () => {
 
 test('Katch-McArdle 与原文公式吻合，且优先于 Mifflin', () => {
   // Katch & McArdle：BMR = 370 + 21.6 × 瘦体重(kg)
-  const p = { sex: 'male', age: 30, heightCm: 175, weightKg: 80, bodyFatPct: 20 };
+  const p = { ...male, weightKg: 80, bodyFatPct: 20 };
   const lbm = 80 * 0.8;                       // 64 kg
   const r = basalMetabolicRate(p);
   assert.equal(r.formula, 'Katch-McArdle', '填了体脂率就该用体成分公式');
@@ -228,8 +254,8 @@ test('脂肪当量沿用 Wishnofsky 的 7700 kcal/kg', () => {
 
 test('微量目标对齐各自的权威推荐值', () => {
   const t = dailyTargets({ ...male, weightKg: 72, activity: 'light' });
-  // 膳食纤维：IOM/DRI 14 g / 1000 kcal
-  assert.equal(t.fiber, Math.round(Math.min(40, Math.max(20, (t.kcal / 1000) * 14))));
+  // 膳食纤维：按 14 g / 1000 kcal 计算，并收敛到中国成人常用的 25–30 g 参考范围
+  assert.equal(t.fiber, Math.round(Math.min(30, Math.max(25, (t.kcal / 1000) * 14))));
   // 钠：WHO 建议成人 < 2000 mg/天（约合 5 g 食盐）
   assert.equal(t.sodium, 2000);
   // 添加糖：WHO 建议游离糖 < 总能量的 10%
@@ -267,8 +293,9 @@ test('有 Apple 实测数据时不再乘活动系数，不会把运动算两遍'
     bmr: stat.bmr, activeSoFar: 500, basalSoFar: null, dayFraction: 1,
     baselineActive: 500, intakeKcal: 2000, fallbackTDEE: stat.tdee,
   });
-  // 动态值 = 静息 + 实测活动 + TEF，与 1.725 无关
-  assert.equal(dyn.tdee, Math.round(stat.bmr + 500 + Math.max(2000, stat.tdee) * 0.1));
+  // 动态值 = 静息 + 实测活动；Apple 口径不再重复叠加固定 TEF，与 1.725 无关
+  assert.equal(dyn.tdee, Math.round(stat.bmr + 500));
+  assert.equal(dyn.tef, 0);
   assert.ok(dyn.tdee < stat.tdee + 500, '不应该在系数之上再叠一份活动能量');
 });
 
@@ -300,18 +327,18 @@ test('年龄是填的还是兜底猜的，必须能分辨', () => {
   assert.equal(ageIsEstimated({}), true, '什么都没填时用的是默认 30 岁');
   assert.equal(ageIsEstimated({ birthday: '乱写' }), true);
   assert.equal(ageFrom({}), 30);
-  assert.equal(dailyTargets({ sex: 'male', heightCm: 175, weightKg: 72 }).ageEstimated, true);
-  assert.equal(dailyTargets({ sex: 'male', heightCm: 175, weightKg: 72, birthday: '1996-03-02' }).ageEstimated, false);
+  assert.equal(dailyTargets({ ...male, age: undefined }).ageEstimated, true);
+  assert.equal(dailyTargets({ ...male, age: undefined, birthday: '1996-03-02' }).ageEstimated, false);
 });
 
 test('蛋白目标落在文献给出的区间内', () => {
   // ISSN 立场声明：运动人群 1.4~2.0 g/kg 体重
   // Morton 等 2018 meta 分析：增肌摄入约 1.6 g/kg
   // Helms 等 2014（自然健美备赛）：减脂期 2.3~3.1 g/kg 瘦体重
-  const noBf = proteinTarget({ weightKg: 72, heightCm: 175 }, 'bulk');
+  const noBf = proteinTarget(male, 'bulk');
   assert.ok(noBf.grams / 72 >= 1.4 && noBf.grams / 72 <= 2.0, `${noBf.grams / 72} g/kg`);
 
-  const withBf = proteinTarget({ weightKg: 80, heightCm: 178, bodyFatPct: 20 }, 'cut');
+  const withBf = proteinTarget({ ...male, weightKg: 80, heightCm: 178, bodyFatPct: 20 }, 'cut');
   const perLbm = withBf.grams / 64;
   assert.ok(perLbm >= 2.3 && perLbm <= 3.1, `减脂期 ${perLbm} g/kg 瘦体重应落在 Helms 区间`);
 });

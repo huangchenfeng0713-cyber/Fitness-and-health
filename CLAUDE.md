@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 命令
 
 ```bash
-npm test                                              # 全部测试（node --test，114 用例）
+npm test                                              # 全部测试（node --test）
 node --test test/nutrition.test.js                    # 单个文件
 node --test --test-name-pattern='Katch' test/*.test.js  # 按用例名筛选
 npm run serve                                         # python3 -m http.server 8080
@@ -75,16 +75,18 @@ zip 路径是全流式的（中央目录 → `Blob.slice` → `DecompressionStre
 
 `test/foods.test.js` 会强制以下约束，加食物前先看那个文件：
 
-- `n` = 每 100g 的 `[热量kcal, 蛋白g, 脂肪g, 碳水g, 纤维g, 糖g, 钠mg]`，七项，全部非负。
+- `n` = 每 100g 的 `[热量kcal, 蛋白g, 脂肪g, 碳水g, 纤维g, 总糖g, 钠mg]`，七项，全部非负。
 - 热量与宏量自洽：`蛋白*4 + 脂肪*9 + (碳水-纤维)*4 + 纤维*2`，误差不超过 `max(25%, 12 kcal)`（`alcohol` 除外）。
 - 纤维 ≤ 碳水，糖 ≤ 碳水。
 - `s`（常用份量）非空，每份 0 < 克数 ≤ 1000；`cat` 必须在 `CATEGORIES` 里，且该分类要有 `PORTION_TIPS`。
 - `cat: 'chain'` 的首个份量必须是品牌标准份（个 / 块 / 只 / 份 / 杯…），40~600g。
 - 搜索同分时按数组里的录入顺序 —— 同品牌把主力单品排在配菜前面。
 - **糖度是界面选项，不是多条记录。** 加 `tealevel` 标记，营养按全糖录入，`nutrientsFor` 按 `SUGAR_LEVELS`
-  五档换算；奶的乳糖、珍珠芋圆的糖水、水果自带的糖放进 `sf`，这部分不随糖度归零。
+  五档换算；`sf` 是点“无糖”时仍存在的总糖，`nfs` 是其中不属于 WHO 游离糖的部分。
+  乳糖、完整果肉内源糖写入 `nfs`；果汁、果泥即使来自水果仍属游离糖，必须显式写 `nfs: 0`。
 - 品牌未公开完整营养表的打 `est`，界面会显示「估算」；茶饮除星巴克 / 瑞幸外一律 `est`。
-- `freeSugarFactor` 按 WHO 游离糖定义：`fruit`/`veg` 必须是 0，`snack` 必须是 1。
+- `freeSugarFactor` 按 WHO 游离糖定义从总糖中扣除有依据的非游离糖；`fruit`/`veg` 必须是 0，
+  但 `snack` 不能按分类一律设为 1（乳品、完整水果制品等可能只有部分糖属于游离糖）。
 
 ## 算法的依据
 
@@ -96,13 +98,18 @@ zip 路径是全流式的（中央目录 → `Blob.slice` → `DecompressionStre
 里有一组「公式对文献值」的用例锁着 Mifflin-St Jeor、Katch-McArdle、Atwater、
 IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防止有人把公式改成拍脑袋的数。
 
-两条口径红线：
+口径红线：
 
 - 界面上凡是基于「惯例」或「护栏」得出的数字，不得说成实测。`dynamicTDEE` 返回
   `basalSource` 与 `measured`，就是给界面区分「实测 / 预估」用的。
 - **摄入类结论的分母是 `baseline.loggedDays`（有饮食记录的天数），不是日历天数。**
   没记录的日子不在样本里，当成 0 kcal 会造出「近 14 天日均赤字 3168 kcal」这种
   并不存在的结论。样本少于 3 天时不下结论。
+- Apple 动态 TDEE 的统一口径是“静息 + 活动”，`tef` 固定为 0；不要再叠加固定 10% TEF。
+- BMR 使用公式原值，不设 800 kcal 下限；每日热量目标下限是女 1200 / 男 1500 kcal，
+  不与 BMR 取最大值。饮水参考固定为男 1700 / 女 1500 ml。
+- `sugar` 目标和饮食汇总表示 WHO 游离糖，不是总糖或狭义添加糖。
+- 体脂率输入会切换到 Katch-McArdle，但家用 BIA 误差会传导到结果，界面不得宣称“更准”。
 
 ## 容易踩的坑
 

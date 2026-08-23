@@ -1,9 +1,12 @@
 /** 健康数据：导入 Apple 健康导出文件、手动补录、查看已同步的每日数据 */
 
 import { h, clearEl, num, toast, formatMinutes, formatHours, mount } from '../lib/utils.js';
-import { state, saveHealthDay, countMisscaledDays, repairHealthEnergy,
-  listImplausibleDays, clearImplausibleHealth } from '../lib/store.js';
+import {
+  state, saveHealthDay, saveProfile, countMisscaledDays, repairHealthEnergy,
+  listImplausibleDays, clearImplausibleHealth,
+} from '../lib/store.js';
 import { healthInsights, healthSummary } from '../core/health-insights.js';
+import { isPlausibleHealthValue } from '../core/health.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
 
 let importing = false;
@@ -23,7 +26,10 @@ async function handleImport(payload, rerender) {
   importing = true;
   try {
     setProgress('准备中…', 1);
-    const result = await runImportWorker(payload, (m) => setProgress(m.stage, m.pct));
+    const result = await runImportWorker({
+      ...payload,
+      sourcePriority: state.profile.appleSourcePriority || [],
+    }, (m) => setProgress(m.stage, m.pct));
     const outcome = await applyImport(result);
     toast(outcome.message, outcome.ok ? 'ok' : 'warn');
   } catch (err) {
@@ -87,11 +93,35 @@ function importCard(rerender) {
   }, '从剪贴板读取');
 
   const last = state.lastImport;
+  const detectedSources = last?.quality?.sourceCoverage
+    ?.map((source) => source.sourceName).filter(Boolean) || [];
+  const priorityInput = h('textarea.paste-area', {
+    rows: 4,
+    placeholder: 'Apple Watch\niPhone\n第三方 App',
+    value: (state.profile.appleSourcePriority || []).join('\n'),
+  });
+  const priorityEditor = h('details.paste-block', null,
+    h('summary', null, '高级：统一数据来源优先级'),
+    h('p.form-hint', { style: { margin: '4px 0 8px' } },
+      '每行一个 export.xml 中的 sourceName，越靠上越优先。仅当你在「健康」App 的各项累计指标采用相同顺序时使用；'
+      + 'Apple 实际允许每个指标分别排序，留空会采用“手动记录 → Apple 设备 → 第三方”的可解释近似。'),
+    detectedSources.length && h('p.form-hint', null,
+      `上次检测到：${detectedSources.join('、')}`),
+    priorityInput,
+    h('button.secondary-btn.full', {
+      onclick: async () => {
+        const priority = [...new Set(priorityInput.value.split(/\r?\n/)
+          .map((value) => value.trim()).filter(Boolean))];
+        await saveProfile({ appleSourcePriority: priority });
+        toast(priority.length ? '来源优先级已保存，下次导入生效' : '已恢复自动来源解析', 'ok');
+      },
+    }, '保存来源顺序'));
 
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, '导入 Apple 健康数据')),
     drop,
     progressEl,
+    priorityEditor,
     h('div.btn-row', { style: { marginTop: '12px' } }, clipboardBtn),
     h('details.paste-block', null,
       h('summary', null, '或粘贴快捷指令输出的 JSON / CSV'),
@@ -205,6 +235,8 @@ function manualCard(rerender) {
           if (v !== '') patch[key] = scale ? Number(v) * scale : Number(v);
         }
         if (!Object.keys(patch).length) { toast('没有填写任何数值', 'warn'); return; }
+        const invalid = Object.entries(patch).find(([key, value]) => !isPlausibleHealthValue(key, value));
+        if (invalid) { toast(`${invalid[0]} 的数值不合理，请检查单位`, 'warn'); return; }
         await saveHealthDay(state.day, { ...patch, source: 'manual' });
         toast('已保存', 'ok');
         rerender();
@@ -279,10 +311,11 @@ function implausibleCard(rerender) {
 
 /** 把同步来的数字翻译成「这意味着什么、该怎么做」 */
 function insightCard() {
-  const summary = healthSummary(state.healthDays);
+  const summary = healthSummary(state.healthDays, 14, state.day);
   const list = healthInsights(state.healthDays, {
     targets: state.derived?.targets,
     dietDaily: state.dietDaily,
+    asOfDate: state.day,
   });
 
   const cells = [
@@ -291,13 +324,13 @@ function insightCard() {
     ['日均锻炼', summary.exerciseMinutes, '分钟'],
     ['日均睡眠', summary.sleepHours, '小时'],
     ['静息心率', summary.restingHR, 'bpm'],
-    ['体脂率', summary.bodyFatPct, '%'],
+    ['平均体脂率', summary.bodyFatPct, '%'],
   ].filter(([, v]) => v != null);
 
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '健康解读'),
-      h('span.card-tag', null, summary.days ? `基于近 ${summary.days} 天` : '')),
+      h('span.card-tag', null, summary.days ? `基于 ${summary.days} 个记录日` : '')),
     cells.length ? h('div.health-strip', null, cells.map(([k, v, u]) => h('div.health-cell', null,
       h('div.health-value', null, num(v, u === '小时' || u === '%' ? 1 : 0), h('span.health-unit', null, u)),
       h('div.health-label', null, k)))) : null,

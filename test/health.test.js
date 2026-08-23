@@ -4,6 +4,7 @@ import {
   normalizeValue, parseAppleDate, parseAttrs, createAggregator, feedXmlChunk,
   parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
   findImplausibleDays, clearImplausibleValues, implausibleFields,
+  isPlausibleHealthValue,
 } from '../js/core/health.js';
 
 test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
@@ -15,6 +16,7 @@ test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡
   assert.equal(normalizeValue('energy', 5300, 'cal'), 5.3, '小写 cal 才是小卡');
   assert.ok(Math.abs(normalizeValue('energy', 418.4, 'kJ') - 100) < 1e-9);
   assert.ok(Math.abs(normalizeValue('energy', 4184, 'J') - 1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('energy', 4184, 'j') - 1) < 1e-9, '小写 j 也应识别');
 });
 
 test('单位换算覆盖 HealthKit 其它常见单位', () => {
@@ -40,6 +42,9 @@ test('Apple 时间戳带时区偏移，日期取本地日', () => {
   assert.equal(parseAppleDate('2026-08-21 23:50:00 -0700').dayKey, '2026-08-21',
     '西半球的深夜记录仍归当地当天');
   assert.equal(parseAppleDate(''), null);
+  assert.equal(parseAppleDate('2026-08-20').dayKey, '2026-08-20', '裸日期不应受运行时区影响');
+  assert.equal(parseAppleDate('2024-02-29').dayKey, '2024-02-29');
+  assert.equal(parseAppleDate('2026-02-29'), null, '非法日期不能被自动滚到三月');
 });
 
 test('属性解析', () => {
@@ -85,6 +90,265 @@ test('睡眠只统计入睡片段，并归到醒来那天', () => {
   assert.equal(days[0].sleepMinutes, 420, '仅 Asleep 片段共 7 小时，卧床不算');
 });
 
+test('睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleep', '2026-08-19 23:00:00 +0800', '2026-08-20 07:00:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore', '2026-08-19 23:00:00 +0800', '2026-08-19 23:50:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepREM', '2026-08-19 23:50:00 +0800', '2026-08-20 00:30:00 +0800'),
+    rec('HKCategoryTypeIdentifierSleepAnalysis', 'HKCategoryValueSleepAnalysisAsleepCore', '2026-08-20 00:30:00 +0800', '2026-08-20 07:00:00 +0800'),
+  ].join('\n'), agg);
+  const result = agg.result();
+  assert.deepEqual(result.days.map((d) => d.date), ['2026-08-20']);
+  assert.equal(result.days[0].sleepMinutes, 480, 'legacy 总段与分期重叠时不能翻倍');
+  assert.equal(result.quality.sleepOverlapMinutes, 480);
+});
+
+test('XML 精确重复去重，多设备累计量不再静默相加', () => {
+  const stamp = '2026-08-20 09:00:00 +0800';
+  const end = '2026-08-20 10:00:00 +0800';
+  const row = (source, value) => `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${source}" unit="count" startDate="${stamp}" endDate="${end}" value="${value}"/>`;
+  const agg = createAggregator();
+  feedXmlChunk([row('Apple Watch', 1000), row('Apple Watch', 1000), row('iPhone', 800)].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].steps, 1000, '跨来源采用单来源日总量最大值近似，不能得到 1800/2800');
+  assert.equal(result.quality.duplicateRecords, 1);
+  assert.equal(result.quality.multiSourceDays, 1);
+});
+
+test('多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源', () => {
+  const row = (source, value, start, end) => `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${source}" unit="count" startDate="${start}" endDate="${end}" value="${value}"/>`;
+  const agg = createAggregator();
+  feedXmlChunk([
+    row('Apple Watch', 1000, '2026-08-20 09:00:00 +0800', '2026-08-20 09:05:00 +0800'),
+    row('iPhone', 800, '2026-08-20 09:00:00 +0800', '2026-08-20 09:05:00 +0800'),
+    row('iPhone', 600, '2026-08-20 09:05:00 +0800', '2026-08-20 09:10:00 +0800'),
+  ].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].steps, 1600, '重叠段取 Watch，iPhone 的互补时段仍应保留');
+  assert.equal(result.quality.overlapBuckets, 1);
+  assert.equal(result.quality.droppedOverlapByMetric.steps, 800);
+  assert.equal(result.quality.resolutionMinutes, 5);
+  assert.equal(result.quality.sourceCoverage.length, 2);
+});
+
+test('同名来源的两台设备也必须参与重叠消重，不能先在来源内相加', () => {
+  const a = createAggregator();
+  const sample = (device, value) => `<Record type="HKQuantityTypeIdentifierStepCount"
+    sourceName="Apple Watch" device="${device}" value="${value}" unit="count"
+    startDate="2026-08-20 09:00:00 +0800" endDate="2026-08-20 09:05:00 +0800"/>`;
+  feedXmlChunk([sample('Watch7,1', 1000), sample('Watch6,1', 800)].join(''), a);
+  const result = a.result();
+  assert.equal(result.days[0].steps, 1000);
+  assert.equal(result.quality.overlapBuckets, 1);
+});
+
+test('HKWasUserEntered 的手动样本在重叠区间优先于设备推断优先级', () => {
+  const agg = createAggregator();
+  feedXmlChunk([
+    '<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Watch" unit="count" startDate="2026-08-20 09:00:00 +0800" endDate="2026-08-20 09:05:00 +0800" value="1000"/>',
+    '<Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-08-20 09:00:00 +0800" endDate="2026-08-20 09:05:00 +0800" value="100"><MetadataEntry key="HKWasUserEntered" value="true"/></Record>',
+  ].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].steps, 100);
+  assert.equal(result.metadata.sources.find((s) => s.sourceName === 'iPhone').userEnteredRecords, 1);
+});
+
+test('UUID/ExternalUUID 优先精确去重，ExternalUUID 不同的同属性记录必须同时保留', () => {
+  const agg = createAggregator();
+  const attrs = 'type="HKQuantityTypeIdentifierDietaryEnergyConsumed" sourceName="饮食 App" unit="kcal" startDate="2026-08-20 12:00:00 +0800" endDate="2026-08-20 12:00:00 +0800" value="100"';
+  feedXmlChunk([
+    `<Record uuid="ABC-123" ${attrs}/>` ,
+    `<Record uuid="ABC-123" ${attrs}/>` ,
+    `<Record ${attrs}><MetadataEntry key="HKExternalUUID" value="meal-A"/></Record>`,
+    `<Record ${attrs}><MetadataEntry key="HKExternalUUID" value="meal-B"/></Record>`,
+  ].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].hkKcal, 300);
+  assert.equal(result.quality.duplicateRecords, 1);
+  assert.equal(result.quality.identityCounts.uuid, 1);
+  assert.equal(result.quality.identityCounts.externalUUID, 2);
+});
+
+test('SyncIdentifier 只保留最高 SyncVersion，同版本再出现视为重复', () => {
+  const sample = (value, version) => `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="同步 App" unit="count" startDate="2026-08-20 09:00:00 +0800" endDate="2026-08-20 09:05:00 +0800" value="${value}"><MetadataEntry key="HKMetadataKeySyncIdentifier" value="steps-1"/><MetadataEntry key="HKMetadataKeySyncVersion" value="${version}"/></Record>`;
+  const agg = createAggregator();
+  feedXmlChunk([sample(100, 1), sample(250, 2), sample(250, 2)].join('\n'), agg);
+  const result = agg.result();
+  assert.equal(result.days[0].steps, 250);
+  assert.equal(result.quality.supersededSyncRecords, 1);
+  assert.equal(result.quality.duplicateRecords, 1);
+  assert.equal(result.quality.syncIdentifierRecords, 1);
+});
+
+test('ActivitySummary 覆盖圆环指标，Workout 仅形成独立摘要且不重复加入活动能量', () => {
+  const xml = `<HealthData locale="zh_CN">
+    <ExportDate value="2026-08-21 08:00:00 +0800"/>
+    <Me HKCharacteristicTypeIdentifierDateOfBirth="1990-01-01" HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexMale"/>
+    <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Apple Watch" unit="kcal" startDate="2026-08-20 10:00:00 +0800" endDate="2026-08-20 11:00:00 +0800" value="400"/>
+    <Record type="HKQuantityTypeIdentifierAppleExerciseTime" sourceName="Apple Watch" unit="min" startDate="2026-08-20 10:00:00 +0800" endDate="2026-08-20 11:00:00 +0800" value="20"/>
+    <ActivitySummary dateComponents="2026-08-20" activeEnergyBurned="350" activeEnergyBurnedUnit="kcal" appleExerciseTime="25" appleStandHours="10" activeEnergyBurnedGoal="500"/>
+    <Workout uuid="workout-1" workoutActivityType="HKWorkoutActivityTypeRunning" sourceName="Apple Watch" sourceVersion="11.0" creationDate="2026-08-20 11:10:00 +0800" startDate="2026-08-20 10:00:00 +0800" endDate="2026-08-20 11:00:00 +0800" duration="60" durationUnit="min" totalEnergyBurned="300" totalEnergyBurnedUnit="kcal" totalDistance="5" totalDistanceUnit="km"><MetadataEntry key="HKExternalUUID" value="run-1"/></Workout>
+    <Record type="HKQuantityTypeIdentifierNotSupported" startDate="2026-08-20 12:00:00 +0800" endDate="2026-08-20 12:00:00 +0800" value="1"/>
+  </HealthData>`;
+  const agg = createAggregator();
+  const tail = feedXmlChunk(xml, agg);
+  agg.finishDocument(tail);
+  const result = agg.result();
+  const day = result.days[0];
+  assert.equal(day.activeEnergy, 350, 'ActivitySummary 比 Record 求和更权威');
+  assert.equal(day.exerciseMinutes, 25);
+  assert.equal(day.standHours, 10);
+  assert.equal(day.workoutCount, 1);
+  assert.equal(day.workoutEnergy, 300);
+  assert.equal(day.activeEnergy, 350, 'Workout 的 300 kcal 绝不能再加到 activeEnergy');
+  assert.equal(result.workouts[0].sourceVersion, '11.0');
+  assert.equal(result.metadata.exportDate.value, '2026-08-21 08:00:00 +0800');
+  assert.equal(result.metadata.me.HKCharacteristicTypeIdentifierDateOfBirth, '1990-01-01');
+  assert.equal(result.quality.unsupportedRecords, 1);
+  assert.equal(result.quality.activitySummaryDays, 1);
+  assert.equal(result.fullSnapshot, true);
+});
+
+test('新版 Workout 可从内嵌 WorkoutStatistics 读取能量和距离摘要', () => {
+  const a = createAggregator();
+  feedXmlChunk(`<Workout workoutActivityType="HKWorkoutActivityTypeRunning" sourceName="Apple Watch"
+    startDate="2026-08-20 10:00:00 +0800" endDate="2026-08-20 11:00:00 +0800"
+    duration="60" durationUnit="min">
+    <WorkoutStatistics type="HKQuantityTypeIdentifierActiveEnergyBurned" sum="300" unit="kcal"/>
+    <WorkoutStatistics type="HKQuantityTypeIdentifierDistanceWalkingRunning" sum="5000" unit="m"/>
+  </Workout>`, a);
+  const workout = a.result().workouts[0];
+  assert.equal(workout.totalEnergy, 300);
+  assert.equal(workout.distanceKm, 5);
+  assert.equal(workout.statistics.length, 2);
+});
+
+test('Correlation 内嵌 Record 不会被当顶层样本重复累计', () => {
+  const agg = createAggregator();
+  feedXmlChunk(`<HealthData><Correlation type="HKCorrelationTypeIdentifierFood" startDate="2026-08-20 12:00:00 +0800" endDate="2026-08-20 12:00:00 +0800"><Record type="HKQuantityTypeIdentifierDietaryEnergyConsumed" unit="kcal" startDate="2026-08-20 12:00:00 +0800" endDate="2026-08-20 12:00:00 +0800" value="500"/></Correlation></HealthData>`, agg);
+  const result = agg.result();
+  assert.equal(result.days.length, 0);
+  assert.deepEqual(result.quality.unsupportedXmlElements, [{ type: 'Correlation', count: 1 }]);
+});
+
+test('未知顶层容器必须整体跳过，内嵌 Record 不能污染聚合结果', () => {
+  const a = createAggregator();
+  const xml = `<HealthData>
+    <!-- 注释中的 <Record type="HKQuantityTypeIdentifierStepCount" value="9999"/> 也不能解析 -->
+    <FutureHealthElement version="1">
+      <FutureHealthElement>
+        <Record type="HKQuantityTypeIdentifierStepCount" sourceName="未来格式" value="7000" unit="count"
+          startDate="2026-08-20 08:00:00 +0800" endDate="2026-08-20 08:05:00 +0800"/>
+      </FutureHealthElement>
+      <Record type="HKQuantityTypeIdentifierStepCount" sourceName="未来格式" value="5000" unit="count"
+        startDate="2026-08-20 09:00:00 +0800" endDate="2026-08-20 09:05:00 +0800"/>
+    </FutureHealthElement>
+    <FutureLeaf value="x"/>
+    <Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Watch" value="100" unit="count"
+      startDate="2026-08-20 10:00:00 +0800" endDate="2026-08-20 10:05:00 +0800"/>
+  </HealthData>`;
+  const tail = feedXmlChunk(xml, a);
+  a.finishDocument(tail);
+  const result = a.result();
+  assert.equal(result.days[0].steps, 100);
+  assert.deepEqual(result.quality.unsupportedXmlElements, [
+    { type: 'FutureHealthElement', count: 1 },
+    { type: 'FutureLeaf', count: 1 },
+  ]);
+  assert.equal(result.quality.unsupportedXmlElementCount, 2);
+  assert.equal(result.quality.unknownXmlElementCount, 2);
+  assert.equal(result.quality.snapshotBlockedByUnknownElements, true);
+  assert.equal(result.quality.documentComplete, true);
+  assert.equal(result.fullSnapshot, false, '未知 schema 不能授权删除旧 Apple 字段');
+});
+
+test('已知可安全略过的 Apple 顶层结构不会阻止完整快照', () => {
+  const a = createAggregator();
+  const tail = feedXmlChunk(`<HealthData>
+    <Correlation type="HKCorrelationTypeIdentifierBloodPressure">
+      <Record type="HKQuantityTypeIdentifierBloodPressureSystolic" value="120"/>
+    </Correlation>
+    <ClinicalRecord type="HKClinicalTypeIdentifierAllergyRecord"/>
+  </HealthData>`, a);
+  a.finishDocument(tail);
+  const result = a.result();
+  assert.equal(result.quality.unsupportedXmlElementCount, 2);
+  assert.equal(result.quality.unknownXmlElementCount, 0);
+  assert.equal(result.fullSnapshot, true);
+});
+
+test('只有完整闭合的 HealthData 才标记全量快照，截断 XML 必须降级为 partial', () => {
+  const complete = createAggregator();
+  let tail = feedXmlChunk(`<HealthData>${rec('HKQuantityTypeIdentifierStepCount', 10, '2026-08-20 09:00:00 +0800', '2026-08-20 09:05:00 +0800', 'count')}</HealthData>`, complete);
+  complete.finishDocument(tail);
+  assert.equal(complete.result().fullSnapshot, true);
+
+  const broken = createAggregator();
+  tail = feedXmlChunk('<HealthData><Record type="HKQuantityTypeIdentifierStepCount" unit="count" startDate="2026-08-20 09:00:00 +0800"', broken);
+  broken.finishDocument(tail);
+  const result = broken.result();
+  assert.equal(result.fullSnapshot, false);
+  assert.equal(result.quality.documentComplete, false);
+  assert.equal(result.quality.truncatedXml, true);
+});
+
+test('只有文件尾部而没有 HealthData 开头时绝不能标记全量快照', () => {
+  const a = createAggregator();
+  const tail = feedXmlChunk(`${rec('HKQuantityTypeIdentifierStepCount', 10,
+    '2026-08-20 09:00:00 +0800', '2026-08-20 09:05:00 +0800', 'count')}</HealthData>`, a);
+  a.finishDocument(tail);
+  const result = a.result();
+  assert.equal(result.fullSnapshot, false);
+  assert.equal(result.quality.documentStarted, false);
+  assert.equal(result.quality.truncatedXml, true);
+});
+
+test('未知顶层容器未闭合时即使看见根尾标签也必须降级为 partial', () => {
+  const a = createAggregator();
+  const tail = feedXmlChunk('<HealthData><FutureHealthElement><Record/></HealthData>', a);
+  a.finishDocument(tail);
+  const result = a.result();
+  assert.equal(result.fullSnapshot, false);
+  assert.equal(result.quality.documentStarted, true);
+  assert.equal(result.quality.documentComplete, true);
+  assert.equal(result.quality.truncatedXml, true);
+});
+
+test('即使出现 HealthData 尾标签，未闭合的 Record 仍视为损坏快照', () => {
+  const a = createAggregator();
+  const tail = feedXmlChunk(`<HealthData><Record type="HKQuantityTypeIdentifierStepCount"
+    value="100" unit="count" startDate="2026-08-20 09:00:00 +0800"
+    endDate="2026-08-20 09:05:00 +0800"></HealthData>`, a);
+  a.finishDocument(tail);
+  const result = a.result();
+  assert.equal(result.fullSnapshot, false);
+  assert.equal(result.quality.documentComplete, true);
+  assert.equal(result.quality.truncatedXml, true);
+});
+
+test('来源版本、设备与创建时间在质量元数据中保留，XML 实体会解码', () => {
+  const a = createAggregator();
+  feedXmlChunk(`<Record type="HKQuantityTypeIdentifierStepCount" value="100" unit="count"
+    sourceName="Watch &amp; Phone" sourceVersion="10.1" device="&lt;&lt;HKDevice&gt;&gt;"
+    creationDate="2026-08-20 09:06:00 +0800" startDate="2026-08-20 09:00:00 +0800"
+    endDate="2026-08-20 09:05:00 +0800"/>`, a);
+  const source = a.result().quality.sourceCoverage[0];
+  assert.equal(source.sourceName, 'Watch & Phone');
+  assert.deepEqual(source.sourceVersions, ['10.1']);
+  assert.deepEqual(source.devices, ['<<HKDevice>>']);
+  assert.equal(source.firstCreationDate, '2026-08-20 09:06:00 +0800');
+  assert.equal(source.lastCreationDate, '2026-08-20 09:06:00 +0800');
+});
+
+test('跨午夜累计样本按持续时间拆分到两个本地日', () => {
+  const agg = createAggregator();
+  feedXmlChunk(rec('HKQuantityTypeIdentifierStepCount', 100, '2026-08-20 23:55:00 +0800', '2026-08-21 00:05:00 +0800', 'count'), agg);
+  const { days } = agg.result();
+  assert.equal(days[0].steps, 50);
+  assert.equal(days[1].steps, 50);
+});
+
 test('分块流式解析：标签被切成两半也不丢数据', () => {
   const xml = [
     rec('HKQuantityTypeIdentifierStepCount', 500, '2026-08-20 09:00:00 +0800', '2026-08-20 09:10:00 +0800', 'count'),
@@ -128,6 +392,21 @@ test('Health Auto Export 风格的 JSON', () => {
   assert.equal(days[0].weightKg, 71.4);
 });
 
+test('JSON 平均型按日求平均，最近值按时间而不是数组顺序', () => {
+  const { days } = parseHealthJson({ data: { metrics: [
+    { name: 'resting_heart_rate', units: 'count/min', data: [
+      { date: '2026-08-20 20:00:00 +0800', qty: 80 },
+      { date: '2026-08-20 08:00:00 +0800', qty: 60 },
+    ] },
+    { name: 'weight_body_mass', units: 'lb', data: [
+      { date: '2026-08-20 20:00:00 +0800', qty: 154.3 },
+      { date: '2026-08-20 08:00:00 +0800', qty: 150 },
+    ] },
+  ] } });
+  assert.equal(days[0].restingHR, 70);
+  assert.ok(Math.abs(days[0].weightKg - 70) < 0.1, 'point/metric 单位应换算且取时间最新值');
+});
+
 test('扁平 JSON（快捷指令粘贴的格式）', () => {
   const { days } = parseHealthJson([
     { date: '2026-08-20', steps: 8600, activeEnergy: 520, weightKg: 71.2 },
@@ -142,6 +421,26 @@ test('CSV 导入', () => {
   assert.equal(days.length, 2);
   assert.equal(days[0].steps, 8600);
   assert.equal(days[1].weightKg, 71.0);
+});
+
+test('CSV 支持引号逗号、空值、BOM、单位表头与重复日期合并', () => {
+  const csv = '\uFEFFdate,steps,weight[lb],active_energy(kJ)\r\n'
+    + '2026-08-20,"1,234",,418.4\r\n'
+    + '2026-08-20,"2,345",154.3,836.8\r\n';
+  const result = parseHealthCsv(csv);
+  assert.equal(result.days.length, 1);
+  assert.equal(result.days[0].steps, 2345, '同日重复行按后值合并，而不是产出重复日期');
+  assert.ok(Math.abs(result.days[0].weightKg - 70) < 0.1);
+  assert.ok(Math.abs(result.days[0].activeEnergy - 200) < 1e-9);
+});
+
+test('异常健康值被隔离而不是写入', () => {
+  assert.equal(isPlausibleHealthValue('steps', -1), false);
+  assert.equal(isPlausibleHealthValue('weightKg', 900), false);
+  const { days, quality } = parseHealthJson({ date: '2026-08-20', steps: -10, weight: 70 });
+  assert.equal(days[0].steps, undefined);
+  assert.equal(days[0].weightKg, 70);
+  assert.equal(quality.invalidRecords, 1);
 });
 
 test('CSV 缺少日期列时明确失败而不是产生垃圾数据', () => {
@@ -249,6 +548,32 @@ test('修正只动能量字段，其余原样保留', async () => {
   assert.equal(fixed[0].sleepMinutes, 430, '睡眠不该被改');
 });
 
+test('历史能量修复逐字段处理，且不会碰当天未同步完的静息能量', async () => {
+  const { repairMisscaledEnergy } = await import('../js/core/health.js');
+  const fixed = repairMisscaledEnergy([
+    { date: '2026-08-01', steps: 8000, restingEnergy: 1.48, activeEnergy: 550, hkKcal: 1900 },
+    { date: '2026-08-20', steps: 100, restingEnergy: 40, activeEnergy: 5 },
+  ], '2026-08-20');
+  assert.equal(fixed.length, 1);
+  assert.equal(fixed[0].restingEnergy, 1480);
+  assert.equal(fixed[0].activeEnergy, 550);
+  assert.equal(fixed[0].hkKcal, 1900);
+});
+
+test('基线先排序并截断当前日，不能偷看未来体重', () => {
+  const health = [
+    { date: '2026-09-01', weightKg: 90, activeEnergy: 900 },
+    { date: '2026-08-08', weightKg: 69.8, activeEnergy: 400 },
+    { date: '2026-08-01', weightKg: 70.1, activeEnergy: 300 },
+    { date: '2026-08-05', weightKg: 70.0, activeEnergy: 350 },
+    { date: '2026-08-09', weightKg: 69.7, activeEnergy: 450 },
+  ];
+  const b = computeBaseline(health, [], '2026-08-10', 14);
+  assert.equal(b.latestWeight, 69.7);
+  assert.ok(b.activeEnergy < 500);
+  assert.ok(b.weightTrend < 0);
+});
+
 test('修正是幂等的：再跑一次不会把正确数据放大一千倍', async () => {
   const { repairMisscaledEnergy, findMisscaledEnergyDays } = await import('../js/core/health.js');
   const once = repairMisscaledEnergy([{ date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 }]);
@@ -275,7 +600,8 @@ const recFrom = (src, type, value, start, end = start, unit = '') =>
 test('iPhone 与 Apple Watch 各写一份步数时不重复计数', () => {
   // 实测：健康 App 当天显示 8419 步，把导出文件里所有来源加起来变成 16299 步。
   // 两台设备记的是同一段路，加起来就是把人走的路数了两遍。
-  const agg = createAggregator();
+  // export.xml 不携带「健康」App 中用户配置的来源顺序；这里显式复现该用户的 iPhone 优先设置。
+  const agg = createAggregator({ sourcePriority: ['iPhone', 'Apple Watch'] });
   feedXmlChunk([
     recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 5000, '2026-08-22 09:00:00 +0800', '2026-08-22 09:30:00 +0800', 'count'),
     recFrom('iPhone', 'HKQuantityTypeIdentifierStepCount', 3419, '2026-08-22 15:00:00 +0800', '2026-08-22 15:30:00 +0800', 'count'),
@@ -283,7 +609,7 @@ test('iPhone 与 Apple Watch 各写一份步数时不重复计数', () => {
     recFrom('Apple Watch', 'HKQuantityTypeIdentifierStepCount', 3280, '2026-08-22 15:00:00 +0800', '2026-08-22 15:30:00 +0800', 'count'),
   ].join('\n'), agg);
   const { days } = agg.result();
-  assert.equal(days[0].steps, 8419, '应取最完整的那个来源，而不是 16299');
+  assert.equal(days[0].steps, 8419, '应按显式来源顺序选择 iPhone，而不是相加成 16299');
 });
 
 test('只有一个来源时结果和原来完全一样', () => {

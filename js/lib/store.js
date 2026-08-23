@@ -5,10 +5,17 @@
 
 import * as db from './db.js';
 import { todayKey, dayFraction } from './utils.js';
-import { dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE } from '../core/nutrition.js';
+import {
+  dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
+} from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
-  findImplausibleDays, clearImplausibleValues, implausibleFields } from '../core/health.js';
+import {
+  computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
+  findImplausibleDays, clearImplausibleValues, implausibleFields, isPlausibleHealthValue,
+} from '../core/health.js';
+import {
+  isCompleteAppleSnapshot, mergeApplePartialRows, replaceAppleSnapshotRows, stampManualPatch,
+} from '../core/health-merge.js';
 import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
@@ -24,6 +31,7 @@ export const DEFAULT_PROFILE = {
   proteinPerKg: null,
   useAppleEnergy: true,   // 用 Apple 健康的真实消耗动态调整热量预算
   syncWeightFromApple: true,
+  appleSourcePriority: [], // 可选：export.xml sourceName 的统一优先顺序
   onboarded: false,
 };
 
@@ -198,7 +206,10 @@ export async function setDay(dayKey) {
 
 export async function saveProfile(patch) {
   // 只要用户动过设置，就不再显示首次引导
-  state.profile = { ...state.profile, ...patch, onboarded: true };
+  const next = { ...state.profile, ...patch, onboarded: true };
+  const checked = validateProfile(next);
+  if (!checked.valid) throw new RangeError(checked.errors.join('；'));
+  state.profile = next;
   await db.setSetting('profile', state.profile);
   recompute();
   emit();
@@ -299,19 +310,31 @@ export async function removeCustomFood(id) {
 
 /** 写入导入的 Apple 健康数据（同日期字段合并，不覆盖已有的其它字段） */
 export async function mergeHealthDays(days, meta = {}) {
-  if (!days?.length) return 0;
-  await db.bulkPut(db.STORES.health, days, { merge: true });
+  const isCompleteSnapshot = isCompleteAppleSnapshot(meta);
+  if (!days?.length && !isCompleteSnapshot) return 0;
+  const incomingDays = days || [];
+  const existing = await db.getAll(db.STORES.health);
+  const importId = `health-${Date.now().toString(36)}`;
+  if (isCompleteSnapshot) {
+    const { upserts, deletes } = replaceAppleSnapshotRows(existing, incomingDays, importId);
+    await db.bulkSync(db.STORES.health, upserts, deletes);
+  } else {
+    const merged = mergeApplePartialRows(existing, incomingDays, importId);
+    await db.bulkSync(db.STORES.health, merged);
+  }
   setHealthDays(await db.getAll(db.STORES.health));
   state.lastImport = {
     at: new Date().toISOString(),
-    days: days.length,
-    range: [days[0].date, days[days.length - 1].date],
+    days: incomingDays.length,
+    range: incomingDays.length
+      ? [incomingDays[0].date, incomingDays[incomingDays.length - 1].date]
+      : null,
     ...meta,
   };
   await db.setSetting('lastImport', state.lastImport);
   recompute();
   emit();
-  return days.length;
+  return incomingDays.length;
 }
 
 /** 有多少天的能量数据受早期单位缺陷影响 */
@@ -353,8 +376,12 @@ export async function clearImplausibleHealth() {
 
 /** 手动写入 / 修改某天的健康数据 */
 export async function saveHealthDay(date, patch) {
+  for (const [key, value] of Object.entries(patch || {})) {
+    if (key === 'source' || value == null || value === '') continue;
+    if (!isPlausibleHealthValue(key, value)) throw new RangeError(`${key} 的数值超出可接受范围`);
+  }
   const existing = state.healthByDate.get(date) || { date };
-  const row = { ...existing, ...patch, date, source: patch.source || existing.source || 'manual' };
+  const row = stampManualPatch(existing, { ...patch, date });
   await db.put(db.STORES.health, row);
   setHealthDays(await db.getAll(db.STORES.health));
   recompute();
