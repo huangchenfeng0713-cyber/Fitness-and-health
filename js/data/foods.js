@@ -943,7 +943,7 @@ export const FOODS = [
   { id: 'preserved_plum', name: '话梅 / 陈皮梅', alias: 'huamei chenpimei preserved plum', cat: 'snack', n: [260, 2.0, 0.5, 63.0, 5.0, 50.0, 1200], s: [['三颗可食部', 15]], ...META_RECIPE_READY, note: '非特定品牌蜜饯代表值，糖和钠差异很大', f: ['processed', 'quick', 'est'] },
   { id: 'dried_prune', name: '西梅干', alias: 'ximeigan dried prune', cat: 'fruit', n: [240, 2.2, 0.4, 64.0, 7.1, 38.0, 2], s: [['一小把', 30]], ...META_USDA_READY, note: '按无额外加糖的干西梅计；糖为完整果干内源糖', f: ['quick'] },
 
-  // ---------- v1.2 常见食品补充：糯米主食、饭团、街边小吃、粉面和盖饭 ----------
+  // ---------- v1.3 常见食品补充：糯米主食、饭团、街边小吃、粉面和盖饭 ----------
   { id: 'glutinous_rice_cooked', name: '糯米饭（熟）', alias: 'nuomifan glutinous sticky rice cooked', cat: 'staple', n: [116, 2.3, 0.3, 25.8, 0.3, 0.1, 2], s: [['小碗', 150], ['中碗', 200]], nfs: 0.1, ...META_RECIPE_COOKED, note: '只计清水蒸熟糯米，不含糖、油和配菜', f: ['refined', 'est'] },
   { id: 'eight_treasure_rice', name: '八宝饭', alias: 'babaofan eight treasure glutinous rice', cat: 'staple', n: [220, 4.0, 4.0, 42.0, 2.0, 18.0, 80], s: [['一小碗', 180]], ...META_RECIPE_READY, note: '按糯米、豆沙、果脯、坚果和糖的常见甜口配方估算', f: ['refined', 'processed', 'est'] },
   { id: 'salted_egg_meat_zongzi', name: '咸蛋黄肉粽', alias: 'xiandanhuang rouzong rouzongzi zongzi 咸肉粽 粽子', cat: 'staple', n: [260, 8.0, 12.0, 30.0, 1.0, 2.0, 600], s: [['一个', 180]], ...META_RECIPE_READY, note: '按糯米、五花肉、咸蛋黄和咸味调料估算，不含粽叶重量', f: ['processed', 'quick', 'est'] },

@@ -31,7 +31,7 @@ const COMMON_FOOD_EXPANSION_IDS = [
   'omelette_rice',
 ];
 
-test('常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索', () => {
+test('v1.3 常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索', () => {
   assert.equal(COMMON_FOOD_EXPANSION_IDS.length, 64);
   for (const id of COMMON_FOOD_EXPANSION_IDS) {
     const food = FOOD_BY_ID.get(id);
