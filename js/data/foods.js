@@ -1,5 +1,5 @@
 /**
- * 食物营养库（每 100g 可食部）
+ * 食物营养库（固体按每 100g 可食部，饮品按每 100ml）
  * 数据参考《中国食物成分表》标准版及常见品牌营养标签的通用值，用于估算而非临床用途。
  *
  * 字段：
@@ -7,7 +7,7 @@
  *   name     中文名
  *   alias    搜索别名（拼音首字母 / 俗称）
  *   cat      分类
- *   n        每 100g：[热量kcal, 蛋白g, 脂肪g, 碳水g, 膳食纤维g, 糖g, 钠mg]
+ *   n        按 basis 每 100g/100ml：[热量kcal, 蛋白g, 脂肪g, 碳水g, 膳食纤维g, 糖g, 钠mg]
  *   s        常用份量 [[名称, 克数], ...]
  *   sf       仅茶饮：点「无糖」时仍残留的总糖（每 100g）
  *   nfs      其中不属于 WHO 游离糖的部分（乳糖、完整果肉内源糖等，每 100g）
@@ -120,6 +120,9 @@ const META_USDA_COOKED = Object.freeze({
 });
 const META_USDA_READY = Object.freeze({
   source: SOURCE_USDA, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+});
+const META_USDA_DRINK = Object.freeze({
+  source: SOURCE_USDA, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
 
 export const FOODS = [
@@ -1138,6 +1141,82 @@ export const FOODS = [
   { id: 'mixue_lemonade', name: '蜜雪冰城 柠檬水', alias: 'mixue ningmengshui', cat: 'drink', n: [38, 0.1, 0, 9.5, 0.2, 9.2, 5], s: [['中杯', 500]], f: ['sweetdrink', 'tealevel', 'est'], sf: 0.5, nfs: 0 },
   { id: 'mixue_icecream', name: '蜜雪冰城 冰淇淋', alias: 'mixue bingqilin', cat: 'snack', n: [186, 3, 6.5, 29, 0, 24, 70], s: [['一个', 75]], f: ['processed', 'est'], nfs: 3 },
   { id: 'rice_cake_korean', name: '韩式年糕', alias: 'hanshi niangao tteok', cat: 'staple', n: [218, 3.6, 0.6, 49.5, 1, 0.5, 280], s: [['一份', 150]], f: ['refined'] },
+
+  // ---------- 闽琼鄂地方小吃与可组合甜品 ----------
+  { id: 'fuding_pork_slices', name: '福鼎肉片', alias: 'fuding roupian 福建肉片 温州瘦肉丸 肉片汤', cat: 'dish', n: [92, 8.5, 1.8, 10.5, 0.2, 0.8, 600], s: [['一小碗（含汤）', 300], ['一大碗（含汤）', 450]], ...META_RECIPE_READY, note: '按猪后腿瘦肉、地瓜粉及整碗清汤估算；摊店的粉肉比例、汤底和调味差异较大，不喝汤时钠摄入通常更低', f: ['est', 'breakfast'] },
+  { id: 'tujia_sauce_pancake', name: '土家酱香饼', alias: 'tujia jiangxiangbing 酱香饼 公婆饼 恩施', cat: 'staple', n: [337, 7.5, 15, 44, 2, 4, 780], s: [['一小块', 50], ['一份', 150], ['半张', 250]], ...META_RECIPE_READY, note: '按刷油烙饼和咸甜酱料估算；摊店刷油量、酱量和切块大小差异明显', f: ['refined', 'fried', 'processed', 'quick', 'est'] },
+  { id: 'fujian_guobianhu', name: '福州锅边糊', alias: 'fuzhou guobianhu 鼎边糊 福建小吃', cat: 'dish', n: [68, 2.8, 1.8, 9.8, 0.4, 0.4, 550], s: [['一碗（含汤）', 400]], ...META_RECIPE_READY, note: '按米浆片、海鲜或肉末配料及整碗汤估算；汤底和配料随店家变化', f: ['breakfast', 'est'] },
+  { id: 'fuzhou_rouyan', name: '福州肉燕', alias: 'fuzhou rouyan 太平燕 肉燕汤 福建小吃', cat: 'dish', n: [99, 9.5, 3, 8.5, 0.2, 0.3, 600], s: [['一碗（含汤）', 350], ['一只', 20]], ...META_RECIPE_READY, note: '按肉燕、少量配菜及整碗汤估算；若不喝汤，实际钠摄入通常更低', f: ['est'] },
+  { id: 'shaxian_bianrou', name: '沙县扁肉', alias: 'shaxian bianrou 扁食 馄饨 福建小吃', cat: 'dish', n: [85, 7.5, 2.5, 8.2, 0.2, 0.3, 560], s: [['一碗（含汤）', 350], ['一只', 18]], ...META_RECIPE_READY, note: '按扁肉及整碗清汤估算；馅料、汤底和调味随店家变化', f: ['est'] },
+  { id: 'curry_fish_balls', name: '咖喱鱼蛋 / 咖喱鱼丸', alias: 'gali yudan curry fish ball 鱼蛋 街边小吃', cat: 'snack', n: [164, 10, 7, 15, 1, 2, 700], s: [['一串 4 颗', 80], ['一份 8 颗', 160]], ...META_RECIPE_READY, note: '按鱼丸和附着咖喱酱估算，不包含饮用余下酱汁', f: ['processed', 'quick', 'est'] },
+  { id: 'street_chicken_cutlet', name: '街边炸鸡排', alias: 'jipai fried chicken cutlet 正新鸡排 大鸡排', cat: 'snack', n: [293, 21, 15, 19, 1, 1, 780], s: [['一块', 180]], ...META_RECIPE_READY, note: '按裹粉鸡胸肉、吸油和撒料估算；厚度、裹粉和吸油量差异较大', f: ['fried', 'processed', 'quick', 'est'] },
+  { id: 'egg_waffle', name: '鸡蛋仔', alias: 'jidanzi egg waffle 香港小吃', cat: 'snack', n: [325, 7.5, 12.5, 46, 1, 18, 260], s: [['一份', 150], ['半份', 75]], ...META_RECIPE_READY, note: '按原味鸡蛋仔估算；加巧克力、奶油或冰淇淋需另记', f: ['refined', 'quick', 'est'] },
+  { id: 'cream_puff', name: '泡芙（奶油馅）', alias: 'paofu cream puff shu', cat: 'snack', n: [292, 6, 18, 27, 1, 12, 180], s: [['一个小号', 35], ['一个大号', 80]], ...META_RECIPE_READY, note: '按奶油夹心泡芙通用配方估算，馅料比例会显著影响热量', f: ['refined', 'processed', 'quick', 'est'] },
+  { id: 'ginger_milk_curd', name: '姜撞奶', alias: 'jiangzhuangnai ginger milk curd 广东甜品', cat: 'snack', n: [120, 4, 4.5, 16, 0.1, 15, 70], s: [['一碗', 220]], ...META_RECIPE_READY, nfs: 3.8, note: '按全脂奶和加糖的常见甜度估算；牛奶乳糖不计入游离糖，加糖部分计入', f: ['est'] },
+  { id: 'sweet_red_bean_soup', name: '红豆糖水', alias: 'hongdou tangshui red bean soup 红豆沙', cat: 'snack', n: [93, 3.5, 0.3, 19.2, 3.1, 9.5, 18], s: [['一碗', 300]], ...META_RECIPE_READY, nfs: 0.2, note: '按煮红豆和糖水估算；甜度可使热量明显变化', f: ['est'] },
+  { id: 'sweet_mung_bean_soup', name: '绿豆糖水', alias: 'lvdou tangshui mung bean soup 绿豆汤', cat: 'snack', n: [82, 3, 0.2, 17.4, 2.8, 8, 15], s: [['一碗', 300]], ...META_RECIPE_READY, nfs: 0.5, note: '按煮绿豆和糖水估算；不加糖版本可在清补凉配料中用熟绿豆记录', f: ['est'] },
+  { id: 'white_fungus_soup', name: '银耳羹（加糖）', alias: 'yiner geng white fungus soup 银耳汤', cat: 'snack', n: [54, 0.3, 0.1, 13.4, 0.8, 10, 8], s: [['一碗', 300]], ...META_RECIPE_READY, nfs: 0, note: '按银耳和糖水估算；红枣、莲子等额外配料需按实际加入', f: ['est'] },
+  { id: 'jiuniang_tangyuan', name: '酒酿小圆子', alias: 'jiuniang xiaoyuanzi fermented rice dumpling 醪糟汤圆', cat: 'snack', n: [94, 2, 1, 19.5, 0.4, 8, 25], s: [['一碗', 300]], ...META_RECIPE_READY, note: '按甜酒酿、小圆子和汤汁估算；糖量与圆子比例差异较大', f: ['refined', 'est'] },
+
+  // 清补凉的可选原料也各自可搜索；组合条目会按用户实际选择逐项求和。
+  { id: 'coconut_milk_sweet', name: '椰奶（清补凉甜味底）', alias: 'yenai coconut milk qingbuliang 清补凉椰奶', cat: 'drink', n: [105, 1, 7, 9.5, 0, 8, 30], s: [['一杯', 250]], nfs: 0, ...META_RECIPE_DRINK, note: '按稀释椰浆和糖的甜品底估算；并非罐装浓椰浆', f: ['sweetdrink', 'est'] },
+  { id: 'red_bean_cooked', name: '红豆（煮熟，无糖）', alias: 'hongdou cooked red bean 赤小豆 熟红豆', cat: 'soy', n: [127, 8.7, 0.5, 22.8, 6.4, 0.3, 1], s: [['一勺', 25], ['一份', 100]], nfs: 0.3, ...META_USDA_COOKED, f: ['whole'] },
+  { id: 'mung_bean_cooked', name: '绿豆（煮熟，无糖）', alias: 'lvdou cooked mung bean 熟绿豆', cat: 'soy', n: [105, 7, 0.4, 19.2, 7.6, 2, 2], s: [['一勺', 25], ['一份', 100]], nfs: 2, ...META_USDA_COOKED, f: ['whole'] },
+  { id: 'coix_seed_cooked', name: '薏米（煮熟，无糖）', alias: 'yimi coix job tears cooked 薏仁', cat: 'staple', n: [123, 3, 0.5, 26.7, 1.5, 0.5, 3], s: [['一勺', 25], ['一份', 100]], nfs: 0.5, ...META_RECIPE_COOKED, f: ['whole', 'est'] },
+  { id: 'lotus_seed_cooked', name: '莲子（煮熟，无糖）', alias: 'lianzi lotus seed cooked 熟莲子', cat: 'nut', n: [89, 4.9, 0.5, 17.3, 4.9, 0.3, 1], s: [['一勺', 25], ['一份', 100]], nfs: 0.3, ...META_USDA_COOKED, f: ['whole'] },
+  { id: 'peanut_boiled', name: '花生（煮，无糖）', alias: 'huasheng boiled peanut 水煮花生', cat: 'nut', n: [320, 13.5, 22, 21.3, 8.8, 2.5, 9], s: [['一勺', 15], ['一小把', 30]], nfs: 2.5, ...META_USDA_COOKED, f: ['whole'] },
+  { id: 'grass_jelly_plain', name: '仙草冻 / 凉粉（无糖）', alias: 'xiancao grass jelly liangfen 烧仙草 黑凉粉', cat: 'snack', n: [15, 0.2, 0, 3.8, 0.6, 0, 5], s: [['一勺', 30], ['一份', 100]], ...META_RECIPE_READY, note: '只计无糖凝胶本体，糖浆、奶底和其它配料另计', f: ['est'] },
+  { id: 'sago_cooked', name: '西米（煮熟，无糖）', alias: 'ximi sago cooked 西米露配料', cat: 'staple', n: [71, 0.2, 0.1, 17.5, 0.2, 0, 1], s: [['一勺', 25], ['一份', 100]], ...META_RECIPE_COOKED, note: '只计煮熟西米本体，不含糖水和奶底', f: ['refined', 'est'] },
+  { id: 'taro_balls_cooked', name: '芋圆（煮熟）', alias: 'yuyuan taro balls cooked 地瓜圆 甜品配料', cat: 'snack', n: [177, 1, 0.4, 42.8, 0.8, 8, 20], s: [['一勺', 30], ['一份', 100]], nfs: 0, ...META_RECIPE_COOKED, note: '按含糖淀粉芋圆估算，品牌和手作配方差异较大', f: ['refined', 'processed', 'est'] },
+  { id: 'adazi_cooked', name: '阿达籽（煮熟）', alias: 'adazi 海南清补凉 透明糯米粒 甜品配料', cat: 'snack', n: [125, 0.2, 0.1, 31, 0.3, 5, 15], s: [['一勺', 25], ['一份', 100]], nfs: 0, ...META_RECIPE_COOKED, note: '按海南甜品常见木薯淀粉制阿达籽估算', f: ['refined', 'est'] },
+  { id: 'winter_melon_candy', name: '冬瓜糖', alias: 'dongguatang winter melon candy 糖冬瓜', cat: 'snack', n: [319, 0.3, 0.1, 79.5, 0.5, 72, 20], s: [['一小勺', 15], ['一份', 30]], nfs: 0, ...META_RECIPE_READY, f: ['processed', 'quick', 'est'] },
+  { id: 'dessert_sugar_syrup', name: '甜品糖浆', alias: 'tangjiang sugar syrup qingbuliang 清补凉糖水', cat: 'other', n: [60, 0, 0, 15, 0, 15, 1], s: [['一勺', 20], ['一份', 50]], nfs: 0, ...META_RECIPE_READY, note: '按约 15% 糖的稀糖浆估算', f: ['refined', 'est'] },
+  {
+    id: 'qingbuliang_custom', name: '清补凉（自选配料）', alias: 'qingbuliang 海南清补凉 椰奶清补凉 椰子水清补凉', cat: 'snack',
+    n: [102, 2.2, 5.4, 11.8, 1.6, 4.8, 16], s: [['常见一碗', 375]], nfs: 1,
+    ...META_RECIPE_READY,
+    note: '营养按下方实际勾选的常用料和份量逐项计算；椰奶、糖浆、冰淇淋及各店甜度差异会显著改变热量与游离糖',
+    f: ['est'],
+    mix: {
+      label: '常用配料与份量',
+      components: [
+        { foodId: 'coconut_milk_sweet', label: '椰奶底', defaultGrams: 180, step: 10, max: 500, unit: 'ml' },
+        { foodId: 'coconut_water', label: '椰子水', defaultGrams: 0, step: 10, max: 400, unit: 'ml' },
+        { foodId: 'red_bean_cooked', label: '红豆', defaultGrams: 25, step: 5, max: 150 },
+        { foodId: 'mung_bean_cooked', label: '绿豆', defaultGrams: 20, step: 5, max: 150 },
+        { foodId: 'coix_seed_cooked', label: '薏米', defaultGrams: 20, step: 5, max: 150 },
+        { foodId: 'peanut_boiled', label: '花生', defaultGrams: 10, step: 5, max: 80 },
+        { foodId: 'lotus_seed_cooked', label: '莲子', defaultGrams: 0, step: 5, max: 100 },
+        { foodId: 'grass_jelly_plain', label: '仙草冻', defaultGrams: 30, step: 10, max: 200 },
+        { foodId: 'sago_cooked', label: '西米', defaultGrams: 25, step: 5, max: 150 },
+        { foodId: 'taro_balls_cooked', label: '芋圆', defaultGrams: 0, step: 5, max: 150 },
+        { foodId: 'adazi_cooked', label: '阿达籽', defaultGrams: 0, step: 5, max: 150 },
+        { foodId: 'coconut_meat', label: '椰肉', defaultGrams: 15, step: 5, max: 100 },
+        { foodId: 'watermelon', label: '西瓜', defaultGrams: 30, step: 10, max: 200 },
+        { foodId: 'pineapple', label: '菠萝', defaultGrams: 0, step: 10, max: 200 },
+        { foodId: 'macaroni_cooked', label: '通心粉', defaultGrams: 0, step: 5, max: 150 },
+        { foodId: 'winter_melon_candy', label: '冬瓜糖', defaultGrams: 0, step: 5, max: 60 },
+        { foodId: 'ice_cream', label: '冰淇淋', defaultGrams: 0, step: 10, max: 150 },
+        { foodId: 'dessert_sugar_syrup', label: '糖浆', defaultGrams: 0, step: 5, max: 100 },
+        { foodId: 'water', label: '冰与水', defaultGrams: 20, step: 10, max: 300, unit: 'ml' },
+      ],
+    },
+  },
+
+  // ---------- 果汁与常见即饮果蔬饮品（液体均按 100ml） ----------
+  { id: 'juice_apple', name: '苹果汁（100%）', alias: 'pingguozhi apple juice 纯果汁', cat: 'drink', n: [46, 0.1, 0.1, 11.3, 0.2, 9.6, 4], s: [['一杯', 250], ['一小瓶', 300]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
+  { id: 'juice_grape', name: '葡萄汁（100%）', alias: 'putaozhi grape juice 纯果汁', cat: 'drink', n: [60, 0.4, 0.1, 15.2, 0.2, 14.5, 5], s: [['一杯', 250]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
+  { id: 'juice_pineapple', name: '菠萝汁（100%）', alias: 'boluozhi pineapple juice 凤梨汁 纯果汁', cat: 'drink', n: [53, 0.4, 0.1, 13.1, 0.2, 10.5, 2], s: [['一杯', 250]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
+  { id: 'juice_pear', name: '梨汁（100%）', alias: 'lizhi pear juice 雪梨汁 纯果汁', cat: 'drink', n: [47, 0.1, 0.1, 11.7, 0.2, 9.8, 4], s: [['一杯', 250]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
+  { id: 'juice_mango', name: '芒果汁（100%）', alias: 'mangguozhi mango juice 纯果汁', cat: 'drink', n: [56, 0.2, 0.1, 14, 0.3, 12.5, 5], s: [['一杯', 250]], nfs: 0, ...META_RECIPE_DRINK, note: '按无额外加糖的芒果原汁代表值估算；浓稠果泥型饮品差异较大', f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'juice_pomegranate', name: '石榴汁（100%）', alias: 'shiliuzhi pomegranate juice 纯果汁', cat: 'drink', n: [54, 0.2, 0.1, 13.2, 0.1, 12.5, 5], s: [['一杯', 250]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
+  { id: 'juice_watermelon', name: '西瓜汁（鲜榨，无加糖）', alias: 'xiguazhi watermelon juice 鲜榨果汁', cat: 'drink', n: [31, 0.6, 0.2, 7.6, 0.2, 6.2, 2], s: [['一杯', 350]], nfs: 0, ...META_RECIPE_DRINK, note: '按不加糖、不滤渣的鲜榨西瓜汁估算；加糖需另计', f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'juice_tomato', name: '番茄汁（无加糖）', alias: 'fanqiezhi tomato juice 西红柿汁', cat: 'drink', n: [17, 0.8, 0.1, 3.5, 0.4, 2.6, 20], s: [['一杯', 250], ['一罐', 330]], nfs: 0, ...META_USDA_DRINK, note: '钠按低盐代表值；罐装加盐番茄汁应优先看包装标签', f: ['quick'] },
+  { id: 'juice_carrot', name: '胡萝卜汁（无加糖）', alias: 'huluobozhi carrot juice 果蔬汁', cat: 'drink', n: [41, 0.9, 0.2, 9.3, 0.8, 3.9, 45], s: [['一杯', 250]], nfs: 0, ...META_USDA_DRINK, f: ['quick'] },
+  { id: 'juice_mixed_fruit', name: '混合果汁（100%）', alias: 'hunhe guozhi mixed fruit juice 复合果汁', cat: 'drink', n: [53, 0.3, 0.1, 13, 0.2, 11, 5], s: [['一杯', 250], ['一瓶', 300]], nfs: 0, ...META_RECIPE_DRINK, note: '按无额外加糖的混合果汁代表值估算，实际以配料表和营养标签为准', f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'juice_drink_generic', name: '果汁饮料（含糖，通用）', alias: 'guozhi yinliao juice drink 果味饮料 果粒饮料', cat: 'drink', n: [42, 0.1, 0, 10.5, 0.1, 10, 8], s: [['一瓶', 500], ['一盒', 250]], nfs: 0, ...META_RECIPE_DRINK, note: '不是 100% 果汁；按水、果汁和添加糖的常见果汁饮料估算，优先使用包装标签', f: ['sweetdrink', 'processed', 'quick', 'est'] },
+  { id: 'corn_juice', name: '鲜榨玉米汁（常见甜度）', alias: 'yumizhi corn juice 玉米饮料', cat: 'drink', n: [52, 1.2, 0.7, 10.5, 0.6, 5, 25], s: [['一杯', 300]], nfs: 1, ...META_RECIPE_DRINK, note: '按玉米、水和少量添加糖的餐馆常见配方估算', f: ['sweetdrink', 'est'] },
+  { id: 'mixed_fruit_cup', name: '鲜切水果拼盘', alias: 'shuiguo pingpan fruit cup 果切 水果捞不加奶', cat: 'fruit', n: [53, 0.6, 0.2, 13, 1.4, 10.5, 2], s: [['一盒', 300], ['一小盒', 200]], ...META_RECIPE_READY, note: '按多种完整鲜果混合估算，不含酸奶、椰奶、糖浆或罐头水果', f: ['whole', 'quick', 'est'] },
 ];
 
 // 旧库兼容迁移：不改营养数字，只把已能确定的来源、估算边界和糖口径显式化。
@@ -1180,6 +1259,24 @@ const INTRINSIC_SUGAR_IDS = new Set([
 ]);
 
 for (const food of FOODS) {
+  // 旧饮品最初没有单位元数据，界面会把 250ml 错写成 250g。只补能确定的
+  // 计量口径，不给旧营养数字虚构来源；新旧饮品从此都统一显示 ml。
+  if (food.cat === 'drink') {
+    food.basis ||= '100ml';
+    food.state ||= 'ready';
+    food.edibleRatio ??= 1;
+    food.carbBasis ||= 'total';
+  }
+  if (food.id === 'juice_orange') food.nfs = 0;
+  if (food.id === 'coconut_water') {
+    food.cat = 'drink';
+    food.basis = '100ml';
+    food.state ||= 'ready';
+    food.edibleRatio ??= 1;
+    food.carbBasis ||= 'total';
+    food.nfs = 0;
+  }
+
   if (food.cat === 'dish') {
     if (!food.f.includes('est')) food.f = [...food.f, 'est'];
     food.note ||= LEGACY_BROTH_NOTES[food.id]
@@ -1261,6 +1358,73 @@ export function unitLabel(servingName) {
 
 /** 名称 -> 食物 的索引 */
 export const FOOD_BY_ID = new Map(FOODS.map((f) => [f.id, f]));
+
+/** 复合食物是否支持逐项选择原料；目前用于清补凉，结构可复用于沙拉、麻辣烫等。 */
+export function hasFoodMix(food) {
+  return Array.isArray(food?.mix?.components) && food.mix.components.length > 0;
+}
+
+/** 返回一份新的默认原料表，调用方可以直接修改而不会污染食物库。 */
+export function defaultFoodMix(food) {
+  if (!hasFoodMix(food)) return {};
+  return Object.fromEntries(food.mix.components.map((component) => [
+    component.foodId,
+    Math.max(0, Number(component.defaultGrams) || 0),
+  ]));
+}
+
+const roundMix = (value, decimals = 1) => {
+  const scale = 10 ** decimals;
+  return Math.round((Number(value) || 0) * scale) / scale;
+};
+
+/**
+ * 把复合食物的原料逐项换算再求和。
+ * amounts 省略时使用默认配方；一旦传入对象，未出现的原料按 0 处理，便于彻底取消某项。
+ */
+export function foodMixNutrition(food, amounts = null) {
+  if (!hasFoodMix(food)) throw new TypeError('这个食物没有可组合配方');
+  const selected = amounts == null ? defaultFoodMix(food) : amounts;
+  const total = {
+    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0,
+    totalSugar: 0, sugar: 0, sodium: 0,
+  };
+  const components = [];
+  let grams = 0;
+
+  for (const component of food.mix.components) {
+    const ingredient = FOOD_BY_ID.get(component.foodId);
+    if (!ingredient) throw new Error(`复合食物缺少原料：${component.foodId}`);
+    const max = Math.max(0, Number(component.max) || 1000);
+    const amount = Math.min(max, Math.max(0, roundMix(selected?.[component.foodId] ?? 0)));
+    if (amount <= 0) continue;
+    const nutrients = nutrientsFor(ingredient, amount);
+    for (const key of Object.keys(total)) total[key] += Number(nutrients[key]) || 0;
+    grams += amount;
+    components.push({
+      foodId: component.foodId,
+      name: ingredient.name,
+      label: component.label || ingredient.name,
+      grams: amount,
+      unit: component.unit || (ingredient.basis === '100ml' ? 'ml' : 'g'),
+    });
+  }
+
+  return {
+    grams: roundMix(grams),
+    nutrients: {
+      kcal: Math.round(total.kcal),
+      protein: roundMix(total.protein),
+      fat: roundMix(total.fat),
+      carb: roundMix(total.carb),
+      fiber: roundMix(total.fiber),
+      totalSugar: roundMix(total.totalSugar),
+      sugar: roundMix(total.sugar),
+      sodium: Math.round(total.sodium),
+    },
+    components,
+  };
+}
 
 /** 把 n 数组展开成具名对象（每 100g） */
 export function per100(food) {

@@ -16,7 +16,7 @@ import {
 import {
   isCompleteAppleSnapshot, mergeApplePartialRows, replaceAppleSnapshotRows, stampManualPatch,
 } from '../core/health-merge.js';
-import { FOODS, FOOD_BY_ID, nutrientsFor } from '../data/foods.js';
+import { FOODS, FOOD_BY_ID, nutrientsFor, hasFoodMix, foodMixNutrition } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
   sex: 'male',
@@ -286,11 +286,22 @@ export async function saveProfile(patch) {
   emit();
 }
 
-/** 新增一条饮食记录 */
-export async function addEntry({ foodId, name, grams, meal, custom = null, note = '', sugarLevel = null }) {
+function compositionNote(components = []) {
+  const chosen = components
+    .filter((component) => Number(component.grams) > 0)
+    .map((component) => `${component.label || component.name} ${component.grams}${component.unit || 'g'}`);
+  return chosen.length ? `配料：${chosen.join('、')}` : '';
+}
+
+/** 新增一条饮食记录；复合食物可直接传入逐项求和后的营养与配料快照。 */
+export async function addEntry({
+  foodId, name, grams, meal, custom = null, note = '', sugarLevel = null,
+  nutrients: suppliedNutrients = null, composition = null,
+}) {
   const food = custom || findFood(foodId);
   if (!food) throw new Error('找不到这个食物');
-  const nutrients = custom?.nutrients || nutrientsFor(food, grams, sugarLevel);
+  const nutrients = suppliedNutrients || custom?.nutrients || nutrientsFor(food, grams, sugarLevel);
+  const savedComposition = Array.isArray(composition) ? composition : null;
   const entry = {
     date: state.day,
     time: new Date().toISOString(),
@@ -300,7 +311,8 @@ export async function addEntry({ foodId, name, grams, meal, custom = null, note 
     grams: Number(grams) || 0,
     // 字段名不能叫 sugar：下面展开的 nutrients 里 sugar 是糖的克数，会把档位覆盖掉
     sugarLevel,
-    note,
+    note: note || compositionNote(savedComposition),
+    ...(savedComposition ? { composition: savedComposition } : {}),
     ...nutrients,
   };
   const id = await db.put(db.STORES.diet, entry);
@@ -320,7 +332,24 @@ export async function updateEntry(id, patch) {
   let next = { ...current, ...patch };
   if (patch.grams != null && current.foodId) {
     const food = findFood(current.foodId);
-    if (food) next = { ...next, ...nutrientsFor(food, patch.grams, current.sugarLevel) };
+    if (food && hasFoodMix(food) && Array.isArray(current.composition) && current.composition.length) {
+      const previous = Number(current.grams);
+      const requested = Math.max(0, Number(patch.grams) || 0);
+      const ratio = previous > 0 ? requested / previous : 0;
+      const amounts = Object.fromEntries(current.composition.map((component) => [
+        component.foodId, Math.max(0, Number(component.grams) || 0) * ratio,
+      ]));
+      const mixed = foodMixNutrition(food, amounts);
+      next = {
+        ...next,
+        grams: mixed.grams,
+        ...mixed.nutrients,
+        composition: mixed.components,
+        note: compositionNote(mixed.components),
+      };
+    } else if (food) {
+      next = { ...next, ...nutrientsFor(food, patch.grams, current.sugarLevel) };
+    }
   }
   await db.put(db.STORES.diet, next);
   state.dietEntries = state.dietEntries.map((e) => (e.id === id ? next : e));

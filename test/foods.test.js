@@ -4,11 +4,70 @@ import {
   FOODS, FOOD_BY_ID, CATEGORIES, per100, nutrientsFor,
   searchFoods, unitLabel, portionTip, freeSugarFactor, freeSugarPer100, PORTION_TIPS,
   FOOD_META, isEstimated, macroEnergyPer100,
+  hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 838, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 942, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
+});
+
+const REGIONAL_AND_JUICE_IDS = [
+  'fuding_pork_slices', 'qingbuliang_custom', 'tujia_sauce_pancake',
+  'fujian_guobianhu', 'fuzhou_rouyan', 'shaxian_bianrou', 'curry_fish_balls',
+  'juice_apple', 'juice_grape', 'juice_pineapple', 'juice_pear', 'juice_mango',
+  'juice_pomegranate', 'juice_watermelon', 'juice_tomato', 'juice_carrot',
+  'juice_mixed_fruit', 'juice_drink_generic',
+];
+
+test('v1.4 地方小吃与果汁扩充可直接搜索，液体单位和游离糖口径一致', () => {
+  for (const id of REGIONAL_AND_JUICE_IDS) assert.ok(FOOD_BY_ID.has(id), `缺少 ${id}`);
+  for (const term of ['福鼎肉片', '清补凉', '土家酱香饼', '锅边糊', '肉燕', '沙县扁肉',
+    '苹果汁', '葡萄汁', '菠萝汁', '芒果汁', '番茄汁', '果汁饮料']) {
+    assert.ok(searchFoods(term).length > 0, `搜不到“${term}”`);
+  }
+  for (const food of FOODS.filter((item) => item.id.startsWith('juice_'))) {
+    assert.equal(food.basis, '100ml', `${food.name} 不应按克显示`);
+    assert.equal(food.nfs, 0, `${food.name} 的果汁糖应按 WHO 游离糖计`);
+    assert.equal(freeSugarPer100(food), food.n[5], `${food.name} 的游离糖与总糖不一致`);
+  }
+  assert.equal(FOOD_BY_ID.get('juice_orange').basis, '100ml', '旧橙汁也要迁移到 ml');
+  assert.equal(FOOD_BY_ID.get('coconut_water').basis, '100ml', '椰子水应按 ml 记录');
+});
+
+test('清补凉原料可独立选择和调量，营养按实际配方逐项求和', () => {
+  const food = FOOD_BY_ID.get('qingbuliang_custom');
+  assert.equal(hasFoodMix(food), true);
+  assert.ok(food.mix.components.length >= 18, '常用料和可选料覆盖不足');
+  for (const component of food.mix.components) {
+    assert.ok(FOOD_BY_ID.has(component.foodId), `清补凉缺原料 ${component.foodId}`);
+    assert.ok(component.step > 0 && component.max >= component.step, `${component.label} 的调量规则不合理`);
+  }
+
+  const defaults = defaultFoodMix(food);
+  const base = foodMixNutrition(food);
+  assert.equal(base.grams, 375);
+  assert.equal(base.components.length, Object.values(defaults).filter((amount) => amount > 0).length);
+  assert.ok(base.nutrients.kcal > 300 && base.nutrients.kcal < 500);
+  assert.ok(base.nutrients.totalSugar >= base.nutrients.sugar, '总糖不能低于游离糖');
+
+  const withoutMilk = foodMixNutrition(food, { ...defaults, coconut_milk_sweet: 0 });
+  assert.equal(withoutMilk.grams, base.grams - defaults.coconut_milk_sweet);
+  assert.ok(withoutMilk.nutrients.kcal < base.nutrients.kcal);
+  assert.ok(withoutMilk.nutrients.sugar < base.nutrients.sugar);
+
+  const withIceCream = foodMixNutrition(food, { ...defaults, ice_cream: 100 });
+  assert.equal(withIceCream.grams, base.grams + 100);
+  assert.ok(withIceCream.nutrients.kcal > base.nutrients.kcal);
+  assert.ok(withIceCream.components.some((component) => component.foodId === 'ice_cream'));
+
+  const empty = foodMixNutrition(food, {});
+  assert.equal(empty.grams, 0, '显式空配方不能偷偷补回默认料');
+  assert.deepEqual(empty.components, []);
+  assert.deepEqual(empty.nutrients, {
+    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0,
+    totalSugar: 0, sugar: 0, sodium: 0,
+  });
 });
 
 const FUNCTIONAL_DRINK_IDS = [
