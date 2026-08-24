@@ -136,7 +136,8 @@ function profileCard(rerender) {
       // 生日独占一整行：iOS Safari 的原生日期控件固有宽度大，挤在半格里容易溢出
       field('生日', birthday, '用于计算个人目标', 'span-all'),
       field('身高（cm）', numInput('heightCm', '0.5')),
-      field('体重（kg）', numInput('weightKg', '0.1'), p.syncWeightFromApple ? '以 Apple 健康最新记录为准' : null),
+      field('体重（kg）', numInput('weightKg', '0.1'),
+        p.syncWeightFromApple ? '计算时采用所选日期之前最新的 Apple 健康记录' : null),
       field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
       // 选项文字长（「轻度活动（每周 1-3 次）」），半格会被截断
       field('日常活动量', activity, '选择平时的生活强度', 'span-all'),
@@ -167,7 +168,8 @@ function targetCard() {
   const rows = [
     ['热量', `${num(t.kcal)} kcal`, energyBasis],
     ['蛋白质', `${num(t.protein)} g`, t.proteinBasis],
-    ['脂肪', `${num(t.fat)} g`, '占总热量 20%~35%'],
+    ['脂肪', `${num(t.fat)} g（参考上限 ${num(t.fatUpper || t.fat)} g）`,
+      '计划值用于分配三大营养素；真正的参考上限按总热量 35% 计算'],
     ['碳水', `${num(t.carb)} g`, '总热量减去蛋白与脂肪后的剩余'],
     ['膳食纤维', `${num(t.fiber)} g`, '中国成人参考 25–30g'],
     ['钠上限', `${num(t.sodium)} mg`, '约等于 5g 食盐'],
@@ -176,7 +178,7 @@ function targetCard() {
   ];
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '当前每日目标'),
+      h('h3', null, d.isToday ? '当前每日目标' : `${state.day} · 按当前设置估算`),
       h('div.card-head-actions', null,
         h('span.card-tag', null, `${GOALS[t.goal].label} · ${t.rateKgPerWeek > 0 ? '+' : ''}${t.rateKgPerWeek} kg/周`),
         infoTip('查看目标计算依据',
@@ -212,7 +214,7 @@ function toggleCard() {
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
     toggle('syncWeightFromApple', '体重体脂跟随 Apple 健康',
-      '以健康 App 里最新一次记录为准，体重变了目标也会自动跟着变。'),
+      '按正在查看的日期，采用此前最近一次健康记录；体重变化后目标会随之更新。'),
   );
 }
 

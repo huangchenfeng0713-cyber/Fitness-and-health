@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { healthInsights, healthSummary } from '../js/core/health-insights.js';
+import { healthInsights, healthSummary, weightTrendStats } from '../js/core/health-insights.js';
 
 const mkDaysFrom = (start, n, fn) => Array.from({ length: n }, (_, i) => ({
   date: new Date(Date.parse(`${start}T00:00:00Z`) + i * 86400000).toISOString().slice(0, 10),
@@ -101,6 +101,35 @@ test('减重过快会被拦下（>1% 体重/周）', () => {
   assert.match(w.text, /肌肉/);
 });
 
+test('体重趋势同时要求足够点数与至少 7 天首末间隔', () => {
+  const crowded = mkDays(4, (i) => ({ weightKg: 70 - i * 0.3 }));
+  assert.equal(weightTrendStats(crowded, 30, '2026-08-24').kgPerWeek, null);
+  assert.equal(byKey(healthInsights(crowded, { asOfDate: '2026-08-24' }), 'weight'), undefined,
+    '四次称重挤在四天里不应外推成每周趋势');
+
+  const spread = [
+    { date: '2026-08-01', weightKg: 70 },
+    { date: '2026-08-03', weightKg: 69.9 },
+    { date: '2026-08-06', weightKg: 69.7 },
+    { date: '2026-08-09', weightKg: 69.6 },
+  ];
+  const stats = weightTrendStats(spread, 30, '2026-08-24');
+  assert.equal(stats.records, 4);
+  assert.equal(stats.elapsedDays, 8);
+  assert.ok(stats.kgPerWeek < 0);
+});
+
+test('体脂和静息心率不足一周时不外推每周趋势', () => {
+  const short = mkDays(6, (i) => ({
+    restingHR: 60 + i * 2,
+    bodyFatPct: 20 + i * 0.3,
+    weightKg: 70,
+  }));
+  const result = healthInsights(short, { windowDays: 14 });
+  assert.equal(byKey(result, 'bodyfat'), undefined);
+  assert.doesNotMatch(byKey(result, 'rhr')?.title || '', /近期上升/);
+});
+
 test('体重趋势偏离目标但不足 28 天时不贸然调整热量', () => {
   const wrong = healthInsights(
     mkDays(14, (i) => ({ weightKg: 70 + i * 0.05 })),  // 在涨，但目标是减
@@ -185,12 +214,42 @@ test('饮食记得够全就不再唠叨', () => {
   assert.equal(byKey(r, 'logging'), undefined);
 });
 
+test('饮食覆盖提示使用所选日历窗口，不把“健康记录日数”冒充天数', () => {
+  const health = [
+    { date: '2026-08-01', steps: 8000 },
+    { date: '2026-08-10', steps: 8000 },
+    { date: '2026-08-20', steps: 8000 },
+  ];
+  const diet = [
+    { date: '2026-08-02', kcal: 1800 },
+    { date: '2026-08-03', kcal: 1900 },
+  ];
+  const hit = byKey(healthInsights(health, {
+    dietDaily: diet, windowDays: 30, asOfDate: '2026-08-24',
+  }), 'logging');
+  assert.match(hit.title, /近 30 天饮食仅记录 2 天/);
+  assert.match(hit.text, /健康数据覆盖 3 天/);
+  assert.match(hit.text, /同一天齐全 0 天/);
+});
+
 test('摘要指标取近窗口均值', () => {
   const s = healthSummary(mkDays(14, () => ({ steps: 8000, sleepMinutes: 450, weightKg: 70 })));
   assert.equal(s.steps, 8000);
   assert.equal(s.sleepHours, 7.5);
   assert.equal(s.weightKg, 70);
   assert.equal(s.restingHR, null, '没有的数据应为 null 而不是 0');
+});
+
+test('明确记录的零步数和零活动参与平均，缺失字段才跳过', () => {
+  const days = [
+    { date: '2026-08-01', steps: 0, activeEnergy: 0 },
+    { date: '2026-08-02', steps: 100, activeEnergy: 0 },
+    { date: '2026-08-03', steps: 200, activeEnergy: 300 },
+    { date: '2026-08-04', weightKg: 70 },
+  ];
+  const summary = healthSummary(days, 14, '2026-08-04');
+  assert.equal(summary.steps, 100);
+  assert.equal(summary.activeEnergy, 100);
 });
 
 test('窗口先按日期排序，并以截止日期取日历窗口', () => {

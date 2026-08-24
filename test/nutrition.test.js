@@ -71,6 +71,9 @@ test('宏量营养素分配自洽：三大宏量的热量之和与总热量闭�
     assert.ok(Math.abs(fromMacros - t.kcal) <= 4,
       `${JSON.stringify(p.goal)}: 宏量合计 ${fromMacros} 与目标 ${t.kcal} 偏差过大`);
     assert.ok(t.fat >= p.weightKg * 0.7, '脂肪不应低于必需量');
+    assert.ok(t.fatUpper >= t.fat, '脂肪计划值不能高于 AMDR 参考上限');
+    assert.ok(Math.abs(t.fatUpper * 9 - t.kcal * 0.35) <= 5,
+      '脂肪参考上限应对应总能量的 35%');
     assert.ok(t.carb >= 50, '碳水有保底');
   }
 });
@@ -212,6 +215,9 @@ test('营养汇总与差额', () => {
   const gaps = computeGaps({ kcal: 2000, protein: 120 }, total);
   assert.equal(gaps.kcal.remaining, 1499.5);
   assert.equal(gaps.protein.pct, 21);
+  const fatGap = computeGaps({ fat: 60, fatUpper: 84 }, { fat: 72 }).fat;
+  assert.equal(fatGap.remaining, -12, '可以超过计划值');
+  assert.equal(fatGap.upperRemaining, 12, '未超过真正的参考上限');
 });
 
 

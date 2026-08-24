@@ -2,7 +2,7 @@
 
 import { h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
-import { state, addEntry } from '../lib/store.js';
+import { state, addEntry, findFood } from '../lib/store.js';
 import { CATEGORIES, isEstimated } from '../data/foods.js';
 import { MEAL_LABEL } from '../core/advisor.js';
 
@@ -26,12 +26,15 @@ function heroCard(advice, targets, derived) {
   const left = gaps.kcal.remaining;
   const over = left < 0;
 
-  const macroMini = (label, g, color) => h('div.mini-macro', null,
+  const macroMini = (label, g, color, { target = g.target, upperLimit = false } = {}) => {
+    const pct = target > 0 ? (g.eaten / target) * 100 : 0;
+    return h('div.mini-macro', null,
     h('div.mini-macro-top', null,
       h('span', null, label),
-      h('strong', { class: g.pct > 105 ? 'over' : '' }, `${num(g.eaten)}`),
-      h('span.mini-macro-target', null, `/${num(g.target)}g`)),
-    macroBar({ value: g.eaten, target: g.target, color }));
+      h('strong', { class: upperLimit && pct > 105 ? 'over' : '' }, `${num(g.eaten)}`),
+      h('span.mini-macro-target', null, `/${num(target)}g`)),
+    macroBar({ value: g.eaten, target, color, overIsBad: upperLimit }));
+  };
 
   return h(`section.card.hero.${status.level}`, null,
     h('div.hero-head', null,
@@ -53,7 +56,9 @@ function heroCard(advice, targets, derived) {
       h('div.hero-macros', null,
         macroMini('蛋白质', gaps.protein, 'var(--protein)'),
         macroMini('碳水', gaps.carb, 'var(--carb)'),
-        macroMini('脂肪', gaps.fat, 'var(--fat)'))),
+        macroMini('脂肪上限', gaps.fat, 'var(--fat)', {
+          target: targets.fatUpper || gaps.fat.target, upperLimit: true,
+        }))),
 
     h('div.hero-foot', null,
       h('span', null, `已吃 ${num(gaps.kcal.eaten)}`),
@@ -67,8 +72,8 @@ function heroCard(advice, targets, derived) {
 
     h('div.hero-micros', null,
       microChip('纤维', gaps.fiber, 'g'),
-      microChip('钠上限', gaps.sodium, 'mg'),
-      microChip('游离糖上限', gaps.sugar, 'g')),
+      microChip('钠上限', gaps.sodium, 'mg', true),
+      microChip('游离糖上限', gaps.sugar, 'g', true)),
   );
 }
 
@@ -90,8 +95,10 @@ function energyFreshness(derived) {
     `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`);
 }
 
-function microChip(label, g, unit) {
-  const level = g.pct > 105 ? 'over' : g.pct >= 80 ? 'near' : '';
+function microChip(label, g, unit, upperLimit = false) {
+  const level = upperLimit
+    ? g.pct > 105 ? 'over' : g.pct >= 80 ? 'near' : ''
+    : g.pct >= 100 ? 'met' : '';
   return h(`div.micro-chip.${level}`, null,
     h('span.micro-label', null, label),
     h('span.micro-val', null, `${num(g.eaten, unit === 'mg' ? 0 : 1)}`),
@@ -122,6 +129,7 @@ function recommendCard(advice, rerender) {
 
 function recRow(item, meal) {
   const f = item.food;
+  const unit = f.basis === '100ml' ? 'ml' : 'g';
   return h('div.rec-row', null,
     h('div.rec-info', null,
       h('div.rec-name', null, f.name,
@@ -138,7 +146,7 @@ function recRow(item, meal) {
       onclick: async (ev) => {
         ev.currentTarget.disabled = true;
         await addEntry({ foodId: f.id, grams: item.grams, meal });
-        toast(`已记录 ${f.name} ${item.grams}g`, 'ok');
+        toast(`已记录 ${f.name} ${item.grams}${unit}`, 'ok');
       },
     }, '＋'),
   );
@@ -156,7 +164,8 @@ function avoidCard(advice, rerender) {
       h('span.card-tag', null, '按此刻的剩余预算判断')),
     h('div.avoid-list', null, list.map((item) => h('div.avoid-row', null,
       h('div.avoid-name', null, item.food.name,
-        h('span.chip.chip-danger', null, `${item.per100.kcal} kcal/100g`)),
+        h('span.chip.chip-danger', null,
+          `${item.per100.kcal} kcal/${item.food.basis === '100ml' ? '100ml' : '100g'}`)),
       h('div.avoid-reason', null, item.reason)))),
     moreToggle('avoid', all.length, 3, rerender),
   );
@@ -185,24 +194,31 @@ function dataCenterBtn() {
   }, '前往数据中心同步');
 }
 
-function healthCard(health, derived) {
-  const has = Object.keys(health).some((k) => !['date', 'source'].includes(k));
+function healthCard(health) {
+  const metricKeys = [
+    'steps', 'activeEnergy', 'restingEnergy', 'exerciseMinutes', 'sleepMinutes',
+    'weightKg', 'bodyFatPct', 'restingHR', 'waterMl',
+  ];
+  const has = metricKeys.some((key) => health[key] != null && Number.isFinite(Number(health[key])));
   const isToday = state.day === todayKey();
   // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
   const needsImport = isToday && (!has || health.activeEnergy == null);
   const items = [
     ['步数', health.steps != null ? num(health.steps) : '—'],
     ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)}` : '—', 'kcal'],
-    ['锻炼', health.exerciseMinutes ? formatMinutes(health.exerciseMinutes) : '—'],
-    ['睡眠', health.sleepMinutes ? formatHours(health.sleepMinutes, { unit: false }) : '—',
-      health.sleepMinutes ? '小时' : ''],
-    ['体重', num(health.weightKg ?? derived.effectiveProfile.weightKg, 1), 'kg'],
+    ['锻炼', health.exerciseMinutes != null ? formatMinutes(health.exerciseMinutes) : '—'],
+    ['睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : '—',
+      health.sleepMinutes != null ? '小时' : ''],
+    // 这张卡只展示所选日期的健康记录；档案体重不能冒充当天 Apple 数据。
+    ['体重', health.weightKg != null ? num(health.weightKg, 1) : '—', health.weightKg != null ? 'kg' : ''],
     ['体脂', health.bodyFatPct != null ? num(health.bodyFatPct, 1) : '—', '%'],
   ];
+  const sourceLabel = health.source === 'manual'
+    ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, 'Apple 健康'),
-      h('span.card-tag', null, has ? (health.source === 'manual' ? '手动录入' : '已同步') : '未同步')),
+      h('span.card-tag', null, has ? sourceLabel : '未同步')),
     has
       ? h('div.health-strip', null, items.map(([k, v, u]) => h('div.health-cell', null,
         h('div.health-value', null, v, u && h('span.health-unit', null, u)),
@@ -233,7 +249,8 @@ function entriesCard() {
           h('strong', null, MEAL_LABEL[meal] || meal),
           h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
         h('div.entry-meal-items', null,
-          list.map((e) => h('span.entry-tag', null, `${e.name} ${num(e.grams)}g`)))))),
+          list.map((e) => h('span.entry-tag', null,
+            `${e.name} ${num(e.grams)}${findFood(e.foodId)?.basis === '100ml' ? 'ml' : 'g'}`)))))),
   );
 }
 
@@ -248,7 +265,7 @@ export function renderDashboard(root) {
     recommendCard(advice, rerender),
     avoidCard(advice, rerender),
     insightsCard(advice, rerender),
-    healthCard(health, d),
+    healthCard(health),
     entriesCard(),
   );
 }

@@ -83,14 +83,15 @@ function portionPhrase(name, mult) {
 
 /** 把克数吸附到该食物的常用份量上，让建议更好执行 */
 function snapToServing(food, grams) {
-  let best = { grams: Math.round(grams / 5) * 5, label: `${Math.round(grams / 5) * 5} g`, exact: false };
+  const unit = food.basis === '100ml' ? 'ml' : 'g';
+  let best = { grams: Math.round(grams / 5) * 5, label: `${Math.round(grams / 5) * 5} ${unit}`, exact: false };
   for (const [name, g] of food.s || []) {
     for (const mult of [0.5, 1, 1.5, 2, 3]) {
       const cand = g * mult;
       if (Math.abs(cand - grams) <= Math.max(grams * 0.28, 15)) {
         const label = portionPhrase(name, mult);
         if (!best.exact || Math.abs(cand - grams) < Math.abs(best.grams - grams)) {
-          best = { grams: Math.round(cand), label: `${label}（约 ${Math.round(cand)} g）`, exact: true };
+          best = { grams: Math.round(cand), label: `${label}（约 ${Math.round(cand)} ${unit}）`, exact: true };
         }
       }
     }
@@ -199,7 +200,7 @@ function scoreFood(food, ctx) {
     score += 6;
     if (!reasons.some((r) => r.includes('纤维'))) reasons.push(`补 ${nut.fiber}g 纤维`);
   }
-  if (gaps.fat.remaining < 5 && nut.fat > 10) score -= 12;
+  if (gaps.fat.upperRemaining < 5 && nut.fat > 10) score -= 12;
   if (gaps.carb.remaining < 15 && nut.carb > 25) score -= 10;
 
   // 6) 加工与烹饪方式
@@ -266,33 +267,34 @@ function buildAvoidList(ctx, limit = 5) {
   const proteinShort = proteinLeft > gaps.protein.target * 0.25;
   const sodiumOver = gaps.sodium.remaining < gaps.sodium.target * 0.2;
   const sugarOver = gaps.sugar.remaining < 5;
-  const fatOver = gaps.fat.remaining < gaps.fat.target * 0.1;
+  const fatOver = gaps.fat.upperRemaining < gaps.fat.upper * 0.1;
   const lateNight = hour >= 21;
 
   for (const food of FOODS) {
     if (food.cat === 'other') continue;
     const p = per100(food);
     const tags = tagsOf(food);
+    const basis = food.basis === '100ml' ? '100ml' : '100g';
     const proteinPer100kcal = p.kcal > 0 ? (p.protein / p.kcal) * 100 : 0;
 
     if (sodiumOver && tags.has('high-sodium')) {
-      push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（目标 ${gaps.sodium.target} mg），它每 100g 还要再加 ${p.sodium} mg`, 3);
+      push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（上限 ${gaps.sodium.target} mg），它每 ${basis} 还要再加 ${p.sodium} mg`, 3);
     } else if (sugarOver && (tags.has('sweetdrink') || tags.has('high-sugar'))) {
-      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 100g 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
+      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 ${basis} 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
     } else if (kcalTight && proteinShort && p.kcal >= 250 && proteinPer100kcal < 6) {
-      push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它 ${p.kcal} kcal/100g 却几乎不含蛋白`, 3);
+      push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它每 ${basis} ${p.kcal} kcal 却几乎不含蛋白`, 3);
     } else if (kcalTight && p.kcal >= 300) {
       push(food, 'kcal', `热量预算只剩 ${Math.max(kcalLeft, 0)} kcal，一份就会吃超`, 2);
     } else if (lateNight && (tags.has('fried') || tags.has('high-fat') || tags.has('high-sugar'))) {
-      push(food, 'late', `${p.kcal} kcal/100g，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
+      push(food, 'late', `${p.kcal} kcal/${basis}，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
     } else if (fatOver && p.fat >= 25) {
-      push(food, 'fat', `脂肪已接近上限（${gaps.fat.eaten}g / ${gaps.fat.target}g），它含 ${p.fat}g 脂肪/100g`, 2);
+      push(food, 'fat', `脂肪已接近参考上限（${gaps.fat.eaten}g / ${gaps.fat.upper}g），它每 ${basis} 含 ${p.fat}g 脂肪`, 2);
     } else if (goal === 'cut' && tags.has('fried') && p.kcal >= 300) {
-      push(food, 'fried', `减脂期油炸物能量密度过高（${p.kcal} kcal/100g），同样饱腹感的代价太大`, 1);
+      push(food, 'fried', `减脂期油炸物能量密度过高（${p.kcal} kcal/${basis}），同样饱腹感的代价太大`, 1);
     } else if (goal === 'cut' && tags.has('sweetdrink')) {
       push(food, 'drink', '液体糖几乎不带来饱腹感，最容易在不知不觉中吃超', 1);
     } else if (proteinShort && tags.has('high-density') && proteinPer100kcal < 5 && food.cat !== 'nut') {
-      push(food, 'empty', `蛋白还差 ${round(proteinLeft)}g，它 ${p.kcal} kcal/100g 却只有 ${p.protein}g 蛋白`, 1);
+      push(food, 'empty', `蛋白还差 ${round(proteinLeft)}g，它每 ${basis} ${p.kcal} kcal 却只有 ${p.protein}g 蛋白`, 1);
     }
   }
 
@@ -350,6 +352,12 @@ export function buildAdvice(input) {
     const target = Number(targets[k]) || 0;
     const eaten = Number(intake[k]) || 0;
     gaps[k] = { target, eaten: round(eaten, 1), remaining: round(target - eaten, 1), pct: target > 0 ? round((eaten / target) * 100) : 0 };
+    if (k === 'fat') {
+      const upper = Number(targets.fatUpper) || target;
+      gaps[k].upper = round(upper, 1);
+      gaps[k].upperRemaining = round(upper - eaten, 1);
+      gaps[k].upperPct = upper > 0 ? round((eaten / upper) * 100) : 0;
+    }
   }
 
   const kcalLeft = gaps.kcal.remaining;

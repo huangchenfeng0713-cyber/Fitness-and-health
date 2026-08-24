@@ -421,6 +421,9 @@ export function dailyTargets(profile, dynamic = null) {
 
   const proteinRounded = round(protein);
   const fatRounded = round(fat);
+  // fat 是用于闭合宏量热量的计划点，不是“吃过就超标”的上限。
+  // AMDR 的真正上界是总能量的 35%，单独返回给界面与推荐算法使用。
+  const fatUpper = round((kcal * 0.35) / ATWATER.fat);
   const carbRounded = round(Math.max(0,
     (kcal - proteinRounded * ATWATER.protein - fatRounded * ATWATER.fat) / ATWATER.carb), 1);
 
@@ -451,6 +454,7 @@ export function dailyTargets(profile, dynamic = null) {
     proteinBasis: proteinCapped ? `${proteinPlan.basis}（受总热量约束已下调）` : proteinPlan.basis,
     proteinCapped,
     fat: fatRounded,
+    fatUpper,
     carb: carbRounded,
     fiber: round(clamp((kcal / 1000) * 14, 25, 30)),
     sodium: 2000,       // mg，约等于 5g 食盐
@@ -491,6 +495,12 @@ export function computeGaps(targets, intake) {
       remaining: round(target - eaten, 1),
       pct: target > 0 ? round((eaten / target) * 100) : 0,
     };
+    if (k === 'fat') {
+      const upper = Number(targets.fatUpper) || target;
+      out[k].upper = round(upper, 1);
+      out[k].upperRemaining = round(upper - eaten, 1);
+      out[k].upperPct = upper > 0 ? round((eaten / upper) * 100) : 0;
+    }
   }
   return out;
 }

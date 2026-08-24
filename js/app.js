@@ -8,6 +8,7 @@ import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
 import { renderTrends } from './views/trends.js';
 import { renderSettings } from './views/settings.js';
+import { APP_VERSION } from './core/feedback.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
@@ -113,7 +114,15 @@ function renderTopbar() {
   }, h('span', { html: TAB_ICON.settings }));
 
   if (!tab.dated) {
-    context.append(h('h1', null, tab.label));
+    const cutoff = state.day === todayKey()
+      ? `今天 · ${state.day.slice(5)}`
+      : formatDayLabel(state.day);
+    context.classList.add('topbar-page-context');
+    context.append(
+      h('h1', null, tab.label),
+      h('span.topbar-context-note', null,
+        `${tab.key === 'trends' ? '统计' : '数据'}截至 ${cutoff}`),
+    );
     bar.append(context, settingsButton);
     return;
   }
@@ -198,12 +207,13 @@ function renderCurrent() {
 function syncOnboarding() {
   const slot = $('#banner');
   if (!slot) return;
+  const existing = slot.querySelector('.onboard');
   // 人已经在设置抽屉填表了，横幅只会碍事
   if (state.profile.onboarded || settingsOpen) {
-    clearEl(slot);
+    existing?.remove();
     return;
   }
-  if (slot.firstChild) return;
+  if (existing) return;
   slot.append(h('div.onboard', null,
     h('h2', null, '先花 30 秒填一下身体信息'),
     h('p', null, '热量与蛋白目标都由这些数据算出来。填完就能开始记录，之后随时能在「设置」里改。'),
@@ -212,6 +222,37 @@ function syncOnboarding() {
       onclick: () => saveProfile({ demoMode: true, onboarded: true }),
     }, '使用演示数据预览'),
   ));
+}
+
+function showUpdateNotice() {
+  const slot = $('#banner');
+  if (!slot || slot.querySelector('.update-notice')) return;
+  slot.prepend(h('div.update-notice', null,
+    h('div', null,
+      h('strong', null, '发现新版本'),
+      h('span', null, `当前页面仍是 v${APP_VERSION}，刷新后切换到最新代码。`)),
+    h('button', { onclick: () => location.reload() }, '立即更新')));
+}
+
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  const hadController = !!navigator.serviceWorker.controller;
+  if (hadController) {
+    navigator.serviceWorker.addEventListener('controllerchange', showUpdateNotice, { once: true });
+  }
+  try {
+    // 不沿用 HTTP 缓存检查 sw.js，否则 GitHub Pages 的十分钟缓存会让已部署的新版本
+    // 看起来仍像旧页面。控制器切换后由用户点击刷新，避免打断正在填写的表单。
+    const registration = await navigator.serviceWorker.register(new URL('../sw.js', import.meta.url), {
+      updateViaCache: 'none',
+    });
+    registration.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) registration.update().catch(() => {});
+    });
+  } catch (err) {
+    console.warn('离线缓存注册失败', err);
+  }
 }
 
 /** 快捷指令可以直接打开 #import=<JSON> 完成同步，不用手动传文件 */
@@ -373,9 +414,7 @@ async function boot() {
     }
   });
 
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register(new URL('../sw.js', import.meta.url)).catch(() => {});
-  }
+  registerServiceWorker();
 }
 
 boot();

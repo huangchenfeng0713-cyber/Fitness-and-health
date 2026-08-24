@@ -54,6 +54,13 @@ test('蛋白已经达标时不显示负数缺口', () => {
   assert.doesNotMatch(a.status.headline, /蛋白还差 -/);
 });
 
+test('脂肪计划值与参考上限分开，超过计划值不会被误判为超上限', () => {
+  const a = advise({ kcal: 1200, fat: targets.fat + 5 });
+  assert.ok(a.gaps.fat.remaining < 0, '应反映已超过计划分配值');
+  assert.ok(a.gaps.fat.upperRemaining > 0, '仍低于 35% 供能参考上限');
+  assert.ok(a.gaps.fat.upper > a.gaps.fat.target);
+});
+
 test('标签从营养数字推导', () => {
   const chicken = deriveTags(FOOD_BY_ID.get('chicken_breast'));
   assert.ok(chicken.has('high-protein') && chicken.has('protein-dense'));
