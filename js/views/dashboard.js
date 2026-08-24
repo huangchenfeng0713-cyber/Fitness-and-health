@@ -116,8 +116,8 @@ function recommendCard(advice, rerender) {
     h('div.card-head', null,
       h('h3', null, '现在吃什么'),
       h('span.card-tag', null, advice.budget.proteinFeasible
-        ? `${MEAL_LABEL[meal]} · ${num(advice.budget.kcal)} kcal / ${num(advice.budget.protein, 0)}g 蛋白`
-        : `${MEAL_LABEL[meal]} · ${num(advice.budget.kcal)} kcal / 蛋白最多约 ${num(advice.budget.maxProteinByKcal, 1)}g`)),
+        ? `${MEAL_LABEL[meal]}时段 · ${num(advice.budget.kcal)} kcal / ${num(advice.budget.protein, 0)}g 蛋白`
+        : `${MEAL_LABEL[meal]}时段 · ${num(advice.budget.kcal)} kcal / 蛋白最多约 ${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length
       ? [
         h('div.rec-list', null, list.map((item) => recRow(item, meal))),
