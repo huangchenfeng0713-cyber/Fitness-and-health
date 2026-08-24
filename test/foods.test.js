@@ -581,3 +581,63 @@ test('完整谷薯、豆和坚果的内源糖不计入 WHO 游离糖', () => {
   assert.ok(freeSugarPer100(FOOD_BY_ID.get('sweet_douhua')) > 5,
     '甜豆花的糖水仍应计入游离糖，不能因豆制品类别被整体豁免');
 });
+
+
+/* ------------------------------ 牛奶与乳品品牌 ------------------------------ */
+
+test('主要牛奶品牌可被搜到，且区分纯奶与含糖乳饮料', () => {
+  const brands = [
+    ['特仑苏', 'milk_telunsu'], ['金典', 'milk_jindian'], ['优倍', 'milk_guangming_youbei'],
+    ['悦鲜活', 'milk_junlebao_fresh'], ['认养一头牛', 'milk_renyang'], ['每日鲜语', 'milk_meirixianyu'],
+    ['安慕希', 'yogurt_ambpoial'], ['纯甄', 'yogurt_chunzhen'], ['莫斯利安', 'yogurt_momchilovtsi'],
+    ['简爱', 'yogurt_jianai'], ['养乐多', 'yogurt_drink_yakult'], ['旺仔', 'milk_wangzai'],
+    ['优酸乳', 'milk_yousuanru'], ['AD钙奶', 'milk_ad_calcium'], ['舒化', 'milk_shuhua'],
+  ];
+  for (const [query, id] of brands) {
+    const hit = searchFoods(query, FOODS).slice(0, 5);
+    assert.ok(hit.some((f) => f.id === id), `搜「${query}」找不到 ${id}，实得 ${hit.map((f) => f.name).join('、')}`);
+  }
+});
+
+test('乳糖不计入 WHO 游离糖，加进去的糖才计入', () => {
+  // WHO 明确把牛奶天然存在的乳糖排除在游离糖之外。
+  // 纯奶整杯的糖都是乳糖；含糖乳饮料要把乳糖那部分写进 nfs，只算加进去的。
+  const pure = ['milk_telunsu', 'milk_jindian', 'milk_mengniu_plain', 'milk_yili_plain',
+    'milk_guangming_youbei', 'milk_sanyuan_fresh', 'milk_junlebao_fresh', 'milk_renyang',
+    'milk_meirixianyu', 'milk_anchor', 'milk_devondale', 'milk_shuhua',
+    'yogurt_jianai', 'yogurt_ruoshi', 'yogurt_junlebao_jianjia'];
+  for (const id of pure) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f, `缺少 ${id}`);
+    assert.ok(f.n[5] > 0, `${f.name} 应该有乳糖`);
+    assert.equal(freeSugarPer100(f), 0, `${f.name} 的乳糖不该被算成游离糖`);
+  }
+
+  const sweetened = ['milk_yousuanru', 'milk_ad_calcium', 'milk_zhenguoli', 'milk_wangzai',
+    'yogurt_ambpoial', 'yogurt_chunzhen', 'yogurt_drink_yakult'];
+  for (const id of sweetened) {
+    const f = FOOD_BY_ID.get(id);
+    assert.ok(f, `缺少 ${id}`);
+    const free = freeSugarPer100(f);
+    assert.ok(free > 0, `${f.name} 加了糖，游离糖不能是 0`);
+    assert.ok(free < f.n[5], `${f.name} 的乳糖部分应从游离糖里扣掉（总糖 ${f.n[5]}，游离糖 ${free}）`);
+  }
+});
+
+test('同一杯纯奶与含糖乳饮料的蛋白密度拉得开', () => {
+  // 优酸乳这类乳饮料常被当成牛奶喝，实际蛋白只有三分之一
+  const milk = FOOD_BY_ID.get('milk_telunsu');
+  const drink = FOOD_BY_ID.get('milk_yousuanru');
+  assert.ok(milk.n[1] >= 3.4, `纯奶蛋白应在 3.4g 以上，实得 ${milk.n[1]}`);
+  assert.ok(drink.n[1] <= 1.5, `乳饮料蛋白应在 1.5g 以下，实得 ${drink.n[1]}`);
+});
+
+test('新增的品牌乳品都给出了常见规格', () => {
+  const ids = FOODS.filter((f) => f.cat === 'dairy' && /^(milk_|yogurt_)/.test(f.id));
+  assert.ok(ids.length >= 30, `乳制品条目偏少：${ids.length}`);
+  for (const f of ids) {
+    assert.ok(f.s.length >= 1, `${f.name} 没有份量`);
+    const [, grams] = f.s[0];
+    assert.ok(grams >= 15 && grams <= 500, `${f.name} 的首份量 ${grams}g 不像常见规格`);
+  }
+});

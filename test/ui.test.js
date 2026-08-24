@@ -81,7 +81,8 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
   assert.ok(trends.includes('target: proteinThreshold'));
   assert.ok(trends.includes("targetLabel: '达标线'"));
   assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
-  assert.ok(trends.includes('今天的浅色柱只是当前累计，不计入上方平均'));
+  // 当天已经整体不画了，不再有「浅色柱」这回事
+  assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截柱的处理');
   assert.ok(charts.includes('emptyText = \'数据不足，至少需要 2 个记录日\''));
 });
 
@@ -137,13 +138,80 @@ test('活动能量图有平均参考线，且与卡片标签同源', () => {
   assert.ok(/已结束日平均 \$\{avgActive\} kcal/.test(block), '卡片标签应写明是已结束日的平均');
 });
 
-test('趋势页各项平均口径一致：今天一律不计入', () => {
+test('趋势图统计到前一天为止，当天不画也不计入', () => {
+  // 一天没过完，活动能量和摄入都还在累加，画出来是个必然偏低的点，
+  // 会被误读成「今天掉下去了」。区间本身就止于前一天，图与平均用同一批数据。
   const trends = read('js/views/trends.js');
-  for (const name of ['endedKcal', 'endedProtein', 'endedActive', 'endedSleep']) {
-    assert.match(trends, new RegExp(`const ${name} = ended\\(`), `${name} 没有排除今天`);
+  assert.match(trends, /function lastEndedDay\(\)[\s\S]*?shiftDay\(state\.day, -1\)/,
+    '缺少「区间止于前一天」的实现');
+  assert.match(trends, /let d = lastEndedDay\(\);/, 'dateRange 仍从今天往回数');
+  for (const gone of ['ended(', 'endedKcal', 'endedSleep', 'todayHasDiet', 'viewingToday']) {
+    assert.ok(!trends.includes(gone), `还残留旧的当天过滤逻辑：${gone}`);
   }
-  assert.ok(!/const avgSleep = average\(sleepSeries/.test(trends),
-    '睡眠平均仍在使用含今天的序列');
+  assert.match(trends, /const avgSleep = average\(sleepSeries, 1\)/);
+  assert.match(trends, /const avgActive = average\(activeSeries\)/);
+});
+
+test('区间档位是 7 天 / 近一个月 / 近六个月 / 全部', () => {
+  const trends = read('js/views/trends.js');
+  const labels = [...trends.matchAll(/label: '([^']+)', days:/g)].map((m) => m[1]);
+  assert.deepEqual(labels, ['7 天', '近一个月', '近六个月', '全部']);
+});
+
+test('只有 7 天视图开逐日标注与点选', () => {
+  // 一个月以上一个点不到 20px，点选只会选错
+  const trends = read('js/views/trends.js');
+  assert.match(trends, /const isWeek = range === 7;/);
+  assert.match(trends, /const pick = isWeek\s*\?\s*\{[\s\S]*?showAllDates: true,[\s\S]*?interactive: true,/);
+  assert.match(trends, /:\s*\{\};/, '非 7 天视图应传空对象');
+  const chartCalls = trends.match(/(lineChart|barChart)\(\{[\s\S]*?\}\)/g) || [];
+  assert.ok(chartCalls.length >= 5, `图表数量异常：${chartCalls.length}`);
+  for (const call of chartCalls) {
+    assert.ok(/\.\.\.pick/.test(call), `有图表没接上 7 天交互开关：${call.slice(0, 80)}`);
+  }
+});
+
+test('「全部」档位附一张逐日明细表', () => {
+  const trends = read('js/views/trends.js');
+  assert.match(trends, /range === 'all' \? fullTable\(days, dietByDate\) : null/);
+  assert.match(trends, /function fullTable\(/);
+  // 缺的字段要留空，不能当成 0
+  assert.ok(trends.includes('不会当成 0'), '明细表没有说明缺失字段的处理');
+});
+
+test('一次点选让同一页所有图标注同一天', () => {
+  // 「那天吃了多少、动了多少、睡了多久」是一个问题，
+  // 选中状态因此放在趋势页而不是各张图内部，一次点选全页生效。
+  const trends = read('js/views/trends.js');
+  assert.match(trends, /^let selectedDay = null;$/m, '选中日应是模块级状态');
+  assert.match(trends, /selectedX: selectedDay/, '图表没有接收选中日');
+  assert.match(trends, /onPick: \(date\) => \{ selectedDay = selectedDay === date \? null : date; rerender\(\); \}/,
+    '点同一天两次应取消选中');
+  assert.match(trends, /if \(selectedDay && \(!isWeek \|\| !days\.includes\(selectedDay\)\)\) selectedDay = null;/,
+    '切换区间后应清掉落在窗口外的选中日');
+
+  // 图表本身不存选中状态，只按传进来的值画
+  const charts = read('js/lib/charts.js');
+  assert.ok(!charts.includes('attachPicker'), '旧的图内状态实现应已移除');
+  assert.match(charts, /function markSelected\(/);
+  // 柱状图上竖线会藏进柱子里，改成给这根柱子描边
+  assert.match(charts, /function markSelectedBar\(/);
+  const start = charts.indexOf('function markSelected(');
+  const block = charts.slice(start, charts.indexOf('\n}', start));
+  assert.ok(!/let |state\.|store/.test(block), 'markSelected 不该持有状态');
+});
+
+test('数值显示在图外，不遮挡数据点', () => {
+  // 气泡压在数据点旁边会盖住相邻的点，手指点下去的位置又正好挡住它
+  const trends = read('js/views/trends.js');
+  const charts = read('js/lib/charts.js');
+  assert.match(trends, /function readoutRow\(/);
+  assert.ok(trends.includes('点图上任意一天查看当天数值'), '没选中时应给出可点提示');
+  assert.ok(trends.includes("h('div.chart-readout.empty'"), '空态也要占一行，避免卡片高度跳动');
+  assert.ok(!charts.includes('marker-bubble') && !charts.includes('marker-value'),
+    '图内不应再画数值气泡');
+  const css = read('css/app.css');
+  assert.ok(css.includes('.chart-readout'), '缺少数值行样式');
 });
 
 

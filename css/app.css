@@ -848,6 +848,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .guide-list p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* 「全部」档位可能上千行，限高内滚，别把整页撑成几万像素 */
+.table-scroll { max-height: 60vh; overflow-y: auto; }
+.table-scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
 .data-table th {
   text-align: right; padding: 6px 8px; color: var(--faint); font-weight: 550;
@@ -872,6 +875,24 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .chart .chart-empty { fill: var(--faint); }
 .chart .target-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
 .chart .target-label { fill: var(--muted); }
+
+/* 选中某一天时的标注线（只在 7 天视图出现） */
+.chart .marker-line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .8; }
+.chart .marker-bar { stroke: var(--text); stroke-width: 1.5; opacity: .55; }
+.chart .chart-hits rect { cursor: pointer; }
+
+/* 数值显示在图外，不遮数据、也不会被手指挡住 */
+.chart-readout {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 6px; padding: 6px 10px; min-height: 30px;
+  background: var(--card-2); border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.chart-readout.empty { color: var(--faint); font-size: 12px; justify-content: center; }
+.readout-day { color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout-value { font-weight: 650; font-variant-numeric: tabular-nums; margin-left: auto; }
+/* 图表本身不该吃掉页面滚动，只在可点的落点区拦手势 */
+.chart { touch-action: pan-y; }
 
 /* ============ 引导 / 提示 ============ */
 .banner-slot { flex: none; }
