@@ -118,6 +118,19 @@ test('清补凉支持逐项选配和份量调整，记录会保存营养与配�
   assert.ok(store.includes('foodMixNutrition(food, amounts)'), '改列表总量时应同步缩放配方营养');
 });
 
+test('普通食物记录失败会恢复按钮，条目说明不会被底栏截断', () => {
+  const diet = read('js/views/diet.js');
+  const dashboard = read('js/views/dashboard.js');
+  const utils = read('js/lib/utils.js');
+  const css = read('css/app.css');
+  assert.ok(diet.includes('runLocalAction'));
+  assert.ok(dashboard.includes('runLocalAction'));
+  assert.ok(utils.includes('control.disabled = wasDisabled'));
+  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*position: fixed/);
+  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*bottom: calc\(78px \+ var\(--safe-bottom\)\)/);
+  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*max-height: min\(38vh, 280px\)/);
+});
+
 test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   const advisor = read('js/core/advisor.js');
   const dashboard = read('js/views/dashboard.js');

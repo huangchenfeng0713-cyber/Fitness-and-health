@@ -6,7 +6,9 @@
  * 所以外壳只建一次（buildShell），之后只刷新会变的那几块容器。
  */
 
-import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip } from '../lib/utils.js';
+import {
+  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction,
+} from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
@@ -165,8 +167,10 @@ function suggestionBlock() {
       h('button.add-btn', {
         'aria-label': `记录 ${item.food.name}`,
         onclick: async (ev) => {
-          ev.currentTarget.disabled = true;
-          await addEntry({ foodId: item.food.id, grams: item.grams, meal: meal.key });
+          const result = await runLocalAction(ev.currentTarget,
+            () => addEntry({ foodId: item.food.id, grams: item.grams, meal: meal.key }),
+            '记录食物');
+          if (!result.ok) return;
           toast(`已记录 ${item.food.name} ${item.grams}${item.food.basis === '100ml' ? 'ml' : 'g'}`, 'ok');
         },
       }, '＋')))));
@@ -329,15 +333,15 @@ function refreshMixedPortion(food) {
       toast('至少选择一种配料', 'warn');
       return;
     }
-    addBtn.disabled = true;
-    await addEntry({
+    const result = await runLocalAction(addBtn, () => addEntry({
       foodId: food.id,
       grams: currentMix.grams,
       meal: guessMeal(),
       name: food.name,
       nutrients: currentMix.nutrients,
       composition: currentMix.components,
-    });
+    }), '记录食物');
+    if (!result.ok) return;
     toast(`已记录 ${food.name}，${currentMix.components.length} 种配料`, 'ok');
     ui.selected = null;
     ui.mix = {};
@@ -531,15 +535,15 @@ function refreshPortion() {
   };
 
   addBtn.onclick = async () => {
-    addBtn.disabled = true;
     const levelLabel = hasSugarLevel(food) && ui.sugar !== 'full'
       ? `（${sugarLevel(ui.sugar).label}）` : '';
-    await addEntry({
+    const result = await runLocalAction(addBtn, () => addEntry({
       foodId: food.id, grams: ui.grams, meal: guessMeal(),
       sugarLevel: hasSugarLevel(food) ? ui.sugar : null,
       name: food.name + levelLabel,
       custom: food.custom ? food : null,
-    });
+    }), '记录食物');
+    if (!result.ok) return;
     toast(`已记录 ${food.name}${levelLabel} ${ui.grams}${isLiquid ? 'ml' : 'g'}`, 'ok');
     ui.selected = null;
     ui.query = '';
@@ -767,32 +771,46 @@ function entryRow(e) {
         'aria-label': `${e.name} 的${isLiquid ? '毫升数' : '克数'}`,
         // 用 change：输入过程中不落库，避免每敲一个数字就重算重绘
         onchange: async (ev) => {
+          const input = ev.currentTarget;
           const g = Number(ev.target.value);
-          if (g > 0) { await updateEntry(e.id, { grams: g }); toast('已更新', 'ok'); return; }
-          ev.target.value = num(e.grams);   // 清空或填了非法值就还原，别留个空框
+          if (g > 0) {
+            const result = await runLocalAction(input, () => updateEntry(e.id, { grams: g }), '更新份量');
+            if (result.ok) toast('已更新', 'ok');
+            else input.value = num(e.grams);
+            return;
+          }
+          input.value = num(e.grams);   // 清空或填了非法值就还原，别留个空框
         },
       }),
       h('span.unit', null, unit),
       h('button.icon-btn.danger', {
         'aria-label': `删除 ${e.name}`,
-        onclick: async () => { await removeEntry(e.id); toast('已删除'); },
+        onclick: async (ev) => {
+          const result = await runLocalAction(ev.currentTarget, () => removeEntry(e.id), '删除记录');
+          if (result.ok) toast('已删除');
+        },
       }, '×')));
 }
 
 function copyRow() {
   return h('div.copy-row', null,
     h('button.text-btn', {
-      onclick: async () => {
-        const n = await copyDay(shiftDay(state.day, -1));
+      onclick: async (ev) => {
+        const result = await runLocalAction(ev.currentTarget,
+          () => copyDay(shiftDay(state.day, -1)), '复制昨天记录');
+        if (!result.ok) return;
+        const n = result.value;
         toast(n ? `已复制昨天的 ${n} 条记录` : '昨天没有记录', n ? 'ok' : 'warn');
       },
     }, '和昨天一样'),
     h('button.text-btn.danger', {
-      onclick: async () => {
+      onclick: async (ev) => {
         if (!state.dietEntries.length) return;
         if (!confirmAction(`确定清空 ${state.day} 的全部 ${state.dietEntries.length} 条记录？`)) return;
-        for (const e of [...state.dietEntries]) await removeEntry(e.id);
-        toast('已清空');
+        const result = await runLocalAction(ev.currentTarget, async () => {
+          for (const e of [...state.dietEntries]) await removeEntry(e.id);
+        }, '清空记录');
+        if (result.ok) toast('已清空');
       },
     }, '清空这一天'),
   );
