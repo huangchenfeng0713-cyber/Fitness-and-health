@@ -11,15 +11,87 @@ import { renderSettings } from './views/settings.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
-  { key: 'today', label: '今日', icon: '◎', render: renderDashboard, dated: true },
-  { key: 'diet', label: '记录', icon: '＋', render: renderDiet, dated: true },
-  { key: 'health', label: '健康', icon: '♡', render: renderHealth },
-  { key: 'trends', label: '趋势', icon: '◫', render: renderTrends },
-  { key: 'settings', label: '设置', icon: '⚙', render: renderSettings },
+  { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
+  { key: 'diet', label: '饮食', icon: 'add', render: renderDiet, dated: true },
+  { key: 'health', label: '数据', icon: 'data', render: renderHealth },
+  { key: 'trends', label: '趋势', icon: 'trend', render: renderTrends },
 ];
+
+const TAB_ICON = {
+  today: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.7 1.7"/></svg>',
+  add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  data: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h3l2-6 4 11 2-5h5"/></svg>',
+  trend: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17V9M12 17V5M19 17v-7"/><path d="M3 20h18"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>',
+};
 
 let current = 'today';
 let viewRoot = null;
+let settingsOverlay = null;
+let settingsRoot = null;
+let settingsOpen = false;
+let settingsOpener = null;
+let settingsCloseTimer = null;
+
+/** 设置是全局偏好，不占一个主栏目；从右侧抽屉随时打开。 */
+function ensureSettingsDrawer() {
+  if (settingsOverlay) return;
+  settingsRoot = h('div.settings-drawer-content');
+  const drawer = h('aside.settings-drawer', {
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-labelledby': 'settings-drawer-title',
+    onclick: (event) => event.stopPropagation(),
+  },
+  h('div.settings-drawer-head', null,
+    h('h2#settings-drawer-title', null, '设置'),
+    h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' }, '×')),
+  settingsRoot);
+
+  drawer.addEventListener('click', (event) => {
+    if (event.target.closest('a[href^="#"]')) closeSettings({ restoreHash: false });
+  });
+  settingsOverlay = h('div.settings-overlay', {
+    hidden: true,
+    'aria-hidden': 'true',
+    onclick: () => closeSettings(),
+  }, drawer);
+  document.body.append(settingsOverlay);
+}
+
+function openSettings() {
+  ensureSettingsDrawer();
+  clearTimeout(settingsCloseTimer);
+  settingsOpener = document.activeElement;
+  renderSettings(settingsRoot);
+  settingsOverlay.hidden = false;
+  settingsOverlay.setAttribute('aria-hidden', 'false');
+  $('#app').inert = true;
+  settingsOpen = true;
+  syncOnboarding();
+  requestAnimationFrame(() => {
+    settingsOverlay.classList.add('open');
+    settingsOverlay.querySelector('.settings-close')?.focus({ preventScroll: true });
+  });
+}
+
+function closeSettings({ restoreHash = true } = {}) {
+  if (!settingsOverlay || !settingsOpen) return;
+  settingsOverlay.classList.remove('open');
+  settingsOverlay.setAttribute('aria-hidden', 'true');
+  $('#app').inert = false;
+  settingsOpen = false;
+  syncOnboarding();
+  settingsCloseTimer = setTimeout(() => { settingsOverlay.hidden = true; }, 220);
+  if (restoreHash && location.hash === '#settings') {
+    history.replaceState(null, '', `#${current}`);
+  }
+  settingsOpener?.focus?.({ preventScroll: true });
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && settingsOpen) closeSettings();
+});
 
 /**
  * 顶栏。
@@ -33,14 +105,21 @@ function renderTopbar() {
   if (!bar) return;
   clearEl(bar);
   const tab = TABS.find((t) => t.key === current) || TABS[0];
+  const context = h('div.topbar-context');
+  const settingsButton = h('button.topbar-settings-btn', {
+    onclick: openSettings,
+    'aria-label': '打开设置',
+    title: '设置',
+  }, h('span', { html: TAB_ICON.settings }));
 
   if (!tab.dated) {
-    bar.append(h('h1', null, tab.label));
+    context.append(h('h1', null, tab.label));
+    bar.append(context, settingsButton);
     return;
   }
 
   const isToday = state.day === todayKey();
-  bar.append(
+  context.append(
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
       'aria-label': '前一天',
@@ -57,6 +136,7 @@ function renderTopbar() {
       'aria-label': '后一天',
     }, '›'),
   );
+  bar.append(context, settingsButton);
 }
 
 function renderTabs() {
@@ -66,11 +146,18 @@ function renderTabs() {
     nav.append(h('button', {
       class: `tab${current === tab.key ? ' active' : ''}`,
       onclick: () => switchTab(tab.key),
-    }, h('span.tab-icon', null, tab.icon), h('span.tab-label', null, tab.label)));
+      'aria-current': current === tab.key ? 'page' : null,
+      'aria-label': tab.label,
+    }, h('span.tab-icon', { html: TAB_ICON[tab.icon] }), h('span.tab-label', null, tab.label)));
   }
 }
 
 function switchTab(key) {
+  if (key === 'settings') {
+    openSettings();
+    return;
+  }
+  if (settingsOpen) closeSettings({ restoreHash: false });
   current = key;
   location.hash = key;
   renderTabs();
@@ -85,7 +172,7 @@ function switchTab(key) {
 /** 焦点在输入控件里时不要重绘：DOM 一换，iOS 会收起键盘、日期选择器会被当场提交 */
 function isEditing() {
   const el = document.activeElement;
-  if (!el || !viewRoot?.contains(el)) return false;
+  if (!el) return false;
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
 }
 
@@ -111,8 +198,8 @@ function renderCurrent() {
 function syncOnboarding() {
   const slot = $('#banner');
   if (!slot) return;
-  // 人已经在设置页填表了，横幅只会碍事
-  if (state.profile.onboarded || current === 'settings') {
+  // 人已经在设置抽屉填表了，横幅只会碍事
+  if (state.profile.onboarded || settingsOpen) {
     clearEl(slot);
     return;
   }
@@ -120,7 +207,7 @@ function syncOnboarding() {
   slot.append(h('div.onboard', null,
     h('h2', null, '先花 30 秒填一下身体信息'),
     h('p', null, '热量与蛋白目标都由这些数据算出来。填完就能开始记录，之后随时能在「设置」里改。'),
-    h('button.primary-btn', { onclick: () => switchTab('settings') }, '去填写'),
+    h('button.primary-btn', { onclick: openSettings }, '去填写'),
     h('button.text-btn', {
       onclick: () => saveProfile({ demoMode: true, onboarded: true }),
     }, '使用演示数据预览'),
@@ -131,7 +218,9 @@ function syncOnboarding() {
 function runUrlImport() {
   importFromUrlHash().then((outcome) => {
     if (!outcome) return;
-    toast(outcome.message, outcome.ok ? 'ok' : 'error');
+    toast(outcome.ok
+      ? (outcome.days ? `同步完成：已更新 ${outcome.days} 天健康数据` : 'Apple 健康快照已同步')
+      : outcome.message, outcome.ok ? 'ok' : 'error');
     if (outcome.ok) renderCurrent();
   }).catch((err) => {
     console.error('URL 导入失败', err);
@@ -211,6 +300,7 @@ async function boot() {
   watchSafeInsets();
   viewRoot = $('#view');
   const hash = location.hash.replace('#', '');
+  const openSettingsOnBoot = hash === 'settings';
   if (TABS.some((t) => t.key === hash)) current = hash;
 
   try {
@@ -227,10 +317,16 @@ async function boot() {
   renderTopbar();
   syncOnboarding();
   renderCurrent();
+  if (openSettingsOnBoot) openSettings();
 
   runUrlImport();
 
-  subscribe(() => { renderTopbar(); syncOnboarding(); renderCurrent(); });
+  subscribe(() => {
+    renderTopbar();
+    syncOnboarding();
+    renderCurrent();
+    if (settingsOpen && !isEditing()) renderSettings(settingsRoot);
+  });
 
   // 时间在走，“下一餐”仍要刷新；热量外推使用健康快照时间，不再跟当前时钟漂移。
   // 只在用户原本跟随“今天”时自动跨日，避免把正在查看历史日期的人强行拉走。
@@ -267,7 +363,14 @@ async function boot() {
       return;
     }
     const next = location.hash.replace('#', '');
-    if (TABS.some((t) => t.key === next) && next !== current) switchTab(next);
+    if (next === 'settings') {
+      openSettings();
+      return;
+    }
+    if (TABS.some((t) => t.key === next)) {
+      if (settingsOpen) closeSettings({ restoreHash: false });
+      if (next !== current) switchTab(next);
+    }
   });
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

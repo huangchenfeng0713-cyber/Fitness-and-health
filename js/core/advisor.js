@@ -493,7 +493,7 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
       `健康数据里今天的活动能量是 ${round(targets.activeReported || 0)} kcal，`
       + `按现在的时间点算不可能达到（近期日均 ${round(baseline.activeEnergy || 0)} kcal）。`
       + '热量目标已改按平时的活动节奏估算。'
-      + '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，建议去「健康」页核对一下。');
+      + '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，建议去「数据」页核对一下。');
   }
 
   /*

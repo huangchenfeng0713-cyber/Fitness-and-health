@@ -7,8 +7,71 @@ import {
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 752, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 838, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
+});
+
+const FUNCTIONAL_DRINK_IDS = [
+  'redbull_original_imported', 'redbull_sugarfree_imported', 'monster_original_green',
+  'monster_ultra_zero', 'eastroc_energy_original', 'warhorse_energy_original',
+  'lehu_energy_original', 'amino_energy_drink_generic', 'gatorade_thirst_quencher',
+  'gatorade_zero', 'gatorade_fit', 'gatorade_fast_twitch', 'powerade_original',
+  'pocari_sweat', 'mizone_vitamin_drink', 'scream_sports_drink',
+  'alien_electrolyte_zero', 'electrolyte_water_low_sugar', 'vitamin_water_sugared',
+  'vitamin_water_zero', 'caffeinated_sparkling_zero', 'electrolyte_tablet_prepared',
+];
+
+test('功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因', () => {
+  assert.equal(FUNCTIONAL_DRINK_IDS.length, 22);
+  for (const id of FUNCTIONAL_DRINK_IDS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少功能饮料 ${id}`);
+    assert.equal(food.cat, 'drink');
+    assert.equal(food.basis, '100ml');
+    assert.ok(food.source && food.note, `${food.name} 缺来源或版本差异说明`);
+  }
+  for (const id of ['redbull_original_imported', 'monster_ultra_zero', 'eastroc_energy_original',
+    'gatorade_fast_twitch', 'caffeinated_sparkling_zero']) {
+    assert.ok(FOOD_BY_ID.get(id).caffeineMg > 0, `${id} 缺咖啡因含量`);
+  }
+  const terms = ['红牛', '东鹏特饮', '战马', '乐虎', '魔爪', '佳得乐', '宝矿力',
+    '脉动', '尖叫', '外星人电解质', '维生素水', '咖啡因气泡水'];
+  assert.deepEqual(terms.filter((term) => searchFoods(term).length === 0), []);
+});
+
+const COMMON_FOOD_EXPANSION_IDS = [
+  'glutinous_rice_cooked', 'eight_treasure_rice', 'salted_egg_meat_zongzi', 'redbean_zongzi',
+  'plain_zongzi', 'lotus_glutinous_chicken', 'glutinous_siumai', 'mushroom_oil_rice',
+  'tuna_onigiri', 'pork_floss_onigiri', 'purple_rice_ball', 'seaweed_plain_onigiri',
+  'starch_sausage', 'corn_sausage', 'crispy_sausage', 'fish_tofu', 'grilled_gluten',
+  'fried_sweet_potato_ball', 'wolf_tooth_potato', 'fried_chicken_rack',
+  'crispy_pork_snack', 'liangfen_savory', 'bobo_chicken', 'nanchang_rice_noodle',
+  'claypot_meat_soup', 'fried_rice_vermicelli_cn', 'soup_rice_noodle',
+  'intestine_rice_noodle', 'duck_blood_vermicelli_soup', 'hainan_chicken_rice',
+  'pork_trotter_rice', 'roast_duck_rice', 'pork_rib_rice', 'soy_sauce_fried_rice',
+  'curry_chicken_rice', 'teriyaki_chicken_rice', 'chicken_cutlet_rice', 'char_siu_rice',
+  'roast_goose_rice', 'ham_cheese_sandwich', 'pork_floss_bread', 'sausage_bun',
+  'custard_bun', 'lava_bun', 'egg_yolk_pastry', 'wife_cake', 'glutinous_lotus_root',
+  'glutinous_rice_ball_sweet', 'donkey_roll', 'sesame_ball', 'roasted_sweet_potato',
+  'brown_sugar_mantou', 'egg_pancake_plain', 'grilled_mantou', 'baked_lamb_baozi',
+  'rice_burger', 'self_heating_rice_meal', 'buldak_noodle_ready', 'fried_niangao',
+  'stirfried_niangao', 'northeast_rice_wrap', 'cold_rice_cake', 'street_egg_burger',
+  'omelette_rice',
+];
+
+test('v1.3 常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索', () => {
+  assert.equal(COMMON_FOOD_EXPANSION_IDS.length, 64);
+  for (const id of COMMON_FOOD_EXPANSION_IDS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少新增食物 ${id}`);
+    assert.ok(food.source && food.basis && food.state && food.carbBasis, `${food.name} 缺可审计元数据`);
+    assert.equal(isEstimated(food), true, `${food.name} 是通用配方，应明确标为估算`);
+  }
+  const terms = ['糯米饭', '饭团', '淀粉肠', '鱼豆腐', '烤面筋', '小酥肉',
+    '南昌拌粉', '鸭血粉丝汤', '海南鸡饭', '猪脚饭', '蛋黄酥', '自热米饭'];
+  assert.deepEqual(terms.filter((term) => searchFoods(term).length === 0), []);
+  assert.equal(freeSugarPer100(FOOD_BY_ID.get('glutinous_rice_cooked')), 0,
+    '原味糯米饭中的内源糖不应计入游离糖');
 });
 
 test('v1.2 扩充食物可搜索，复合菜和包装食品明确披露估算', () => {
@@ -365,6 +428,10 @@ test('可选食物元数据遵守稳定 schema，旧条目仍可不带元数据'
       assert.ok(Number.isFinite(f.edibleRatio) && f.edibleRatio > 0 && f.edibleRatio <= 1,
         `${f.name} 的 edibleRatio 必须在 (0, 1]`);
     }
+    if (f.caffeineMg !== undefined) {
+      assert.ok(Number.isFinite(f.caffeineMg) && f.caffeineMg > 0 && f.caffeineMg <= 100,
+        `${f.name} 的 caffeineMg 应为每 100ml 的合理正数`);
+    }
   }
 });
 
@@ -381,6 +448,7 @@ test('营养、糖层级与语义标记在合理范围内', () => {
   const allowedFlags = new Set([
     'fried', 'refined', 'processed', 'whole', 'quick', 'breakfast', 'late', 'cook',
     'sweetdrink', 'alcohol', 'natsugar', 'est', 'tealevel', 'instant',
+    'functional', 'caffeinated',
   ]);
   for (const f of FOODS) {
     const [kcal, protein, fat, carb, fiber, totalSugar, sodium] = f.n;
