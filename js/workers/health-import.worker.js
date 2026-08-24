@@ -11,7 +11,8 @@
 import {
   createAggregator,
   feedXmlChunk,
-  parseHealthJson,
+  normalizeHealthJsonText,
+  parseHealthJsonText,
   parseHealthCsv,
 } from '../core/health.js';
 
@@ -189,17 +190,17 @@ self.onmessage = async (event) => {
   try {
     let result;
     if (text != null) {
-      const trimmed = text.trim();
-      result = trimmed.startsWith('{') || trimmed.startsWith('[')
-        ? parseHealthJson(JSON.parse(trimmed))
-        : parseHealthCsv(trimmed);
+      const normalized = normalizeHealthJsonText(text);
+      result = normalized.startsWith('{') || normalized.startsWith('[')
+        ? parseHealthJsonText(normalized)
+        : parseHealthCsv(normalized);
     } else if (!file) {
       throw new Error('没有收到文件');
     } else {
       const name = (file.name || '').toLowerCase();
       if (name.endsWith('.zip')) result = await importZip(file, { sourcePriority });
       else if (name.endsWith('.xml')) result = await importXml(file, { sourcePriority });
-      else if (name.endsWith('.json')) result = parseHealthJson(JSON.parse(await file.text()));
+      else if (name.endsWith('.json')) result = parseHealthJsonText(await file.text());
       else if (name.endsWith('.csv')) result = parseHealthCsv(await file.text());
       else throw new Error('不认识的文件类型，请上传 zip / xml / json / csv');
     }

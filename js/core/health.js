@@ -105,6 +105,30 @@ const ALIAS_LOOKUP = (() => {
 
 const DATE_KEYS = new Set(['date', 'day', 'datetime', 'timestamp', 'time', '日期']);
 
+/**
+ * 手机输入法和对话应用经常把 JSON 的英文引号替换成“智能引号”，
+ * 也可能在复制时连同 Markdown 代码框一起带进来。这里只清理粘贴文本的
+ * 常见包装，后面仍由 JSON.parse 做严格语法校验。
+ */
+export function normalizeHealthJsonText(text) {
+  let normalized = String(text ?? '').trim().replace(/^\uFEFF/, '');
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(normalized);
+  if (fenced) normalized = fenced[1].trim();
+  return normalized.replace(/[\u201c\u201d\uff02]/g, '"');
+}
+
+/** 解析粘贴或文件中的健康 JSON，并把原生英文语法错误换成可操作的提示。 */
+export function parseHealthJsonText(text) {
+  try {
+    return parseHealthJson(JSON.parse(normalizeHealthJsonText(text)));
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new Error('JSON 格式不正确，请检查引号、逗号和括号');
+    }
+    throw err;
+  }
+}
+
 /** 把任意写法的字段名解析成内部字段名，认不出返回 null */
 export function resolveKey(k) {
   return ALIAS_LOOKUP.get(normalizeKey(k)) || null;
