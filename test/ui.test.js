@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -110,4 +110,57 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(health.includes('截至所选日共 ${eligible.length} 天'));
   assert.ok(settings.includes('按当前设置估算'));
   assert.ok(trends.includes("'当前设置估算目标'"));
+});
+
+
+test('趋势页所有折线图共用同一横轴窗口', () => {
+  // 用户实测：同一个「近 30 天」下，体重图 08-22→08-23、活动能量 07-26→08-24。
+  // 柱状图本来就按整段区间画，折线图不传 domain 就会各画各的。
+  const trends = read('js/views/trends.js');
+  const calls = trends.match(/lineChart\(\{[\s\S]*?\}\)/g) || [];
+  assert.ok(calls.length >= 4, `折线图数量异常：${calls.length}`);
+  for (const call of calls) {
+    assert.ok(/domain: axisDomain/.test(call),
+      `有折线图没有传 domain：${call.slice(0, 90)}`);
+  }
+  assert.match(trends, /const axisDomain = \[days\[0\], days\[days\.length - 1\]\]/);
+});
+
+test('活动能量图有平均参考线，且与卡片标签同源', () => {
+  const trends = read('js/views/trends.js');
+  const idx = trends.indexOf("chartCard('活动能量'");
+  assert.ok(idx > 0, '找不到活动能量卡片');
+  const block = trends.slice(idx, idx + 900);
+  assert.ok(/target: avgActive/.test(block), '活动能量图缺少平均参考线');
+  assert.ok(/targetLabel: avgActive != null \? `平均 \$\{avgActive\}`/.test(block),
+    '参考线标签应短且与卡片标签同一个数');
+  assert.ok(/已结束日平均 \$\{avgActive\} kcal/.test(block), '卡片标签应写明是已结束日的平均');
+});
+
+test('趋势页各项平均口径一致：今天一律不计入', () => {
+  const trends = read('js/views/trends.js');
+  for (const name of ['endedKcal', 'endedProtein', 'endedActive', 'endedSleep']) {
+    assert.match(trends, new RegExp(`const ${name} = ended\\(`), `${name} 没有排除今天`);
+  }
+  assert.ok(!/const avgSleep = average\(sleepSeries/.test(trends),
+    '睡眠平均仍在使用含今天的序列');
+});
+
+
+test('每个 js 模块都在 Service Worker 的离线清单里', () => {
+  // 漏一个模块，离线时整个应用就打不开——历史上 health-insights.js 和
+  // importer.js 就漏过。新增模块必须同步改 sw.js，这条测试替人记着。
+  const sw = read('sw.js');
+  const cached = new Set([...sw.matchAll(/'\.\/(js\/[^']+\.js)'/g)].map((m) => m[1]));
+  const walk = (dir) => readdirSync(new URL(`../${dir}`, import.meta.url), { withFileTypes: true })
+    .flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : (e.name.endsWith('.js') ? [`${dir}/${e.name}`] : [])));
+  const missing = walk('js').filter((f) => !cached.has(f));
+  assert.deepEqual(missing, [], `这些模块没进 sw.js 的 SHELL：${missing.join('、')}`);
+});
+
+test('Service Worker 缓存名跟着版本号走', () => {
+  // 缓存名不变的话，老用户可能一直吃着旧壳
+  const pkg = JSON.parse(read('package.json'));
+  assert.ok(read('sw.js').includes(pkg.version),
+    `sw.js 的 CACHE 名里没有 package.json 的版本号 ${pkg.version}`);
 });

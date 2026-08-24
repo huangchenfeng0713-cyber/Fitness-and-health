@@ -54,3 +54,73 @@ test('大量程用整数刻度，小量程自动加小数位', () => {
 test('显式指定小数位时以调用方为准', () => {
   assert.ok(axisTicks([70.1, 71.8], { decimals: 1 }).every((t) => t.split('.')[1]?.length === 1));
 });
+
+
+/* ---------------------------------------------------- 横轴窗口 domain */
+
+/** 与 charts.js 中 lineChart 的横轴映射保持一致 */
+function axisDomainMap(pointDates, domain = null, { width = 640, padL = 38, padR = 12 } = {}) {
+  const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+  const parse = (d) => Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`);
+  const dayXs = pointDates.map(parse);
+  const domainXs = Array.isArray(domain) && domain.length === 2 ? domain.map(parse) : null;
+  const useDomain = domainXs != null && domainXs.every(Number.isFinite) && domainXs[1] > domainXs[0];
+  const x0 = useDomain ? domainXs[0] : dayXs[0];
+  const x1 = useDomain ? domainXs[1] : dayXs.at(-1);
+  const hasCalendarX = dayXs.every(Number.isFinite) && x1 > x0;
+  const px = (i) => {
+    const ratio = hasCalendarX ? clamp01((dayXs[i] - x0) / (x1 - x0)) : i / (pointDates.length - 1);
+    return padL + ratio * (width - padL - padR);
+  };
+  return {
+    useDomain,
+    firstLabel: String(useDomain ? domain[0] : pointDates[0]).slice(5),
+    lastLabel: String(useDomain ? domain[1] : pointDates.at(-1)).slice(5),
+    xs: pointDates.map((_, i) => Math.round(px(i))),
+  };
+}
+
+test('不给 domain 时横轴仍是「第一个到最后一个有数据的日子」', () => {
+  const r = axisDomainMap(['2026-08-22', '2026-08-23']);
+  assert.equal(r.useDomain, false);
+  assert.equal(r.firstLabel, '08-22');
+  assert.equal(r.lastLabel, '08-23');
+  assert.equal(r.xs[0], 38);
+  assert.equal(r.xs.at(-1), 628, '最后一个点贴右边界');
+});
+
+test('给了 domain 后横轴标的是区间两端，数据落在区间内的真实位置', () => {
+  // 用户实测：同一页「近 30 天」里，只有 2 次体重记录的图显示 08-22 → 08-23，
+  // 旁边活动能量却是 07-26 → 08-24，三张图三个区间没法横向比较。
+  const domain = ['2026-07-26', '2026-08-24'];
+  const r = axisDomainMap(['2026-08-22', '2026-08-23'], domain);
+  assert.equal(r.useDomain, true);
+  assert.equal(r.firstLabel, '07-26');
+  assert.equal(r.lastLabel, '08-24');
+  assert.ok(r.xs[0] > 500 && r.xs[0] < 628, `08-22 应靠近右侧，实得 x=${r.xs[0]}`);
+  assert.ok(r.xs.at(-1) < 628, '最后一个数据点不该被拉到右边界，08-23 还不是区间末尾');
+});
+
+test('同一 domain 下不同数据的两张图，同一天落在同一个 x 上', () => {
+  const domain = ['2026-07-26', '2026-08-24'];
+  const a = axisDomainMap(['2026-07-26', '2026-08-10', '2026-08-24'], domain);
+  const b = axisDomainMap(['2026-08-10', '2026-08-24'], domain);
+  assert.equal(a.xs[1], b.xs[0], '08-10 在两张图上必须对齐');
+  assert.equal(a.xs[2], b.xs[1], '08-24 在两张图上必须对齐');
+  assert.equal(a.firstLabel, b.firstLabel);
+  assert.equal(a.lastLabel, b.lastLabel);
+});
+
+test('数据点超出 domain 时被夹住，不会画到画布外', () => {
+  const r = axisDomainMap(['2026-07-01', '2026-09-30'], ['2026-07-26', '2026-08-24']);
+  assert.ok(r.xs[0] >= 38, `左端不能越界，实得 ${r.xs[0]}`);
+  assert.ok(r.xs.at(-1) <= 628, `右端不能越界，实得 ${r.xs.at(-1)}`);
+});
+
+test('非法 domain 会被忽略而不是把图画坏', () => {
+  for (const bad of [['2026-08-24', '2026-07-26'], ['乱写', '也乱写'], ['2026-08-01'], [], null]) {
+    const r = axisDomainMap(['2026-08-22', '2026-08-23'], bad);
+    assert.equal(r.useDomain, false, `${JSON.stringify(bad)} 不该被当成有效区间`);
+    assert.equal(r.firstLabel, '08-22');
+  }
+});

@@ -2,6 +2,8 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
 function el(tag, attrs = {}) {
   const node = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -93,6 +95,7 @@ export function macroBar({
 export function lineChart({
   data = [], width = 640, height = 200, color = 'var(--accent)',
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
+  domain = null,
   emptyText = '数据不足，至少需要 2 个记录日',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
@@ -127,10 +130,24 @@ export function lineChart({
   // 日期有缺口时必须按真实日历距离布点；否则 8 月 1 日、2 日、30 日会被
   // 画成等间距，视觉上把最后 28 天的空档压成一天。
   const dayXs = points.map((p) => Date.parse(`${String(p.x).slice(0, 10)}T00:00:00Z`));
-  const hasCalendarX = dayXs.every(Number.isFinite) && dayXs.at(-1) > dayXs[0];
+  /*
+   * domain 指定横轴窗口，让同一页的多张图对齐。
+   *
+   * 不给 domain 时横轴是「第一个有数据的日子 → 最后一个有数据的日子」，
+   * 于是趋势页里只有 2 次体重记录的图显示 08-22 → 08-23，
+   * 旁边活动能量却是 07-26 → 08-24 —— 同一个「近 30 天」，三张图三个区间，
+   * 根本没法横向比较。柱状图本来就按整段区间画，线图也该跟上。
+   */
+  const domainXs = Array.isArray(domain) && domain.length === 2
+    ? domain.map((d) => Date.parse(`${String(d).slice(0, 10)}T00:00:00Z`))
+    : null;
+  const useDomain = domainXs != null && domainXs.every(Number.isFinite) && domainXs[1] > domainXs[0];
+  const x0 = useDomain ? domainXs[0] : dayXs[0];
+  const x1 = useDomain ? domainXs[1] : dayXs.at(-1);
+  const hasCalendarX = dayXs.every(Number.isFinite) && x1 > x0;
   const px = (i) => {
     const ratio = hasCalendarX
-      ? (dayXs[i] - dayXs[0]) / (dayXs.at(-1) - dayXs[0])
+      ? clamp01((dayXs[i] - x0) / (x1 - x0))
       : i / (points.length - 1);
     return pad.l + ratio * (width - pad.l - pad.r);
   };
@@ -166,11 +183,11 @@ export function lineChart({
   const last = points[points.length - 1];
   svg.append(el('circle', { cx: px(points.length - 1), cy: py(Number(last.y)), r: 3.5, fill: color }));
 
-  // 横轴：首尾日期
+  // 横轴：首尾日期。给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
   const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
-  first.textContent = String(points[0].x).slice(5);
+  first.textContent = String(useDomain ? domain[0] : points[0].x).slice(5);
   const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
-  lastT.textContent = String(last.x).slice(5);
+  lastT.textContent = String(useDomain ? domain[1] : last.x).slice(5);
   svg.append(first, lastT);
 
   if (unit) {
