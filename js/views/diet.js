@@ -24,7 +24,7 @@ const ui = {
   meal: null,
   selected: null,
   grams: 100,
-  unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按克输入
+  unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按 g/ml 输入
   qty: 1,         // 份数
   sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
   showCustomForm: false,
@@ -165,7 +165,7 @@ function suggestionBlock() {
         onclick: async (ev) => {
           ev.currentTarget.disabled = true;
           await addEntry({ foodId: item.food.id, grams: item.grams, meal: meal.key });
-          toast(`已记录 ${item.food.name} ${item.grams}g`, 'ok');
+          toast(`已记录 ${item.food.name} ${item.grams}${item.food.basis === '100ml' ? 'ml' : 'g'}`, 'ok');
         },
       }, '＋')))));
 }
@@ -187,10 +187,11 @@ function refreshResults() {
     ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${results.length} 项`),
     h('div.search-results', null, results.map((f) => {
     const p = per100(f);
+    const basis = f.basis === '100ml' ? '100ml' : '100g';
     return h('button.search-item', { onclick: () => selectFood(f) },
       h('div.search-item-main', null,
         h('strong', null, f.name),
-        h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / 100g`)),
+        h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
       h('div.search-item-tags', null,
         isEstimated(f) && h('span.chip.chip-est', {
           title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
@@ -315,11 +316,12 @@ function refreshPortion() {
     mount(clearEl(quickChips), presets.map((v) => h('button', {
       class: `chip-btn${Math.abs(ui.qty - v) < 1e-6 ? ' active' : ''}`,
       onclick: () => { ui.qty = v; syncReadouts(); refreshQuickChips(); },
-    }, gramMode() ? `${v}g` : `${v} ${unitLabel(servings[ui.unitIdx][0])}`)));
+    }, gramMode() ? `${v}${isLiquid ? 'ml' : 'g'}` : `${v} ${unitLabel(servings[ui.unitIdx][0])}`)));
   }
 
   const gramInputWrap = h('div.gram-input-wrap', null,
-    h('span', null, '克数'), gramsInput, h('span.unit', null, 'g'));
+    h('span', null, isLiquid ? '毫升数' : '克数'), gramsInput,
+    h('span.unit', null, isLiquid ? 'ml' : 'g'));
   function toggleGramInput() { gramInputWrap.hidden = !gramMode(); }
 
   nodes.preview = h('div.preview-slot');
@@ -422,10 +424,11 @@ function impactBlock(n) {
   if (!gaps) return null;
 
   const rows = [
-    ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0],
-    ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1],
-    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1],
-    ['脂肪', 'g', gaps.fat, n.fat, 'var(--fat)', 1],
+    ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0, true],
+    ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1, false],
+    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1, false],
+    ['脂肪上限', 'g', { ...gaps.fat, target: gaps.fat.upper || gaps.fat.target },
+      n.fat, 'var(--fat)', 1, true],
   ];
 
   const kcalAfter = gaps.kcal.eaten + n.kcal;
@@ -443,7 +446,7 @@ function impactBlock(n) {
 
   return h('div.impact-block', null,
     h('div.impact-title', null, h('span', null, '记录后 · 今日进度'), h('span', null, '现在 → 记录后 / 目标')),
-    rows.map(([label, unit, g, add, color, dec]) => {
+    rows.map(([label, unit, g, add, color, dec, overIsBad]) => {
       const after = g.eaten + add;
       const pct = g.target > 0 ? (after / g.target) * 100 : 0;
       return h('div.impact-row', null,
@@ -451,9 +454,9 @@ function impactBlock(n) {
           h('span.impact-name', null, label),
           h('span.impact-from', null, num(g.eaten, dec)),
           h('span.impact-arrow', null, '→'),
-          h('span.impact-to', { class: pct > 105 ? 'over' : '' }, num(after, dec)),
+          h('span.impact-to', { class: overIsBad && pct > 105 ? 'over' : '' }, num(after, dec)),
           h('span.impact-target', null, `/${num(g.target, 0)}${unit}`)),
-        macroBar({ value: g.eaten, delta: add, target: g.target, color }));
+        macroBar({ value: g.eaten, delta: add, target: g.target, color, overIsBad }));
     }),
     note);
 }
@@ -566,6 +569,8 @@ function refreshEntries() {
 }
 
 function entryRow(e) {
+  const isLiquid = findFood(e.foodId)?.basis === '100ml';
+  const unit = isLiquid ? 'ml' : 'g';
   return h('div.entry-row', null,
     h('div.entry-main', null,
       h('div.entry-name', null, e.name),
@@ -575,7 +580,7 @@ function entryRow(e) {
     h('div.entry-actions', null,
       h('input.entry-grams', {
         type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',
-        'aria-label': `${e.name} 的克数`,
+        'aria-label': `${e.name} 的${isLiquid ? '毫升数' : '克数'}`,
         // 用 change：输入过程中不落库，避免每敲一个数字就重算重绘
         onchange: async (ev) => {
           const g = Number(ev.target.value);
@@ -583,7 +588,7 @@ function entryRow(e) {
           ev.target.value = num(e.grams);   // 清空或填了非法值就还原，别留个空框
         },
       }),
-      h('span.unit', null, 'g'),
+      h('span.unit', null, unit),
       h('button.icon-btn.danger', {
         'aria-label': `删除 ${e.name}`,
         onclick: async () => { await removeEntry(e.id); toast('已删除'); },

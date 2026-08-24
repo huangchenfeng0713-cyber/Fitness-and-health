@@ -19,6 +19,19 @@ export const MEALS = [
 
 export const MEAL_LABEL = Object.fromEntries(MEALS.map((m) => [m.key, m.label]));
 
+// 防止临近一天结束时把此前没吃的热量全部塞进晚餐或夜宵。
+// 这些只是产品护栏，不是营养学推荐值；日目标本身不会因此改变。
+const MEAL_KCAL_CAP = {
+  breakfast: 0.35, lunch: 0.45, snack: 0.18, dinner: 0.40, late: 0.10,
+};
+const MEAL_PROTEIN_CAP = {
+  breakfast: 0.40, lunch: 0.50, snack: 0.25, dinner: 0.45, late: 0.25,
+};
+
+const MAIN_MEAL_CATS = new Set(['dish', 'chain', 'staple']);
+const LIGHT_MEAL_CATS = new Set(['dairy', 'fruit', 'nut', 'drink', 'snack', 'egg', 'soy']);
+const PREPARED_NAME = /(熟|水煮|白煮|烤|蒸|炖|焖|煎|炒|卤|拌|汤|粥|饭|面|粉|饺|包|罐头|即食)/;
+
 /** 从营养数字自动推导标签，避免与手工标记冲突 */
 export function deriveTags(food) {
   const p = per100(food);
@@ -82,15 +95,18 @@ function portionPhrase(name, mult) {
 }
 
 /** 把克数吸附到该食物的常用份量上，让建议更好执行 */
-function snapToServing(food, grams) {
-  let best = { grams: Math.round(grams / 5) * 5, label: `${Math.round(grams / 5) * 5} g`, exact: false };
+function snapToServing(food, grams, maxGrams = Infinity) {
+  const unit = food.basis === '100ml' ? 'ml' : 'g';
+  const rounded = Math.min(Math.round(grams / 5) * 5, maxGrams);
+  let best = { grams: rounded, label: `${rounded} ${unit}`, exact: false };
   for (const [name, g] of food.s || []) {
     for (const mult of [0.5, 1, 1.5, 2, 3]) {
       const cand = g * mult;
+      if (cand > maxGrams + 0.01) continue;
       if (Math.abs(cand - grams) <= Math.max(grams * 0.28, 15)) {
         const label = portionPhrase(name, mult);
         if (!best.exact || Math.abs(cand - grams) < Math.abs(best.grams - grams)) {
-          best = { grams: Math.round(cand), label: `${label}（约 ${Math.round(cand)} g）`, exact: true };
+          best = { grams: Math.round(cand), label: `${label}（约 ${Math.round(cand)} ${unit}）`, exact: true };
         }
       }
     }
@@ -102,13 +118,21 @@ function snapToServing(food, grams) {
  * 计算这一餐应该给多少预算。
  * 把剩余热量按剩余餐次的份额权重分配，而不是平均分。
  */
-export function mealBudget({ kcalLeft, proteinLeft, now = new Date() }) {
+export function mealBudget({
+  kcalLeft, proteinLeft, dailyKcal = null, proteinTarget = null, now = new Date(),
+}) {
   const rest = remainingMeals(now);
   const totalShare = rest.reduce((s, m) => s + m.share, 0) || 1;
   const cur = rest[0];
   const ratio = cur.share / totalShare;
-  const kcal = round(Math.max(kcalLeft, 0) * ratio);
-  const requestedProtein = round(Math.max(proteinLeft, 0) * ratio, 1);
+  const allocatedKcal = Math.max(kcalLeft, 0) * ratio;
+  const kcalCeiling = Number(dailyKcal) > 0
+    ? Number(dailyKcal) * (MEAL_KCAL_CAP[cur.key] || 0.45) : Infinity;
+  const kcal = round(Math.min(allocatedKcal, kcalCeiling));
+  const allocatedProtein = Math.max(proteinLeft, 0) * ratio;
+  const proteinCeiling = Number(proteinTarget) > 0
+    ? Number(proteinTarget) * (MEAL_PROTEIN_CAP[cur.key] || 0.5) : Infinity;
+  const requestedProtein = round(Math.min(allocatedProtein, proteinCeiling), 1);
   // 蛋白质本身至少提供 4 kcal/g。分别计算两个缺口会生成“42 kcal 补 16g 蛋白”
   // 这种物理上不可能的指令，因此先用热量约束住这一餐可显示的蛋白预算。
   const maxProteinByKcal = round(kcal / ATWATER.protein, 1);
@@ -121,6 +145,7 @@ export function mealBudget({ kcalLeft, proteinLeft, now = new Date() }) {
     maxProteinByKcal,
     proteinFeasible,
     restMealCount: rest.length,
+    timeCapped: allocatedKcal > kcalCeiling + 0.5 || allocatedProtein > proteinCeiling + 0.05,
   };
 }
 
@@ -137,6 +162,11 @@ function scoreFood(food, ctx) {
   if (food.cat === 'other') return null;
   if (tags.has('alcohol')) return null;
 
+  // “现在吃什么”不能把明确标注为生的肉和水产当成可直接入口的食物。
+  // 这类条目仍保留在搜索与记账中，只从即时推荐里排除。
+  const explicitRaw = food.state === 'raw' || /[（(]生[）)]/.test(food.name);
+  if (explicitRaw) return null;
+
   // 建议份量：一餐由多样食物组成，单品只承担这一餐的一部分
   let grams;
   const defaultGrams = food.s?.[0]?.[1] || 100;
@@ -150,10 +180,12 @@ function scoreFood(food, ctx) {
   // 不能超出这一餐的热量预算，也不能超出全天剩余
   const kcalCap = Math.max(0, Math.min(kcalLeft, Math.max(budget.kcal, 150) * 0.8));
   const maxByKcal = p.kcal > 0 ? (kcalCap / p.kcal) * 100 : grams;
-  grams = Math.min(grams, maxByKcal, PORTION_CAP[food.cat] || 300);
+  const servingCap = Math.min(maxByKcal, PORTION_CAP[food.cat] || 300);
+  grams = Math.min(grams, servingCap);
   if (grams < defaultGrams * 0.25 || grams < 10) return null;
 
-  const snapped = snapToServing(food, grams);
+  // 常用份量吸附也必须服从热量与分类上限；否则 450g 会再次跳成 1.5 份 525g。
+  const snapped = snapToServing(food, grams, servingCap);
   const nut = nutrientsFor(food, snapped.grams);
   if (nut.kcal > Math.max(kcalLeft, 0) * 1.02) return null;
   if (nut.kcal > Math.max(budget.kcal, 200) * 0.95) return null;
@@ -199,7 +231,7 @@ function scoreFood(food, ctx) {
     score += 6;
     if (!reasons.some((r) => r.includes('纤维'))) reasons.push(`补 ${nut.fiber}g 纤维`);
   }
-  if (gaps.fat.remaining < 5 && nut.fat > 10) score -= 12;
+  if (gaps.fat.upperRemaining < 5 && nut.fat > 10) score -= 12;
   if (gaps.carb.remaining < 15 && nut.carb > 25) score -= 10;
 
   // 6) 加工与烹饪方式
@@ -208,24 +240,42 @@ function scoreFood(food, ctx) {
   if (tags.has('sweetdrink')) score -= 16;
   if (tags.has('whole')) { score += 5; reasons.push('全谷物'); }
 
-  // 7) 时段适配：早餐和夜宵要能马上吃到，别推荐需要现做的生鲜
+  // 7) 时段适配：不同餐次不只改变标题和预算，也真正改变候选食物的排序与筛选。
   const mealKey = budget.meal.key;
-  const needsCooking = tags.has('cook') || ((food.cat === 'meat' || food.cat === 'seafood') && !tags.has('quick'));
+  const prepared = food.state === 'ready' || food.state === 'cooked' || PREPARED_NAME.test(food.name);
+  const needsCooking = !prepared && (tags.has('cook')
+    || ((food.cat === 'meat' || food.cat === 'seafood') && !tags.has('quick')));
   if (mealKey === 'breakfast') {
-    if (tags.has('breakfast')) { score += 16; reasons.push('适合早餐'); }
-    else if (tags.has('quick')) score += 8;
-    if (needsCooking) score -= 16;
+    if (needsCooking) return null;
+    if (!tags.has('breakfast') && !LIGHT_MEAL_CATS.has(food.cat)) return null;
+    if (tags.has('breakfast')) { score += 24; reasons.unshift('适合早餐'); }
+    else if (tags.has('quick') || prepared) { score += 10; reasons.unshift('早餐时段方便食用'); }
+    else score -= 6;
+  }
+  if (mealKey === 'lunch' || mealKey === 'dinner') {
+    const mealLabel = MEAL_LABEL[mealKey];
+    const mainMealFood = MAIN_MEAL_CATS.has(food.cat)
+      || (prepared && ['meat', 'seafood', 'egg', 'soy', 'veg'].includes(food.cat));
+    if (mainMealFood) {
+      score += food.cat === 'dish' || food.cat === 'chain' ? 24 : 12;
+      reasons.unshift(`适合${mealLabel}`);
+    } else {
+      score -= LIGHT_MEAL_CATS.has(food.cat) ? 14 : 8;
+    }
+    if (needsCooking) score -= 10;
+    if (mealKey === 'dinner' && (tags.has('fried') || tags.has('high-fat'))) score -= 8;
   }
   if (mealKey === 'snack') {
-    if (tags.has('quick') || food.cat === 'fruit' || food.cat === 'dairy' || food.cat === 'nut') { score += 10; reasons.push('随手可得，不用现做'); }
-    if (needsCooking) score -= 14;
+    if (needsCooking || !LIGHT_MEAL_CATS.has(food.cat)) return null;
+    score += 16; reasons.unshift('适合加餐，方便少量食用');
     if (nut.kcal > 250) score -= 8;
   }
   if (mealKey === 'late' || hour >= 21) {
-    if (tags.has('late') || (p.kcal <= 120 && nut.fat <= 6 && tags.has('quick'))) { score += 12; reasons.push('份量较轻，适合深夜少量食用'); }
-    else score -= 12;
-    if (needsCooking) score -= 14;
-    if (tags.has('high-fat') || tags.has('fried')) score -= 12;
+    const lateReady = tags.has('late')
+      || ((tags.has('quick') || prepared) && LIGHT_MEAL_CATS.has(food.cat));
+    if (!lateReady || needsCooking || nut.kcal > 260 || nut.fat > 12) return null;
+    score += 18;
+    reasons.unshift('适合夜间少量食用');
   }
 
   // 8) 训练日补碳水
@@ -266,33 +316,34 @@ function buildAvoidList(ctx, limit = 5) {
   const proteinShort = proteinLeft > gaps.protein.target * 0.25;
   const sodiumOver = gaps.sodium.remaining < gaps.sodium.target * 0.2;
   const sugarOver = gaps.sugar.remaining < 5;
-  const fatOver = gaps.fat.remaining < gaps.fat.target * 0.1;
+  const fatOver = gaps.fat.upperRemaining < gaps.fat.upper * 0.1;
   const lateNight = hour >= 21;
 
   for (const food of FOODS) {
     if (food.cat === 'other') continue;
     const p = per100(food);
     const tags = tagsOf(food);
+    const basis = food.basis === '100ml' ? '100ml' : '100g';
     const proteinPer100kcal = p.kcal > 0 ? (p.protein / p.kcal) * 100 : 0;
 
     if (sodiumOver && tags.has('high-sodium')) {
-      push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（目标 ${gaps.sodium.target} mg），它每 100g 还要再加 ${p.sodium} mg`, 3);
+      push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（上限 ${gaps.sodium.target} mg），它每 ${basis} 还要再加 ${p.sodium} mg`, 3);
     } else if (sugarOver && (tags.has('sweetdrink') || tags.has('high-sugar'))) {
-      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 100g 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
+      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 ${basis} 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
     } else if (kcalTight && proteinShort && p.kcal >= 250 && proteinPer100kcal < 6) {
-      push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它 ${p.kcal} kcal/100g 却几乎不含蛋白`, 3);
+      push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它每 ${basis} ${p.kcal} kcal 却几乎不含蛋白`, 3);
     } else if (kcalTight && p.kcal >= 300) {
       push(food, 'kcal', `热量预算只剩 ${Math.max(kcalLeft, 0)} kcal，一份就会吃超`, 2);
     } else if (lateNight && (tags.has('fried') || tags.has('high-fat') || tags.has('high-sugar'))) {
-      push(food, 'late', `${p.kcal} kcal/100g，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
+      push(food, 'late', `${p.kcal} kcal/${basis}，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
     } else if (fatOver && p.fat >= 25) {
-      push(food, 'fat', `脂肪已接近上限（${gaps.fat.eaten}g / ${gaps.fat.target}g），它含 ${p.fat}g 脂肪/100g`, 2);
+      push(food, 'fat', `脂肪已接近参考上限（${gaps.fat.eaten}g / ${gaps.fat.upper}g），它每 ${basis} 含 ${p.fat}g 脂肪`, 2);
     } else if (goal === 'cut' && tags.has('fried') && p.kcal >= 300) {
-      push(food, 'fried', `减脂期油炸物能量密度过高（${p.kcal} kcal/100g），同样饱腹感的代价太大`, 1);
+      push(food, 'fried', `减脂期油炸物能量密度过高（${p.kcal} kcal/${basis}），同样饱腹感的代价太大`, 1);
     } else if (goal === 'cut' && tags.has('sweetdrink')) {
       push(food, 'drink', '液体糖几乎不带来饱腹感，最容易在不知不觉中吃超', 1);
     } else if (proteinShort && tags.has('high-density') && proteinPer100kcal < 5 && food.cat !== 'nut') {
-      push(food, 'empty', `蛋白还差 ${round(proteinLeft)}g，它 ${p.kcal} kcal/100g 却只有 ${p.protein}g 蛋白`, 1);
+      push(food, 'empty', `蛋白还差 ${round(proteinLeft)}g，它每 ${basis} ${p.kcal} kcal 却只有 ${p.protein}g 蛋白`, 1);
     }
   }
 
@@ -350,12 +401,20 @@ export function buildAdvice(input) {
     const target = Number(targets[k]) || 0;
     const eaten = Number(intake[k]) || 0;
     gaps[k] = { target, eaten: round(eaten, 1), remaining: round(target - eaten, 1), pct: target > 0 ? round((eaten / target) * 100) : 0 };
+    if (k === 'fat') {
+      const upper = Number(targets.fatUpper) || target;
+      gaps[k].upper = round(upper, 1);
+      gaps[k].upperRemaining = round(upper - eaten, 1);
+      gaps[k].upperPct = upper > 0 ? round((eaten / upper) * 100) : 0;
+    }
   }
 
   const kcalLeft = gaps.kcal.remaining;
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
-  const budget = mealBudget({ kcalLeft, proteinLeft, now });
+  const budget = mealBudget({
+    kcalLeft, proteinLeft, dailyKcal: targets.kcal, proteinTarget: targets.protein, now,
+  });
   // 活动能量已经被判为不可信时不能拿它推断训练日，
   // 否则会出现「凌晨躺床上却被告知今天是训练日、该补蛋白和碳水」这种事
   const isTrainingDay = (health.exerciseMinutes || 0) >= 30
@@ -453,7 +512,8 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     return {
       level: 'warn',
       headline: `还有 ${kcalLeft} kcal 没吃，偏少了`,
-      detail: `长期大幅低于目标不利于保留肌肉和持续执行。接下来 ${budget.meal.label} 建议吃到约 ${budget.kcal} kcal。`,
+      detail: `长期大幅低于目标不利于保留肌肉和持续执行。接下来 ${budget.meal.label} 建议吃到约 ${budget.kcal} kcal。`
+        + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
   if (gaps.sodium.pct > 110) {

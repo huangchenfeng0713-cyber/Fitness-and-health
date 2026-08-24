@@ -453,7 +453,7 @@ function insightCard() {
       h('div.card-head-actions', null,
         summary.days ? h('span.card-tag', null, `${summary.days} 个记录日`) : null,
         infoTip('查看统计口径',
-          h('p', null, '摘要按所选日期之前最近 14 天计算；只统计实际存在的字段，缺失不会当成 0。')))),
+          h('p', null, '摘要按截至所选日期的最近 14 个日历日计算；只统计实际存在的字段，缺失不会当成 0。')))),
     cells.length ? h('div.health-strip', null, cells.map(([k, v, u]) => h('div.health-cell', null,
       h('div.health-value', null, num(v, u === '小时' || u === '%' ? 1 : 0), h('span.health-unit', null, u)),
       h('div.health-label', null, k)))) : null,
@@ -468,7 +468,8 @@ function insightCard() {
 }
 
 function dataTable() {
-  const rows = [...state.healthDays].slice(-14).reverse();
+  const eligible = state.healthDays.filter((d) => d.date <= state.day);
+  const rows = eligible.slice(-14).reverse();
   if (!rows.length) return null;
   const cols = [
     ['date', '日期', (v) => v],
@@ -483,7 +484,7 @@ function dataTable() {
     h('div.card-head', null,
       h('h3', null, '最近记录'),
       h('div.card-head-actions', null,
-        h('span.card-tag', null, `14 天 / 共 ${state.healthDays.length} 天`),
+        h('span.card-tag', null, `最近 ${rows.length} 个记录日 / 截至所选日共 ${eligible.length} 天`),
         infoTip('查看表格说明',
           h('p', null, '每行是一天的汇总结果；活动与静息能量单位为 kcal。')))),
     h('div.table-wrap', null, h('table.data-table', null,

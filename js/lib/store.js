@@ -4,7 +4,7 @@
  */
 
 import * as db from './db.js';
-import { todayKey, dayFraction } from './utils.js';
+import { todayKey, dayFraction, shiftDay } from './utils.js';
 import {
   dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
 } from '../core/nutrition.js';
@@ -198,7 +198,7 @@ export function recompute(now = new Date()) {
     baseline: {
       ...baseline,
       // 分母用「有饮食记录的天数」，不是日历天数——否则会把没记的日子算成没达标
-      proteinHitDays: countProteinHitDays(targets.protein, baseline.loggedDays),
+      proteinHitDays: countProteinHitDays(targets.protein, baseline.windowDays),
     },
     now: isToday ? now : new Date(`${state.day}T20:00:00`),
   });
@@ -257,7 +257,10 @@ export function latestHealthValue(key, upToDate = state.day) {
 
 function countProteinHitDays(target, windowDays = 7) {
   if (!(target > 0) || !windowDays) return null;
-  const recent = state.dietDaily.filter((d) => d.date < state.day).slice(-windowDays);
+  // 必须和 computeBaseline 使用同一段日历窗口。按“已记录天数”去 slice 会在
+  // 中间漏记时把更早的旧记录拉进来，让热量均值和蛋白达标率来自两段不同日期。
+  const start = shiftDay(state.day, -Math.max(1, Math.floor(windowDays)));
+  const recent = state.dietDaily.filter((d) => d.date >= start && d.date < state.day);
   if (!recent.length) return null;
   return recent.filter((d) => d.protein >= target * 0.9).length;
 }

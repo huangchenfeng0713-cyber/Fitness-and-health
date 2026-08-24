@@ -54,6 +54,13 @@ test('蛋白已经达标时不显示负数缺口', () => {
   assert.doesNotMatch(a.status.headline, /蛋白还差 -/);
 });
 
+test('脂肪计划值与参考上限分开，超过计划值不会被误判为超上限', () => {
+  const a = advise({ kcal: 1200, fat: targets.fat + 5 });
+  assert.ok(a.gaps.fat.remaining < 0, '应反映已超过计划分配值');
+  assert.ok(a.gaps.fat.upperRemaining > 0, '仍低于 35% 供能参考上限');
+  assert.ok(a.gaps.fat.upper > a.gaps.fat.target);
+});
+
 test('标签从营养数字推导', () => {
   const chicken = deriveTags(FOOD_BY_ID.get('chicken_breast'));
   assert.ok(chicken.has('high-protein') && chicken.has('protein-dense'));
@@ -88,6 +95,13 @@ test('推荐不会让人一顿吃掉全天剩余热量', () => {
     assert.ok(r.nutrients.kcal <= Math.max(a.budget.kcal, 200),
       `${r.food.name} ${r.nutrients.kcal} kcal 超过这一餐预算 ${a.budget.kcal}`);
   }
+});
+
+test('吸附到常用份量后仍不能越过分类份量上限', () => {
+  const a = advise({}, { now: at('07:30') });
+  const soup = a.recommend.find((r) => r.food.id === 'claypot_meat_soup');
+  if (soup) assert.ok(soup.grams <= 450, `瓦罐肉汤吸附后变成 ${soup.grams}g`);
+  assert.ok(a.recommend.every((r) => r.grams <= 500), '出现超过通用单次上限的推荐');
 });
 
 test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
@@ -138,6 +152,39 @@ test('早餐时段偏向即食/早餐类食物', () => {
   const a = advise({}, { now: at('07:30') });
   const quickCount = a.recommend.filter((r) => r.tags.includes('breakfast') || r.tags.includes('quick')).length;
   assert.ok(quickCount >= 3, `早餐推荐里只有 ${quickCount} 项是即食的`);
+  assert.ok(a.recommend.every((r) => r.tags.includes('breakfast')
+    || ['dairy', 'fruit', 'nut', 'drink', 'snack', 'egg', 'soy'].includes(r.food.cat)),
+  `早餐混入了正餐食材：${a.recommend.map((r) => r.food.name).join('、')}`);
+});
+
+test('午餐和晚餐真正优先正餐，不推荐明确标为生的食材', () => {
+  for (const [time, label] of [['12:00', '午餐'], ['19:30', '晚餐']]) {
+    const a = advise({}, { now: at(time) });
+    assert.ok(a.recommend.length >= 4, `${label}推荐数量不足`);
+    assert.ok(a.recommend.every((r) => r.food.state !== 'raw' && !/[（(]生[）)]/.test(r.food.name)),
+      `${label}仍推荐了生食材：${a.recommend.map((r) => r.food.name).join('、')}`);
+    const matched = a.recommend.filter((r) => r.reasons.some((reason) => reason === `适合${label}`));
+    assert.ok(matched.length >= 3, `${label}只有 ${matched.length} 项正餐候选`);
+  }
+});
+
+test('加餐只推荐方便少量食用的食物', () => {
+  const a = advise({}, { now: at('16:00') });
+  assert.ok(a.recommend.length > 0);
+  assert.ok(a.recommend.every((r) => r.reasons.includes('适合加餐，方便少量食用')),
+    `加餐混入了正餐食材：${a.recommend.map((r) => r.food.name).join('、')}`);
+});
+
+test('夜间不会把全天缺口一次补完，只给轻量候选', () => {
+  const a = advise({}, { now: at('22:30') });
+  assert.ok(a.budget.timeCapped, '夜间缺口很大时应触发餐次上限');
+  assert.ok(a.budget.kcal <= targets.kcal * 0.10 + 1,
+    `夜宵预算 ${a.budget.kcal} kcal 超过日目标的 10%`);
+  assert.ok(a.recommend.length > 0);
+  for (const r of a.recommend) {
+    assert.ok(r.reasons.includes('适合夜间少量食用'), `${r.food.name} 没有通过夜间适配`);
+    assert.ok(r.nutrients.kcal <= 260 && r.nutrients.fat <= 12, `${r.food.name} 夜间份量过重`);
+  }
 });
 
 test('训练日会被识别并给出补给建议', () => {

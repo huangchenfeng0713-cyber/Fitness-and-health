@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v1.3.0';
+const CACHE = 'health-diet-v1.3.1';
 const SHELL = [
   './',
   './index.html',

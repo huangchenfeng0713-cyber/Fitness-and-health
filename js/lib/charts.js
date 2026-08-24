@@ -50,7 +50,9 @@ export function ring({ pct = 0, size = 92, stroke = 9, color = 'var(--accent)', 
  * @param {number} [delta] 本次将要增加的量，用半透明的第二段画出来，
  *        让人一眼看出「记完这笔会推进到哪」。
  */
-export function macroBar({ value, target, delta = 0, color = 'var(--accent)' }) {
+export function macroBar({
+  value, target, delta = 0, color = 'var(--accent)', overIsBad = true,
+}) {
   const wrap = document.createElement('div');
   wrap.className = 'macro-bar';
   const pctOf = (v) => (target > 0 ? (v / target) * 100 : 0);
@@ -59,20 +61,20 @@ export function macroBar({ value, target, delta = 0, color = 'var(--accent)' }) 
   const totalPct = pctOf(value + delta);
 
   const fill = document.createElement('div');
-  fill.className = `macro-bar-fill${pctOf(value) > 105 ? ' over' : ''}`;
+  fill.className = `macro-bar-fill${overIsBad && pctOf(value) > 105 ? ' over' : ''}`;
   fill.style.width = `${basePct}%`;
-  if (pctOf(value) <= 105) fill.style.background = color;
+  if (!overIsBad || pctOf(value) <= 105) fill.style.background = color;
   wrap.append(fill);
 
   if (delta > 0) {
     const add = document.createElement('div');
     add.className = 'macro-bar-delta';
     add.style.width = `${Math.max(0, Math.min(totalPct, 100) - basePct)}%`;
-    add.style.background = totalPct > 105 ? 'var(--danger)' : color;
+    add.style.background = overIsBad && totalPct > 105 ? 'var(--danger)' : color;
     wrap.append(add);
   }
 
-  if (totalPct > 100) {
+  if (overIsBad && totalPct > 100) {
     const over = document.createElement('div');
     over.className = 'macro-bar-over';
     over.style.width = `${Math.min(totalPct - 100, 40)}%`;
@@ -91,6 +93,7 @@ export function macroBar({ value, target, delta = 0, color = 'var(--accent)' }) 
 export function lineChart({
   data = [], width = 640, height = 200, color = 'var(--accent)',
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
+  emptyText = '数据不足，至少需要 2 个记录日',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
@@ -98,7 +101,7 @@ export function lineChart({
 
   if (points.length < 2) {
     const t = el('text', { x: width / 2, y: height / 2, 'text-anchor': 'middle', class: 'chart-empty', 'font-size': 13 });
-    t.textContent = '数据不足，至少需要 2 天记录';
+    t.textContent = emptyText;
     svg.append(t);
     return svg;
   }
@@ -121,7 +124,16 @@ export function lineChart({
     return t === `-${(0).toFixed(dec)}` ? (0).toFixed(dec) : t;   // 别显示 "-0"
   };
 
-  const px = (i) => pad.l + (i / (points.length - 1)) * (width - pad.l - pad.r);
+  // 日期有缺口时必须按真实日历距离布点；否则 8 月 1 日、2 日、30 日会被
+  // 画成等间距，视觉上把最后 28 天的空档压成一天。
+  const dayXs = points.map((p) => Date.parse(`${String(p.x).slice(0, 10)}T00:00:00Z`));
+  const hasCalendarX = dayXs.every(Number.isFinite) && dayXs.at(-1) > dayXs[0];
+  const px = (i) => {
+    const ratio = hasCalendarX
+      ? (dayXs[i] - dayXs[0]) / (dayXs.at(-1) - dayXs[0])
+      : i / (points.length - 1);
+    return pad.l + ratio * (width - pad.l - pad.r);
+  };
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (height - pad.t - pad.b);
 
   // 网格与纵轴
@@ -170,16 +182,20 @@ export function lineChart({
 }
 
 /** 柱状图：摄入 vs 目标（超标柱染红） */
-export function barChart({ data = [], width = 640, height = 200, target = null, unit = '' }) {
+export function barChart({
+  data = [], width = 640, height = 200, target = null, unit = '',
+  targetLabel = '目标', overIsBad = true, partialX = null,
+}) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
-  if (!data.length) {
+  const measured = data.filter((d) => d.y != null && Number.isFinite(Number(d.y)));
+  if (!measured.length) {
     const t = el('text', { x: width / 2, y: height / 2, 'text-anchor': 'middle', class: 'chart-empty', 'font-size': 13 });
     t.textContent = '还没有记录';
     svg.append(t);
     return svg;
   }
-  const max = Math.max(...data.map((d) => Number(d.y) || 0), target || 0) * 1.15 || 1;
+  const max = Math.max(...measured.map((d) => Number(d.y)), target || 0) * 1.15 || 1;
   const innerW = width - pad.l - pad.r;
   const bw = Math.max(3, (innerW / data.length) * 0.62);
   const py = (v) => pad.t + (1 - v / max) * (height - pad.t - pad.b);
@@ -194,13 +210,15 @@ export function barChart({ data = [], width = 640, height = 200, target = null, 
   }
 
   data.forEach((d, i) => {
-    const v = Number(d.y) || 0;
+    if (d.y == null || !Number.isFinite(Number(d.y))) return;
+    const v = Number(d.y);
     const x = pad.l + (i + 0.5) * (innerW / data.length) - bw / 2;
     const y = py(v);
+    const isPartial = partialX != null && d.x === partialX;
     svg.append(el('rect', {
       x, y, width: bw, height: Math.max(0, height - pad.b - y), rx: Math.min(3, bw / 2),
-      fill: target && v > target * 1.05 ? 'var(--danger)' : 'var(--accent)',
-      opacity: target && v < target * 0.75 ? 0.5 : 0.9,
+      fill: overIsBad && target && v > target * 1.05 ? 'var(--danger)' : 'var(--accent)',
+      opacity: isPartial ? 0.38 : target && v < target * 0.75 ? 0.5 : 0.9,
     }));
   });
 
@@ -208,7 +226,7 @@ export function barChart({ data = [], width = 640, height = 200, target = null, 
     const y = py(target);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'target-line' }));
     const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': 10 });
-    t.textContent = `目标 ${Math.round(target)}${unit}`;
+    t.textContent = `${targetLabel} ${Math.round(target)}${unit}`;
     svg.append(t);
   }
 

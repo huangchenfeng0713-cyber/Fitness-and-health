@@ -2,10 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeValue, parseAppleDate, parseAttrs, createAggregator, feedXmlChunk,
-  parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
+  normalizeHealthJsonText, parseHealthJsonText, parseHealthJson, parseHealthCsv, computeBaseline, toDayKey,
   findImplausibleDays, clearImplausibleValues, implausibleFields,
   isPlausibleHealthValue,
 } from '../js/core/health.js';
+
+test('粘贴健康 JSON 自动兼容智能引号和 Markdown 代码框', () => {
+  const smartQuotes = '{“date”:“2026-08-24 12:18:58 +0800”,“steps”:1594,“activeEnergy”:103.21,'
+    + '“restingEnergy”:791.67,“exerciseMinutes”:3,“standMinutes”:36,“distanceKm”:1.113,'
+    + '“sleepMinutes”:352,“restingHR”:70}';
+  const { days } = parseHealthJsonText(smartQuotes);
+  assert.equal(days.length, 1);
+  assert.deepEqual(days[0], {
+    date: '2026-08-24', source: 'apple', steps: 1594, activeEnergy: 103.21,
+    restingEnergy: 791.67, exerciseMinutes: 3, standMinutes: 36,
+    distanceKm: 1.11, sleepMinutes: 352, restingHR: 70,
+    energyObservedAt: '2026-08-24T04:18:58.000Z',
+  });
+
+  const fenced = `\`\`\`json\n${smartQuotes}\n\`\`\``;
+  assert.ok(normalizeHealthJsonText(fenced).startsWith('{"date"'));
+  assert.equal(parseHealthJsonText(fenced).days[0].steps, 1594);
+});
+
+test('非法健康 JSON 返回简短中文提示', () => {
+  assert.throws(() => parseHealthJsonText('{“date”:“2026-08-24”,}'),
+    /JSON 格式不正确，请检查引号、逗号和括号/);
+});
 
 test('能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡', () => {
   // export.xml 里 ActiveEnergyBurned / BasalEnergyBurned 的 unit 就是 "Cal"。

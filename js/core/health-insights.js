@@ -98,10 +98,34 @@ function slopePerDay(points) {
   return den > 0 ? num / den : null;
 }
 
+const ZERO_IS_MEASUREMENT = new Set(['steps', 'activeEnergy']);
+
 const series = (days, key) => days
-  .map((d) => ({ date: d.date, value: Number(d[key]) }))
-  .filter((p) => Number.isFinite(p.value) && p.value > 0)
+  .map((d) => ({ date: d.date, raw: d[key], value: Number(d[key]) }))
+  .filter((p) => p.raw != null && String(p.raw).trim() !== '' && Number.isFinite(p.value)
+    && (ZERO_IS_MEASUREMENT.has(key) ? p.value >= 0 : p.value > 0))
+  .map(({ date, value }) => ({ date, value }))
   .sort((a, b) => a.date.localeCompare(b.date));
+
+function weightTrendStatsFromDays(days) {
+  const points = series(days, 'weightKg');
+  const spanDays = calendarSpan(points);
+  const elapsedDays = Math.max(0, spanDays - 1);
+  // 四次连续称重挤在三四天里，换算成“每周变化”会把水分波动放大。
+  // 因此点数与首末间隔必须同时满足，所有页面共用这一条门槛。
+  const slope = points.length >= 4 && elapsedDays >= 7 ? slopePerDay(points) : null;
+  return {
+    records: points.length,
+    spanDays,
+    elapsedDays,
+    kgPerWeek: slope != null ? round(slope * 7, 2) : null,
+  };
+}
+
+/** 趋势页和健康解读共用的体重拟合口径。 */
+export function weightTrendStats(healthDays = [], windowDays = 30, asOfDate = null) {
+  return weightTrendStatsFromDays(windowedDays(healthDays, windowDays, asOfDate));
+}
 
 /**
  * 生成健康解读。
@@ -204,7 +228,8 @@ export function healthInsights(healthDays = [], opts = {}) {
   const rhr = series(days, 'restingHR');
   if (rhr.length >= 5) {
     const m = round(avg(rhr.map((p) => p.value)));
-    const slope = slopePerDay(rhr);
+    // 不把四五天的短波动硬外推成“每周变化”；至少要真正跨过一周。
+    const slope = calendarSpan(rhr) - 1 >= 7 ? slopePerDay(rhr) : null;
     const weekly = slope != null ? round(slope * 7, 1) : null;
     if (m > 80) {
       add('rhr', 'warn', `静息心率 ${m} bpm，偏高`,
@@ -222,13 +247,13 @@ export function healthInsights(healthDays = [], opts = {}) {
 
   // ---------------- 体重与体成分 ----------------
   const weight = series(days, 'weightKg');
+  const weightStats = weightTrendStatsFromDays(days);
   let weightPerWeek = null;
   let weightSpan = 0;
-  if (weight.length >= 4) {
-    const slope = slopePerDay(weight);
-    weightPerWeek = slope != null ? slope * 7 : null;
-    const perWeek = weightPerWeek != null ? round(weightPerWeek, 2) : null;
-    weightSpan = calendarSpan(weight);
+  if (weightStats.kgPerWeek != null) {
+    weightPerWeek = weightStats.kgPerWeek;
+    const perWeek = weightStats.kgPerWeek;
+    weightSpan = weightStats.spanDays;
     const latest = weight[weight.length - 1].value;
     const rawGoal = targets?.rateKgPerWeek;
     const parsedGoal = Number(rawGoal);
@@ -274,7 +299,7 @@ export function healthInsights(healthDays = [], opts = {}) {
   }
 
   const bodyFat = series(days, 'bodyFatPct');
-  if (bodyFat.length >= 4) {
+  if (bodyFat.length >= 4 && calendarSpan(bodyFat) - 1 >= 7) {
     const slope = slopePerDay(bodyFat);
     const perWeek = slope != null ? round(slope * 7, 2) : null;
     const latest = round(bodyFat[bodyFat.length - 1].value, 1);
@@ -325,11 +350,22 @@ export function healthInsights(healthDays = [], opts = {}) {
 
   // ---------------- 数据完整度 ----------------
   const covered = days.filter((d) => Object.keys(d).some((k) => !['date', 'source'].includes(k))).length;
-  const dietCovered = dietDaily.filter((d) => days.some((h) => h.date === d.date)).length;
-  if (dietCovered < covered * 0.5) {
-    add('logging', 'warn', `近 ${days.length} 天只有 ${dietCovered} 天记了饮食`,
-      '健康数据是自动同步的，饮食得手动记。两边都齐了，热量收支才算得准——'
-      + '否则趋势图只能看出消耗，看不出为什么没瘦。');
+  const n = Math.max(1, Math.floor(Number(windowDays) || 14));
+  const requestedCutoff = validDayKey(asOfDate || endDate);
+  const hardLimit = todayKey();
+  const cutoff = requestedCutoff
+    ? (requestedCutoff < hardLimit ? requestedCutoff : hardLimit)
+    : days.at(-1)?.date || hardLimit;
+  const start = dayNumber(cutoff) - n + 1;
+  const dietDates = new Set((dietDaily || [])
+    .map((d) => validDayKey(d?.date))
+    .filter((date) => date && date <= cutoff && dayNumber(date) >= start));
+  const healthDates = new Set(days.map((d) => d.date));
+  const pairedDays = [...dietDates].filter((date) => healthDates.has(date)).length;
+  if (covered > 0 && pairedDays < covered * 0.5) {
+    add('logging', 'warn', `近 ${n} 天饮食仅记录 ${dietDates.size} 天`,
+      `同期健康数据覆盖 ${covered} 天，两类数据在同一天齐全 ${pairedDays} 天。`
+      + '热量收支只有在同日摄入与消耗都存在时才有意义；没有记录的日子不会被当成零摄入。');
   }
 
   return out;

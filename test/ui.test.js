@@ -73,3 +73,41 @@ test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因',
   assert.ok(diet.includes('本份约含 ${caffeine} mg 咖啡因'));
   assert.ok(diet.includes("isLiquid ? 'ml' : 'g'"));
 });
+
+test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致', () => {
+  const trends = read('js/views/trends.js');
+  const charts = read('js/lib/charts.js');
+  assert.ok(trends.includes('首末记录相隔 7 天'));
+  assert.ok(trends.includes('target: proteinThreshold'));
+  assert.ok(trends.includes("targetLabel: '达标线'"));
+  assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
+  assert.ok(trends.includes('今天的浅色柱只是当前累计，不计入上方平均'));
+  assert.ok(charts.includes('emptyText = \'数据不足，至少需要 2 个记录日\''));
+});
+
+test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
+  const advisor = read('js/core/advisor.js');
+  const dashboard = read('js/views/dashboard.js');
+  const diet = read('js/views/diet.js');
+  const settings = read('js/views/settings.js');
+  assert.ok(dashboard.includes("macroMini('脂肪上限'"));
+  assert.ok(settings.includes('参考上限'));
+  assert.ok(dashboard.includes("basis === '100ml' ? 'ml' : 'g'"));
+  assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
+  assert.ok(diet.includes("isLiquid ? '毫升数' : '克数'"));
+  assert.ok(advisor.includes("food.basis === '100ml' ? 'ml' : 'g'"));
+});
+
+test('数据与趋势页显示统计截止日期，新版本可主动提示刷新', () => {
+  const app = read('js/app.js');
+  const health = read('js/views/health.js');
+  const settings = read('js/views/settings.js');
+  const trends = read('js/views/trends.js');
+  assert.ok(app.includes('topbar-context-note'));
+  assert.ok(app.includes('showUpdateNotice'));
+  assert.ok(app.includes("updateViaCache: 'none'"));
+  assert.ok(app.includes('registration.update()'));
+  assert.ok(health.includes('截至所选日共 ${eligible.length} 天'));
+  assert.ok(settings.includes('按当前设置估算'));
+  assert.ok(trends.includes("'当前设置估算目标'"));
+});

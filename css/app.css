@@ -137,6 +137,12 @@ html, body { height: 100%; overflow: hidden; }
   padding: 3px calc(12px + var(--safe-right)) 5px calc(12px + var(--safe-left));
 }
 .topbar-context { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.topbar-page-context { flex-direction: column; align-items: flex-start; gap: 0; padding-left: 4px; }
+.topbar-page-context h1 { margin-left: 0; line-height: 1.15; }
+.topbar-context-note {
+  max-width: 100%; margin-top: 2px; color: var(--faint); font-size: 10.5px;
+  line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .topbar-settings-btn {
   width: 38px; height: 38px; flex: none; border: 0; border-radius: 12px;
   display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer;
@@ -363,6 +369,8 @@ html, body { height: 100%; overflow: hidden; }
 .micro-target { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .micro-chip.near { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
 .micro-chip.near .micro-val { color: var(--warn); }
+.micro-chip.met { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.micro-chip.met .micro-val { color: var(--accent); }
 .micro-chip.over { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); background: color-mix(in srgb, var(--danger) 8%, var(--card-2)); }
 .micro-chip.over .micro-val { color: var(--danger); }
 
@@ -876,6 +884,18 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .onboard h2 { margin: 0 0 6px; font-size: 16px; }
 .onboard p { margin: 0 0 10px; font-size: 13px; color: var(--muted); line-height: 1.6; }
 .onboard .primary-btn { margin-top: 0; }
+.update-notice {
+  margin: 10px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left));
+  padding: 10px 12px; border-radius: 13px; border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  background: var(--accent-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.update-notice div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.update-notice strong { font-size: 13px; }
+.update-notice span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.update-notice button {
+  flex: none; min-height: 34px; padding: 7px 11px; border: 0; border-radius: 10px;
+  background: var(--accent); color: #fff; font: inherit; font-size: 11.5px; font-weight: 650;
+}
 
 .about p { font-size: 12.5px; color: var(--muted); line-height: 1.65; margin: 0 0 8px; }
 .inline-link {
