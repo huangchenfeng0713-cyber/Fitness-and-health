@@ -4,6 +4,84 @@ const NS = 'http://www.w3.org/2000/svg';
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/*
+ * 估算文字宽度，用来给点选时弹出的数值气泡画底板。
+ * SVG 里量文字要等元素进 DOM 再 getBBox，图表是离屏拼好再挂上去的，量不到；
+ * 中文按 11px、西文数字按 6.2px 估算，误差几个像素不影响观感。
+ */
+const textWidth = (str, size = 11) => [...String(str)]
+  .reduce((sum, ch) => sum + (/[\x00-\xff]/.test(ch) ? size * 0.56 : size), 0);
+
+/**
+ * 给图表加「点一下看某一天数值」的能力。
+ *
+ * 只在 7 天视图开：点数少、每个点有近百像素的落点区间，手指点得准；
+ * 30 天以上一个点不到 20px，点选只会选错，不如不做。
+ *
+ * 交互只改 SVG 自己的 DOM，不碰应用状态，所以不会触发整页重绘。
+ */
+/*
+ * 已经展开的十字线。同一页有五张图，点第二张时第一张那条得收起来，
+ * 否则屏幕上会同时挂着好几条线，不知道在看哪天。
+ *
+ * 不用 document 上的事件：render* 会反复重建图表，监听器会越积越多。
+ * 这里存的是弱引用式的登记表，每次展开时顺手清掉已经从文档里摘掉的项。
+ */
+const openPickers = new Set();
+
+function attachPicker({ svg, pad, width, height, items, color, formatValue }) {
+  if (!items.length) return;
+  const marker = el('g', { class: 'chart-marker' });
+  marker.setAttribute('style', 'display:none');
+  const vline = el('line', { class: 'marker-line' });
+  const dot = el('circle', { r: 4.5, fill: color, stroke: 'var(--card)', 'stroke-width': 2 });
+  const bg = el('rect', { class: 'marker-bubble', rx: 5, height: 18 });
+  const label = el('text', { class: 'marker-value', 'font-size': 11, 'text-anchor': 'middle' });
+  marker.append(vline, bg, label, dot);
+
+  let activeIndex = null;
+  const hide = () => { marker.setAttribute('style', 'display:none'); activeIndex = null; };
+  const entry = { marker, hide };
+  const show = (i) => {
+    if (activeIndex === i) { hide(); return; }   // 再点一次收起
+    for (const other of [...openPickers]) {
+      if (!other.marker.isConnected) { openPickers.delete(other); continue; }
+      if (other !== entry) other.hide();
+    }
+    openPickers.add(entry);
+    activeIndex = i;
+    const it = items[i];
+    vline.setAttribute('x1', it.x); vline.setAttribute('x2', it.x);
+    vline.setAttribute('y1', height - pad.b); vline.setAttribute('y2', it.y);
+    dot.setAttribute('cx', it.x); dot.setAttribute('cy', it.y);
+    const text = `${it.label} · ${formatValue(it.value)}`;
+    const w = textWidth(text) + 12;
+    // 气泡贴着点上方，靠边时向内收，别画到画布外
+    const cx = Math.min(width - pad.r - w / 2, Math.max(pad.l + w / 2, it.x));
+    // 点贴着顶时气泡往上放会被卡片裁掉，翻到点下方去
+    const above = it.y - 24 >= pad.t;
+    const top = above ? it.y - 24 : Math.min(height - pad.b - 20, it.y + 8);
+    bg.setAttribute('x', cx - w / 2); bg.setAttribute('y', top); bg.setAttribute('width', w);
+    label.setAttribute('x', cx); label.setAttribute('y', top + 13);
+    label.textContent = text;
+    marker.setAttribute('style', '');
+  };
+
+  const hits = el('g', { class: 'chart-hits' });
+  items.forEach((it, i) => {
+    const left = i === 0 ? pad.l : (items[i - 1].x + it.x) / 2;
+    const right = i === items.length - 1 ? width - pad.r : (it.x + items[i + 1].x) / 2;
+    const r = el('rect', {
+      x: left, y: pad.t, width: Math.max(1, right - left), height: height - pad.t - pad.b,
+      fill: 'transparent',
+    });
+    r.addEventListener('click', (ev) => { ev.stopPropagation(); show(i); });
+    hits.append(r);
+  });
+  svg.addEventListener('click', hide);
+  svg.append(marker, hits);
+}
+
 function el(tag, attrs = {}) {
   const node = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -95,7 +173,7 @@ export function macroBar({
 export function lineChart({
   data = [], width = 640, height = 200, color = 'var(--accent)',
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
-  domain = null,
+  domain = null, showAllDates = false, interactive = false,
   emptyText = '数据不足，至少需要 2 个记录日',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
@@ -145,12 +223,10 @@ export function lineChart({
   const x0 = useDomain ? domainXs[0] : dayXs[0];
   const x1 = useDomain ? domainXs[1] : dayXs.at(-1);
   const hasCalendarX = dayXs.every(Number.isFinite) && x1 > x0;
-  const px = (i) => {
-    const ratio = hasCalendarX
-      ? clamp01((dayXs[i] - x0) / (x1 - x0))
-      : i / (points.length - 1);
-    return pad.l + ratio * (width - pad.l - pad.r);
-  };
+  const pxAt = (ms) => pad.l + clamp01((ms - x0) / (x1 - x0)) * (width - pad.l - pad.r);
+  const px = (i) => (hasCalendarX
+    ? pxAt(dayXs[i])
+    : pad.l + (i / (points.length - 1)) * (width - pad.l - pad.r));
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (height - pad.t - pad.b);
 
   // 网格与纵轴
@@ -183,12 +259,45 @@ export function lineChart({
   const last = points[points.length - 1];
   svg.append(el('circle', { cx: px(points.length - 1), cy: py(Number(last.y)), r: 3.5, fill: color }));
 
-  // 横轴：首尾日期。给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
-  const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
-  first.textContent = String(useDomain ? domain[0] : points[0].x).slice(5);
-  const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
-  lastT.textContent = String(useDomain ? domain[1] : last.x).slice(5);
-  svg.append(first, lastT);
+  // 横轴。7 天视图逐日标注，长区间只标两端——30 个日期挤在一起谁也看不清
+  if (showAllDates) {
+    /*
+     * 标区间里的每一天，不是「每个有数据的点」。
+     * 体重可能只有三天有记录，若只标那三天，同一页几张图的横轴刻度就又对不齐了，
+     * 而且用户要的是「看得到每一天是几号」。
+     */
+    const oneDay = 86400000;
+    const labelDays = [];
+    if (hasCalendarX && (x1 - x0) / oneDay <= 31) {
+      for (let ms = x0; ms <= x1; ms += oneDay) labelDays.push({ ms, x: pxAt(ms) });
+    } else {
+      points.forEach((pt, i) => labelDays.push({ ms: dayXs[i], x: px(i) }));
+    }
+    for (const day of labelDays) {
+      const t = el('text', {
+        x: day.x, y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': 9.5,
+      });
+      t.textContent = new Date(day.ms).toISOString().slice(5, 10);
+      svg.append(t);
+    }
+  } else {
+    // 给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    first.textContent = String(useDomain ? domain[0] : points[0].x).slice(5);
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    lastT.textContent = String(useDomain ? domain[1] : last.x).slice(5);
+    svg.append(first, lastT);
+  }
+
+  if (interactive) {
+    attachPicker({
+      svg, pad, width, height, color,
+      items: points.map((pt, i) => ({
+        x: px(i), y: py(Number(pt.y)), label: String(pt.x).slice(5), value: Number(pt.y),
+      })),
+      formatValue: (v) => `${fmt(v)}${unit || ''}`,
+    });
+  }
 
   if (unit) {
     const u = el('text', { x: pad.l, y: 10, class: 'axis', 'font-size': 10 });
@@ -202,6 +311,7 @@ export function lineChart({
 export function barChart({
   data = [], width = 640, height = 200, target = null, unit = '',
   targetLabel = '目标', overIsBad = true, partialX = null,
+  showAllDates = false, interactive = false,
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
@@ -247,10 +357,37 @@ export function barChart({
     svg.append(t);
   }
 
-  const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
-  first.textContent = String(data[0].x).slice(5);
-  const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
-  lastT.textContent = String(data[data.length - 1].x).slice(5);
-  svg.append(first, lastT);
+  const barCx = (i) => pad.l + (i + 0.5) * (innerW / data.length);
+
+  if (showAllDates) {
+    data.forEach((d, i) => {
+      const t = el('text', {
+        x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': 9.5,
+      });
+      t.textContent = String(d.x).slice(5);
+      svg.append(t);
+    });
+  } else {
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    first.textContent = String(data[0].x).slice(5);
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    lastT.textContent = String(data[data.length - 1].x).slice(5);
+    svg.append(first, lastT);
+  }
+
+  if (interactive) {
+    // 没有记录的那天也要能点，点了告诉用户「没有记录」，比点不动更好懂
+    attachPicker({
+      svg, pad, width, height, color: 'var(--accent)',
+      items: data.map((d, i) => {
+        const has = d.y != null && Number.isFinite(Number(d.y));
+        return {
+          x: barCx(i), y: has ? py(Number(d.y)) : height - pad.b,
+          label: String(d.x).slice(5), value: has ? Number(d.y) : null,
+        };
+      }),
+      formatValue: (v) => (v == null ? '没有记录' : `${Math.round(v)}${unit}`),
+    });
+  }
   return svg;
 }

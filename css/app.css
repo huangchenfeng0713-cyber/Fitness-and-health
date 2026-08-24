@@ -848,6 +848,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .guide-list p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* 「全部」档位可能上千行，限高内滚，别把整页撑成几万像素 */
+.table-scroll { max-height: 60vh; overflow-y: auto; }
+.table-scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
 .data-table th {
   text-align: right; padding: 6px 8px; color: var(--faint); font-weight: 550;
@@ -872,6 +875,14 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .chart .chart-empty { fill: var(--faint); }
 .chart .target-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
 .chart .target-label { fill: var(--muted); }
+
+/* 点选某一天时弹出的十字线与数值气泡（只在 7 天视图出现） */
+.chart .marker-line { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .8; }
+.chart .marker-bubble { fill: var(--text); opacity: .92; }
+.chart .marker-value { fill: var(--card); font-variant-numeric: tabular-nums; }
+.chart .chart-hits rect { cursor: pointer; }
+/* 图表本身不该吃掉页面滚动，只在可点的落点区拦手势 */
+.chart { touch-action: pan-y; }
 
 /* ============ 引导 / 提示 ============ */
 .banner-slot { flex: none; }
