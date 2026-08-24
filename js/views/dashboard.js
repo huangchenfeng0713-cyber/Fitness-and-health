@@ -1,6 +1,8 @@
 /** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
 
-import { h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey } from '../lib/utils.js';
+import {
+  h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey, runLocalAction,
+} from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state, addEntry, findFood } from '../lib/store.js';
 import { CATEGORIES, isEstimated } from '../data/foods.js';
@@ -144,8 +146,9 @@ function recRow(item, meal) {
     h('button.add-btn', {
       'aria-label': `记录 ${f.name}`,
       onclick: async (ev) => {
-        ev.currentTarget.disabled = true;
-        await addEntry({ foodId: f.id, grams: item.grams, meal });
+        const result = await runLocalAction(ev.currentTarget,
+          () => addEntry({ foodId: f.id, grams: item.grams, meal }), '记录食物');
+        if (!result.ok) return;
         toast(`已记录 ${f.name} ${item.grams}${unit}`, 'ok');
       },
     }, '＋'),

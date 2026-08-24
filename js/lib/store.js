@@ -286,8 +286,8 @@ export async function saveProfile(patch) {
   emit();
 }
 
-function compositionNote(components = []) {
-  const chosen = components
+export function compositionNote(components = []) {
+  const chosen = (Array.isArray(components) ? components : [])
     .filter((component) => Number(component.grams) > 0)
     .map((component) => `${component.label || component.name} ${component.grams}${component.unit || 'g'}`);
   return chosen.length ? `配料：${chosen.join('、')}` : '';

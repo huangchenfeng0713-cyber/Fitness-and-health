@@ -66,9 +66,16 @@ export function clearEl(el) {
  * 使用原生 details，键盘、读屏和无 JavaScript 的场景都能正常展开。
  */
 export function infoTip(label, ...children) {
-  return h('details.info-tip', null,
+  const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, '!'),
     h('div.info-tip-panel', { role: 'note' }, children));
+  details.addEventListener('toggle', () => {
+    if (!details.open) return;
+    document.querySelectorAll('details.info-tip[open]').forEach((other) => {
+      if (other !== details) other.open = false;
+    });
+  });
+  return details;
 }
 
 /** YYYY-MM-DD（本地时区） */
@@ -148,6 +155,32 @@ export function toast(message, kind = 'info') {
   // 短提示停留 2.8 秒；较长的错误说明多留一点阅读时间，但不再把整份导入报告塞进提示框。
   const duration = Math.min(6000, Math.max(2800, 1800 + text.length * 38));
   toastTimer = setTimeout(() => { el.className = 'toast'; }, duration);
+}
+
+/**
+ * 执行会写入本地数据的界面操作。
+ *
+ * IndexedDB 写入失败时，不能把按钮永远留在 disabled 状态，也不能只在控制台报错，
+ * 否则用户看到的就只是“点了没反应”。返回 ok 让调用方只在真正成功后更新界面。
+ */
+export async function runLocalAction(control, action, failureLabel = '保存') {
+  const wasDisabled = Boolean(control?.disabled);
+  if (control) control.disabled = true;
+  try {
+    return { ok: true, value: await action() };
+  } catch (error) {
+    console.error(`${failureLabel}失败`, error);
+    const name = String(error?.name || '');
+    const message = name === 'QuotaExceededError'
+      ? `${failureLabel}失败：本机存储空间不足`
+      : ['InvalidStateError', 'NotAllowedError', 'SecurityError'].includes(name)
+        ? `${failureLabel}失败：浏览器本地存储不可用`
+        : `${failureLabel}失败，请刷新后重试`;
+    toast(message, 'error');
+    return { ok: false, error };
+  } finally {
+    if (control) control.disabled = wasDisabled;
+  }
 }
 
 /** 简易确认框（用原生 confirm，避免额外依赖） */

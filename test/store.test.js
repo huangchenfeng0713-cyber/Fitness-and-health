@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { migrateStoredProfile, resolveEnergyObservation } from '../js/lib/store.js';
+import { compositionNote, migrateStoredProfile, resolveEnergyObservation } from '../js/lib/store.js';
+
+test('普通食物没有自选配料时也能生成记录说明', () => {
+  assert.equal(compositionNote(null), '');
+  assert.equal(compositionNote(undefined), '');
+  assert.equal(compositionNote([]), '');
+  assert.equal(compositionNote([
+    { label: '椰奶', grams: 20, unit: 'ml' },
+    { label: '西米', grams: 25 },
+  ]), '配料：椰奶 20ml、西米 25g');
+});
 
 test('v1.2 升级会迁移旧版冲突目标，不让应用在启动时崩溃', () => {
   assert.equal(migrateStoredProfile({ goal: 'cut', rateKgPerWeek: 0.4 }).rateKgPerWeek, -0.4);
