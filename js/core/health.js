@@ -65,10 +65,6 @@ export function normalizeKey(k) {
   return String(k).trim().toLowerCase().replace(/[\s_\-]+/g, '');
 }
 
-const SUM_KEYS = new Set(
-  Object.values(HEALTH_TYPES).filter((t) => t.agg === 'sum').map((t) => t.key),
-);
-
 const HEALTH_BY_KEY = new Map(Object.values(HEALTH_TYPES).map((t) => [t.key, t]));
 
 /**

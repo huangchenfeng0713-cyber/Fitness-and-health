@@ -100,8 +100,14 @@ export function renderTrends(root) {
   const avgKcal = average(endedKcal);
   const avgProtein = average(endedProtein);
   const avgActive = average(endedActive);
-  const avgSleep = average(sleepSeries, 1);
+  // 睡眠原先是唯一把「今天」算进平均的一项，和旁边三张图口径不一致。
+  // 今天的睡眠同样可能还没完（白天补觉会继续累加到今天），一律按已结束日统计。
+  const endedSleep = ended(sleepSeries);
+  const avgSleep = average(endedSleep, 1);
   const weightStats = weightTrendStats(state.healthDays, range, state.day);
+  // 同一页所有图共用横轴窗口：柱状图本来就画整段区间，线图不跟上就会出现
+  // 「体重 08-22→08-23、活动能量 07-26→08-24」这种同页三个区间的情况。
+  const axisDomain = [days[0], days[days.length - 1]];
   const todayHasDiet = viewingToday && kcalSeries.some((p) => p.x === state.day);
   const weightNote = weightStats.kgPerWeek != null
     ? `所选区间有 ${weightStats.records} 次体重记录、覆盖 ${weightStats.spanDays} 个日历日；拟合趋势 ${weightStats.kgPerWeek > 0 ? '+' : ''}${weightStats.kgPerWeek} kg/周，目标 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周。单日波动不等于脂肪变化。`
@@ -139,7 +145,7 @@ export function renderTrends(root) {
 
     chartCard('体重', weightSeries.length ? `最新 ${num(weightSeries[weightSeries.length - 1].y, 1)} kg` : null,
       lineChart({
-        data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg',
+        data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg', domain: axisDomain,
         emptyText: weightSeries.length ? '已有 1 次体重记录，暂时无法连线' : '还没有体重记录',
       }),
       weightNote),
@@ -159,16 +165,29 @@ export function renderTrends(root) {
       `达标线使用${targetContext}的 90%（${Math.round(proteinThreshold)}g）；超过这条线不会被标红。${todayHasDiet ? '今天只显示当前累计，不计入达标率。' : ''}`),
 
     ended(balanceSeries).length >= 2 ? chartCard('热量收支（摄入 − 消耗）', null,
-      lineChart({ data: ended(balanceSeries), color: 'var(--warn)', target: 0, targetLabel: '收支平衡', unit: 'kcal' }),
+      lineChart({
+        data: ended(balanceSeries), color: 'var(--warn)', target: 0, targetLabel: '收支平衡',
+        unit: 'kcal', domain: axisDomain,
+      }),
       '只绘制同日饮食、静息能量和活动能量都齐全的数据；低于 0 表示摄入低于设备估算消耗。7700 kcal/kg 仅用于脂肪当量换算，不等于体重一定这样变化。') : null,
 
     activeSeries.length >= 2 ? chartCard('活动能量', avgActive != null ? `已结束日平均 ${avgActive} kcal` : null,
-      lineChart({ data: activeSeries, color: 'var(--protein)', unit: 'kcal' }),
+      lineChart({
+        data: activeSeries, color: 'var(--protein)', unit: 'kcal', domain: axisDomain,
+        // 活动能量没有「该达到多少」的目标，能做参考的只有自己的均值。
+        // 画的是已结束日均值，和卡片右上角那个数字同源，两处必须一致。
+        // 图内标签要短：右对齐画在线上方，写全「已结束日平均」会压住曲线。
+        // 完整措辞放在卡片右上角的标签里，两处是同一个数。
+        target: avgActive, targetLabel: avgActive != null ? `平均 ${avgActive}` : '',
+      }),
       `活动能量来自设备估算。新数据导入后会调整当日预算；旧快照不会随时钟自动变化。${viewingToday && activeSeries.some((p) => p.x === state.day) ? '今天的点是当前累计，不计入平均。' : ''}`) : null,
 
-    sleepSeries.length >= 2 ? chartCard('睡眠', avgSleep != null ? `平均 ${formatHours(avgSleep * 60)}` : null,
-      lineChart({ data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时', decimals: 1, unit: '小时' }),
-      '长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。') : null,
+    sleepSeries.length >= 2 ? chartCard('睡眠', avgSleep != null ? `已结束日平均 ${formatHours(avgSleep * 60)}` : null,
+      lineChart({
+        data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时',
+        decimals: 1, unit: '小时', domain: axisDomain,
+      }),
+      `睡眠归到醒来那天。长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。${viewingToday && sleepSeries.some((p) => p.x === state.day) ? '今天的点会画出来，但和其它几张图一样不计入平均。' : ''}`) : null,
   );
 }
 
