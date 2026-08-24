@@ -17,6 +17,7 @@
  *   edibleRatio 毛重中的可食比例（0~1）；份量已按可食部填写时为 1
  *   carbBasis 碳水口径：total 含纤维 / available 不含纤维
  *   note     估算边界；汤面、汤菜必须说明是否计入汤汁
+ *   caffeineMg 可选，每 100ml 咖啡因 mg；用于含咖啡因饮料的醒目提示
  *   f        语义标记（无法从营养数字推导的部分）
  *            fried 油炸 / refined 精制 / processed 加工肉或深加工 / whole 全谷物
  *            quick 便利店随手可得 / breakfast 适合早餐 / late 适合睡前 / cook 需烹饪
@@ -24,6 +25,7 @@
  *            est 该品牌未公开完整营养表，数值按同类食品推算
  *            tealevel 可选糖度（营养按全糖录入，由 nutrientsFor 按糖度换算）
  *            instant 方便面类（名字未必带「面」，靠标记识别）
+ *            functional 功能/运动饮料 / caffeinated 含咖啡因
  */
 
 export const CATEGORIES = {
@@ -69,6 +71,26 @@ const SOURCE_MCDONALDS_CN = Object.freeze({
   ref: '麦当劳中国官网营养计算器（各单品，营养数据更新于 2025-04）',
   accessed: '2026-08-23',
 });
+const SOURCE_RED_BULL = Object.freeze({
+  type: 'label',
+  ref: 'Red Bull 官方产品问答（250ml 原味含糖 27g、咖啡因 80mg；无糖版不含糖）',
+  accessed: '2026-08-24',
+});
+const SOURCE_GATORADE = Object.freeze({
+  type: 'label',
+  ref: 'Gatorade 官方产品与 FAQ（Thirst Quencher / Zero / Fit / Fast Twitch）',
+  accessed: '2026-08-24',
+});
+const SOURCE_MONSTER = Object.freeze({
+  type: 'label',
+  ref: 'Monster Energy 官方产品页（Original Green / Ultra Zero Sugar）',
+  accessed: '2026-08-24',
+});
+const SOURCE_POWERADE = Object.freeze({
+  type: 'label',
+  ref: 'Coca-Cola POWERADE 官方产品营养表代表口味',
+  accessed: '2026-08-24',
+});
 const META_RECIPE_READY = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
@@ -77,6 +99,12 @@ const META_RECIPE_RAW = Object.freeze({
 });
 const META_RECIPE_COOKED = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'cooked', edibleRatio: 1, carbBasis: 'total',
+});
+const META_RECIPE_DRINK = Object.freeze({
+  source: SOURCE_RECIPE, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+});
+const drinkLabelMeta = (source) => ({
+  source, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
 const META_CNFCT_RAW = Object.freeze({
   source: SOURCE_CNFCT, basis: '100g', state: 'raw', edibleRatio: 1, carbBasis: 'total',
@@ -1012,6 +1040,30 @@ export const FOODS = [
   { id: 'cold_rice_cake', name: '凉糕（红糖）', alias: 'lianggao cold rice cake brown sugar', cat: 'snack', n: [99, 1.0, 0, 24.0, 0.5, 12.0, 10], s: [['一碗', 250]], ...META_RECIPE_READY, note: '按米制凉糕和红糖浆估算', f: ['refined', 'est'] },
   { id: 'street_egg_burger', name: '鸡蛋汉堡（街边）', alias: 'jidanhanbao street egg burger', cat: 'dish', n: [246, 8.0, 12.0, 27.0, 1.0, 3.0, 500], s: [['一个', 180]], ...META_RECIPE_READY, note: '按面糊、鸡蛋、少量肉馅、刷油和酱料估算', f: ['fried', 'breakfast', 'est'] },
   { id: 'omelette_rice', name: '蛋包饭', alias: 'danbaofan omelette rice omurice', cat: 'dish', n: [181, 7.0, 7.0, 23.0, 1.0, 3.0, 500], s: [['一份', 450]], ...META_RECIPE_READY, note: '按番茄炒饭、蛋皮和少量酱汁估算', f: ['est'] },
+
+  // ---------- 功能与运动饮料 ----------
+  { id: 'redbull_original_imported', name: 'Red Bull 红牛能量饮料（进口原味）', alias: 'red bull hongniu 红牛 奥地利红牛 功能饮料 energy drink', cat: 'drink', n: [46, 0, 0, 10.8, 0, 10.8, 40], s: [['一罐', 250]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_RED_BULL), note: '按国际版 250ml 罐装折算；中国不同系列配方并不相同，购买后应优先看罐身标签', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated'] },
+  { id: 'redbull_sugarfree_imported', name: 'Red Bull 红牛无糖能量饮料', alias: 'red bull sugarfree zero hongniu wutang 红牛无糖 红牛0糖', cat: 'drink', n: [3, 0, 0, 0.8, 0, 0, 40], s: [['一罐', 250]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_RED_BULL), note: '无糖不等于无咖啡因；不同地区版本热量和钠可能略有差异，以罐身标签为准', f: ['processed', 'quick', 'functional', 'caffeinated'] },
+  { id: 'monster_original_green', name: 'Monster 魔爪能量饮料（原味）', alias: 'monster mozhao 魔爪 怪兽 绿魔爪 energy drink', cat: 'drink', n: [46, 0, 0, 11.0, 0, 11.0, 75], s: [['一罐', 500]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_MONSTER), note: '按官方 500ml Original Green 的糖和咖啡因折算；地区版本及罐装容量可能不同', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated'] },
+  { id: 'monster_ultra_zero', name: 'Monster 魔爪 Ultra 无糖', alias: 'monster ultra zero mozhao wutang 魔爪无糖 白魔爪 黑魔爪', cat: 'drink', n: [2, 0, 0, 1.0, 0, 0, 75], s: [['一罐', 473]], caffeineMg: 31.7, ...drinkLabelMeta(SOURCE_MONSTER), note: 'Ultra 各口味与地区版本容量、钠和咖啡因略有差异；无糖不等于无咖啡因', f: ['processed', 'quick', 'functional', 'caffeinated'] },
+  { id: 'eastroc_energy_original', name: '东鹏特饮（含糖）', alias: 'dongpeng tedian 东鹏特饮 东鹏 功能饮料 energy drink', cat: 'drink', n: [52, 0, 0, 13.0, 0, 13.0, 50], s: [['一瓶', 500], ['一瓶小装', 250]], caffeineMg: 20, ...META_RECIPE_DRINK, note: '按常见含糖维生素功能饮料代表标签估算；东鹏不同系列和容量配方不同，以瓶身标签为准', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated', 'est'] },
+  { id: 'warhorse_energy_original', name: '战马能量型维生素饮料', alias: 'zhanma 战马 能量饮料 功能饮料 energy drink', cat: 'drink', n: [48, 0, 0, 12.0, 0, 12.0, 50], s: [['一罐', 310]], caffeineMg: 20, ...META_RECIPE_DRINK, note: '非特定口味的代表值，实际以包装营养表和咖啡因标示为准', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated', 'est'] },
+  { id: 'lehu_energy_original', name: '乐虎氨基酸维生素功能饮料', alias: 'lehu 乐虎 氨基酸 维生素 功能饮料 energy drink', cat: 'drink', n: [50, 0, 0, 12.5, 0, 12.5, 50], s: [['一罐', 250], ['一瓶', 380]], caffeineMg: 20, ...META_RECIPE_DRINK, note: '按常见含糖罐装配方估算；不同包装版本可能变化，以标签为准', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated', 'est'] },
+  { id: 'amino_energy_drink_generic', name: '氨基酸能量饮料（含糖，通用）', alias: 'anjisuan nengliang yinliao amino acid energy drink 体质能量 功能饮料', cat: 'drink', n: [30, 0, 0, 7.5, 0, 7.5, 50], s: [['一瓶', 500]], caffeineMg: 15, ...META_RECIPE_DRINK, note: '通用品类估算，不代表特定品牌；“氨基酸”字样不能替代正餐蛋白质', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated', 'est'] },
+  { id: 'gatorade_thirst_quencher', name: 'Gatorade 佳得乐运动饮料（原味类）', alias: 'gatorade jiadele 佳得乐 运动饮料 sports drink electrolyte', cat: 'drink', n: [23, 0, 0, 5.9, 0, 5.9, 45], s: [['一瓶', 591], ['一份', 355]], ...drinkLabelMeta(SOURCE_GATORADE), note: '按官方 Thirst Quencher 每 12oz 的热量与碳水折算；国内口味与包装请以标签为准', f: ['sweetdrink', 'processed', 'quick', 'functional'] },
+  { id: 'gatorade_zero', name: 'Gatorade 佳得乐 Zero 无糖', alias: 'gatorade zero jiadele wutang 佳得乐无糖 0糖 电解质', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 45], s: [['一瓶', 591], ['一份', 355]], ...drinkLabelMeta(SOURCE_GATORADE), note: '官方说明为零糖、含与经典款同等级电解质且不含咖啡因；钠按代表包装折算', f: ['processed', 'quick', 'functional'] },
+  { id: 'gatorade_fit', name: 'Gatorade Fit 维生素电解质饮料', alias: 'gatorade fit vitamin electrolyte 维生素电解质 无添加糖', cat: 'drink', n: [3, 0, 0, 0.6, 0, 0.6, 46], s: [['一瓶', 500]], nfs: 0, ...drinkLabelMeta(SOURCE_GATORADE), note: '官方 500ml 规格为 10–15 kcal、3g 碳水、230mg 钠且不含咖啡因；无添加糖不等于绝对零糖，果汁来源糖仍按游离糖计', f: ['processed', 'quick', 'functional'] },
+  { id: 'gatorade_fast_twitch', name: 'Gatorade Fast Twitch 无糖咖啡因电解质饮料', alias: 'gatorade fast twitch workout preworkout 训练前 氮泵 咖啡因 电解质', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 60], s: [['一瓶', 355]], caffeineMg: 56.3, ...drinkLabelMeta(SOURCE_GATORADE), note: '一瓶约含 200mg 咖啡因，属于高咖啡因产品；不应与咖啡、能量饮料或训练前补剂叠加', f: ['processed', 'quick', 'functional', 'caffeinated'] },
+  { id: 'powerade_original', name: 'POWERADE 运动饮料（含糖）', alias: 'powerade baokuang 运动饮料 电解质 sports drink', cat: 'drink', n: [23, 0, 0, 5.9, 0, 5.9, 68], s: [['一瓶', 710], ['一份', 355]], ...drinkLabelMeta(SOURCE_POWERADE), note: '按 Coca-Cola 官方代表口味每 12oz 80kcal、21g 糖、240mg 钠折算；地区配方差异明显', f: ['sweetdrink', 'processed', 'quick', 'functional'] },
+  { id: 'pocari_sweat', name: '宝矿力水特电解质饮料', alias: 'baokuangli shuute pocari sweat 宝矿力 水特 电解质 运动饮料', cat: 'drink', n: [25, 0, 0, 6.2, 0, 6.2, 49], s: [['一瓶', 500]], ...META_RECIPE_DRINK, note: '按常见瓶装产品代表标签估算，不同地区和口味可能变化；它含糖，不等同于白水', f: ['sweetdrink', 'processed', 'quick', 'functional', 'est'] },
+  { id: 'mizone_vitamin_drink', name: '脉动维生素饮料（含糖）', alias: 'maidong mizone 脉动 维生素饮料 功能饮料', cat: 'drink', n: [19, 0, 0, 4.6, 0, 4.5, 18], s: [['一瓶', 600]], ...META_RECIPE_DRINK, note: '按常见口味代表标签估算；不同系列的糖和热量不同，以包装为准', f: ['sweetdrink', 'processed', 'quick', 'functional', 'est'] },
+  { id: 'scream_sports_drink', name: '尖叫运动饮料（含糖）', alias: 'jianjiao scream 尖叫 运动饮料 电解质', cat: 'drink', n: [26, 0, 0, 6.4, 0, 6.0, 50], s: [['一瓶', 550]], ...META_RECIPE_DRINK, note: '按常见运动型口味代表值估算；不同颜色和系列配方可能不同', f: ['sweetdrink', 'processed', 'quick', 'functional', 'est'] },
+  { id: 'alien_electrolyte_zero', name: '外星人电解质水（无糖类）', alias: 'waixingren alien electrolyte 外星人 电解质水 0糖 无糖', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 60], s: [['一瓶', 500]], ...META_RECIPE_DRINK, note: '按无糖电解质水通用值估算；不同口味的钠及矿物质含量以标签为准', f: ['processed', 'quick', 'functional', 'est'] },
+  { id: 'electrolyte_water_low_sugar', name: '电解质水（低糖，通用）', alias: 'dianjiezhi shui low sugar electrolyte water 低糖 补水饮料', cat: 'drink', n: [12, 0, 0, 3.0, 0, 3.0, 60], s: [['一瓶', 500]], ...META_RECIPE_DRINK, note: '通用品类代表值；大量出汗时应按实际包装的钠与糖含量选择', f: ['sweetdrink', 'processed', 'quick', 'functional', 'est'] },
+  { id: 'vitamin_water_sugared', name: '维生素水（含糖，通用）', alias: 'weishengsu shui vitamin water 维他命水 营养素饮料', cat: 'drink', n: [20, 0, 0, 5.0, 0, 5.0, 20], s: [['一瓶', 500]], ...META_RECIPE_DRINK, note: '“含维生素”不代表低糖；通用值仅用于没有包装信息时估算', f: ['sweetdrink', 'processed', 'quick', 'functional', 'est'] },
+  { id: 'vitamin_water_zero', name: '维生素水（无糖，通用）', alias: 'weishengsu shui wutang vitamin water zero 维他命水 0糖', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 20], s: [['一瓶', 500]], ...META_RECIPE_DRINK, note: '通用无糖维生素饮料估算；维生素和甜味剂种类随品牌变化', f: ['processed', 'quick', 'functional', 'est'] },
+  { id: 'caffeinated_sparkling_zero', name: '无糖咖啡因气泡水（通用）', alias: 'kafeiyin qipaoshui caffeine sparkling energy water 无糖能量气泡水', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 10], s: [['一罐', 330], ['一瓶', 500]], caffeineMg: 20, ...META_RECIPE_DRINK, note: '按每 500ml 约 100mg 咖啡因的代表配方估算；实际差异很大，请查看包装总咖啡因', f: ['processed', 'quick', 'functional', 'caffeinated', 'est'] },
+  { id: 'electrolyte_tablet_prepared', name: '电解质泡腾片冲饮（无糖类）', alias: 'dianjiezhi paotengpian electrolyte tablet drink 冲剂 运动补水', cat: 'drink', n: [4, 0, 0, 1.0, 0, 0, 50], s: [['一片冲饮', 500]], ...META_RECIPE_DRINK, note: '按一片兑 500ml 水的通用配方估算；务必按包装冲调比例记录，钠和碳水差异很大', f: ['processed', 'quick', 'functional', 'est'] },
 
   // ---------- 其他 ----------
   { id: 'oil', name: '食用油', alias: 'you oil', cat: 'other', n: [899, 0, 99.9, 0, 0, 0, 0], s: [['一勺', 10]], f: [] },

@@ -61,6 +61,16 @@ export function clearEl(el) {
   return el;
 }
 
+/**
+ * 把不影响主流程的补充说明收进一个可点击的小圆点里。
+ * 使用原生 details，键盘、读屏和无 JavaScript 的场景都能正常展开。
+ */
+export function infoTip(label, ...children) {
+  return h('details.info-tip', null,
+    h('summary', { 'aria-label': label, title: label }, '!'),
+    h('div.info-tip-panel', { role: 'note' }, children));
+}
+
 /** YYYY-MM-DD（本地时区） */
 export function todayKey(d = new Date()) {
   const y = d.getFullYear();

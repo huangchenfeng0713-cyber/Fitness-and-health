@@ -1,7 +1,7 @@
 /** 数据中心：集中管理 Apple 健康同步、应用备份、手动补录与健康数据查看。 */
 
 import {
-  h, clearEl, num, toast, formatMinutes, formatHours, mount, confirmAction, download,
+  h, clearEl, num, toast, formatMinutes, formatHours, mount, confirmAction, download, infoTip,
 } from '../lib/utils.js';
 import {
   state, saveHealthDay, saveProfile, countMisscaledDays, repairHealthEnergy,
@@ -47,31 +47,11 @@ async function handleImport(payload, rerender) {
   }
 }
 
-function dataHubCard() {
-  const sources = [
-    ['Apple 健康', '设备数据', '步数、活动与静息能量、锻炼、睡眠、体重和体脂，用于计算预算与趋势。'],
-    ['饮食记录', '你在“饮食”中填写', '食物、克数与餐次，用于统计摄入和生成饮食建议。'],
-    ['应用备份', '本应用生成', '把健康、饮食、身体设置和自定义食物打包，用于换设备或恢复。'],
-  ];
-  return h('section.card.data-hub', null,
-    h('span.eyebrow', null, '数据中心'),
-    h('h2.data-hub-title', null, '所有数据操作都在这里'),
-    h('p.data-hub-copy', null,
-      '“同步健康”和“恢复备份”是两件不同的事：前者只更新身体与活动数据，后者会替换本应用的全部本地内容。'),
-    h('div.source-list', null, sources.map(([name, origin, desc], index) => h('div.source-item', null,
-      h('span.source-index', null, index + 1),
-      h('div.source-copy', null,
-        h('div.source-title', null, h('strong', null, name), h('span', null, origin)),
-        h('p', null, desc))))),
-    h('div.stat-row.data-stats', null,
-      h('div.stat', null, h('strong', null, state.healthDays.length), h('span', null, '健康记录日')),
-      h('div.stat', null, h('strong', null, state.dietDaily.length), h('span', null, '饮食记录日')),
-      h('div.stat', null, h('strong', null, state.customFoods.length), h('span', null, '自定义食物'))));
-}
-
 function importQualityItems(last) {
   const q = last?.quality || {};
   const items = [];
+  if (last?.fullSnapshot != null) items.push(last.fullSnapshot ? '导入方式：完整快照' : '导入方式：增量合并');
+  if (last?.sourceFormat) items.push(`文件格式：${last.sourceFormat === 'apple-health-export' ? 'Apple 官方导出' : last.sourceFormat}`);
   if (last?.records) items.push(`解析 ${num(last.records)} 条原始健康记录`);
   if (q.duplicateRecords) items.push(`去除 ${num(q.duplicateRecords)} 条完全重复样本`);
   if (q.overlapBuckets) items.push(`处理 ${num(q.overlapBuckets)} 个多来源重叠时间段`);
@@ -96,21 +76,18 @@ function lastSyncPanel(last) {
   const range = last.range?.length === 2 ? `${last.range[0]} 至 ${last.range[1]}` : '日期范围未知';
   const details = importQualityItems(last);
   const sources = last.quality?.sourceCoverage?.map((source) => source.sourceName).filter(Boolean) || [];
+  if (sources.length) details.splice(2, 0, `识别 ${sources.length} 个数据来源`);
   return h('div.sync-result', null,
     h('div.sync-result-head', null,
       h('div', null, h('strong', null, `已同步 ${num(last.days)} 天`), h('span', null, range)),
       h('time', null, at)),
-    h('div.sync-pills', null,
-      h('span', null, last.fullSnapshot ? '完整快照' : '增量合并'),
-      last.sourceFormat && h('span', null, last.sourceFormat === 'apple-health-export' ? 'Apple 官方导出' : last.sourceFormat),
-      sources.length && h('span', null, `${sources.length} 个数据来源`)),
     details.length && h('details.sync-details', null,
-      h('summary', null, '查看本次解析详情'),
+      h('summary', null, '导入详情'),
       h('ul', null, details.map((item) => h('li', null, item))),
       sources.length && h('p', null, `识别来源：${sources.slice(0, 6).join('、')}${sources.length > 6 ? '等' : ''}`)));
 }
 
-function backupCard(rerender) {
+function backupPanel(rerender) {
   const restoreInput = h('input', {
     type: 'file', accept: '.json', hidden: true,
     onchange: async (e) => {
@@ -119,7 +96,7 @@ function backupCard(rerender) {
       try {
         const payload = JSON.parse(await file.text());
         if (payload?.app !== 'health-diet-tracker') {
-          throw new Error('这不是本应用导出的完整备份；Apple 健康文件请使用上方“同步 Apple 健康”');
+          throw new Error('这不是本应用导出的完整备份；Apple 健康文件请在“同步 Apple 健康”中选择');
         }
         const healthCount = Array.isArray(payload.health) ? payload.health.length : 0;
         const dietCount = Array.isArray(payload.diet) ? payload.diet.length : 0;
@@ -139,13 +116,7 @@ function backupCard(rerender) {
     },
   });
 
-  return h('section.card.backup-card', null,
-    h('div.card-head', null,
-      h('div', null,
-        h('h3', null, '本应用备份与恢复'),
-        h('p.card-desc', null, '来源只能是本应用导出的备份 JSON；它包含健康、饮食、设置和自定义食物。')),
-      h('span.card-tag', null, '换设备 / 防丢失')),
-    h('div.data-actions', null,
+  return h('div.data-actions', null,
       h('div.data-action', null,
         h('div.data-action-icon', null, '↓'),
         h('div.data-action-copy', null,
@@ -176,11 +147,10 @@ function backupCard(rerender) {
             toast('本机数据已清空', 'ok');
             rerender();
           },
-        }, '清空'))),
-    h('p.privacy-note', null, '所有文件都只在你的设备上读取或生成，不会上传到服务器。'));
+        }, '清空')));
 }
 
-function importCard(rerender) {
+function importPanel(rerender) {
   const input = h('input', {
     type: 'file',
     accept: '.zip,.xml,.json,.csv',
@@ -241,8 +211,7 @@ function importCard(rerender) {
   const priorityEditor = h('details.paste-block', null,
     h('summary', null, '高级：统一数据来源优先级'),
     h('p.form-hint', { style: { margin: '4px 0 8px' } },
-      '每行一个 export.xml 中的 sourceName，越靠上越优先。仅当你在「健康」App 的各项累计指标采用相同顺序时使用；'
-      + 'Apple 实际允许每个指标分别排序，留空会采用“手动记录 → Apple 设备 → 第三方”的可解释近似。'),
+      '每行一个 export.xml 中的 sourceName，越靠上越优先；不确定时请留空，应用会自动处理。'),
     detectedSources.length && h('p.form-hint', null,
       `上次检测到：${detectedSources.join('、')}`),
     priorityInput,
@@ -255,20 +224,14 @@ function importCard(rerender) {
       },
     }, '保存来源顺序'));
 
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('div', null,
-        h('h3', null, '同步 Apple 健康'),
-        h('p.card-desc', null, '来源是 iPhone“健康”App、快捷指令或健康导出工具；只更新身体与活动数据，不会改动饮食记录。')),
-      h('span.card-tag', null, '身体与活动')),
+  return h('div.import-panel', null,
     drop,
     progressEl,
     clipboardBtn,
     h('details.paste-block', null,
       h('summary', null, '手动粘贴快捷指令输出'),
       h('p.form-hint', { style: { margin: '4px 0 8px' } },
-        '单条记录、多条数组、CSV 都行。字段名大小写、下划线、多余空格都会自动归一化，'
-        + '常见叫法（weight / body_mass / 体重）也认得。每条数据必须带 date；完整应用备份请用下方“恢复完整备份”。'),
+        '支持一条或多条 JSON / CSV。每条数据都要有 date；完整应用备份请在“本应用备份与恢复”中选择。'),
       pasteArea,
       h('button.secondary-btn.full', {
         onclick: () => {
@@ -280,71 +243,47 @@ function importCard(rerender) {
       }, '解析并同步')),
     lastSyncPanel(last),
     priorityEditor,
-    h('p.privacy-note', null, '所有数据只保存在这台设备的浏览器里，不会上传到任何服务器。'),
   );
 }
 
-function guideCard() {
+function guidePanel() {
   const shortcutRecipe = [
     '打开「快捷指令」App → 右上角 + 新建',
-    '添加「查找健康样本」，类型选「步数」，'
-      + '「排序方式：开始日期／降序」，日期范围选「今天」，勾选「计算统计数据：总计」',
+    '添加「查找健康样本」，类型选“步数”，日期范围选“今天”，并计算总计',
     '重复上一步，把类型换成：活动能量、静息能量、锻炼分钟数、体重、体脂率、睡眠分析',
-    '添加「文本」，内容写成 JSON：'
-      + '[{"date":"当前日期","steps":步数总计,"activeEnergy":活动能量,"weightKg":体重}]'
-      + '（花括号里的中文换成上面各步的「魔法变量」）',
-    '最后加「拷贝到剪贴板」，存好并给它起个名字',
+    '添加“文本”，按示例组成带 date 的 JSON，并把各项替换为对应的魔法变量',
+    '最后添加“拷贝到剪贴板”，保存快捷指令',
   ];
 
-  // 把「每天记得跑一次」这一步也交给系统。剩下那一下点击省不掉：
-  // iOS 不允许网页在没有用户手势时读剪贴板。
   const automationRecipe = [
-    '「快捷指令」App → 底部「自动化」→ 右上角 + → 选「特定时间」',
-    '时间设 23:50、重复选「每天」',
-    '关键一步：把「运行前询问」关掉（新版 iOS 里是选「立即运行」），'
-      + '否则每天还要点一次通知才跑',
-    '下一步选刚才存的那条快捷指令 → 完成',
-    '之后每天数据会自动躺在剪贴板里，打开本 App 在「今日」页点一下「一键导入」就行',
+    '快捷指令 → 自动化 → + → 特定时间，设为每天 23:50',
+    '选择“立即运行”，并运行刚才保存的快捷指令',
+    '之后打开本应用的数据页，在“同步 Apple 健康”中点剪贴板同步',
   ];
 
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('div', null,
-        h('h3', null, 'Apple 健康数据从哪里来'),
-        h('p.card-desc', null, '按日常使用频率选择一种即可，不需要三种都配置。')),
-      h('span.card-tag', null, '同步指南')),
-
+  return h('div.guide-panel', null,
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge.fast', null, '最快'), h('strong', null, '快捷指令 + 定时自动化')),
-      h('p', null, '配置一次，之后每天只剩一下：定时自动化在后台把当天数据拷进剪贴板，'
-        + '打开 App 在「今日」页点一下「一键导入」。'),
-      h('p.form-hint', { style: { margin: '2px 0 8px' } },
-        '说明：网页读不到 Apple 健康（iOS 没给 Safari 这个接口），所以同步绕不开快捷指令；'
-        + '而读剪贴板必须有一次点击，系统还会再弹一次「粘贴」确认。'
-        + '真正的全自动做不到，这已经是最省的路径。'),
+      h('div.method-head', null, h('span.method-badge.fast', null, '日常'), h('strong', null, '快捷指令同步')),
+      h('p', null, '适合每天补充当天数据。首次配置后，只需在数据页点一次剪贴板同步。'),
       h('details', null,
-        h('summary', null, '第一步：做一条取数的快捷指令'),
+        h('summary', null, '创建取数快捷指令'),
         h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
       h('details', null,
-        h('summary', null, '第二步：让它每天自己跑'),
+        h('summary', null, '设置每日自动运行'),
         h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge', null, '较快'), h('strong', null, '第三方导出 App')),
-      h('p', null, 'Health Auto Export 这类 App 可以定时把健康数据导成 JSON/CSV 存到「文件」或云盘，'
-        + '本页直接上传即可，格式会自动识别。适合想要长期自动归档的情况。')),
+      h('div.method-head', null, h('span.method-badge', null, '首次'), h('strong', null, '健康 App 完整导出')),
+      h('p', null, '「健康」App → 右上角头像 → 滑到底部「导出所有健康数据」→ 得到 导出.zip，'
+        + '无需解压，直接在同步区选择。')),
 
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge', null, '最全'), h('strong', null, '官方完整导出')),
-      h('p', null, '「健康」App → 右上角头像 → 滑到底部「导出所有健康数据」→ 得到 导出.zip，'
-        + '不用解压直接传。数据量大时要等几分钟，适合第一次导入全部历史。')),
-
-    h('p.form-hint', null, '活动与静息能量用于动态估算消耗，体重用于计算个人目标；数据越完整，预算依据越充分。'
-      + '快捷指令的 date 请保留具体时分，页面才能知道累计值覆盖到几点。'),
+      h('div.method-head', null, h('span.method-badge', null, '可选'), h('strong', null, '第三方导出工具')),
+      h('p', null, '支持导入常见工具生成的 JSON / CSV；请先确认文件中每条记录都有 date。')),
   );
 }
 
-function manualCard(rerender) {
+function manualPanel(rerender) {
   const day = state.healthByDate.get(state.day) || {};
   const fields = [
     ['steps', '步数', '步'],
@@ -356,12 +295,7 @@ function manualCard(rerender) {
     ['waterMl', '饮水', 'ml'],
   ];
   const inputs = {};
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('div', null,
-        h('h3', null, `手动补录 · ${state.day}`),
-        h('p.card-desc', null, '来源是你本人填写；只补这一天缺少的字段，不覆盖其它日期。')),
-      h('span.card-tag', null, '没导出数据时也能用')),
+  return h('div.manual-panel', null,
     h('div.form-grid', null, fields.map(([key, label, unit, scale]) => {
       const input = h('input', {
         type: 'number', step: '0.1', inputmode: 'decimal',
@@ -387,6 +321,45 @@ function manualCard(rerender) {
         rerender();
       },
     }, '保存这一天的健康数据'),
+  );
+}
+
+function managerSection(icon, title, subtitle, content, open = false) {
+  return h('details.manager-section', { open },
+    h('summary', null,
+      h('span.manager-icon', null, icon),
+      h('span.manager-summary-copy', null,
+        h('strong', null, title),
+        h('span', null, subtitle)),
+      h('span.manager-chevron', { 'aria-hidden': 'true' }, '›')),
+    h('div.manager-panel', null, content));
+}
+
+/** 同步、补录、恢复和说明只出现一次，并统一放在结果之后。 */
+function dataManagerCard(rerender) {
+  const last = state.lastImport;
+  const lastHint = last?.days
+    ? `上次同步 ${num(last.days)} 天${last.range?.[1] ? ` · 至 ${last.range[1]}` : ''}`
+    : '从健康 App、快捷指令或导出文件同步';
+  return h('section.card.data-manager#data-manager', null,
+    h('div.card-head', null,
+      h('div', null,
+        h('h3', null, '数据管理'),
+        h('p.card-desc', null, '需要同步、补录、换设备或恢复时再展开。')),
+      h('div.card-head-actions', null,
+        infoTip('查看数据来源说明',
+          h('p', null, h('strong', null, '同步 Apple 健康：'),
+            '只更新身体与活动数据，不会改动饮食记录。'),
+          h('p', null, h('strong', null, '手动补录：'),
+            '只保存你填写的当天字段。'),
+          h('p', null, h('strong', null, '恢复完整备份：'),
+            '会替换本应用的健康、饮食、设置和自定义食物。'),
+          h('p', null, '文件只在当前设备读取，不会上传到服务器。')))),
+    h('div.manager-list', null,
+      managerSection('↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
+      managerSection('＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
+      managerSection('↺', '本应用备份与恢复', '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
+      managerSection('?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
   );
 }
 
@@ -475,9 +448,12 @@ function insightCard() {
   return h('section.card', null,
     h('div.card-head', null,
       h('div', null,
-        h('h3', null, '健康摘要与解读'),
-        h('p.card-desc', null, '只解读记录中实际存在的字段，缺失数据不会被当成 0。')),
-      h('span.card-tag', null, summary.days ? `基于 ${summary.days} 个记录日` : '')),
+        h('h3', null, '健康概览'),
+        h('p.card-desc', null, '近期身体与活动变化，一眼查看。')),
+      h('div.card-head-actions', null,
+        summary.days ? h('span.card-tag', null, `${summary.days} 个记录日`) : null,
+        infoTip('查看统计口径',
+          h('p', null, '摘要按所选日期之前最近 14 天计算；只统计实际存在的字段，缺失不会当成 0。')))),
     cells.length ? h('div.health-strip', null, cells.map(([k, v, u]) => h('div.health-cell', null,
       h('div.health-value', null, num(v, u === '小时' || u === '%' ? 1 : 0), h('span.health-unit', null, u)),
       h('div.health-label', null, k)))) : null,
@@ -485,6 +461,9 @@ function insightCard() {
       list.map((i) => h(`div.insight.${i.level}`, null,
         h('div.insight-title', null, i.title),
         h('div.insight-text', null, i.text)))),
+    !cells.length && h('button.secondary-btn.full', {
+      onclick: () => document.getElementById('data-manager')?.scrollIntoView({ behavior: 'smooth' }),
+    }, '添加健康数据'),
   );
 }
 
@@ -502,16 +481,16 @@ function dataTable() {
   ];
   return h('section.card', null,
     h('div.card-head', null,
-      h('div', null,
-        h('h3', null, '最近同步记录'),
-        h('p.card-desc', null, '这里是按天汇总后的结果，不是 Apple Health 的逐条原始样本。')),
-      h('span.card-tag', null, `最近 14 天 / 共 ${state.healthDays.length} 天`)),
+      h('h3', null, '最近记录'),
+      h('div.card-head-actions', null,
+        h('span.card-tag', null, `14 天 / 共 ${state.healthDays.length} 天`),
+        infoTip('查看表格说明',
+          h('p', null, '每行是一天的汇总结果；活动与静息能量单位为 kcal。')))),
     h('div.table-wrap', null, h('table.data-table', null,
       h('thead', null, h('tr', null, cols.map(([, label]) => h('th', null, label)))),
       h('tbody', null, rows.map((r) => h('tr', {
         class: r.date === state.day ? 'current' : '',
       }, cols.map(([key, , fmt]) => h('td', null, fmt(r[key])))))))),
-    h('p.form-hint', null, '活动 / 静息单位为 kcal。点击顶部日期可切换到任意一天查看。'),
   );
 }
 
@@ -519,14 +498,10 @@ export function renderHealth(root) {
   const rerender = () => renderHealth(root);
   clearEl(root);
   mount(root,
-    dataHubCard(),
     repairCard(rerender),
     implausibleCard(rerender),
-    importCard(rerender),
-    backupCard(rerender),
     insightCard(),
-    manualCard(rerender),
     dataTable(),
-    guideCard(),
+    dataManagerCard(rerender),
   );
 }

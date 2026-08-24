@@ -7,8 +7,36 @@ import {
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 816, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 838, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
+});
+
+const FUNCTIONAL_DRINK_IDS = [
+  'redbull_original_imported', 'redbull_sugarfree_imported', 'monster_original_green',
+  'monster_ultra_zero', 'eastroc_energy_original', 'warhorse_energy_original',
+  'lehu_energy_original', 'amino_energy_drink_generic', 'gatorade_thirst_quencher',
+  'gatorade_zero', 'gatorade_fit', 'gatorade_fast_twitch', 'powerade_original',
+  'pocari_sweat', 'mizone_vitamin_drink', 'scream_sports_drink',
+  'alien_electrolyte_zero', 'electrolyte_water_low_sugar', 'vitamin_water_sugared',
+  'vitamin_water_zero', 'caffeinated_sparkling_zero', 'electrolyte_tablet_prepared',
+];
+
+test('功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因', () => {
+  assert.equal(FUNCTIONAL_DRINK_IDS.length, 22);
+  for (const id of FUNCTIONAL_DRINK_IDS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少功能饮料 ${id}`);
+    assert.equal(food.cat, 'drink');
+    assert.equal(food.basis, '100ml');
+    assert.ok(food.source && food.note, `${food.name} 缺来源或版本差异说明`);
+  }
+  for (const id of ['redbull_original_imported', 'monster_ultra_zero', 'eastroc_energy_original',
+    'gatorade_fast_twitch', 'caffeinated_sparkling_zero']) {
+    assert.ok(FOOD_BY_ID.get(id).caffeineMg > 0, `${id} 缺咖啡因含量`);
+  }
+  const terms = ['红牛', '东鹏特饮', '战马', '乐虎', '魔爪', '佳得乐', '宝矿力',
+    '脉动', '尖叫', '外星人电解质', '维生素水', '咖啡因气泡水'];
+  assert.deepEqual(terms.filter((term) => searchFoods(term).length === 0), []);
 });
 
 const COMMON_FOOD_EXPANSION_IDS = [
@@ -400,6 +428,10 @@ test('可选食物元数据遵守稳定 schema，旧条目仍可不带元数据'
       assert.ok(Number.isFinite(f.edibleRatio) && f.edibleRatio > 0 && f.edibleRatio <= 1,
         `${f.name} 的 edibleRatio 必须在 (0, 1]`);
     }
+    if (f.caffeineMg !== undefined) {
+      assert.ok(Number.isFinite(f.caffeineMg) && f.caffeineMg > 0 && f.caffeineMg <= 100,
+        `${f.name} 的 caffeineMg 应为每 100ml 的合理正数`);
+    }
   }
 });
 
@@ -416,6 +448,7 @@ test('营养、糖层级与语义标记在合理范围内', () => {
   const allowedFlags = new Set([
     'fried', 'refined', 'processed', 'whole', 'quick', 'breakfast', 'late', 'cook',
     'sweetdrink', 'alcohol', 'natsugar', 'est', 'tealevel', 'instant',
+    'functional', 'caffeinated',
   ]);
   for (const f of FOODS) {
     const [kcal, protein, fat, carb, fiber, totalSugar, sodium] = f.n;

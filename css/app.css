@@ -136,6 +136,17 @@ html, body { height: 100%; overflow: hidden; }
   display: flex; align-items: center; gap: 6px; min-height: 46px;
   padding: 3px calc(12px + var(--safe-right)) 5px calc(12px + var(--safe-left));
 }
+.topbar-context { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.topbar-settings-btn {
+  width: 38px; height: 38px; flex: none; border: 0; border-radius: 12px;
+  display: grid; place-items: center; background: transparent; color: var(--muted); cursor: pointer;
+}
+.topbar-settings-btn:active { background: var(--card-2); color: var(--accent); }
+.topbar-settings-btn span { display: grid; place-items: center; }
+.topbar-settings-btn svg {
+  width: 22px; height: 22px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
 /* 页名。原来 17px / 650 / 负字距，中文落到 PingFang 上又细又挤，
    看着不像标题像行说明文字。加大加重、去掉负字距 —— 负字距是给西文标题用的。 */
 .topbar h1 {
@@ -161,6 +172,8 @@ html, body { height: 100%; overflow: hidden; }
 
 .view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
   padding: 14px calc(14px + var(--safe-right)) 18px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
+/* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
+.view > * { flex: 0 0 auto; }
 
 .tabbar {
   flex: none;
@@ -197,6 +210,38 @@ html, body { height: 100%; overflow: hidden; }
 .tab.active { color: var(--accent); font-weight: 620; }
 .tab.active .tab-icon { background: var(--accent-soft); transform: translateY(-1px); }
 
+/* ============ 右侧设置抽屉 ============ */
+.settings-overlay {
+  position: fixed; inset: 0; z-index: 70; display: flex; justify-content: flex-end;
+  background: rgba(7, 16, 14, .32); opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+.settings-overlay[hidden] { display: none; }
+.settings-overlay.open { opacity: 1; pointer-events: auto; }
+.settings-drawer {
+  width: min(430px, 94vw); height: 100%; min-width: 0; display: flex; flex-direction: column;
+  padding-top: var(--safe-top); padding-right: var(--safe-right); padding-bottom: var(--safe-bottom);
+  background: var(--bg); box-shadow: -18px 0 50px rgba(8, 24, 19, .2);
+  transform: translateX(102%); transition: transform .22s ease; overflow: hidden;
+}
+.settings-overlay.open .settings-drawer { transform: translateX(0); }
+.settings-drawer-head {
+  min-height: 52px; display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px 7px 18px; border-bottom: 1px solid var(--border); flex: none;
+}
+.settings-drawer-head h2 { margin: 0; font-size: 19px; }
+.settings-close {
+  width: 38px; height: 38px; border: 0; border-radius: 12px; background: var(--card-2);
+  color: var(--muted); font-size: 25px; line-height: 1; cursor: pointer;
+}
+.settings-drawer-content {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain;
+  padding: 13px; display: flex; flex-direction: column; gap: 13px;
+  -webkit-overflow-scrolling: touch;
+}
+.settings-drawer-content > * { flex: 0 0 auto; }
+.settings-drawer-content .card { border-radius: 16px; box-shadow: none; }
+
 /* ============ 卡片 ============ */
 .card {
   background: var(--card);
@@ -211,11 +256,34 @@ html, body { height: 100%; overflow: hidden; }
 }
 .card-head > div { min-width: 0; }
 .card-head h3 { margin: 0; font-size: 15.5px; line-height: 1.35; font-weight: 680; letter-spacing: 0; }
+.card-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+.card-head-actions .card-tag { max-width: 180px; }
 .card-desc { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; font-weight: 400; }
 .card-tag {
   max-width: 44%; font-size: 11px; line-height: 1.4; color: var(--faint);
   text-align: right; flex-shrink: 0; overflow-wrap: anywhere;
 }
+
+.info-tip { position: relative; flex: none; }
+.info-tip > summary {
+  list-style: none; width: 23px; height: 23px; display: grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 50%; background: var(--card-2);
+  color: var(--muted); font: 700 12px/1 var(--font); cursor: pointer;
+}
+.info-tip > summary::-webkit-details-marker { display: none; }
+.info-tip[open] > summary { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.info-tip-panel {
+  position: absolute; z-index: 25; top: calc(100% + 8px); right: 0;
+  width: min(292px, calc(100vw - 44px)); padding: 11px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card); color: var(--muted); box-shadow: 0 12px 36px rgba(9, 28, 22, .16);
+  font-size: 11.5px; line-height: 1.55; text-align: left; font-weight: 400;
+}
+.info-tip-panel p { margin: 0; }
+.info-tip-panel p + p { margin-top: 7px; }
+.info-tip-panel ul { margin: 0; padding-left: 18px; }
+.info-tip-panel li + li { margin-top: 5px; }
+.info-tip-panel strong { color: var(--text); }
 
 .card-danger { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
 
@@ -513,12 +581,18 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
 }
 .portion-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.portion-head-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .portion-head strong { font-size: 15px; margin-right: 6px; }
 .portion-per100 { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
 .portion-meal, .unit-row, .qty-quick, .sugar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 .field-label {
   font-size: 12px; color: var(--faint); margin-top: 14px; font-weight: 600;
+}
+.functional-warning {
+  margin: 9px 0 0; padding: 9px 11px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--text); font-size: 12px; line-height: 1.5;
 }
 
 /* 份数步进器：主视觉是「几份」，克数作为副标注 */
@@ -629,36 +703,31 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .copy-row { display: flex; justify-content: space-between; margin-top: 12px; }
 
-/* ============ 健康页 ============ */
-.data-hub {
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 16%, transparent), transparent 42%),
-    var(--card);
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+/* ============ 数据页 ============ */
+.data-manager { border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); }
+.manager-list { border-top: 1px solid var(--border); }
+.manager-section { border-bottom: 1px solid var(--border); }
+.manager-section:last-child { border-bottom: 0; }
+.manager-section > summary {
+  list-style: none; display: grid; grid-template-columns: 38px minmax(0, 1fr) 22px;
+  gap: 10px; align-items: center; min-height: 66px; cursor: pointer;
 }
-.eyebrow {
-  display: inline-flex; color: var(--accent); background: var(--accent-soft);
-  border-radius: 999px; padding: 3px 9px; font-size: 10.5px; font-weight: 680; letter-spacing: .04em;
+.manager-section > summary::-webkit-details-marker { display: none; }
+.manager-icon {
+  width: 36px; height: 36px; display: grid; place-items: center; border-radius: 12px;
+  color: var(--accent); background: var(--accent-soft); font-size: 18px; font-weight: 650;
 }
-.data-hub-title { margin: 10px 0 4px; font-size: 20px; line-height: 1.3; letter-spacing: -.01em; }
-.data-hub-copy { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.65; max-width: 590px; }
-.source-list { margin-top: 15px; display: grid; gap: 8px; }
-.source-item {
-  display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 9px; align-items: start;
-  padding: 10px; border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  border-radius: var(--radius-sm); background: color-mix(in srgb, var(--card-2) 86%, transparent);
+.manager-summary-copy { min-width: 0; }
+.manager-summary-copy strong { display: block; font-size: 13.5px; color: var(--text); }
+.manager-summary-copy span {
+  display: block; margin-top: 2px; color: var(--muted); font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.source-index {
-  width: 26px; height: 26px; display: grid; place-items: center; border-radius: 9px;
-  background: var(--card); border: 1px solid var(--border); color: var(--accent); font-size: 11px; font-weight: 700;
-}
-.source-copy { min-width: 0; }
-.source-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.source-title strong { font-size: 13.5px; }
-.source-title span { color: var(--faint); font-size: 10.5px; text-align: right; }
-.source-copy p { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
-.data-stats { margin-top: 12px; }
+.manager-chevron { color: var(--faint); font-size: 23px; transform: rotate(0); transition: transform .16s; }
+.manager-section[open] .manager-chevron { transform: rotate(90deg); color: var(--accent); }
+.manager-panel { padding: 3px 0 16px 48px; }
+.manager-panel .primary-btn { margin-top: 10px; }
+.manager-panel .dropzone { padding-top: 18px; padding-bottom: 16px; }
 
 .dropzone {
   border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--radius);
@@ -817,18 +886,17 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .target-list { display: flex; flex-direction: column; }
 .target-row {
-  display: grid; grid-template-columns: 72px 1fr; gap: 4px 10px;
+  display: grid; grid-template-columns: minmax(72px, 1fr) auto; gap: 10px;
   padding: 8px 0; border-bottom: 1px solid var(--border); align-items: baseline;
 }
 .target-row:last-child { border-bottom: 0; }
 .target-key { font-size: 13px; color: var(--muted); }
 .target-val { font-size: 14px; font-variant-numeric: tabular-nums; }
-.target-note { grid-column: 2; font-size: 11px; color: var(--faint); }
 
 /* ============ Toast ============ */
 .toast {
   position: fixed; left: 50%; bottom: calc(78px + var(--safe-bottom));
-  transform: translate(-50%, 12px); z-index: 60;
+  transform: translate(-50%, 12px); z-index: 90;
   background: #252b30; color: #fff; padding: 10px 14px; border-radius: 13px;
   font-size: 12.5px; line-height: 1.48; opacity: 0; pointer-events: none;
   transition: opacity .2s, transform .2s;
@@ -851,14 +919,15 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   .card { padding: 16px; }
 }
 
+@media (max-width: 480px) {
+  .manager-panel { padding-left: 0; }
+}
+
 @media (max-width: 380px) {
   .view { padding-left: calc(11px + var(--safe-left)); padding-right: calc(11px + var(--safe-right)); }
   .card { padding: 14px; }
   .card-head { gap: 7px; }
   .card-tag { max-width: 40%; font-size: 10px; }
-  .data-hub-title { font-size: 18px; }
-  .source-title { align-items: flex-start; flex-direction: column; gap: 0; }
-  .source-title span { text-align: left; }
   .data-action { grid-template-columns: 34px minmax(0, 1fr); }
   .data-action .secondary-btn.compact { grid-column: 2; width: 100%; }
   .health-strip { grid-template-columns: repeat(2, 1fr); }

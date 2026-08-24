@@ -6,7 +6,7 @@
  * 所以外壳只建一次（buildShell），之后只刷新会变的那几块容器。
  */
 
-import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount } from '../lib/utils.js';
+import { h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
@@ -223,6 +223,7 @@ function refreshPortion() {
   if (!food) return;
 
   const p = per100(food);
+  const isLiquid = food.basis === '100ml';
   const servings = food.s || [['一份', 100]];
   const gramMode = () => ui.unitIdx >= servings.length;
   const step = () => (gramMode() ? 10 : 0.5);
@@ -234,9 +235,10 @@ function refreshPortion() {
   const qtyValue = h('span.qty-value');
   const qtyUnit = h('span.qty-unit');
   const gramsHint = h('div.grams-hint');
+  const caffeineWarning = Number(food.caffeineMg) > 0 ? h('p.functional-warning') : null;
   const gramsInput = h('input.grams-input', {
     type: 'number', min: 1, step: 5, inputmode: 'numeric',
-    'aria-label': '克数',
+    'aria-label': isLiquid ? '毫升数' : '克数',
     // 输入过程中既不钳制也不回写：一旦在 oninput 里把值改回去，
     // 用户删到空的那一刻就会被填成 1，等于永远删不干净、改不了数。
     oninput: (e) => {
@@ -262,13 +264,17 @@ function refreshPortion() {
     const pending = gramMode() && gramsInput.value === '';
     if (!pending) ui.grams = computeGrams();
 
-    const unit = gramMode() ? 'g' : unitLabel(servings[ui.unitIdx][0]);
+    const unit = gramMode() ? (isLiquid ? 'ml' : 'g') : unitLabel(servings[ui.unitIdx][0]);
     qtyValue.textContent = pending ? '—'
       : gramMode() ? String(ui.grams) : String(Number(ui.qty.toFixed(2)));
     qtyUnit.textContent = pending ? '' : unit;
     gramsHint.textContent = gramMode()
-      ? `${p.kcal} kcal / 100g`
-      : `≈ ${ui.grams} g`;
+      ? `${p.kcal} kcal / ${isLiquid ? '100ml' : '100g'}`
+      : `≈ ${ui.grams} ${isLiquid ? 'ml' : 'g'}`;
+    if (caffeineWarning) {
+      const caffeine = Math.round(Number(food.caffeineMg) * ui.grams / 100);
+      caffeineWarning.textContent = `${caffeine >= 150 ? '高咖啡因 · ' : ''}本份约含 ${caffeine} mg 咖啡因。无糖版本也可能含咖啡因，临睡前及对咖啡因敏感时请慎选。`;
+    }
     if (gramMode() && !typing) gramsInput.value = ui.grams;
     refreshPreview(pending);
   }
@@ -287,14 +293,14 @@ function refreshPortion() {
         ui.unitIdx = i; ui.qty = 1;
         rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
       },
-    }, `${unitLabel(name)}（${g}g）`)),
+    }, `${unitLabel(name)}（${g}${isLiquid ? 'ml' : 'g'}）`)),
     h('button', {
       class: `chip-btn${gramMode() ? ' active' : ''}`,
       onclick: () => {
         ui.unitIdx = servings.length; ui.qty = ui.grams;
         rebuildUnitRow(); syncReadouts(); refreshQuickChips(); toggleGramInput();
       },
-    }, '按克输入'));
+    }, isLiquid ? '按毫升输入' : '按克输入'));
 
   function rebuildUnitRow() {
     [...unitRow.children].forEach((btn, i) => {
@@ -349,7 +355,7 @@ function refreshPortion() {
       name: food.name + levelLabel,
       custom: food.custom ? food : null,
     });
-    toast(`已记录 ${food.name}${levelLabel} ${ui.grams}g`, 'ok');
+    toast(`已记录 ${food.name}${levelLabel} ${ui.grams}${isLiquid ? 'ml' : 'g'}`, 'ok');
     ui.selected = null;
     ui.query = '';
     nodes.searchInput.value = '';
@@ -369,16 +375,18 @@ function refreshPortion() {
         isEstimated(food) && h('span.chip.chip-est', null, '估算'),
         h('span.chip', null, CATEGORIES[food.cat] || '自定义'),
         h('div.portion-per100', null,
-          `每 100g：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
-      h('button.icon-btn', {
-        'aria-label': '取消',
-        onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
-      }, '×')),
+          `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
+      h('div.portion-head-actions', null,
+        food.note && infoTip('查看食物说明', h('p', null, food.note)),
+        h('button.icon-btn', {
+          'aria-label': '取消',
+          onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
+        }, '×'))),
 
     sugarRow && h('div.field-label', null, '糖度'),
     sugarRow,
 
-    h('div.field-label', null, hasSugarLevel(food) ? '喝了多少' : '吃了多少'),
+    h('div.field-label', null, food.cat === 'drink' ? '喝了多少' : '吃了多少'),
     unitRow,
 
     h('div.qty-stepper', null,
@@ -390,6 +398,7 @@ function refreshPortion() {
     gramInputWrap,
 
     h('p.portion-tip', null, portionTip(food)),
+    caffeineWarning,
     isEstimated(food) && h('p.form-hint', null,
       '营养会随配方、烹调或品牌而变化，以上数值为估算参考。'),
 
