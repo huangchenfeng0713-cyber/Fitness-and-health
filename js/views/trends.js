@@ -16,6 +16,12 @@ const RANGES = [
   { key: 'all', label: '全部', days: null },
 ];
 let range = 30;
+/*
+ * 选中的那一天。放在这里而不是图表内部，是为了让一次点选同时作用于全部图表——
+ * 「那天吃了多少、动了多少、睡了多久」是一个问题，不该点五次才看得全。
+ * 放在模块级也让它扛得住定时器触发的重绘。
+ */
+let selectedDay = null;
 
 /**
  * 图表统计到哪一天为止。
@@ -70,11 +76,25 @@ function rangeSwitch(rerender) {
     }, r.label)));
 }
 
-function chartCard(title, tag, chart, note) {
+/**
+ * readout: 选中某天时显示的那行数值。固定占一行，没选中时显示提示语——
+ * 一来告诉用户图是可以点的，二来避免选中/取消时卡片高度跳动。
+ */
+function chartCard(title, tag, chart, note, readout = null) {
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, title), tag && h('span.card-tag', null, tag)),
     h('div.chart-wrap', null, chart),
+    readout,
     note && h('p.form-hint', null, note));
+}
+
+function readoutRow(value) {
+  if (!selectedDay) {
+    return h('div.chart-readout.empty', null, '点图上任意一天查看当天数值');
+  }
+  return h('div.chart-readout', null,
+    h('span.readout-day', null, selectedDay.slice(5)),
+    h('span.readout-value', null, value == null ? '没有记录' : value));
 }
 
 /*
@@ -181,7 +201,25 @@ export function renderTrends(root) {
   const axisDomain = [days[0], days[days.length - 1]];
   // 7 天视图才开逐日标注和点选：点数少、落点区间宽，手指点得准；
   // 一个月以上一个点不到 20px，点选只会选错。
-  const pick = isWeek ? { showAllDates: true, interactive: true } : {};
+  // 切换区间后旧的选中日可能已经不在窗口里，先清掉再渲染
+  if (selectedDay && (!isWeek || !days.includes(selectedDay))) selectedDay = null;
+  const pick = isWeek
+    ? {
+      showAllDates: true,
+      interactive: true,
+      selectedX: selectedDay,
+      // 点同一天再点一次 = 取消选中
+      onPick: (date) => { selectedDay = selectedDay === date ? null : date; rerender(); },
+    }
+    : {};
+  // 每张图下方那行数值。取的是选中日在该指标上的值，没有就显示「没有记录」
+  const valueAt = (fmt) => (getter) => {
+    if (!selectedDay) return null;
+    const v = getter(selectedDay);
+    return v == null ? null : fmt(v);
+  };
+  const kcalAt = valueAt((v) => `${num(v)} kcal`);
+  const gAt = valueAt((v) => `${num(v)} g`);
   // 所有图都只画到前一天，这句在每张图下面重复一次，免得有人以为数据丢了
   const todayNote = state.day === todayKey() ? '当天数据要等这一天过完才会出现。' : '';
   const weightNote = weightStats.kgPerWeek != null
@@ -223,28 +261,32 @@ export function renderTrends(root) {
         data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg', domain: axisDomain, ...pick,
         emptyText: weightSeries.length ? '已有 1 次体重记录，暂时无法连线' : '还没有体重记录',
       }),
-      weightNote),
+      weightNote,
+      isWeek ? readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))) : null),
 
     chartCard('每日热量摄入', avgKcal != null ? `已结束日平均 ${avgKcal} kcal` : null,
       barChart({
         data: kcalTimeline, target: targets.kcal, targetLabel: targetContext, unit: ' kcal',
         ...pick,
       }),
-      `参考线使用${targetContext}，不代表区间内各历史日期当时的目标；超过 5% 的日子会标红。${todayNote}`),
+      `参考线使用${targetContext}，不代表区间内各历史日期当时的目标；超过 5% 的日子会标红。${todayNote}`,
+      isWeek ? readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)) : null),
 
     chartCard('每日蛋白摄入', proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
       barChart({
         data: proteinTimeline, target: proteinThreshold, targetLabel: '达标线', unit: ' g',
         overIsBad: false, ...pick,
       }),
-      `达标线使用${targetContext}的 90%（${Math.round(proteinThreshold)}g）；超过这条线不会被标红。${todayNote}`),
+      `达标线使用${targetContext}的 90%（${Math.round(proteinThreshold)}g）；超过这条线不会被标红。${todayNote}`,
+      isWeek ? readoutRow(gAt((dd) => dietByDate.get(dd)?.protein ?? null)) : null),
 
     balanceSeries.length >= 2 ? chartCard('热量收支（摄入 − 消耗）', null,
       lineChart({
         data: balanceSeries, color: 'var(--warn)', target: 0, targetLabel: '收支平衡',
         unit: 'kcal', domain: axisDomain, ...pick,
       }),
-      '只绘制同日饮食、静息能量和活动能量都齐全的数据；低于 0 表示摄入低于设备估算消耗。7700 kcal/kg 仅用于脂肪当量换算，不等于体重一定这样变化。') : null,
+      '只绘制同日饮食、静息能量和活动能量都齐全的数据；低于 0 表示摄入低于设备估算消耗。7700 kcal/kg 仅用于脂肪当量换算，不等于体重一定这样变化。',
+      isWeek ? readoutRow(kcalAt((dd) => balanceSeries.find((pt) => pt.x === dd)?.y ?? null)) : null) : null,
 
     activeSeries.length >= 2 ? chartCard('活动能量', avgActive != null ? `已结束日平均 ${avgActive} kcal` : null,
       lineChart({
@@ -255,14 +297,16 @@ export function renderTrends(root) {
         // 完整措辞放在卡片右上角的标签里，两处是同一个数。
         target: avgActive, targetLabel: avgActive != null ? `平均 ${avgActive}` : '',
       }),
-      `活动能量来自设备估算。新数据导入后会调整当日预算；旧快照不会随时钟自动变化。${todayNote}`) : null,
+      `活动能量来自设备估算。新数据导入后会调整当日预算；旧快照不会随时钟自动变化。${todayNote}`,
+      isWeek ? readoutRow(kcalAt((dd) => health.get(dd)?.activeEnergy ?? null)) : null) : null,
 
     sleepSeries.length >= 2 ? chartCard('睡眠', avgSleep != null ? `已结束日平均 ${formatHours(avgSleep * 60)}` : null,
       lineChart({
         data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
-      `睡眠归到醒来那天。长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。${todayNote}`) : null,
+      `睡眠归到醒来那天。长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。${todayNote}`,
+      isWeek ? readoutRow(valueAt((v) => formatHours(v))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes : null))) : null) : null,
 
     range === 'all' ? fullTable(days, dietByDate) : null,
   );

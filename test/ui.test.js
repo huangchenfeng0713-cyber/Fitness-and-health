@@ -162,7 +162,8 @@ test('只有 7 天视图开逐日标注与点选', () => {
   // 一个月以上一个点不到 20px，点选只会选错
   const trends = read('js/views/trends.js');
   assert.match(trends, /const isWeek = range === 7;/);
-  assert.match(trends, /const pick = isWeek \? \{ showAllDates: true, interactive: true \} : \{\};/);
+  assert.match(trends, /const pick = isWeek\s*\?\s*\{[\s\S]*?showAllDates: true,[\s\S]*?interactive: true,/);
+  assert.match(trends, /:\s*\{\};/, '非 7 天视图应传空对象');
   const chartCalls = trends.match(/(lineChart|barChart)\(\{[\s\S]*?\}\)/g) || [];
   assert.ok(chartCalls.length >= 5, `图表数量异常：${chartCalls.length}`);
   for (const call of chartCalls) {
@@ -178,14 +179,39 @@ test('「全部」档位附一张逐日明细表', () => {
   assert.ok(trends.includes('不会当成 0'), '明细表没有说明缺失字段的处理');
 });
 
-test('点选交互只改 SVG，不触发整页重绘', () => {
-  // 一旦写进应用状态，subscribe 会整页重画，选中的点当场消失
+test('一次点选让同一页所有图标注同一天', () => {
+  // 「那天吃了多少、动了多少、睡了多久」是一个问题，
+  // 选中状态因此放在趋势页而不是各张图内部，一次点选全页生效。
+  const trends = read('js/views/trends.js');
+  assert.match(trends, /^let selectedDay = null;$/m, '选中日应是模块级状态');
+  assert.match(trends, /selectedX: selectedDay/, '图表没有接收选中日');
+  assert.match(trends, /onPick: \(date\) => \{ selectedDay = selectedDay === date \? null : date; rerender\(\); \}/,
+    '点同一天两次应取消选中');
+  assert.match(trends, /if \(selectedDay && \(!isWeek \|\| !days\.includes\(selectedDay\)\)\) selectedDay = null;/,
+    '切换区间后应清掉落在窗口外的选中日');
+
+  // 图表本身不存选中状态，只按传进来的值画
   const charts = read('js/lib/charts.js');
-  const start = charts.indexOf('function attachPicker');
-  assert.ok(start > 0, '缺少 attachPicker');
+  assert.ok(!charts.includes('attachPicker'), '旧的图内状态实现应已移除');
+  assert.match(charts, /function markSelected\(/);
+  // 柱状图上竖线会藏进柱子里，改成给这根柱子描边
+  assert.match(charts, /function markSelectedBar\(/);
+  const start = charts.indexOf('function markSelected(');
   const block = charts.slice(start, charts.indexOf('\n}', start));
-  assert.ok(!/import|state\.|saveSetting|store/.test(block), 'attachPicker 不该碰应用状态');
-  assert.ok(/addEventListener\('click'/.test(block), '缺少点选事件');
+  assert.ok(!/let |state\.|store/.test(block), 'markSelected 不该持有状态');
+});
+
+test('数值显示在图外，不遮挡数据点', () => {
+  // 气泡压在数据点旁边会盖住相邻的点，手指点下去的位置又正好挡住它
+  const trends = read('js/views/trends.js');
+  const charts = read('js/lib/charts.js');
+  assert.match(trends, /function readoutRow\(/);
+  assert.ok(trends.includes('点图上任意一天查看当天数值'), '没选中时应给出可点提示');
+  assert.ok(trends.includes("h('div.chart-readout.empty'"), '空态也要占一行，避免卡片高度跳动');
+  assert.ok(!charts.includes('marker-bubble') && !charts.includes('marker-value'),
+    '图内不应再画数值气泡');
+  const css = read('css/app.css');
+  assert.ok(css.includes('.chart-readout'), '缺少数值行样式');
 });
 
 
