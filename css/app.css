@@ -675,6 +675,58 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   border-radius: var(--radius-sm);
 }
 
+/* 清补凉等复合食物：每项原料独立选择和调量，窄屏也保持单行可读 */
+.mix-summary {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  margin-top: 12px;
+}
+.mix-summary > div {
+  display: flex; flex-direction: column; gap: 2px; padding: 9px 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--card-2);
+}
+.mix-summary span { color: var(--faint); font-size: 10.5px; }
+.mix-total-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mix-picker-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 10px;
+  margin-top: 12px;
+}
+.mix-picker-head .field-label { margin-top: 0; }
+.mix-selected-count { display: block; margin-top: 2px; color: var(--faint); font-size: 10.5px; }
+.mix-help { margin-top: 5px; line-height: 1.5; }
+.mix-grid {
+  margin-top: 8px; overflow: hidden; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--card-2);
+}
+.mix-row {
+  display: grid; grid-template-columns: 31px minmax(64px, 1fr) auto;
+  align-items: center; gap: 8px; min-height: 54px; padding: 7px 8px;
+  border-bottom: 1px solid var(--border); transition: background .15s;
+}
+.mix-row:last-child { border-bottom: 0; }
+.mix-row.active { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.mix-toggle {
+  width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
+  background: var(--card); color: var(--faint); font: 650 17px/1 var(--font); cursor: pointer;
+}
+.mix-toggle.active { border-color: var(--accent); background: var(--accent); color: #fff; font-size: 14px; }
+.mix-ingredient { min-width: 0; }
+.mix-ingredient strong {
+  display: block; overflow: hidden; color: var(--text); font-size: 12.5px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.mix-ingredient span { display: block; margin-top: 2px; color: var(--faint); font-size: 9.5px; white-space: nowrap; }
+.mix-amount-control { display: flex; align-items: center; gap: 3px; }
+.mix-step {
+  width: 30px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--card); color: var(--text); font: 500 18px/1 var(--font); cursor: pointer;
+}
+.mix-amount-input {
+  width: 50px; min-width: 0; height: 32px; padding: 4px 3px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+  text-align: center; font-size: 16px; font-variant-numeric: tabular-nums;
+}
+.mix-unit { width: 17px; color: var(--faint); font-size: 10px; text-align: left; }
+
 .custom-form {
   margin: 10px 0; padding: 12px; background: var(--card-2);
   border: 1px solid var(--border); border-radius: var(--radius-sm);
@@ -697,7 +749,8 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .entry-row { display: flex; align-items: center; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .entry-row:last-child { border-bottom: 0; }
 .entry-main { flex: 1; min-width: 0; }
-.entry-name { font-size: 13.5px; font-weight: 550; }
+.entry-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 550; }
+.entry-name .info-tip > summary { width: 20px; height: 20px; font-size: 10px; }
 .entry-meta {
   font-size: 11.5px; color: var(--faint); margin-top: 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

@@ -1,7 +1,7 @@
 /** 趋势：体重、热量收支、蛋白达标、活动与睡眠 */
 
 import { h, clearEl, num, shiftDay, formatHours, formatMinutes, mount, todayKey } from '../lib/utils.js';
-import { lineChart, barChart } from '../lib/charts.js';
+import { lineChart } from '../lib/charts.js';
 import { state } from '../lib/store.js';
 import { healthInsights, weightTrendStats } from '../core/health-insights.js';
 
@@ -237,7 +237,7 @@ export function renderTrends(root) {
         summaryItem('已结束日均蛋白', avgProtein != null ? `${avgProtein}g` : '—',
           avgProtein != null ? `${proteinSeries.length} 个有记录日` : '暂无已结束记录日'),
         summaryItem('蛋白达标', proteinSeries.length ? `${proteinHit}/${proteinSeries.length}` : '—', `按${targetContext} 90%`),
-        summaryItem(`${range}日体重趋势`, weightStats.kgPerWeek != null
+        summaryItem(`${rangeLabel}体重趋势`, weightStats.kgPerWeek != null
           ? `${weightStats.kgPerWeek > 0 ? '+' : ''}${weightStats.kgPerWeek}` : '—',
         `kg/周 · ${weightStats.records} 次`),
         summaryItem('已结束日均活动', avgActive != null ? `${avgActive}` : '—',
@@ -265,17 +265,21 @@ export function renderTrends(root) {
       isWeek ? readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))) : null),
 
     chartCard('每日热量摄入', avgKcal != null ? `已结束日平均 ${avgKcal} kcal` : null,
-      barChart({
-        data: kcalTimeline, target: targets.kcal, targetLabel: targetContext, unit: ' kcal',
-        ...pick,
+      lineChart({
+        data: kcalTimeline, color: 'var(--accent)', target: targets.kcal,
+        targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
+        domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
+        overIsBad: true, emptyText: '还没有饮食记录', ...pick,
       }),
       `参考线使用${targetContext}，不代表区间内各历史日期当时的目标；超过 5% 的日子会标红。${todayNote}`,
       isWeek ? readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)) : null),
 
     chartCard('每日蛋白摄入', proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
-      barChart({
-        data: proteinTimeline, target: proteinThreshold, targetLabel: '达标线', unit: ' g',
-        overIsBad: false, ...pick,
+      lineChart({
+        data: proteinTimeline, color: 'var(--protein)', target: proteinThreshold,
+        targetLabel: `达标线 ${Math.round(proteinThreshold)}g`, unit: 'g',
+        domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
+        overIsBad: false, emptyText: '还没有饮食记录', ...pick,
       }),
       `达标线使用${targetContext}的 90%（${Math.round(proteinThreshold)}g）；超过这条线不会被标红。${todayNote}`,
       isWeek ? readoutRow(gAt((dd) => dietByDate.get(dd)?.protein ?? null)) : null),

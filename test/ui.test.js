@@ -79,11 +79,43 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
   const charts = read('js/lib/charts.js');
   assert.ok(trends.includes('首末记录相隔 7 天'));
   assert.ok(trends.includes('target: proteinThreshold'));
-  assert.ok(trends.includes("targetLabel: '达标线'"));
+  assert.ok(trends.includes('targetLabel: `达标线 ${Math.round(proteinThreshold)}g`'));
   assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
-  // 当天已经整体不画了，不再有「浅色柱」这回事
-  assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截柱的处理');
+  // 当天已经整体不画了，不再需要「半截数据点」处理
+  assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截数据的处理');
   assert.ok(charts.includes('emptyText = \'数据不足，至少需要 2 个记录日\''));
+});
+
+test('趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据', () => {
+  const trends = read('js/views/trends.js');
+  const charts = read('js/lib/charts.js');
+  assert.ok(!trends.includes('barChart'), '趋势页仍在使用柱状图');
+  for (const title of ['每日热量摄入', '每日蛋白摄入']) {
+    const index = trends.indexOf(`chartCard('${title}'`);
+    assert.ok(index > 0, `缺少${title}卡片`);
+    const block = trends.slice(index, index + 900);
+    assert.ok(block.includes('lineChart({'), `${title}没有改成折线图`);
+    assert.ok(block.includes('breakOnMissing: true'), `${title}会跨过漏记日连线`);
+    assert.ok(block.includes('showPoints: true'), `${title}没有显示实际记录点`);
+    assert.ok(block.includes('minPoints: 1'), `${title}只有一天记录时会被错误判空`);
+  }
+  assert.ok(charts.includes('breakOnMissing = false'));
+  assert.match(charts, /else if \(breakOnMissing && segment\.length\)/);
+});
+
+test('清补凉支持逐项选配和份量调整，记录会保存营养与配料快照', () => {
+  const diet = read('js/views/diet.js');
+  const store = read('js/lib/store.js');
+  const css = read('css/app.css');
+  assert.ok(diet.includes('function refreshMixedPortion(food)'));
+  assert.ok(diet.includes('defaultFoodMix(food)'));
+  assert.ok(diet.includes('foodMixNutrition(food, ui.mix)'));
+  assert.ok(diet.includes('composition: currentMix.components'));
+  assert.ok(diet.includes("h('input.mix-amount-input'"));
+  assert.ok(css.includes('.mix-row.active') && css.includes('.mix-amount-input'));
+  assert.ok(store.includes('nutrients: suppliedNutrients = null'));
+  assert.ok(store.includes('composition: savedComposition'));
+  assert.ok(store.includes('foodMixNutrition(food, amounts)'), '改列表总量时应同步缩放配方营养');
 });
 
 test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
@@ -116,7 +148,7 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
 
 test('趋势页所有折线图共用同一横轴窗口', () => {
   // 用户实测：同一个「近 30 天」下，体重图 08-22→08-23、活动能量 07-26→08-24。
-  // 柱状图本来就按整段区间画，折线图不传 domain 就会各画各的。
+  // 折线图不传 domain 就会各画各的。
   const trends = read('js/views/trends.js');
   const calls = trends.match(/lineChart\(\{[\s\S]*?\}\)/g) || [];
   assert.ok(calls.length >= 4, `折线图数量异常：${calls.length}`);
@@ -164,7 +196,7 @@ test('只有 7 天视图开逐日标注与点选', () => {
   assert.match(trends, /const isWeek = range === 7;/);
   assert.match(trends, /const pick = isWeek\s*\?\s*\{[\s\S]*?showAllDates: true,[\s\S]*?interactive: true,/);
   assert.match(trends, /:\s*\{\};/, '非 7 天视图应传空对象');
-  const chartCalls = trends.match(/(lineChart|barChart)\(\{[\s\S]*?\}\)/g) || [];
+  const chartCalls = trends.match(/lineChart\(\{[\s\S]*?\}\)/g) || [];
   assert.ok(chartCalls.length >= 5, `图表数量异常：${chartCalls.length}`);
   for (const call of chartCalls) {
     assert.ok(/\.\.\.pick/.test(call), `有图表没接上 7 天交互开关：${call.slice(0, 80)}`);

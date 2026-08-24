@@ -155,13 +155,14 @@ export function lineChart({
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
   domain = null, showAllDates = false, interactive = false,
   selectedX = null, onPick = null,
+  breakOnMissing = false, showPoints = false, overIsBad = false, minPoints = 2,
   emptyText = '数据不足，至少需要 2 个记录日',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
   const points = data.filter((d) => Number.isFinite(Number(d.y)));
 
-  if (points.length < 2) {
+  if (points.length < minPoints) {
     const t = el('text', { x: width / 2, y: height / 2, 'text-anchor': 'middle', class: 'chart-empty', 'font-size': 13 });
     t.textContent = emptyText;
     svg.append(t);
@@ -207,7 +208,9 @@ export function lineChart({
   const pxAt = (ms) => pad.l + clamp01((ms - x0) / (x1 - x0)) * (width - pad.l - pad.r);
   const px = (i) => (hasCalendarX
     ? pxAt(dayXs[i])
-    : pad.l + (i / (points.length - 1)) * (width - pad.l - pad.r));
+    : points.length === 1
+      ? pad.l + (width - pad.l - pad.r) / 2
+      : pad.l + (i / (points.length - 1)) * (width - pad.l - pad.r));
   const py = (v) => pad.t + (1 - (v - min) / (max - min)) * (height - pad.t - pad.b);
 
   // 网格与纵轴
@@ -230,15 +233,43 @@ export function lineChart({
     }
   }
 
-  const d = points.map((p, i) => `${i ? 'L' : 'M'}${px(i).toFixed(1)},${py(Number(p.y)).toFixed(1)}`).join(' ');
-  if (area) {
-    const areaPath = `${d} L${px(points.length - 1).toFixed(1)},${height - pad.b} L${px(0).toFixed(1)},${height - pad.b} Z`;
-    svg.append(el('path', { d: areaPath, fill: color, opacity: 0.12, stroke: 'none' }));
+  // 摄入记录可能中间漏几天。柱状图天然不会跨过空白；换成折线后也不能把
+  // 08-01 和 08-10 直接连起来，造成“中间每天都有摄入”的错觉。
+  const pointIndex = new Map(points.map((point, index) => [point, index]));
+  const segments = [];
+  let segment = [];
+  for (const point of data) {
+    if (Number.isFinite(Number(point.y))) {
+      segment.push(point);
+    } else if (breakOnMissing && segment.length) {
+      segments.push(segment);
+      segment = [];
+    }
   }
-  svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+  if (segment.length) segments.push(segment);
+  if (!breakOnMissing) segments.splice(0, segments.length, points);
+
+  const pointX = (point) => px(pointIndex.get(point));
+  for (const line of segments) {
+    if (line.length < 2) continue;
+    const d = line.map((point, i) => `${i ? 'L' : 'M'}${pointX(point).toFixed(1)},${py(Number(point.y)).toFixed(1)}`).join(' ');
+    if (area) {
+      const areaPath = `${d} L${pointX(line.at(-1)).toFixed(1)},${height - pad.b} L${pointX(line[0]).toFixed(1)},${height - pad.b} Z`;
+      svg.append(el('path', { d: areaPath, fill: color, opacity: 0.12, stroke: 'none' }));
+    }
+    svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+  }
 
   const last = points[points.length - 1];
-  svg.append(el('circle', { cx: px(points.length - 1), cy: py(Number(last.y)), r: 3.5, fill: color }));
+  const visiblePoints = showPoints ? points : [last];
+  const radius = showPoints && points.length > 60 ? 2 : showPoints && points.length > 14 ? 2.6 : 3.5;
+  for (const point of visiblePoints) {
+    const high = overIsBad && target != null && Number(point.y) > Number(target) * 1.05;
+    svg.append(el('circle', {
+      cx: pointX(point), cy: py(Number(point.y)), r: radius,
+      fill: high ? 'var(--danger)' : color,
+    }));
+  }
 
   // 横轴。7 天视图逐日标注，长区间只标两端——30 个日期挤在一起谁也看不清
   if (showAllDates) {

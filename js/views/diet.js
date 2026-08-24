@@ -15,6 +15,7 @@ import {
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
   SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
+  hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
 
@@ -27,6 +28,7 @@ const ui = {
   unitIdx: 0,     // 选中的常用份量下标；等于 servings.length 时表示直接按 g/ml 输入
   qty: 1,         // 份数
   sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
+  mix: {},        // 清补凉等复合食物的 { foodId: g/ml }
   showCustomForm: false,
 };
 
@@ -80,7 +82,7 @@ function buildShell(root) {
     h('div.card-head.search-card-head', null,
       h('div', null,
         h('h3', null, '记录吃了什么'),
-        h('p.card-desc', null, '搜索名称、拼音或品牌，也可以按分类浏览 800+ 种食物。'))),
+        h('p.card-desc', null, '搜索名称、拼音或品牌，也可以按分类浏览 900+ 种食物。'))),
     h('div.search-row', null, nodes.searchInput, nodes.customToggle),
     nodes.customBox,
     nodes.favRow,
@@ -206,9 +208,186 @@ function selectFood(food) {
   ui.unitIdx = 0;
   ui.qty = 1;
   ui.sugar = DEFAULT_SUGAR_LEVEL;
+  ui.mix = hasFoodMix(food) ? defaultFoodMix(food) : {};
   ui.grams = food.s?.[0]?.[1] || 100;
   refreshPortion();
   nodes.portion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/**
+ * 清补凉一类复合甜品不能只靠一个固定“每 100g”值：椰奶、豆类、芋圆和糖浆
+ * 选不选，能让同一碗相差几百千卡。这里把每项原料独立开关和调量，并把最终
+ * 原料快照随记录保存；之后在当天列表改总量时，store 会按比例缩放整份配方。
+ */
+function refreshMixedPortion(food) {
+  const components = food.mix.components;
+  const controllers = [];
+  let currentMix = foodMixNutrition(food, ui.mix);
+
+  nodes.preview = h('div.preview-slot');
+  nodes.mealRow = h('div.portion-meal');
+  const totalAmount = h('strong.mix-total-value');
+  const totalKcal = h('strong.mix-total-value');
+  const selectedCount = h('span.mix-selected-count');
+  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+
+  const refreshMealChips = () => {
+    mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
+      class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
+      onclick: () => {
+        ui.meal = m.key;
+        refreshMealChips();
+        addBtn.textContent = `记录到${m.label}`;
+      },
+    }, m.label)));
+  };
+
+  const syncTotals = () => {
+    currentMix = foodMixNutrition(food, ui.mix);
+    ui.grams = currentMix.grams;
+    const amountText = Number.isInteger(currentMix.grams)
+      ? num(currentMix.grams) : num(currentMix.grams, 1);
+    totalAmount.textContent = `约 ${amountText} g`;
+    totalKcal.textContent = `${num(currentMix.nutrients.kcal)} kcal`;
+    selectedCount.textContent = `已选 ${currentMix.components.length}/${components.length} 项`;
+    addBtn.disabled = currentMix.grams <= 0;
+    refreshPreview(false, currentMix.nutrients);
+  };
+
+  const rows = components.map((component) => {
+    const ingredient = findFood(component.foodId);
+    const step = Math.max(1, Number(component.step) || 5);
+    const max = Math.max(step, Number(component.max) || 1000);
+    const unit = component.unit || (ingredient?.basis === '100ml' ? 'ml' : 'g');
+    const suggested = Math.min(max, Math.max(step,
+      Number(component.defaultGrams) || Number(ingredient?.s?.[0]?.[1]) || step));
+
+    const toggle = h('button.mix-toggle', {
+      type: 'button',
+      'aria-label': `${component.label}：选择或取消`,
+    });
+    const input = h('input.mix-amount-input', {
+      type: 'number', min: 0, max, step, inputmode: 'decimal',
+      'aria-label': `${component.label}的${unit === 'ml' ? '毫升数' : '克数'}`,
+    });
+    const row = h('div.mix-row', null,
+      toggle,
+      h('div.mix-ingredient', null,
+        h('strong', null, component.label),
+        ingredient && h('span', null, `${per100(ingredient).kcal} kcal / 100${unit}`)),
+      h('div.mix-amount-control', null,
+        h('button.mix-step', {
+          type: 'button', 'aria-label': `减少${component.label}`,
+          onclick: () => setAmount((Number(ui.mix[component.foodId]) || 0) - step),
+        }, '−'),
+        input,
+        h('span.mix-unit', null, unit),
+        h('button.mix-step', {
+          type: 'button', 'aria-label': `增加${component.label}`,
+          onclick: () => setAmount((Number(ui.mix[component.foodId]) || 0) + step),
+        }, '+')));
+
+    const clampAmount = (value) => {
+      const finite = Number.isFinite(Number(value)) ? Number(value) : 0;
+      return Math.round(Math.min(max, Math.max(0, finite)) * 10) / 10;
+    };
+    const syncComponent = ({ writeInput = true } = {}) => {
+      const amount = clampAmount(ui.mix[component.foodId]);
+      ui.mix[component.foodId] = amount;
+      const active = amount > 0;
+      row.className = `mix-row${active ? ' active' : ''}`;
+      toggle.className = `mix-toggle${active ? ' active' : ''}`;
+      toggle.textContent = active ? '✓' : '+';
+      toggle.setAttribute('aria-pressed', String(active));
+      if (writeInput) input.value = String(amount);
+    };
+    function setAmount(value, { writeInput = true } = {}) {
+      ui.mix[component.foodId] = clampAmount(value);
+      syncComponent({ writeInput });
+      syncTotals();
+    }
+
+    toggle.onclick = () => setAmount(Number(ui.mix[component.foodId]) > 0 ? 0 : suggested);
+    input.oninput = (event) => {
+      if (event.target.value === '') {
+        ui.mix[component.foodId] = 0;
+        syncComponent({ writeInput: false });
+        syncTotals();
+        return;
+      }
+      setAmount(event.target.value, { writeInput: false });
+    };
+    input.onblur = () => setAmount(input.value);
+
+    syncComponent();
+    controllers.push(syncComponent);
+    return row;
+  });
+
+  addBtn.onclick = async () => {
+    if (currentMix.grams <= 0) {
+      toast('至少选择一种配料', 'warn');
+      return;
+    }
+    addBtn.disabled = true;
+    await addEntry({
+      foodId: food.id,
+      grams: currentMix.grams,
+      meal: guessMeal(),
+      name: food.name,
+      nutrients: currentMix.nutrients,
+      composition: currentMix.components,
+    });
+    toast(`已记录 ${food.name}，${currentMix.components.length} 种配料`, 'ok');
+    ui.selected = null;
+    ui.mix = {};
+    ui.query = '';
+    nodes.searchInput.value = '';
+    refreshResults();
+    refreshPortion();
+    refreshSuggestions();
+  };
+
+  refreshMealChips();
+  mount(nodes.portion, h('div.portion-panel.mix-picker', null,
+    h('div.portion-head', null,
+      h('div', null,
+        h('strong', null, food.name),
+        h('span.chip.chip-est', null, '按配料估算'),
+        h('span.chip', null, CATEGORIES[food.cat]),
+        h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
+      h('div.portion-head-actions', null,
+        food.note && infoTip('查看估算说明', h('p', null, food.note)),
+        h('button.icon-btn', {
+          'aria-label': '取消',
+          onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
+        }, '×'))),
+
+    h('div.mix-summary', null,
+      h('div', null, h('span', null, '当前总量'), totalAmount),
+      h('div', null, h('span', null, '当前热量'), totalKcal)),
+    h('div.mix-picker-head', null,
+      h('div', null,
+        h('div.field-label', null, food.mix.label || '配料与份量'),
+        selectedCount),
+      h('button.text-btn', {
+        type: 'button',
+        onclick: () => {
+          ui.mix = defaultFoodMix(food);
+          controllers.forEach((sync) => sync());
+          syncTotals();
+        },
+      }, '恢复常见搭配')),
+    h('p.form-hint.mix-help', null,
+      '“+”加入配料，“✓”取消；也可以直接输入每项的克数或毫升数。总量按液体 1ml≈1g 估算。'),
+    h('div.mix-grid', null, rows),
+
+    nodes.preview,
+    h('div.field-label', null, '记到哪一餐'),
+    nodes.mealRow,
+    addBtn));
+
+  syncTotals();
 }
 
 /**
@@ -222,6 +401,10 @@ function refreshPortion() {
   clearEl(nodes.portion);
   const food = ui.selected;
   if (!food) return;
+  if (hasFoodMix(food)) {
+    refreshMixedPortion(food);
+    return;
+  }
 
   const p = per100(food);
   const isLiquid = food.basis === '100ml';
@@ -461,11 +644,11 @@ function impactBlock(n) {
     note);
 }
 
-function refreshPreview(pending = false) {
+function refreshPreview(pending = false, nutrientOverride = null) {
   if (!nodes.preview || !ui.selected) return;
-  const n = pending
+  const n = nutrientOverride || (pending
     ? { kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sugar: 0, sodium: 0 }
-    : nutrientsFor(ui.selected, ui.grams, ui.sugar);
+    : nutrientsFor(ui.selected, ui.grams, ui.sugar));
 
   mount(clearEl(nodes.preview),
     h('div.portion-preview', null,
@@ -573,7 +756,8 @@ function entryRow(e) {
   const unit = isLiquid ? 'ml' : 'g';
   return h('div.entry-row', null,
     h('div.entry-main', null,
-      h('div.entry-name', null, e.name),
+      h('div.entry-name', null, e.name,
+        e.note && infoTip('查看配料与记录说明', h('p', null, e.note))),
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
         ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
