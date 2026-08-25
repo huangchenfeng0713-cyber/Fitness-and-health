@@ -21,11 +21,14 @@ const numericRanges: Record<string, [number, number]> = {
   vo2max: [5, 100],
 };
 
-const allowedKeys = new Set([
-  "protocolVersion", "syncId", "capturedAt", "date", "timezone", "source",
-  ...Object.keys(numericRanges),
-  "weightMeasuredAt", "bodyFatMeasuredAt", "restingHRMeasuredAt", "vo2maxMeasuredAt",
-]);
+const metricAliases: Record<string, string> = {
+  weight: "weightKg",
+  activeEnergyKcal: "activeEnergy",
+  restingEnergyKcal: "restingEnergy",
+  distance: "distanceKm",
+  bodyFat: "bodyFatPct",
+  restingHeartRate: "restingHR",
+};
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -47,10 +50,30 @@ function validTimestamp(value: unknown) {
   return Number.isFinite(Date.parse(value));
 }
 
+function normalizeDate(value: unknown, captured: Date, timezone: string) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[ T])/);
+    if (!match) match = text.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+    if (match) {
+      const [, year, month, day] = match;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+    const parsed = Date.parse(text);
+    if (Number.isFinite(parsed)) return localDateAt(new Date(parsed), timezone);
+  }
+  return localDateAt(captured, timezone);
+}
+
 async function sha256Hex(value: string) {
   const bytes = new TextEncoder().encode(value);
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   return Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || Array.isArray(value) || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
 }
 
 Deno.serve(async (req) => {
@@ -65,73 +88,97 @@ Deno.serve(async (req) => {
     return json(401, { ok: false, code: "invalid_token" });
   }
 
-  let body: Record<string, unknown>;
+  let envelope: Record<string, unknown>;
   try {
-    body = await req.json();
+    const parsed = await req.json();
+    const object = asObject(parsed);
+    if (!object) return json(400, { ok: false, code: "invalid_payload" });
+    envelope = object;
   } catch {
     return json(400, { ok: false, code: "invalid_json" });
   }
-  if (!body || Array.isArray(body) || typeof body !== "object") {
-    return json(400, { ok: false, code: "invalid_payload" });
+
+  // Shortcuts may send the existing health dictionary directly, or wrap it once
+  // as { payload: <dictionary> }. Both forms are accepted.
+  const wrapped = asObject(envelope.payload);
+  const raw = wrapped || envelope;
+  const body: Record<string, unknown> = {};
+  for (const [rawKey, value] of Object.entries(raw)) {
+    const trimmedKey = rawKey.trim();
+    body[metricAliases[trimmedKey] || trimmedKey] = value;
   }
-  for (const key of Object.keys(body)) {
-    if (!allowedKeys.has(key)) return json(400, { ok: false, code: "unknown_field", field: key });
-  }
-  if (body.protocolVersion !== 1) return json(400, { ok: false, code: "unsupported_protocol" });
-  if (typeof body.syncId !== "string" || !/^[A-Za-z0-9._:-]{8,128}$/.test(body.syncId)) {
-    return json(400, { ok: false, code: "invalid_sync_id" });
-  }
-  if (!validTimestamp(body.capturedAt)) return json(400, { ok: false, code: "invalid_captured_at" });
-  if (typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
-    return json(400, { ok: false, code: "invalid_date" });
-  }
-  if (typeof body.timezone !== "string" || body.timezone.length > 64) {
-    return json(400, { ok: false, code: "invalid_timezone" });
-  }
-  const captured = new Date(body.capturedAt as string);
+
+  const protocolVersion = body.protocolVersion == null ? 1 : Number(body.protocolVersion);
+  if (protocolVersion !== 1) return json(400, { ok: false, code: "unsupported_protocol" });
+
+  const timezone = typeof body.timezone === "string" && body.timezone.trim()
+    ? body.timezone.trim()
+    : "Asia/Shanghai";
   try {
-    if (localDateAt(captured, body.timezone) !== body.date) {
-      return json(400, { ok: false, code: "date_timezone_mismatch" });
-    }
+    localDateAt(new Date(), timezone);
   } catch {
     return json(400, { ok: false, code: "invalid_timezone" });
   }
 
+  const capturedProvided = validTimestamp(body.capturedAt);
+  const capturedAt = capturedProvided ? String(body.capturedAt) : new Date().toISOString();
+  const captured = new Date(capturedAt);
+  const date = normalizeDate(body.date, captured, timezone);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return json(400, { ok: false, code: "invalid_date" });
+  }
+  if (capturedProvided && localDateAt(captured, timezone) !== date) {
+    return json(400, { ok: false, code: "date_timezone_mismatch" });
+  }
+
+  const payload: Record<string, unknown> = {};
   let metricCount = 0;
   for (const [key, [min, max]] of Object.entries(numericRanges)) {
-    const value = body[key];
+    let value = body[key];
     if (value == null || value === "") continue;
+    if (typeof value === "string" && value.trim() !== "") value = Number(value.trim());
     if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
       return json(400, { ok: false, code: "invalid_metric", field: key });
     }
+    payload[key] = value;
     metricCount += 1;
   }
   if (!metricCount) return json(400, { ok: false, code: "no_metrics" });
 
   for (const key of ["weightMeasuredAt", "bodyFatMeasuredAt", "restingHRMeasuredAt", "vo2maxMeasuredAt"]) {
-    if (body[key] != null && !validTimestamp(body[key])) {
+    if (body[key] == null || body[key] === "") continue;
+    if (!validTimestamp(body[key])) {
       return json(400, { ok: false, code: "invalid_measurement_time", field: key });
     }
+    payload[key] = body[key];
   }
 
   const url = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceRoleKey) return json(500, { ok: false, code: "server_not_configured" });
 
+  const tokenHash = await sha256Hex(token);
+  let syncId = typeof body.syncId === "string" ? body.syncId.trim() : "";
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(syncId)) {
+    // Deterministic fallback: an identical Shortcut payload becomes the same
+    // idempotency key, while changed health values produce a new one.
+    syncId = `auto_${(await sha256Hex(`${tokenHash}|${JSON.stringify(raw)}`)).slice(0, 48)}`;
+  }
+
+  const source = typeof body.source === "string" && body.source.trim().length <= 40
+    ? body.source.trim()
+    : "apple_shortcuts";
+
   const supabase = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const tokenHash = await sha256Hex(token);
-  const payload = Object.fromEntries(
-    Object.entries(body).filter(([key]) => key in numericRanges || key.endsWith("MeasuredAt")),
-  );
   const { data, error } = await supabase.rpc("ingest_health_sync", {
     p_token_hash: tokenHash,
-    p_sync_id: body.syncId,
-    p_captured_at: body.capturedAt,
-    p_date: body.date,
-    p_timezone: body.timezone,
-    p_source: typeof body.source === "string" && body.source.length <= 40 ? body.source : "apple_shortcuts",
+    p_sync_id: syncId,
+    p_captured_at: capturedAt,
+    p_date: date,
+    p_timezone: timezone,
+    p_source: source,
     p_payload: payload,
   });
 
