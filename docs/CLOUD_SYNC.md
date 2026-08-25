@@ -1,5 +1,9 @@
 # 账号与云同步配置
 
+官方 GitHub Pages 部署自 v1.5.1 起已在 `index.html` 注入项目的公开 Project URL 与
+Publishable key。以下步骤仍适用于迁移项目、自行部署或轮换公开密钥；Google Client
+Secret、数据库密码和 Secret key 始终只能保存在服务端控制台。
+
 账号功能是可选的。全新设备没有配置 Supabase 时，应用保持“本地模式”，健康、饮食、设置和自定义食物只写入浏览器 IndexedDB，其他功能不受影响。若 IndexedDB 已明确归属于某个账号，配置被移除或账号服务暂时不可用时会继续锁定该账号数据，不能把它降级成访客数据展示。
 
 配置后支持：

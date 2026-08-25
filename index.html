@@ -27,6 +27,13 @@
     <nav id="tabbar" class="tabbar"></nav>
   </div>
   <noscript><p style="padding:2rem;text-align:center">这个应用需要 JavaScript 才能运行。</p></noscript>
+  <script>
+    // Supabase 的 Project URL 与 Publishable key 是浏览器公开配置；数据隔离由 RLS 保证。
+    window.__HEALTH_DIET_CLOUD_CONFIG__ = {
+      supabaseUrl: 'https://kdkykrshqiamwecohxgw.supabase.co',
+      supabasePublishableKey: 'sb_publishable_af7poqn7uHi8-NOFQMllTg_NKCecDuY',
+    };
+  </script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
