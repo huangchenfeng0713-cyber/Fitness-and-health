@@ -394,7 +394,7 @@ function signedInAccount(account) {
   const logoutBtn = h('button.secondary-btn.danger', {
     type: 'button',
     onclick: () => {
-      if (!confirmAction('退出前会先确认最新数据已上传；成功后会从这台设备清除该账号的数据。继续吗？')) return;
+      if (!confirmAction('退出前会先确认最新数据已上传；成功后会从这台设备清除该账号的数据。快捷指令连接不会随登录状态自动撤销；如需停止上传，请先到“数据”页撤销设备。继续吗？')) return;
       runAccountAction(logoutBtn, signOutSafely, { success: '已安全退出账号' });
     },
   }, '安全退出');
@@ -430,7 +430,7 @@ function signedInAccount(account) {
     (account.phase === 'conflict' || account.syncStatus === 'conflict')
       ? conflictPanel(account)
       : h('div.account-actions', null, syncBtn, logoutBtn),
-    h('p.privacy-note', null, '同步仅写入当前账号的专属数据行；退出成功后，本机不会继续保留该账号的健康与饮食记录。'),
+    h('p.privacy-note', null, '同步仅写入当前账号的专属数据行；退出成功后，本机不会继续保留该账号的健康与饮食记录。已连接的快捷指令会继续写入原账号，需在数据页单独撤销。'),
     h('details.account-linking', null,
       h('summary', null, '管理登录方式'),
       h('p', null, '设置密码后可以用相同邮箱登录；绑定 Google 后也仍是同一个账号。'),

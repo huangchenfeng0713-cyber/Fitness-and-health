@@ -10,6 +10,7 @@ import { renderTrends } from './views/trends.js';
 import { renderSettings } from './views/settings.js';
 import { APP_VERSION } from './core/feedback.js';
 import { initCloud, getAccountState, subscribeAccount } from './lib/account.js';
+import { pullAccountHealth, resetHealthCloudState } from './lib/health-cloud-sync.js';
 import { inspectCloudConfig } from './config/cloud.js';
 
 const TABS = [
@@ -430,6 +431,21 @@ async function boot() {
 
   runUrlImport();
 
+  const refreshAccountHealth = async ({ minIntervalMs = 0 } = {}) => {
+    if (isEditing()) return { skipped: true };
+    try {
+      const outcome = await pullAccountHealth({ minIntervalMs });
+      // 有新健康行时 mergeHealthDays 会自己触发 store 重绘；没有新行时补一次，
+      // 让数据页的设备状态和“最近读取”时间也及时更新。
+      if (!outcome.skipped && !outcome.importedDays && current === 'health') renderCurrent();
+      return outcome;
+    } catch (error) {
+      console.warn('账号健康数据读取失败', error);
+      if (current === 'health') renderCurrent();
+      return { skipped: false, error };
+    }
+  };
+
   subscribe(() => {
     renderTopbar();
     syncOnboarding();
@@ -437,12 +453,27 @@ async function boot() {
     if (settingsOpen && !isEditing()) renderSettings(settingsRoot);
   });
 
+  let healthAccountUserId = null;
   subscribeAccount((account) => {
     syncOnboarding();
     renderCurrent();
     // 账号归属变为不确定时必须立即移除旧资料，即使焦点仍在体重/生日输入框里。
     // 只有普通状态刷新才为了保留键盘和草稿而跳过重绘。
     if (settingsOpen && (accountDataLocked(account) || !isEditing())) renderSettings(settingsRoot);
+    const nextUserId = account.user?.id || null;
+    if (!nextUserId) {
+      healthAccountUserId = null;
+      resetHealthCloudState();
+      return;
+    }
+    const ready = !accountDataLocked(account)
+      && !account.ownershipPending
+      && !['loading', 'conflict', 'locked'].includes(account.status);
+    if (ready && nextUserId !== healthAccountUserId) {
+      resetHealthCloudState();
+      healthAccountUserId = nextUserId;
+      void refreshAccountHealth();
+    }
   });
 
   // 时间在走，“下一餐”仍要刷新；热量外推使用健康快照时间，不再跟当前时钟漂移。
@@ -464,11 +495,14 @@ async function boot() {
     if (current === 'today' || current === 'diet') renderCurrent();
   };
   setInterval(refreshClock, 60_000);
+  // 网页保持打开时每五分钟看一次账号；快捷指令本身直接写云端，不依赖这个轮询。
+  setInterval(() => { void refreshAccountHealth({ minIntervalMs: 4 * 60_000 }); }, 5 * 60_000);
 
   // 从后台切回来时刷新一次
   document.addEventListener('visibilitychange', async () => {
     if (document.hidden || isEditing()) return;
     await refreshClock();
+    await refreshAccountHealth({ minIntervalMs: 60_000 });
     if (current !== 'today' && current !== 'diet') renderCurrent();
   });
 

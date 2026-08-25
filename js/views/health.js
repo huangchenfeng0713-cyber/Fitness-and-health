@@ -11,9 +11,69 @@ import { healthInsights, healthSummary } from '../core/health-insights.js';
 import { isPlausibleHealthValue } from '../core/health.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
 import { getAccountState, syncNow } from '../lib/account.js';
+import {
+  healthCloudState, createHealthSyncDevice, pullAccountHealth,
+  revokeHealthSyncDevice, clearAccountHealthSyncData,
+  forgetGeneratedHealthSyncCredential,
+} from '../lib/health-cloud-sync.js';
 
 let importing = false;
 let progressEl = null;
+const autoSyncDraft = { deviceName: '我的 iPhone' };
+
+function formatSyncMoment(value, fallback = '尚未上传') {
+  const date = new Date(value || '');
+  if (Number.isNaN(date.getTime())) return fallback;
+  return date.toLocaleString('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+async function copyText(value, successMessage) {
+  const text = String(value || '');
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const fallback = h('textarea', { value: text, readonly: true });
+    fallback.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.append(fallback);
+    fallback.select();
+    const copied = document.execCommand?.('copy');
+    fallback.remove();
+    if (!copied) throw new Error('浏览器不允许复制，请长按内容手动复制');
+  }
+  toast(successMessage, 'ok');
+}
+
+function shortcutConfig(credential) {
+  return JSON.stringify({
+    method: 'POST',
+    url: credential.endpoint,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Health-Sync-Token': credential.token,
+    },
+    bodyExample: {
+      timestamp: '2026-08-25T14:10:00+08:00',
+      date: '2026-08-25',
+      timezone: 'Asia/Shanghai',
+      source: 'apple_shortcuts',
+      steps: 4217,
+      activeEnergyKcal: 203.6,
+      restingEnergyKcal: 912.4,
+      exerciseMinutes: 18,
+      standMinutes: 246,
+      distanceKm: 3.12,
+      sleepMinutes: 431,
+      weightKg: 59,
+      weightMeasuredAt: '2026-08-25T07:35:00+08:00',
+      bodyFatPct: 18.5,
+      bodyFatMeasuredAt: '2026-08-25T07:35:00+08:00',
+      restingHR: 70,
+      restingHRMeasuredAt: '2026-08-25T06:20:00+08:00',
+    },
+  }, null, 2);
+}
 
 function setProgress(stage, pct) {
   if (!progressEl) return;
@@ -52,7 +112,13 @@ function importQualityItems(last) {
   const q = last?.quality || {};
   const items = [];
   if (last?.fullSnapshot != null) items.push(last.fullSnapshot ? '导入方式：完整快照' : '导入方式：增量合并');
-  if (last?.sourceFormat) items.push(`文件格式：${last.sourceFormat === 'apple-health-export' ? 'Apple 官方导出' : last.sourceFormat}`);
+  if (last?.sourceFormat) {
+    const format = {
+      'apple-health-export': 'Apple 官方导出',
+      'account-health-sync': '账号自动同步',
+    }[last.sourceFormat] || last.sourceFormat;
+    items.push(`数据来源：${format}`);
+  }
   if (last?.records) items.push(`解析 ${num(last.records)} 条原始健康记录`);
   if (q.duplicateRecords) items.push(`去除 ${num(q.duplicateRecords)} 条完全重复样本`);
   if (q.overlapBuckets) items.push(`处理 ${num(q.overlapBuckets)} 个多来源重叠时间段`);
@@ -157,20 +223,28 @@ function backupPanel(rerender) {
         h('div.data-action-copy', null,
           h('strong', null, connected ? '清空当前账号数据' : '清空本机数据'),
           h('span', null, connected
-            ? '删除本机全部内容并同步清空当前账号云端；无法撤销。'
+            ? '删除本机全部内容并同步清空该账号云端（含自动健康数据），同时撤销所有设备；无法撤销。'
             : '删除本设备上的全部内容；无法撤销。')),
         h('button.secondary-btn.compact.danger', {
           onclick: async () => {
             const cloud = Boolean(getAccountState().user);
             const warning = cloud
-              ? '确定清空当前账号的全部数据？本机内容会立即删除，随后同步清空该账号云端；此操作不可撤销。建议先导出完整备份。'
+              ? '确定清空当前账号的全部数据？本机内容、账号云端快照、快捷指令健康数据都会删除，所有同步设备也会被撤销。此操作不可撤销，建议先导出完整备份。'
               : '确定清空全部本地数据？此操作不可撤销。建议先导出完整备份。';
             if (!confirmAction(warning)) return;
+            if (cloud) {
+              try {
+                await clearAccountHealthSyncData();
+              } catch (syncError) {
+                toast(`尚未清空：账号健康同步数据删除失败（${syncError.message}）`, 'error');
+                return;
+              }
+            }
             await clearAllData();
             if (cloud) {
               try {
                 await syncNow();
-                toast('当前账号的本机与云端数据已清空', 'ok');
+                toast('当前账号数据已清空，所有自动同步设备已撤销', 'ok');
               } catch (syncError) {
                 toast(`本机已清空，但云端清空尚未完成：${syncError.message}`, 'warn');
               }
@@ -180,6 +254,141 @@ function backupPanel(rerender) {
             rerender();
           },
         }, '清空')));
+}
+
+function credentialField(label, value, copyLabel, message) {
+  return h('div.sync-secret-field', null,
+    h('span', null, label),
+    h('code', null, value),
+    h('button.secondary-btn.compact', {
+      type: 'button', onclick: () => copyText(value, message).catch((error) => toast(error.message, 'error')),
+    }, copyLabel));
+}
+
+function automaticSyncPanel(rerender) {
+  const account = getAccountState();
+  if (!account.user) {
+    return h('section.auto-sync-box', null,
+      h('div.auto-sync-title', null,
+        h('div', null, h('strong', null, '快捷指令自动上传'), h('span', null, '需要登录账号')),
+        h('span.status-pill', null, '自动')),
+      h('p', null, '登录后可为 iPhone 生成专属连接。快捷指令会直接把健康数据存进你的账号，网页不必保持打开。'),
+      h('button.secondary-btn.full', {
+        type: 'button', onclick: () => { location.hash = 'settings'; },
+      }, '登录后启用'));
+  }
+
+  const credential = healthCloudState.userId && healthCloudState.userId !== account.user.id
+    ? null : healthCloudState.credential;
+  const devices = healthCloudState.userId && healthCloudState.userId !== account.user.id
+    ? [] : healthCloudState.devices;
+  const busy = ['creating', 'pulling', 'revoking'].includes(healthCloudState.status);
+  const nameInput = h('input', {
+    type: 'text', maxlength: 80, value: autoSyncDraft.deviceName,
+    placeholder: '例如：我的 iPhone', autocomplete: 'off',
+    oninput: (event) => { autoSyncDraft.deviceName = event.target.value; },
+  });
+  const createBtn = h('button.primary-btn', {
+    type: 'button', disabled: busy,
+    onclick: async () => {
+      const name = autoSyncDraft.deviceName.trim();
+      if (!name) { toast('请先填写设备名称', 'warn'); nameInput.focus(); return; }
+      createBtn.disabled = true;
+      try {
+        await createHealthSyncDevice(name);
+        toast('连接已创建；请现在保存令牌', 'ok');
+        rerender();
+      } catch (error) {
+        toast(`创建失败：${error.message}`, 'error');
+        if (createBtn.isConnected) createBtn.disabled = false;
+      }
+    },
+  }, healthCloudState.status === 'creating' ? '正在生成…' : '生成连接信息');
+
+  const credentialPanel = credential && h('div.sync-credential', { role: 'status' },
+    h('div.sync-credential-head', null,
+      h('div', null,
+        h('strong', null, `${credential.deviceName} 的一次性连接信息`),
+        h('span', null, '令牌关闭后无法再次查看；丢失时请撤销设备并重新生成。')),
+      h('span.status-pill.warn', null, '仅显示一次')),
+    credentialField('上传 URL', credential.endpoint, '复制 URL', '上传 URL 已复制'),
+    credentialField('设备令牌', credential.token, '复制令牌', '设备令牌已复制'),
+    h('div.sync-credential-actions', null,
+      h('button.primary-btn', {
+        type: 'button',
+        onclick: () => copyText(shortcutConfig(credential), '完整快捷指令配置已复制')
+          .catch((error) => toast(error.message, 'error')),
+      }, '复制完整配置'),
+      h('button.text-btn', {
+        type: 'button', onclick: () => { forgetGeneratedHealthSyncCredential(); rerender(); },
+      }, '我已保存，隐藏')));
+
+  const deviceList = devices.length
+    ? h('div.sync-device-list', null,
+      h('div.sync-device-list-head', null,
+        h('strong', null, `已连接设备 · ${devices.length}`),
+        h('span', null, '最多 10 台')),
+      devices.map((device) => h('div.sync-device-row', null,
+        h('div', null,
+          h('strong', null, device.device_name),
+          h('span', null, `最近上传：${formatSyncMoment(device.last_sync_at)}`)),
+        h('button.text-btn.danger', {
+          type: 'button', disabled: busy,
+          onclick: async (event) => {
+            if (!confirmAction(`撤销“${device.device_name}”的上传权限？这台设备之后的请求会被拒绝。`)) return;
+            const control = event.currentTarget;
+            control.disabled = true;
+            try {
+              await revokeHealthSyncDevice(device.id);
+              if (credential?.deviceId === device.id) forgetGeneratedHealthSyncCredential();
+              toast('设备上传权限已撤销', 'ok');
+              rerender();
+            } catch (error) {
+              toast(`撤销失败：${error.message}`, 'error');
+              if (control.isConnected) control.disabled = false;
+            }
+          },
+        }, '撤销'))))
+    : h('p.sync-device-empty', null, '还没有连接设备。生成连接信息后，再把 URL 和令牌填进快捷指令。');
+
+  const pullBtn = h('button.secondary-btn.full', {
+    type: 'button', disabled: busy,
+    onclick: async () => {
+      pullBtn.disabled = true;
+      try {
+        const outcome = await pullAccountHealth();
+        if (outcome.skipped) toast('账号正在切换或同步，请稍后再试', 'warn');
+        else toast(outcome.importedDays
+          ? `已读取账号最新数据：更新 ${outcome.importedDays} 天`
+          : '账号健康数据已是最新', 'ok');
+        rerender();
+      } catch (error) {
+        toast(`读取失败：${error.message}`, 'error');
+        if (pullBtn.isConnected) pullBtn.disabled = false;
+      }
+    },
+  }, healthCloudState.status === 'pulling' ? '正在读取…' : '立即读取账号最新数据');
+
+  return h('section.auto-sync-box', null,
+    h('div.auto-sync-title', null,
+      h('div', null,
+        h('strong', null, '快捷指令自动上传'),
+        h('span', null, account.email || '当前登录账号')),
+      h('span.status-pill.ok', null, '账号直连')),
+    h('p', null, '快捷指令上传后会立即保存到账户；网站在打开、切回前台以及使用期间自动读取，不需要中转文件。'),
+    h('div.auto-sync-form', null,
+      h('label.form-field', null, h('span', null, '设备名称'), nameInput),
+      createBtn),
+    credentialPanel,
+    deviceList,
+    h('div.auto-sync-status', null,
+      h('span', null, healthCloudState.lastCloudUpdateAt
+        ? `账号最新数据：${formatSyncMoment(healthCloudState.lastCloudUpdateAt)}`
+        : '账号中尚无快捷指令数据'),
+      healthCloudState.lastPulledAt && h('span', null,
+        `本机读取：${formatSyncMoment(healthCloudState.lastPulledAt)}`)),
+    pullBtn,
+    healthCloudState.error && h('p.account-error', { role: 'alert' }, healthCloudState.error));
 }
 
 function importPanel(rerender) {
@@ -257,6 +466,10 @@ function importPanel(rerender) {
     }, '保存来源顺序'));
 
   return h('div.import-panel', null,
+    automaticSyncPanel(rerender),
+    h('div.import-fallback-title', null,
+      h('strong', null, '文件与剪贴板导入'),
+      h('span', null, '首次导入历史数据，或自动上传不可用时使用')),
     drop,
     progressEl,
     clipboardBtn,
@@ -280,28 +493,30 @@ function importPanel(rerender) {
 
 function guidePanel() {
   const shortcutRecipe = [
-    '打开「快捷指令」App → 右上角 + 新建',
-    '添加「查找健康样本」，类型选“步数”，日期范围选“今天”，并计算总计',
-    '重复上一步，把类型换成：活动能量、静息能量、锻炼分钟数、体重、体脂率、睡眠分析',
-    '添加“文本”，按示例组成带 date 的 JSON，并把各项替换为对应的魔法变量',
-    '最后添加“拷贝到剪贴板”，保存快捷指令',
+    '先登录本应用，在“同步 Apple 健康”里生成连接信息，并保存上传 URL 与设备令牌',
+    '打开「快捷指令」App → + 新建；分别读取今天的步数、活动能量、静息能量、锻炼时间、站立时间、距离和睡眠总计',
+    '体重、体脂率与静息心率选择“最新一条”，同时读取该样本的开始日期作为对应的 measuredAt；不要把多天数值相加',
+    '添加“字典”，键名使用 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal、exerciseMinutes、standMinutes、distanceKm、sleepMinutes，以及测量值和对应的 measuredAt',
+    '添加“获取 URL 内容”：方法选 POST，请求体选 JSON；标头增加 X-Health-Sync-Token，值填刚才保存的设备令牌',
+    '首次手动运行并允许读取健康数据；返回 ok: true 就表示已经写入账号',
   ];
 
   const automationRecipe = [
-    '快捷指令 → 自动化 → + → 特定时间，设为每天 23:50',
-    '选择“立即运行”，并运行刚才保存的快捷指令',
-    '之后打开本应用的数据页，在“同步 Apple 健康”中点剪贴板同步',
+    '快捷指令 → 自动化 → + → 特定时间，选择希望同步的时刻',
+    '选择“立即运行”，并运行刚才保存的上传快捷指令',
+    '可以建立多个时刻，例如 08:00、12:00、18:00、23:30；同一天累计值会更新，不会相加成重复记录',
+    'iOS 可能因省电、锁屏或权限延迟执行自动化，不保证严格整点；打开本应用时会自动读取账号里的最新结果',
   ];
 
   return h('div.guide-panel', null,
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge.fast', null, '日常'), h('strong', null, '快捷指令同步')),
-      h('p', null, '适合每天补充当天数据。首次配置后，只需在数据页点一次剪贴板同步。'),
+      h('div.method-head', null, h('span.method-badge.fast', null, '推荐'), h('strong', null, '快捷指令自动上传')),
+      h('p', null, '上传直接进入当前账号，不需要复制粘贴，也不要求网页在后台常驻。'),
       h('details', null,
-        h('summary', null, '创建取数快捷指令'),
+        h('summary', null, '创建自动上传快捷指令'),
         h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
       h('details', null,
-        h('summary', null, '设置每日自动运行'),
+        h('summary', null, '设置定时自动运行'),
         h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 
     h('div.method', null,
@@ -310,8 +525,8 @@ function guidePanel() {
         + '无需解压，直接在同步区选择。')),
 
     h('div.method', null,
-      h('div.method-head', null, h('span.method-badge', null, '可选'), h('strong', null, '第三方导出工具')),
-      h('p', null, '支持导入常见工具生成的 JSON / CSV；请先确认文件中每条记录都有 date。')),
+      h('div.method-head', null, h('span.method-badge', null, '备用'), h('strong', null, '剪贴板或第三方导出工具')),
+      h('p', null, '仍支持 JSON / CSV 手动导入；每条记录需要 date。中文弯引号会自动修正。')),
   );
 }
 
