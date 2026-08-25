@@ -19,6 +19,10 @@ export const MEALS = [
 
 export const MEAL_LABEL = Object.fromEntries(MEALS.map((m) => [m.key, m.label]));
 
+// 18:00 后不再把含咖啡因食品列为即时推荐，减少对当晚入睡和睡眠的潜在影响。
+// 这是推荐系统的保守护栏，不代表个人对咖啡因的耐受或医学诊断。
+export const CAFFEINE_CUTOFF_HOUR = 18;
+
 // 防止临近一天结束时把此前没吃的热量全部塞进晚餐或夜宵。
 // 这些只是产品护栏，不是营养学推荐值；日目标本身不会因此改变。
 const MEAL_KCAL_CAP = {
@@ -52,6 +56,7 @@ export function deriveTags(food) {
   if (freeSugar >= 8 || (sugarRatio >= 0.3 && freeSugar >= 5)) tags.add('high-sugar');
   if (p.sodium >= 600) tags.add('high-sodium');
   if (p.fat >= 20) tags.add('high-fat');
+  if (Number(food.caffeineMg) > 0) tags.add('caffeinated');
   return tags;
 }
 
@@ -161,6 +166,7 @@ function scoreFood(food, ctx) {
   // 调味料和纯油糖不作为"吃什么"的推荐
   if (food.cat === 'other') return null;
   if (tags.has('alcohol')) return null;
+  if (hour >= CAFFEINE_CUTOFF_HOUR && tags.has('caffeinated')) return null;
 
   // “现在吃什么”不能把明确标注为生的肉和水产当成可直接入口的食物。
   // 这类条目仍保留在搜索与记账中，只从即时推荐里排除。
@@ -318,6 +324,7 @@ function buildAvoidList(ctx, limit = 5) {
   const sugarOver = gaps.sugar.remaining < 5;
   const fatOver = gaps.fat.upperRemaining < gaps.fat.upper * 0.1;
   const lateNight = hour >= 21;
+  const afterCaffeineCutoff = hour >= CAFFEINE_CUTOFF_HOUR;
 
   for (const food of FOODS) {
     if (food.cat === 'other') continue;
@@ -326,7 +333,12 @@ function buildAvoidList(ctx, limit = 5) {
     const basis = food.basis === '100ml' ? '100ml' : '100g';
     const proteinPer100kcal = p.kcal > 0 ? (p.protein / p.kcal) * 100 : 0;
 
-    if (sodiumOver && tags.has('high-sodium')) {
+    if (afterCaffeineCutoff && tags.has('caffeinated')) {
+      const amount = Number(food.caffeineMg) > 0
+        ? `；每 100ml 约含 ${round(food.caffeineMg, 1)} mg 咖啡因`
+        : '';
+      push(food, 'caffeine', `已过 ${CAFFEINE_CUTOFF_HOUR}:00，含咖啡因可能影响今晚入睡或睡眠${amount}，今晚不再推荐`, 4);
+    } else if (sodiumOver && tags.has('high-sodium')) {
       push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（上限 ${gaps.sodium.target} mg），它每 ${basis} 还要再加 ${p.sodium} mg`, 3);
     } else if (sugarOver && (tags.has('sweetdrink') || tags.has('high-sugar'))) {
       push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 ${basis} 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);

@@ -10,6 +10,7 @@ import {
 import { healthInsights, healthSummary } from '../core/health-insights.js';
 import { isPlausibleHealthValue } from '../core/health.js';
 import { runImportWorker, applyImport } from '../lib/importer.js';
+import { getAccountState, syncNow } from '../lib/account.js';
 
 let importing = false;
 let progressEl = null;
@@ -88,6 +89,7 @@ function lastSyncPanel(last) {
 }
 
 function backupPanel(rerender) {
+  const connected = Boolean(getAccountState().user);
   const restoreInput = h('input', {
     type: 'file', accept: '.json', hidden: true,
     onchange: async (e) => {
@@ -100,13 +102,26 @@ function backupPanel(rerender) {
         }
         const healthCount = Array.isArray(payload.health) ? payload.health.length : 0;
         const dietCount = Array.isArray(payload.diet) ? payload.diet.length : 0;
+        const cloudWarning = getAccountState().user
+          ? '你已登录：恢复后的完整数据还会同步并替换当前账号的云端版本。\n\n'
+          : '';
         const ok = confirmAction(
           `恢复后会替换当前设备里的全部健康、饮食、设置和自定义食物。\n\n`
+          + cloudWarning
           + `所选备份：健康 ${healthCount} 天，饮食 ${dietCount} 条。\n\n继续恢复吗？`,
         );
         if (!ok) return;
         const counts = await db.importAll(payload);
-        toast(`恢复完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条`, 'ok');
+        if (getAccountState().user) {
+          try {
+            await syncNow();
+            toast(`恢复并同步完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条`, 'ok');
+          } catch (syncError) {
+            toast(`本机恢复完成，但云同步尚未完成：${syncError.message}`, 'warn');
+          }
+        } else {
+          toast(`恢复完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条`, 'ok');
+        }
         setTimeout(() => window.location.reload(), 900);
       } catch (err) {
         toast(`恢复失败：${err.message}`, 'error');
@@ -133,18 +148,35 @@ function backupPanel(rerender) {
         h('div.data-action-icon', null, '↺'),
         h('div.data-action-copy', null,
           h('strong', null, '恢复完整备份'),
-          h('span', null, '会先确认再整体替换当前本地数据，不与现有数据混合。')),
+          h('span', null, connected
+            ? '会替换本机数据，并在确认后同步替换当前账号的云端版本。'
+            : '会先确认再整体替换当前本地数据，不与现有数据混合。')),
         h('label.secondary-btn.compact', null, '选择备份', restoreInput)),
       h('div.data-action.danger', null,
         h('div.data-action-icon', null, '×'),
         h('div.data-action-copy', null,
-          h('strong', null, '清空本机数据'),
-          h('span', null, '删除本设备上的全部内容；无法撤销。')),
+          h('strong', null, connected ? '清空当前账号数据' : '清空本机数据'),
+          h('span', null, connected
+            ? '删除本机全部内容并同步清空当前账号云端；无法撤销。'
+            : '删除本设备上的全部内容；无法撤销。')),
         h('button.secondary-btn.compact.danger', {
           onclick: async () => {
-            if (!confirmAction('确定清空全部本地数据？此操作不可撤销。建议先导出完整备份。')) return;
+            const cloud = Boolean(getAccountState().user);
+            const warning = cloud
+              ? '确定清空当前账号的全部数据？本机内容会立即删除，随后同步清空该账号云端；此操作不可撤销。建议先导出完整备份。'
+              : '确定清空全部本地数据？此操作不可撤销。建议先导出完整备份。';
+            if (!confirmAction(warning)) return;
             await clearAllData();
-            toast('本机数据已清空', 'ok');
+            if (cloud) {
+              try {
+                await syncNow();
+                toast('当前账号的本机与云端数据已清空', 'ok');
+              } catch (syncError) {
+                toast(`本机已清空，但云端清空尚未完成：${syncError.message}`, 'warn');
+              }
+            } else {
+              toast('本机数据已清空', 'ok');
+            }
             rerender();
           },
         }, '清空')));
@@ -338,6 +370,7 @@ function managerSection(icon, title, subtitle, content, open = false) {
 /** 同步、补录、恢复和说明只出现一次，并统一放在结果之后。 */
 function dataManagerCard(rerender) {
   const last = state.lastImport;
+  const connected = Boolean(getAccountState().user);
   const lastHint = last?.days
     ? `上次同步 ${num(last.days)} 天${last.range?.[1] ? ` · 至 ${last.range[1]}` : ''}`
     : '从健康 App、快捷指令或导出文件同步';
@@ -354,11 +387,15 @@ function dataManagerCard(rerender) {
             '只保存你填写的当天字段。'),
           h('p', null, h('strong', null, '恢复完整备份：'),
             '会替换本应用的健康、饮食、设置和自定义食物。'),
-          h('p', null, '文件只在当前设备读取，不会上传到服务器。')))),
+          h('p', null, connected
+            ? '文件在当前设备读取；解析或恢复后的数据会同步到当前登录账号。'
+            : '文件只在当前设备读取；未登录时不会上传个人数据。')))),
     h('div.manager-list', null,
       managerSection('↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
       managerSection('＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
-      managerSection('↺', '本应用备份与恢复', '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
+      managerSection('↺', '本应用备份与恢复', connected
+        ? '导出、恢复或清空当前账号数据'
+        : '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
       managerSection('?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
   );
 }

@@ -66,6 +66,65 @@ test('设置从底部主栏目移到可收起的右侧抽屉，补充说明使�
   assert.ok(utils.includes("h('details.info-tip'"), '缺少可点击的信息圆点组件');
 });
 
+test('设置页覆盖本地模式、两种登录和互通的登录方式', () => {
+  const settings = read('js/views/settings.js');
+  const readme = read('README.md');
+  for (const text of [
+    '当前是本地模式', '注册账号', '使用 Google 登录', '忘记密码',
+    '绑定 Google 登录', '添加邮箱密码登录', '更换登录密码',
+  ]) {
+    assert.ok(settings.includes(text), `账号设置缺少“${text}”`);
+  }
+  assert.ok(settings.includes('signInWithPassword'));
+  assert.ok(settings.includes('signInWithGoogle'));
+  assert.ok(settings.includes('setPassword'));
+  assert.ok(settings.includes('linkGoogle'));
+  assert.ok(settings.includes('同一个已验证邮箱'));
+  assert.ok(readme.includes('docs/CLOUD_SYNC.md'), 'README 没有云同步部署文档入口');
+});
+
+test('账号冲突必须明确选择，退出使用先同步后清本机的安全流程', () => {
+  const settings = read('js/views/settings.js');
+  assert.ok(settings.includes("resolveConflict('cloud')"), '缺少保留云端版本的选择');
+  assert.ok(settings.includes("resolveConflict('device')"), '缺少保留本机版本的选择');
+  assert.ok(settings.includes('不会静默覆盖'));
+  assert.ok(settings.includes('signOutSafely'), '退出没有走安全登出接口');
+  assert.ok(settings.includes('退出前会先确认最新数据已上传'));
+  assert.ok(settings.includes('成功后会从这台设备清除该账号的数据'));
+});
+
+test('账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领', () => {
+  const app = read('js/app.js');
+  const settings = read('js/views/settings.js');
+  assert.ok(app.includes('accountDataLocked'), '应用入口缺少账号数据隐私锁');
+  assert.ok(app.includes('账号数据已锁定'));
+  assert.ok(!app.includes('先导出备份'), '未重新认证时不应允许导出原账号健康数据');
+  assert.ok(settings.includes("account.status === 'locked'"));
+  assert.ok(app.includes('account.ownershipPending === true'));
+  assert.ok(settings.includes('account.ownershipPending === true'));
+  assert.ok(app.includes("account.status === 'loading' && !account.user"), '账号初始化异常时可能 fail-open 显示旧数据');
+  assert.ok(settings.includes("account.conflict?.reason === 'orphan-local-data'"));
+  assert.ok(settings.includes('mount(root, slot)'), '锁定时设置页仍可能显示身体资料与目标');
+  assert.ok(settings.includes('原账号的数据仍锁定在这台设备上'));
+  assert.ok(settings.includes('云账号暂时不可用，原账号数据已锁定'));
+  assert.ok(settings.includes('完成前暂不提供同步、退出或登录方式修改'));
+  assert.ok(settings.indexOf('else if (actionableConflict)')
+    < settings.indexOf('else if (account.ownershipPending === true)'),
+  '可操作冲突被 ownershipPending 加载态挡住，用户将无法选择版本');
+  assert.ok(app.includes('accountDataLocked(account) || !isEditing()'), '输入框聚焦时隐私锁仍可能保留旧设置 DOM');
+  assert.ok(settings.includes('确认属于我并上传'));
+  assert.ok(settings.includes('清空本机，使用空账号'));
+});
+
+test('登录账号下恢复备份和清空会明确同步影响云端', () => {
+  const health = read('js/views/health.js');
+  assert.ok(health.includes('getAccountState'));
+  assert.ok(health.includes('恢复后的完整数据还会同步并替换当前账号的云端版本'));
+  assert.ok(health.includes('清空当前账号数据'));
+  assert.ok(health.includes('同步清空该账号云端'));
+  assert.ok(health.includes('await syncNow()'), '恢复或清空后没有显式等待账号同步');
+});
+
 test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因', () => {
   const diet = read('js/views/diet.js');
   assert.ok(diet.includes("food.basis === '100ml'"));
@@ -276,4 +335,21 @@ test('Service Worker 缓存名跟着版本号走', () => {
   const pkg = JSON.parse(read('package.json'));
   assert.ok(read('sw.js').includes(pkg.version),
     `sw.js 的 CACHE 名里没有 package.json 的版本号 ${pkg.version}`);
+});
+
+test('账号 SDK 固定版本并在首次成功加载后支持离线恢复', () => {
+  const config = read('js/config/cloud.js');
+  const worker = read('sw.js');
+  const app = read('js/app.js');
+  const version = config.match(/SUPABASE_JS_VERSION = '([^']+)'/)?.[1];
+  assert.ok(version, '云配置没有固定 Supabase SDK 版本');
+  assert.ok(worker.includes(`@supabase/supabase-js@${version}/+esm`), 'Service Worker 缓存的 SDK 版本不一致');
+  assert.ok(worker.includes("e.request.destination === 'script'"));
+  assert.ok(worker.includes("res.type !== 'opaque'"));
+  assert.ok(worker.includes('await cache.put(e.request, res.clone())'));
+  assert.ok(worker.includes('k !== SDK_CACHE'), '应用升级时不应删除已按需缓存的 SDK 依赖图');
+  assert.ok(worker.includes('k.startsWith(CACHE_PREFIX)'), '应用升级时只能清理本应用命名空间内的旧缓存');
+  assert.ok(worker.includes("'code', 'error', 'error_code', 'error_description'"), 'OAuth 回调查询不应写入离线缓存');
+  assert.ok(app.indexOf('await registerServiceWorker({ waitForControl: inspectCloudConfig().configured })')
+    < app.indexOf('await initCloud()'), '首次账号 SDK 加载前 Service Worker 尚未接管页面');
 });

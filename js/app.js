@@ -9,6 +9,8 @@ import { renderHealth } from './views/health.js';
 import { renderTrends } from './views/trends.js';
 import { renderSettings } from './views/settings.js';
 import { APP_VERSION } from './core/feedback.js';
+import { initCloud, getAccountState, subscribeAccount } from './lib/account.js';
+import { inspectCloudConfig } from './config/cloud.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
@@ -185,7 +187,47 @@ function isEditing() {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
 }
 
+function accountDataLocked(account = getAccountState()) {
+  return account.ownershipPending === true
+    || account.status === 'locked'
+    || (account.status === 'loading' && !account.user)
+    || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
+}
+
+function renderAccountLock() {
+  const account = getAccountState();
+  const orphan = account.conflict?.reason === 'orphan-local-data';
+  const transitioning = account.ownershipPending === true && account.status !== 'locked' && !orphan;
+  const signingOut = account.transitionReason === 'safe-signout';
+  const unavailable = account.transitionReason === 'auth-unavailable';
+  clearEl(viewRoot).append(h('section.card.account-data-lock', {
+    role: 'alert', 'aria-live': 'assertive',
+  },
+  h('span.status-pill.warn', null, transitioning ? '正在保护账号数据' : '账号数据已锁定'),
+  h('h2', null, transitioning
+    ? (signingOut ? '正在安全退出' : '正在确认账号数据归属')
+    : (orphan ? '请先确认这份本机数据属于谁' : unavailable ? '云账号暂时不可用' : '登录状态已失效')),
+  h('p', null, transitioning
+    ? '确认完成前不会显示或修改本机健康数据，避免账号切换期间短暂泄露上一份记录。'
+    : orphan
+      ? '检测到没有可靠账号归属的本机记录。为防止把上一位用户的数据上传到新账号，确认前不会显示、修改或自动上传。'
+      : unavailable
+        ? '本机仍有明确属于原账号的数据。账号服务恢复前会保持锁定，不会降级为访客数据展示。'
+        : '本机仍有属于原账号且尚未确认同步的数据。为防止丢失或被其他账号看到，重新验证原账号前不会显示或修改。'),
+  !transitioning && h('p.empty-hint', null, orphan
+    ? '在“设置 → 账号与云同步”中明确选择保留本机数据或采用云端数据。'
+    : unavailable
+      ? '请在站点配置或网络恢复后刷新，再用原账号继续。'
+      : '请在“设置 → 账号与云同步”中用原来的邮箱或 Google 账号重新登录。'),
+  !transitioning && h('div.account-actions', null,
+    h('button.primary-btn', { onclick: openSettings }, '打开账号设置'))));
+}
+
 function renderCurrent() {
+  if (accountDataLocked()) {
+    renderAccountLock();
+    return;
+  }
   const tab = TABS.find((t) => t.key === current) || TABS[0];
   try {
     tab.render(viewRoot);
@@ -209,7 +251,7 @@ function syncOnboarding() {
   if (!slot) return;
   const existing = slot.querySelector('.onboard');
   // 人已经在设置抽屉填表了，横幅只会碍事
-  if (state.profile.onboarded || settingsOpen) {
+  if (state.profile.onboarded || settingsOpen || accountDataLocked()) {
     existing?.remove();
     return;
   }
@@ -234,7 +276,7 @@ function showUpdateNotice() {
     h('button', { onclick: () => location.reload() }, '立即更新')));
 }
 
-async function registerServiceWorker() {
+async function registerServiceWorker({ waitForControl = false } = {}) {
   if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
   const hadController = !!navigator.serviceWorker.controller;
   if (hadController) {
@@ -246,17 +288,31 @@ async function registerServiceWorker() {
     const registration = await navigator.serviceWorker.register(new URL('../sw.js', import.meta.url), {
       updateViaCache: 'none',
     });
-    registration.update().catch(() => {});
+    await registration.update().catch(() => {});
+    if (waitForControl && (!navigator.serviceWorker.controller
+      || registration.installing || registration.waiting)) {
+      await Promise.race([
+        new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })),
+        new Promise((resolve) => setTimeout(resolve, 8_000)),
+      ]);
+    }
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) registration.update().catch(() => {});
     });
+    return registration;
   } catch (err) {
     console.warn('离线缓存注册失败', err);
+    return null;
   }
 }
 
 /** 快捷指令可以直接打开 #import=<JSON> 完成同步，不用手动传文件 */
 function runUrlImport() {
+  if (accountDataLocked()) {
+    if (/[#&]import=/.test(location.hash)) history.replaceState(null, '', `#${current}`);
+    toast('账号数据已锁定，重新验证归属后才能导入', 'warn');
+    return;
+  }
   importFromUrlHash().then((outcome) => {
     if (!outcome) return;
     toast(outcome.ok
@@ -354,6 +410,18 @@ async function boot() {
     return;
   }
 
+  // 云账号 SDK 是按需加载的跨源模块。若本次部署启用了云账号，先让新版 Service Worker
+  // 接管页面，这样首次成功登录加载到的完整依赖图就能进入离线缓存，而不是要等第二次打开。
+  await registerServiceWorker({ waitForControl: inspectCloudConfig().configured });
+
+  // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
+  // 放在首屏渲染前初始化，避免恢复会话或切换账号时短暂显示另一份本地数据。
+  try {
+    await initCloud();
+  } catch (err) {
+    console.warn('云账号初始化失败，已保留本地模式', err);
+  }
+
   renderTabs();
   renderTopbar();
   syncOnboarding();
@@ -367,6 +435,14 @@ async function boot() {
     syncOnboarding();
     renderCurrent();
     if (settingsOpen && !isEditing()) renderSettings(settingsRoot);
+  });
+
+  subscribeAccount((account) => {
+    syncOnboarding();
+    renderCurrent();
+    // 账号归属变为不确定时必须立即移除旧资料，即使焦点仍在体重/生日输入框里。
+    // 只有普通状态刷新才为了保留键盘和草稿而跳过重绘。
+    if (settingsOpen && (accountDataLocked(account) || !isEditing())) renderSettings(settingsRoot);
   });
 
   // 时间在走，“下一餐”仍要刷新；热量外推使用健康快照时间，不再跟当前时钟漂移。
@@ -413,8 +489,6 @@ async function boot() {
       if (next !== current) switchTab(next);
     }
   });
-
-  registerServiceWorker();
 }
 
 boot();

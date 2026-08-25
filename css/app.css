@@ -981,6 +981,61 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 
 .about p { font-size: 12.5px; color: var(--muted); line-height: 1.65; margin: 0 0 8px; }
+.account-lead { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; line-height: 1.65; }
+.account-form .primary-btn { margin-top: 0; }
+.account-actions {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; margin-top: 10px;
+}
+.account-actions > * { min-width: 0; margin-top: 0; }
+.account-google-btn { width: 100%; margin-top: 8px; }
+.account-link-row { display: flex; justify-content: flex-end; margin-top: 5px; }
+.account-identity {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--card-2);
+}
+.account-identity > div { min-width: 0; }
+.account-identity strong, .account-identity span { display: block; overflow-wrap: anywhere; }
+.account-identity strong { font-size: 13.5px; }
+.account-identity > div span { margin-top: 3px; color: var(--muted); font-size: 11.5px; }
+.account-sync-badge {
+  flex: none; max-width: 42%; padding: 3px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 650;
+  text-align: center; overflow-wrap: anywhere;
+}
+.account-sync-badge.busy { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+.account-sync-badge.warn { background: color-mix(in srgb, var(--warn) 13%, transparent); color: var(--warn); }
+.account-sync-badge.error { background: color-mix(in srgb, var(--danger) 11%, transparent); color: var(--danger); }
+.account-conflict {
+  margin-top: 10px; padding: 11px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
+}
+.account-conflict strong { font-size: 13px; }
+.account-conflict p { margin: 4px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+.account-conflict-versions { display: grid; gap: 6px; margin-top: 10px; }
+.account-conflict-version {
+  padding: 8px 9px; border-radius: 9px; background: color-mix(in srgb, var(--card) 72%, transparent);
+}
+.account-conflict-version strong, .account-conflict-version span { display: block; }
+.account-conflict-version span { margin-top: 2px; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.account-loading { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: 12px; }
+.account-loading strong { color: var(--text); font-size: 13.5px; }
+.account-linking { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.account-linking summary { color: var(--accent); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.account-linking > p { margin: 7px 0 10px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+.account-linking .form-field { margin-top: 9px; }
+.account-provider-ok { color: var(--accent) !important; }
+.account-error {
+  margin: 10px 0 0; padding: 8px 10px; border-radius: 9px;
+  background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--danger);
+  font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere;
+}
+.account-data-lock { margin: auto 0; text-align: center; }
+.account-data-lock h2 { margin: 12px 0 7px; font-size: 20px; }
+.account-data-lock > p { max-width: 520px; margin: 0 auto 8px; line-height: 1.65; }
+.account-data-lock .account-actions { max-width: 420px; margin: 16px auto 0; }
 .inline-link {
   display: inline-flex; align-items: center; min-height: 36px; margin: 1px 0 10px;
   color: var(--accent); font-size: 12.5px; font-weight: 620; text-decoration: none;
@@ -1036,6 +1091,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   .health-strip { grid-template-columns: repeat(2, 1fr); }
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
   .tab { padding-left: 1px; padding-right: 1px; }
+  .account-actions { grid-template-columns: 1fr; }
+  .account-identity { flex-direction: column; }
+  .account-sync-badge { max-width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
