@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v1.5.1';
+const CACHE = 'health-diet-codex-chat-test-1';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
 // 根模块及其固定版本依赖只在账号功能首次成功加载后按需缓存；不为本地模式访客预下载。
@@ -11,14 +11,17 @@ const JSDELIVR_ORIGIN = 'https://cdn.jsdelivr.net';
 const SHELL = [
   './',
   './index.html',
+  './sync-setup.html',
   './manifest.webmanifest',
   './css/app.css',
   './js/app.js',
+  './js/sync-setup.js',
   './js/lib/db.js',
   './js/lib/store.js',
   './js/lib/account.js',
   './js/lib/cloud-auth.js',
   './js/lib/cloud-sync.js',
+  './js/lib/health-daily-sync.js',
   './js/lib/utils.js',
   './js/lib/charts.js',
   './js/core/nutrition.js',
