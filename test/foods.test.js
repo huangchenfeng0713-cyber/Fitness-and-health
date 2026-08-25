@@ -98,6 +98,27 @@ test('功能饮料覆盖能量、运动补水、维生素与无糖类型，并�
   assert.deepEqual(terms.filter((term) => searchFoods(term).length === 0), []);
 });
 
+test('常见咖啡、茶、奶茶与可乐显式标记咖啡因，非茶叶饮品不误标', () => {
+  const caffeinatedIds = [
+    'black_coffee', 'latte', 'americano_milk', 'oat_latte', 'green_tea',
+    'cola', 'cola_zero', 'cocoa_milk', 'chocolate_dark',
+    'tea_boba', 'tea_milk_plain', 'tea_milk_green', 'tea_pure',
+    'mixue_icecream_tea', 'chabaidao_osmanthus', 'guming_jasmine',
+    'chayan_youlan', 'bawang_boya', 'sb_latte', 'sb_matcha_latte',
+    'luckin_americano', 'luckin_coconut', 'kudi_latte',
+  ];
+  for (const id of caffeinatedIds) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少咖啡因食品 ${id}`);
+    assert.ok(food.f.includes('caffeinated'), `${food.name} 缺 caffeinated 标记`);
+  }
+
+  for (const id of ['barley_tea', 'chrysanthemum_tea', 'tea_egg', 'tea_tree_mushroom']) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food && !food.f.includes('caffeinated'), `${food?.name || id} 不应标为含咖啡因`);
+  }
+});
+
 const COMMON_FOOD_EXPANSION_IDS = [
   'glutinous_rice_cooked', 'eight_treasure_rice', 'salted_egg_meat_zongzi', 'redbean_zongzi',
   'plain_zongzi', 'lotus_glutinous_chicken', 'glutinous_siumai', 'mushroom_oil_rice',

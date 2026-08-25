@@ -93,7 +93,7 @@ export function findFood(id) {
 
 // ---------------------------------------------------------------- 初始化
 
-export async function initStore() {
+async function hydrateStore({ notify = false } = {}) {
   const [profile, favorites, lastImport, customFoods, healthDays, dietAll] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', []),
@@ -106,7 +106,13 @@ export async function initStore() {
   state.profile = migrateStoredProfile(profile);
   // 把兼容修复写回去，避免之后每次启动都重复迁移。首次启动没有旧档案时不主动落库。
   if (profile && JSON.stringify(profile) !== JSON.stringify(state.profile)) {
-    await db.setSetting('profile', state.profile);
+    try {
+      await db.setSetting('profile', state.profile);
+    } catch (error) {
+      // 会话意外失效后账号数据会被写锁保护；此时先用内存中的兼容结果完成启动，
+      // 等原账号重新登录解锁后再由下一次正常保存落库。
+      if (error?.code !== 'account_data_locked') throw error;
+    }
   }
   state.favorites = favorites || [];
   state.lastImport = lastImport;
@@ -116,7 +122,20 @@ export async function initStore() {
   state.dietEntries = (dietAll || []).filter((e) => e.date === state.day);
   state.ready = true;
   recompute();
+  if (notify) emit();
   return state;
+}
+
+export async function initStore() {
+  return hydrateStore();
+}
+
+/**
+ * 云端快照替换或安全退出清库后，从 IndexedDB 重新装载内存状态。
+ * 视图只订阅 store，无需知道数据来自本机操作还是账号同步。
+ */
+export async function reloadStoreFromDB() {
+  return hydrateStore({ notify: true });
 }
 
 function setHealthDays(days) {
@@ -280,8 +299,8 @@ export async function saveProfile(patch) {
   const next = { ...state.profile, ...patch };
   const checked = validateProfile(next);
   if (!checked.valid) throw new RangeError(checked.errors.join('；'));
+  await db.setSetting('profile', next);
   state.profile = next;
-  await db.setSetting('profile', state.profile);
   recompute();
   emit();
 }
@@ -390,8 +409,8 @@ async function refreshDietDaily() {
 async function touchFavorite(foodId) {
   if (!foodId) return;
   const next = [foodId, ...state.favorites.filter((f) => f !== foodId)].slice(0, 24);
-  state.favorites = next;
   await db.setSetting('favorites', next);
+  state.favorites = next;
 }
 
 export async function addCustomFood(food) {
@@ -506,7 +525,7 @@ export async function saveHealthDay(date, patch) {
 }
 
 export async function clearAllData() {
-  for (const s of Object.values(db.STORES)) await db.clear(s);
+  await db.clearAllStores();
   state.profile = { ...DEFAULT_PROFILE };
   state.healthDays = [];
   state.healthByDate = new Map();

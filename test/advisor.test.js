@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dailyTargets } from '../js/core/nutrition.js';
-import { buildAdvice, currentMeal, mealBudget, deriveTags, MEALS } from '../js/core/advisor.js';
+import {
+  buildAdvice, currentMeal, mealBudget, deriveTags, MEALS, CAFFEINE_CUTOFF_HOUR,
+} from '../js/core/advisor.js';
 import { FOOD_BY_ID, per100 } from '../js/data/foods.js';
 
 const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, bodyFatPct: 18, activity: 'light', goal: 'cut' };
@@ -78,6 +80,18 @@ test('标签从营养数字推导', () => {
   assert.ok(!deriveTags(FOOD_BY_ID.get('milk_whole')).has('high-sugar'));
 });
 
+test('咖啡因可由含量或显式标记识别，草本茶和含“茶”菜名不误判', () => {
+  assert.equal(CAFFEINE_CUTOFF_HOUR, 18);
+  assert.ok(deriveTags(FOOD_BY_ID.get('black_coffee')).has('caffeinated'));
+  assert.ok(deriveTags({
+    id: 'caffeine_test', name: '测试饮料', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 0],
+    s: [['一杯', 250]], caffeineMg: 12, f: [],
+  }).has('caffeinated'), '只有 caffeineMg 的食品也应识别为含咖啡因');
+  for (const id of ['barley_tea', 'chrysanthemum_tea', 'tea_egg', 'tea_tree_mushroom']) {
+    assert.ok(!deriveTags(FOOD_BY_ID.get(id)).has('caffeinated'), `${id} 不应因名称含“茶”被误判`);
+  }
+});
+
 test('空腹开局：状态良好，推荐非空且份量合理', () => {
   const a = advise();
   assert.equal(a.status.level, 'good');
@@ -146,6 +160,34 @@ test('深夜不推荐需要现做的生鲜与高油食物', () => {
     assert.ok(!r.tags.includes('fried'), `深夜推荐了油炸食物 ${r.food.name}`);
     assert.ok(r.nutrients.fat <= 20, `深夜推荐了高脂食物 ${r.food.name}`);
   }
+});
+
+test('18:00 起排除含咖啡因推荐，并在避免清单解释睡眠原因', () => {
+  const nearTarget = {
+    kcal: targets.kcal - 10,
+    protein: targets.protein,
+    fat: targets.fat,
+    carb: targets.carb,
+    fiber: targets.fiber,
+    sugar: 0,
+    sodium: 0,
+  };
+  const beforeCutoff = advise(nearTarget, { now: at('17:59') });
+  assert.ok(beforeCutoff.recommend.some((item) => item.tags.includes('caffeinated')),
+    '截止时间前不应误伤含咖啡因候选');
+
+  for (const time of ['18:00', '19:30', '22:30']) {
+    const a = advise(nearTarget, { now: at(time) });
+    assert.ok(a.recommend.every((item) => !item.tags.includes('caffeinated')),
+      `${time} 仍推荐了含咖啡因食品：${a.recommend.map((item) => item.food.name).join('、')}`);
+    assert.ok(a.avoid.some((item) => item.kind === 'caffeine'
+      && /18:00/.test(item.reason) && /入睡|睡眠/.test(item.reason)),
+    `${time} 的避免清单没有说明咖啡因与睡眠原因`);
+  }
+
+  const atNight = advise(nearTarget, { now: at('22:30') });
+  assert.ok(atNight.recommend.some((item) => ['barley_tea', 'chrysanthemum_tea'].includes(item.food.id)),
+    '无咖啡因的大麦茶或菊花茶仍应可作为夜间轻量候选');
 });
 
 test('早餐时段偏向即食/早餐类食物', () => {

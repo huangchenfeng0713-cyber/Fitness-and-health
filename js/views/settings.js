@@ -1,7 +1,11 @@
 /** 设置：身体信息、目标与计算偏好。所有导入、备份和恢复统一放在“数据”页。 */
 
-import { h, clearEl, num, toast, mount, infoTip } from '../lib/utils.js';
+import { h, clearEl, num, toast, mount, infoTip, confirmAction } from '../lib/utils.js';
 import { state, saveProfile } from '../lib/store.js';
+import {
+  getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
+  resetPassword, setPassword, linkGoogle, signOutSafely, resolveConflict, syncNow,
+} from '../lib/account.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
 } from '../core/nutrition.js';
@@ -219,6 +223,315 @@ function toggleCard() {
 }
 
 /**
+ * 账号表单也保留模块级草稿：认证状态会经历 loading / signedIn 等阶段，
+ * 不能让一次状态通知把用户刚输入的邮箱或密码清空。
+ */
+const accountDraft = { email: '', password: '', newPassword: '' };
+let accountSlot = null;
+let accountSubscribed = false;
+let accountRenderPending = false;
+
+function accountError(error) {
+  return String(error?.message || error || '操作失败，请稍后重试');
+}
+
+function accountProviders(account) {
+  return (account.providers || []).map((provider) => (
+    typeof provider === 'string' ? provider : provider?.provider
+  )).filter(Boolean);
+}
+
+function formatSyncTime(value) {
+  if (!value) return '尚未同步';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '同步时间未知';
+  return `上次同步 ${new Intl.DateTimeFormat('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  }).format(date)}`;
+}
+
+function accountStatus(account) {
+  if (account.phase === 'conflict' || account.syncStatus === 'conflict') return ['需要选择数据版本', 'warn'];
+  if (account.syncStatus === 'syncing' || account.phase === 'loading') return ['正在同步', 'busy'];
+  if (account.syncStatus === 'dirty') return ['等待上传', 'busy'];
+  if (account.syncStatus === 'error' || account.phase === 'error') return ['同步异常', 'error'];
+  return [formatSyncTime(account.lastSyncedAt), 'ok'];
+}
+
+async function runAccountAction(control, action, {
+  success = '', clearPassword = false, clearNewPassword = false,
+} = {}) {
+  control.disabled = true;
+  try {
+    await action();
+    if (clearPassword) accountDraft.password = '';
+    if (clearNewPassword) accountDraft.newPassword = '';
+    if (success) toast(success, 'ok');
+  } catch (error) {
+    console.error('账号操作失败', error);
+    toast(accountError(error), 'error');
+  } finally {
+    if (control.isConnected) control.disabled = false;
+    if (accountSlot?.isConnected) renderAccountSlot(accountSlot);
+  }
+}
+
+function signedOutAccount(account) {
+  const email = h('input', {
+    type: 'email', autocomplete: 'email', inputmode: 'email', required: true,
+    placeholder: 'name@example.com', value: accountDraft.email,
+    oninput: (event) => { accountDraft.email = event.target.value; },
+  });
+  const password = h('input', {
+    type: 'password', autocomplete: 'current-password', required: true,
+    placeholder: '登录密码', value: accountDraft.password,
+    oninput: (event) => { accountDraft.password = event.target.value; },
+  });
+
+  const loginBtn = h('button.primary-btn', { type: 'submit' }, '登录');
+  const signupBtn = h('button.secondary-btn', {
+    type: 'button',
+    onclick: () => {
+      const address = accountDraft.email.trim();
+      if (!address || !email.checkValidity()) { toast('请填写有效邮箱', 'warn'); email.focus(); return; }
+      if (accountDraft.password.length < 8) { toast('注册密码至少需要 8 位', 'warn'); password.focus(); return; }
+      runAccountAction(signupBtn, () => signUp(address, accountDraft.password), {
+        success: '注册请求已提交；如收到验证邮件，请先完成验证', clearPassword: true,
+      });
+    },
+  }, '注册账号');
+  const googleBtn = h('button.secondary-btn.account-google-btn', {
+    type: 'button',
+    onclick: () => runAccountAction(googleBtn, signInWithGoogle),
+  }, '使用 Google 登录');
+  const resetBtn = h('button.text-btn', {
+    type: 'button',
+    onclick: () => {
+      const address = accountDraft.email.trim();
+      if (!address || !email.checkValidity()) { toast('先填写注册邮箱，再发送重置邮件', 'warn'); email.focus(); return; }
+      runAccountAction(resetBtn, () => resetPassword(address), { success: '密码重置邮件已发送' });
+    },
+  }, '忘记密码');
+
+  const form = h('form.account-form', {
+    onsubmit: (event) => {
+      event.preventDefault();
+      const address = accountDraft.email.trim();
+      if (!address || !email.checkValidity()) { toast('请填写有效邮箱', 'warn'); email.focus(); return; }
+      if (!accountDraft.password) { toast('请输入密码', 'warn'); password.focus(); return; }
+      runAccountAction(loginBtn, () => signInWithPassword(address, accountDraft.password), {
+        success: '已登录', clearPassword: true,
+      });
+    },
+  },
+  h('div.form-grid', null,
+    field('邮箱', email, null, 'span-all'),
+    field('密码', password, '注册新账号时请使用至少 8 位密码', 'span-all')),
+  h('div.account-actions', null, loginBtn, signupBtn),
+  googleBtn,
+  h('div.account-link-row', null, resetBtn));
+
+  return h('div', null,
+    h('p.account-lead', null, '登录后，健康、饮食、身体设置和自定义食物会保存到这个账号的专属云端空间。'),
+    form,
+    h('p.privacy-note', null,
+      'Google 与邮箱密码使用同一个已验证邮箱时会归入同一账号；首次登录若本机与云端都有数据，会先让你选择，不会静默覆盖。'),
+    h('p.privacy-note', null,
+      '如果最先用 Google 创建账号，请先用 Google 登录，再到“管理登录方式”添加密码；不要用“注册账号”补设密码。'),
+    account.error && h('p.account-error', { role: 'alert' }, accountError(account.error)));
+}
+
+function conflictPanel(account) {
+  const orphan = account.conflict?.reason === 'orphan-local-data';
+  const summary = (label, value) => h('div.account-conflict-version', null,
+    h('strong', null, label),
+    h('span', null, value
+      ? `${Number(value.healthDays) || 0} 天健康 · ${Number(value.dietEntries) || 0} 条饮食 · ${Number(value.customFoods) || 0} 个自定义食物`
+      : '没有可读取的数据摘要'));
+  const cloudBtn = h('button.secondary-btn', {
+    type: 'button',
+    onclick: () => {
+      const warning = orphan
+        ? '这份本机数据的账号归属无法确认。继续会清空本机记录，改用当前账号的空白云端空间；此操作不可撤销。继续吗？'
+        : '改用云端数据后，这台设备当前未上传的数据会被替换。继续吗？';
+      if (!confirmAction(warning)) return;
+      runAccountAction(cloudBtn, () => resolveConflict('cloud'), {
+        success: orphan ? '已清空未确认归属的本机数据' : '已采用云端数据',
+      });
+    },
+  }, orphan ? '清空本机，使用空账号' : '使用云端数据');
+  const deviceBtn = h('button.secondary-btn', {
+    type: 'button',
+    onclick: () => {
+      const warning = orphan
+        ? '只有在确认这份本机数据属于你时才能继续。确认后，它会归入并上传到当前账号。继续吗？'
+        : '使用这台设备的数据会替换当前云端版本。继续吗？';
+      if (!confirmAction(warning)) return;
+      runAccountAction(deviceBtn, () => resolveConflict('device'), {
+        success: orphan ? '已确认归属并上传本机数据' : '已采用并上传这台设备的数据',
+      });
+    },
+  }, orphan ? '确认属于我并上传' : '使用这台设备的数据');
+  return h('div.account-conflict', { role: 'alert' },
+    h('strong', null, orphan ? '本机数据的账号归属无法确认' : '检测到两个不同的数据版本'),
+    h('p', null, orphan
+      ? '为防止把上一位用户的健康记录上传到你的账号，数据已锁定。请明确确认本机数据属于你，或清空本机并使用当前空账号。'
+      : '为防止健康或饮食记录丢失，同步已暂停。请选择保留哪一份；另一份会被替换。'),
+    h('div.account-conflict-versions', null,
+      summary('这台设备', account.conflict?.device),
+      summary('云端账号', account.conflict?.cloud)),
+    h('div.account-actions', null, cloudBtn, deviceBtn),
+    account.error && h('p.account-error', null, accountError(account.error)));
+}
+
+function signedInAccount(account) {
+  const providers = accountProviders(account);
+  const [statusText, statusKind] = accountStatus(account);
+  const syncBtn = h('button.secondary-btn', {
+    type: 'button', disabled: account.syncStatus === 'syncing',
+    onclick: () => runAccountAction(syncBtn, syncNow, { success: '云端同步完成' }),
+  }, account.syncStatus === 'syncing' ? '正在同步…' : '立即同步');
+  const logoutBtn = h('button.secondary-btn.danger', {
+    type: 'button',
+    onclick: () => {
+      if (!confirmAction('退出前会先确认最新数据已上传；成功后会从这台设备清除该账号的数据。继续吗？')) return;
+      runAccountAction(logoutBtn, signOutSafely, { success: '已安全退出账号' });
+    },
+  }, '安全退出');
+
+  const password = h('input', {
+    type: 'password', autocomplete: 'new-password', minlength: 8,
+    placeholder: '至少 8 位新密码', value: accountDraft.newPassword,
+    oninput: (event) => { accountDraft.newPassword = event.target.value; },
+  });
+  const passwordBtn = h('button.secondary-btn.full', {
+    type: 'button',
+    onclick: () => {
+      if (accountDraft.newPassword.length < 8) { toast('新密码至少需要 8 位', 'warn'); password.focus(); return; }
+      runAccountAction(passwordBtn, () => setPassword(accountDraft.newPassword), {
+        success: providers.includes('email') ? '登录密码已更新' : '已为此账号设置邮箱登录密码',
+        clearNewPassword: true,
+      });
+    },
+  }, providers.includes('email') ? '更换登录密码' : '添加邮箱密码登录');
+  const googleBtn = !providers.includes('google') && h('button.secondary-btn.full', {
+    type: 'button',
+    onclick: () => runAccountAction(googleBtn, linkGoogle),
+  }, '绑定 Google 登录');
+
+  return h('div', null,
+    h('div.account-identity', null,
+      h('div', null,
+        h('strong', null, account.user?.email || '已登录账号'),
+        h('span', null, providers.length
+          ? `登录方式：${providers.map((p) => (p === 'google' ? 'Google' : '邮箱密码')).join('、')}`
+          : '账号已连接')),
+      h(`span.account-sync-badge.${statusKind}`, { role: 'status', 'aria-live': 'polite' }, statusText)),
+    (account.phase === 'conflict' || account.syncStatus === 'conflict')
+      ? conflictPanel(account)
+      : h('div.account-actions', null, syncBtn, logoutBtn),
+    h('p.privacy-note', null, '同步仅写入当前账号的专属数据行；退出成功后，本机不会继续保留该账号的健康与饮食记录。'),
+    h('details.account-linking', null,
+      h('summary', null, '管理登录方式'),
+      h('p', null, '设置密码后可以用相同邮箱登录；绑定 Google 后也仍是同一个账号。'),
+      field(providers.includes('email') ? '新密码' : '设置邮箱登录密码', password, null, 'span-all'),
+      passwordBtn,
+      googleBtn,
+      providers.includes('google') && h('p.account-provider-ok', null, 'Google 登录已绑定')),
+    account.error && account.phase !== 'conflict'
+      && h('p.account-error', { role: 'alert' }, accountError(account.error)));
+}
+
+function lockedAccount(account) {
+  return h('div', null,
+    h('div.account-conflict', { role: 'alert' },
+      h('strong', null, '原账号的数据仍锁定在这台设备上'),
+      h('p', null, '登录状态意外失效时，应用不会清除或展示原账号的数据，也不会允许另一个账号接管。请用原来的邮箱或 Google 账号重新登录。'),
+      account.error && h('p.account-error', null, accountError(account.error))),
+    signedOutAccount(account));
+}
+
+function unavailableLockedAccount(account) {
+  return h('div.account-conflict', { role: 'alert' },
+    h('strong', null, '云账号暂时不可用，原账号数据已锁定'),
+    h('p', null, '应用不会把这份账号数据当作访客记录展示或交给另一个账号。请在站点配置或网络恢复后刷新，再用原账号重新验证。'),
+    account.error && h('p.account-error', null, accountError(account.error)),
+    h('div.account-actions', null,
+      h('button.secondary-btn', { type: 'button', onclick: () => location.reload() }, '重新检查账号服务'),
+      h('a.inline-link', { href: 'docs/CLOUD_SYNC.md', target: '_blank', rel: 'noopener' }, '查看部署检查')));
+}
+
+function accountCard() {
+  const account = getAccountState();
+  const configured = account.configured !== false && account.phase !== 'local';
+  const actionableConflict = (account.status === 'conflict' || account.phase === 'conflict'
+    || account.syncStatus === 'conflict') && account.user && account.conflict;
+  let content;
+  if (account.status === 'locked' && account.transitionReason === 'auth-unavailable') {
+    content = unavailableLockedAccount(account);
+  } else if (account.status === 'locked') {
+    content = lockedAccount(account);
+  } else if (actionableConflict) {
+    content = signedInAccount(account);
+  } else if (account.ownershipPending === true) {
+    content = h('div.account-loading', { role: 'status', 'aria-live': 'polite' },
+      h('strong', null, account.transitionReason === 'safe-signout' ? '正在安全退出…' : '正在确认账号数据归属…'),
+      h('span', null, '完成前暂不提供同步、退出或登录方式修改，避免与账号切换并发。'));
+  } else if (!configured) {
+    content = h('div.account-local', null,
+      h('p.account-lead', null, '当前是本地模式：全部数据只保存在这台设备的浏览器里，应用仍可完整使用。'),
+      h('p.form-hint', null, '站点管理员配置 Supabase 后，邮箱密码与 Google 登录才会出现；页面不会要求或保存服务端密钥。'),
+      account.error && !accountError(account.error).includes('尚未配置')
+        && h('p.account-error', { role: 'status' }, accountError(account.error)),
+      h('a.inline-link', { href: 'docs/CLOUD_SYNC.md', target: '_blank', rel: 'noopener' }, '查看云同步配置说明'));
+  } else if (account.user) {
+    content = signedInAccount(account);
+  } else if (account.phase === 'loading') {
+    content = h('div.account-loading', { role: 'status', 'aria-live': 'polite' },
+      h('strong', null, '正在恢复登录状态…'),
+      h('span', null, '本地数据不会在账号确认前上传或替换。'));
+  } else {
+    content = signedOutAccount(account);
+  }
+  return h('section.card.account-card', null,
+    h('div.card-head', null,
+      h('div', null,
+        h('h3', null, '账号与云同步'),
+        h('p.card-desc', null, account.status === 'locked'
+          ? '原账号数据正在隐私锁保护下。'
+          : configured ? '跨设备保存，每个账号的数据彼此隔离。' : '无需登录也能继续使用。')),
+      h('span.card-tag', null, account.status === 'locked'
+        ? '数据锁定'
+        : configured ? (account.user ? '账号云同步' : '未登录') : '本地模式')),
+    content);
+}
+
+function renderAccountSlot(slot) {
+  accountRenderPending = false;
+  clearEl(slot);
+  slot.append(accountCard());
+}
+
+function ensureAccountSubscription(slot) {
+  accountSlot = slot;
+  slot.addEventListener('focusout', () => setTimeout(() => {
+    if (accountRenderPending && accountSlot === slot && !slot.contains(document.activeElement)) {
+      renderAccountSlot(slot);
+    }
+  }, 0));
+  if (accountSubscribed) return;
+  accountSubscribed = true;
+  subscribeAccount(() => {
+    if (!accountSlot?.isConnected) return;
+    if (accountSlot.contains(document.activeElement)) {
+      accountRenderPending = true;
+      return;
+    }
+    renderAccountSlot(accountSlot);
+  });
+}
+
+/**
  * 反馈草稿也放模块作用域。
  *
  * 理由和上面的身体信息表单一样：输入过程中绝不重绘。设置页任何一次 store
@@ -298,7 +611,25 @@ function feedbackCard() {
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
   clearEl(root);
-  mount(root, 
+  const slot = h('div.account-slot');
+  renderAccountSlot(slot);
+  ensureAccountSubscription(slot);
+  const account = getAccountState();
+  const protectedAccountData = account.ownershipPending === true
+    || account.status === 'locked'
+    || (account.status === 'loading' && !account.user)
+    || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
+  if (protectedAccountData) {
+    mount(root, slot);
+    return;
+  }
+  const accountCopy = account.user
+    ? '数据保存在本机，并同步到当前登录账号的专属云端空间。'
+    : account.configured
+      ? '未登录时数据只保存在当前设备；登录后可同步到账号专属云端空间。'
+      : '当前为本地模式，数据只保存在这台设备的浏览器里。';
+  mount(root,
+    slot,
     profileCard(rerender),
     targetCard(),
     toggleCard(),
@@ -306,7 +637,7 @@ export function renderSettings(root) {
     h('section.card.about', null,
       h('div.card-head', null, h('h3', null, '关于')),
       h('p', null, `版本 v${APP_VERSION}`),
-      h('p', null, '数据保存在当前设备，不需要账号。'),
+      h('p', null, accountCopy),
       h('p', null, '同步、补录、备份与恢复都在“数据”栏目。'),
       h('a.inline-link', { href: '#health' }, '前往数据中心'),
       h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。'),
