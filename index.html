@@ -7,13 +7,9 @@
 <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="description" content="同步 Apple 健康数据、记录每日饮食，实时判断热量与蛋白摄入并给出该吃什么、该避开什么的建议。">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<!-- 用 default 而不是 black-translucent：后者会让网页整块伸到状态栏底下，
-     一旦 env(safe-area-inset-top) 没及时算出来（iOS 首帧的老毛病），标题就被
-     状态栏的半透明层压住，看着像蒙了层毛玻璃。default 由系统把网页顶下来，
-     状态栏那条用 theme-color 上色，和 --bg 同一个值，接缝看不出来。 -->
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="健康饮食">
-<title>健康饮食助手</title>
+<meta name="apple-mobile-web-app-title" content="健康饮食 Test">
+<title>健康饮食助手 · Codex Test</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
@@ -28,10 +24,10 @@
   </div>
   <noscript><p style="padding:2rem;text-align:center">这个应用需要 JavaScript 才能运行。</p></noscript>
   <script>
-    // Supabase 的 Project URL 与 Publishable key 是浏览器公开配置；数据隔离由 RLS 保证。
+    // codex-chat-test-version 使用完全独立的 Supabase 测试项目；不会读取或修改生产账号数据。
     window.__HEALTH_DIET_CLOUD_CONFIG__ = {
-      supabaseUrl: 'https://kdkykrshqiamwecohxgw.supabase.co',
-      supabasePublishableKey: 'sb_publishable_af7poqn7uHi8-NOFQMllTg_NKCecDuY',
+      supabaseUrl: 'https://jrsvdecbzeocokxedxng.supabase.co',
+      supabasePublishableKey: 'sb_publishable_Nt6EVd4d3iXPbQDjF9Wc-A_4MVdO1UT',
     };
   </script>
   <script type="module" src="js/app.js"></script>
