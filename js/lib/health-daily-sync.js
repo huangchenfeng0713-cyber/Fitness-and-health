@@ -3,10 +3,13 @@
  *
  * health_daily is the authoritative cloud copy of Apple Health daily data. This module mirrors
  * it into the existing IndexedDB health store so the rest of the v1.5.1 app can stay offline-first.
- * It never writes health_daily from the browser; only the Edge Function may do that.
+ * It deliberately bypasses the ordinary local-write notification path: a server health refresh
+ * must not mark user_snapshots dirty or cause a diet/settings snapshot upload.
  */
 import { inspectCloudConfig, SUPABASE_ESM_URL } from '../config/cloud.js';
-import { mergeHealthDays } from './store.js';
+import * as db from './db.js';
+import { reloadStoreFromDB } from './store.js';
+import { mergeApplePartialRows } from '../core/health-merge.js';
 
 const SELECT_FIELDS = [
   'user_id', 'date', 'captured_at', 'timezone', 'source', 'updated_at',
@@ -42,6 +45,31 @@ function emit(detail) {
   globalThis.dispatchEvent?.(new CustomEvent('health-daily-sync', { detail }));
 }
 
+async function applyAuthoritativeHealth(days) {
+  if (!days.length || !userId) return 0;
+  return db.withAccountDataLock(async () => {
+    const meta = await db.getCloudSyncMetadata();
+    // health_daily belongs to an authenticated account. Never write it into an unlocked guest
+    // dataset or across an account transition.
+    if (!meta?.owner || meta.owner !== userId || meta.writeLocked === true) return 0;
+
+    const existing = await db.getAll(db.STORES.health);
+    const importId = `health-daily-${Date.now().toString(36)}`;
+    const merged = mergeApplePartialRows(existing, days, importId);
+    const database = await db.openDB();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(db.STORES.health, 'readwrite');
+      const store = transaction.objectStore(db.STORES.health);
+      for (const row of merged) store.put(row);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error || new Error('health_daily 本地镜像失败'));
+      transaction.onabort = () => reject(transaction.error || new Error('health_daily 本地镜像已回滚'));
+    });
+    await reloadStoreFromDB();
+    return days.length;
+  });
+}
+
 async function pull(reason = 'manual') {
   if (!client || !userId) return { ok: false, reason: 'signed-out' };
   if (pullPromise) return pullPromise;
@@ -53,13 +81,9 @@ async function pull(reason = 'manual') {
       .limit(4000);
     if (error) throw error;
     const days = (data || []).map(toLocal);
-    if (days.length) {
-      await mergeHealthDays(days, {
-        via: 'health_daily', sourceFormat: 'partial', cloudAuthoritative: true,
-      });
-    }
+    const written = await applyAuthoritativeHealth(days);
     lastPullAt = new Date().toISOString();
-    const result = { ok: true, reason, days: days.length, at: lastPullAt };
+    const result = { ok: true, reason, days: days.length, written, at: lastPullAt };
     emit(result);
     return result;
   })().catch((error) => {
@@ -78,9 +102,8 @@ async function attach(nextUserId) {
   userId = nextUserId || null;
   if (!userId) return;
 
-  await pull('sign-in');
-  // Account snapshot reconciliation may still be finishing; pull once more afterward so
-  // health_daily wins even when an older v1.5.1 snapshot contained stale health rows.
+  // Let the account controller establish the durable IndexedDB owner first, then pull.
+  setTimeout(() => pull('sign-in'), 250);
   setTimeout(() => pull('post-account-sync'), 2500);
 
   channel = client.channel(`health-daily-${userId}`)
@@ -119,7 +142,10 @@ async function boot() {
     client.auth.onAuthStateChange((_event, session) => { attach(session?.user?.id || null); });
 
     const foregroundPull = () => {
-      if (!document.hidden && userId) pull('foreground');
+      if (!document.hidden && userId) {
+        pull('foreground');
+        setTimeout(() => pull('foreground-settled'), 1500);
+      }
       injectSetupLink();
     };
     document.addEventListener('visibilitychange', foregroundPull);
