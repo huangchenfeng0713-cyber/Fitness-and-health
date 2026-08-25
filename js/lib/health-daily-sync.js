@@ -22,6 +22,7 @@ let userId = null;
 let channel = null;
 let pullPromise = null;
 let lastPullAt = null;
+let unsubscribeWrites = null;
 
 function toLocal(row) {
   const mapped = {
@@ -141,6 +142,15 @@ async function boot() {
     await attach(data?.session?.user?.id || null);
     client.auth.onAuthStateChange((_event, session) => { attach(session?.user?.id || null); });
 
+    // user_snapshots intentionally stores health: []. If cloud-sync replaces the local snapshot,
+    // IndexedDB health can therefore be cleared for a moment. Re-pull the authoritative table
+    // immediately after that cloud import so an account sync can never leave health data missing.
+    unsubscribeWrites = db.subscribeWrites((event) => {
+      if (event?.source !== 'cloud' || event?.operation !== 'import-all') return;
+      setTimeout(() => pull('account-snapshot-applied'), 0);
+      setTimeout(() => pull('account-snapshot-settled'), 800);
+    });
+
     const foregroundPull = () => {
       if (!document.hidden && userId) {
         pull('foreground');
@@ -154,6 +164,8 @@ async function boot() {
     new MutationObserver(injectSetupLink).observe(document.body, { childList: true, subtree: true });
     injectSetupLink();
   } catch (error) {
+    unsubscribeWrites?.();
+    unsubscribeWrites = null;
     console.warn('health_daily bridge 初始化失败', error);
   }
 }
