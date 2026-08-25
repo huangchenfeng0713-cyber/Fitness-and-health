@@ -353,3 +353,15 @@ test('账号 SDK 固定版本并在首次成功加载后支持离线恢复', () 
   assert.ok(app.indexOf('await registerServiceWorker({ waitForControl: inspectCloudConfig().configured })')
     < app.indexOf('await initCloud()'), '首次账号 SDK 加载前 Service Worker 尚未接管页面');
 });
+
+test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', () => {
+  const html = read('index.html');
+  const config = read('js/config/cloud.js');
+  const assignment = html.indexOf('window.__HEALTH_DIET_CLOUD_CONFIG__');
+  const appModule = html.indexOf('<script type="module" src="js/app.js"></script>');
+  assert.ok(assignment >= 0 && assignment < appModule, '云配置必须在 app.js 启动前注入');
+  assert.match(html, /supabaseUrl:\s*'https:\/\/[a-z0-9]+\.supabase\.co'/);
+  assert.match(html, /supabasePublishableKey:\s*'sb_publishable_[A-Za-z0-9_-]+'/);
+  assert.ok(!/sb_(?:secret|service_role)_/i.test(html), '生产页面不得包含 Secret/service-role key');
+  assert.ok(config.includes("/^sb_(?:secret|service_role)_/i"), '配置校验必须继续拒绝高权限密钥');
+});
