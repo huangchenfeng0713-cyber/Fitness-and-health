@@ -40,6 +40,14 @@ export const CLOUD_HEALTH_SELECT = [
   'updated_at',
 ].join(',');
 
+/** Deployment-order fallback for a v1.6.3 database while v1.6.4 SQL is pending. */
+export const CLOUD_HEALTH_LEGACY_SELECT = [
+  'date', 'captured_at', 'cumulative_captured_at', 'timezone', 'source', 'device_id',
+  ...Object.keys(CLOUD_HEALTH_FIELD_MAP),
+  'weight_measured_at', 'body_fat_measured_at',
+  'resting_hr_measured_at', 'vo2max_measured_at', 'updated_at',
+].join(',');
+
 const CLOUD_HEALTH_KEYS = new Set(Object.values(CLOUD_HEALTH_FIELD_MAP));
 
 function validDay(value) {
@@ -62,6 +70,9 @@ export function cloudHealthRowToDay(row = {}) {
   const fieldValues = {};
   const capturedAt = validInstant(row.captured_at);
   const cumulativeCapturedAt = validInstant(row.cumulative_captured_at) || capturedAt;
+  const hasIndependentCursors = Object.values(CLOUD_HEALTH_CURSOR_MAP)
+    .filter((column) => column.endsWith('_captured_at'))
+    .some((column) => Object.hasOwn(row, column));
   for (const [column, key] of Object.entries(CLOUD_HEALTH_FIELD_MAP)) {
     if (row[column] == null || row[column] === '') continue;
     const value = Number(row[column]);
@@ -81,7 +92,7 @@ export function cloudHealthRowToDay(row = {}) {
     day.energyObservedAt = new Date(Math.min(...energyCursors)).toISOString();
   }
   day._cloudHealthSync = {
-    schemaVersion: 2,
+    schemaVersion: hasIndependentCursors ? 2 : 1,
     capturedAt,
     updatedAt: validInstant(row.updated_at) || capturedAt,
     deviceId: row.device_id || null,

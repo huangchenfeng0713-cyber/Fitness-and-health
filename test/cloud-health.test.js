@@ -83,6 +83,18 @@ test('无效日期和全部越界的账号行不会进入本地数据库', () =>
   }), null);
 });
 
+test('数据库迁移前的旧行仍可读取，并明确保留为 legacy 游标语义', () => {
+  const legacy = { ...remoteRow };
+  for (const key of Object.keys(legacy)) {
+    if (key.endsWith('_captured_at') && key !== 'cumulative_captured_at') delete legacy[key];
+  }
+  const day = cloudHealthRowToDay(legacy);
+  assert.equal(day.steps, 1594);
+  assert.equal(day._cloudHealthSync.schemaVersion, 1);
+  assert.equal(day._cloudHealthSync.fieldCursors.steps, remoteRow.cumulative_captured_at);
+  assert.equal(day._cloudHealthSync.fieldCursors.activeEnergy, remoteRow.cumulative_captured_at);
+});
+
 test('只合并比本地云版本更新的每日行', () => {
   const local = [{
     date: remoteRow.date,

@@ -33,6 +33,9 @@ supabase functions deploy health-sync --no-verify-jwt
 `health-sync`。迁移是幂等的：它会为步数、能量等累计指标补上各自的采集时间，
 避免一次只上传部分指标时把同一行中保留的旧值再次下发；不会删除现有健康记录。
 
+v1.6.5 增加了部署顺序保护：如果 Pages 已更新而数据库迁移尚未执行，网页会临时回退到
+v1.6.3 的旧列读取，不会中断账号健康页；但只有完成上述迁移后，部分指标隔离才真正生效。
+
 这里关闭的是 Supabase 用户 JWT 校验，因为 iPhone 快捷指令使用独立的高熵设备令牌；函数会自行校验 `X-Health-Sync-Token`，并且只有函数内部的 service role 能调用写入 RPC。不要把 service role key 配进快捷指令或网页。
 
 前端只能使用 Supabase 的 **Publishable key**（旧项目可能显示为 `anon` key）。绝对不要把 `service_role`、数据库密码或 Google Client Secret 放进仓库、网页源码、GitHub Actions 日志或浏览器存储。

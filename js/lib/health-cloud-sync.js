@@ -1,6 +1,7 @@
 import { readCloudConfig } from '../config/cloud.js';
 import {
-  CLOUD_HEALTH_SELECT, cloudHealthRange, newerCloudHealthDays,
+  CLOUD_HEALTH_SELECT, CLOUD_HEALTH_LEGACY_SELECT,
+  cloudHealthRange, newerCloudHealthDays,
 } from '../core/cloud-health.js';
 import { getAccountState, getCloudClient } from './account.js';
 import { mergeHealthDays, state as storeState } from './store.js';
@@ -136,12 +137,19 @@ export async function refreshHealthSyncDevices() {
   return activeDeviceRefresh;
 }
 
-async function fetchHealthRows(client, { updatedAfter = null } = {}) {
+function missingIndependentCursorColumn(error) {
+  const text = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  return error?.code === '42703'
+    || error?.code === 'PGRST204'
+    || /(?:steps|active_energy|resting_energy|exercise_minutes|stand_minutes|distance_km|sleep_minutes|water_ml)_captured_at/i.test(text);
+}
+
+async function fetchHealthRowsWithSelect(client, columns, { updatedAfter = null } = {}) {
   const rows = [];
   const pageSize = 500;
   const maxRows = 20000;
   for (let from = 0; from < maxRows; from += pageSize) {
-    let query = client.from('health_daily').select(CLOUD_HEALTH_SELECT);
+    let query = client.from('health_daily').select(columns);
     if (updatedAfter) {
       // 包含游标本身，避免两笔提交恰好同一时间戳时漏掉后到的日期；
       // newerCloudHealthDays 会把已经落地的同版本行过滤掉。
@@ -152,12 +160,29 @@ async function fetchHealthRows(client, { updatedAfter = null } = {}) {
       query = query.order('date', { ascending: true });
     }
     const result = await query.range(from, from + pageSize - 1);
-    if (result.error) throw cloudError(result.error, '读取账号健康数据失败');
+    if (result.error) throw result.error;
     const page = result.data || [];
     rows.push(...page);
     if (page.length < pageSize) return rows;
   }
   throw cloudError(null, '账号健康数据超过 20000 天，请联系维护者处理');
+}
+
+async function fetchHealthRows(client, options = {}) {
+  try {
+    return await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_SELECT, options);
+  } catch (error) {
+    if (!missingIndependentCursorColumn(error)) {
+      throw cloudError(error, '读取账号健康数据失败');
+    }
+    // Database and Pages deploy independently. Keep existing users readable
+    // until the idempotent v1.6.4 schema migration has been applied.
+    try {
+      return await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_LEGACY_SELECT, options);
+    } catch (legacyError) {
+      throw cloudError(legacyError, '读取账号健康数据失败');
+    }
+  }
 }
 
 export async function pullAccountHealth({ minIntervalMs = 0 } = {}) {
