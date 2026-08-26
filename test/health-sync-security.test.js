@@ -149,3 +149,11 @@ test('每项累计指标使用独立采集游标，部分上传不会推进或�
   }
   assert.match(schema, /Backfill existing v1\.6\.0-v1\.6\.3 rows once/);
 });
+
+test('Pages 先于数据库迁移发布时自动回退旧健康列，不中断账号读取', () => {
+  assert.match(healthClient, /CLOUD_HEALTH_LEGACY_SELECT/);
+  assert.match(healthClient, /missingIndependentCursorColumn/);
+  assert.match(healthClient, /fetchHealthRowsWithSelect\(client, CLOUD_HEALTH_SELECT/);
+  assert.match(healthClient, /fetchHealthRowsWithSelect\(client, CLOUD_HEALTH_LEGACY_SELECT/);
+  assert.match(healthClient, /error\?\.code === '42703'/);
+});
