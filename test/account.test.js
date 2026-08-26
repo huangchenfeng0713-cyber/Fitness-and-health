@@ -206,13 +206,21 @@ class FakeQuery {
 
   single() { return this.execute(); }
 
+  project(row) {
+    if (!row || !this.selectedFields) return clone(row);
+    const fields = this.selectedFields.split(',').map((field) => field.trim()).filter(Boolean);
+    return Object.fromEntries(fields
+      .filter((field) => Object.hasOwn(row, field))
+      .map((field) => [field, clone(row[field])]));
+  }
+
   async execute() {
     const userId = this.filters.find(([key]) => key === 'user_id')?.[1] || this.value?.user_id;
     if (this.client.failQueries) return { data: null, error: { code: 'network', message: 'offline' } };
     if (this.action === 'select') {
       const selected = clone(this.client.rows.get(userId) || null);
       if (this.client.onSelect) await this.client.onSelect({ userId, selected });
-      return { data: selected, error: null };
+      return { data: this.project(selected), error: null };
     }
     if (this.action === 'insert') {
       if (this.client.rows.has(userId)) {
@@ -225,7 +233,7 @@ class FakeQuery {
         updated_at: `2026-08-24T00:01:${String(++this.client.clock).padStart(2, '0')}.000Z`,
       };
       this.client.rows.set(userId, inserted);
-      return { data: clone(inserted), error: null };
+      return { data: this.project(inserted), error: null };
     }
     if (this.action === 'update') {
       const row = this.client.rows.get(userId);
@@ -241,7 +249,7 @@ class FakeQuery {
         updated_at: `2026-08-24T00:01:${String(++this.client.clock).padStart(2, '0')}.000Z`,
       };
       this.client.rows.set(userId, next);
-      return { data: clone(next), error: null };
+      return { data: this.project(next), error: null };
     }
     throw new Error(`unsupported query ${this.action}`);
   }
@@ -645,6 +653,42 @@ test('账号快照写入后只回传 revision 元数据，不把整份 payload �
   assert.equal(writeSelect?.fields, 'user_id,schema_version,revision,updated_at');
   assert.ok(!writeSelect.fields.includes('payload'));
   assert.equal(client.rows.get('u1').payload.diet.at(-1).name, 'new');
+  assert.equal(db.readCloudMetadata().revision, 2);
+  assert.equal(db.readCloudMetadata().dirty, false);
+  controller.destroy();
+});
+
+test('服务器已收下上次上传但客户端未记 revision 时自动恢复而不制造冲突', async () => {
+  const local = snapshot('device', { diet: 1, extra: { nested: { a: 1, b: 2 } } });
+  const cloud = {
+    customFoods: [],
+    settings: [],
+    diet: [{ name: 'device', date: '2026-08-24', id: 1 }],
+    health: [],
+    version: 1,
+    app: 'health-diet-tracker',
+    exportedAt: '2026-08-24T01:23:45.000Z',
+    extra: { nested: { b: 2, a: 1 } },
+  };
+  const db = fakeDb(local, {
+    owner: 'u1', revision: 1, dirty: true, changeSeq: 4, epoch: 2,
+  });
+  const client = fakeClient({
+    session: { user: accountUser('u1') },
+    rows: [remoteRow('u1', 2, cloud)],
+  });
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+
+  await controller.initialize();
+
+  assert.equal(controller.state.status, 'signedIn');
+  assert.equal(controller.state.syncStatus, 'idle');
+  assert.equal(controller.state.conflict, null);
+  assert.equal(db.readCloudMetadata().revision, 2);
+  assert.equal(db.readCloudMetadata().dirty, false);
+  assert.equal(db.read().exportedAt, local.exportedAt, '只补记同步元数据，不应重写本机业务数据');
   controller.destroy();
 });
 

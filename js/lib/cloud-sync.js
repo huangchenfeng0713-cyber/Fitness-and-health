@@ -300,6 +300,39 @@ function normalizeRemote(row) {
   return { ...value, schema_version: schemaVersion, revision };
 }
 
+function normalizeWriteResponse(row, snapshot, { userId, revision }) {
+  if (!row) return null;
+  const value = Array.isArray(row) ? row[0] : row;
+  if (!value) return null;
+  const remote = normalizeRemote({ ...value, payload: snapshot });
+  if (remote.user_id !== userId || remote.revision !== revision) {
+    throw new CloudSyncError('云端写入确认信息无效，本机数据已保留', 'invalid_remote');
+  }
+  return remote;
+}
+
+function sameJsonValue(left, right, ignoreTopLevelExportedAt = false) {
+  if (Object.is(left, right)) return true;
+  if (left == null || right == null || typeof left !== typeof right) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => sameJsonValue(value, right[index]));
+  }
+  if (typeof left !== 'object') return false;
+  const visibleKeys = (value) => Object.keys(value)
+    .filter((key) => !(ignoreTopLevelExportedAt && key === 'exportedAt'))
+    .sort();
+  const leftKeys = visibleKeys(left);
+  const rightKeys = visibleKeys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key, index) => key === rightKeys[index]
+    && sameJsonValue(left[key], right[key]));
+}
+
+function snapshotsHaveSameData(left, right) {
+  return Boolean(left && right && sameJsonValue(left, right, true));
+}
+
 function throwQueryError(error, fallback) {
   if (!error) return;
   throw new CloudSyncError(String(error.message || fallback), error.code || 'remote_error', error);
@@ -497,7 +530,7 @@ export function createCloudSync({
       { operation: `首次上传账号数据（约 ${formatBytes(bytes)}）`, timeoutMs: uploadTimeoutMs },
     );
     throwQueryError(result?.error, '首次上传账号数据失败');
-    return normalizeRemote(result?.data || row);
+    return normalizeWriteResponse(result?.data || row, snapshot, { userId, revision: 1 });
   }
 
   async function updateRemote(userId, expectedRevision, snapshot, bytes) {
@@ -519,7 +552,7 @@ export function createCloudSync({
       },
     );
     throwQueryError(result?.error, '上传账号数据失败');
-    return normalizeRemote(result?.data);
+    return normalizeWriteResponse(result?.data, snapshot, { userId, revision: nextRevision });
   }
 
   async function establishOwner(userId, revision, {
@@ -937,6 +970,13 @@ export function createCloudSync({
     if (remote.revision < localRevision) {
       throw new CloudSyncError('云端版本低于本地已确认版本，已停止回退', 'remote_stale');
     }
+    // 上一次写入可能已经到达服务器，但客户端在收到/处理确认响应前中断。
+    // 若云端新 revision 与当前本机业务数据完全一致（只忽略每次导出都会变化的
+    // exportedAt），直接补记同步元数据，避免制造一个并不存在的数据冲突。
+    if (metadata.dirty && snapshotsHaveSameData(local, remote.payload)) {
+      await markSynced(remote, user.id, token, captured);
+      return;
+    }
     if (metadata.dirty || (localRevision === 0 && snapshotHasUserData(local))) {
       await enterConflict('revision-mismatch', local, remote);
       return;
@@ -1041,14 +1081,15 @@ export function createCloudSync({
       return publicState();
     }
     patchState({ syncStatus: 'syncing', error: null });
-    const captured = await captureLocalSnapshot();
+    let captured = await captureLocalSnapshot();
     let local = captured.snapshot;
     assertCurrent(userId, token);
     const remote = await fetchRemoteNotOlderThanMetadata(userId, token, captured);
     assertCurrent(userId, token);
     await metadata.load({ refresh: true });
     if (metadata.changeSeq !== captured.changeSeq) {
-      local = (await captureLocalSnapshot()).snapshot;
+      captured = await captureLocalSnapshot();
+      local = captured.snapshot;
     }
     const expectedRevision = metadata.revision;
 
@@ -1058,7 +1099,13 @@ export function createCloudSync({
       return publicState();
     }
     if (remote.revision > expectedRevision) {
-      if (metadata.dirty) throw await enterConflict('revision-mismatch', local, remote);
+      if (metadata.dirty) {
+        if (snapshotsHaveSameData(local, remote.payload)) {
+          await markSynced(remote, userId, token, captured);
+          return publicState();
+        }
+        throw await enterConflict('revision-mismatch', local, remote);
+      }
       await applyRemote(remote, 'cloud-newer', userId, token, captured);
       return publicState();
     }
