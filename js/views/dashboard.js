@@ -191,10 +191,11 @@ function insightsCard(advice, rerender) {
 
 /* ---------------------------------------------------------------- 健康 */
 
+/** 同步入口已经收进设置抽屉里的「数据管理」，这里直接把抽屉打开 */
 function dataCenterBtn() {
   return h('button.secondary-btn.full', {
-    onclick: () => { location.hash = 'health'; },
-  }, '前往数据中心同步');
+    onclick: () => document.querySelector('.topbar-settings-btn')?.click(),
+  }, '去同步健康数据');
 }
 
 function healthCard(health) {
@@ -227,8 +228,8 @@ function healthCard(health) {
         h('div.health-value', null, v, u && h('span.health-unit', null, u)),
         h('div.health-label', null, k))))
       : h('p.empty-hint', null, isToday
-        ? '今天还没有健康数据。请到“数据”栏目从 Apple 健康、快捷指令或导出文件同步。'
-        : '这一天还没有健康数据。到“数据”栏目同步 Apple 健康，或手动补录。'),
+        ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
+        : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
     needsImport && dataCenterBtn(),
     needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
       '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),

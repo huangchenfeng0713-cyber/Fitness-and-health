@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const [healthView, guide] = await Promise.all([
-  readFile(new URL('../js/views/health.js', import.meta.url), 'utf8'),
+  // 数据管理卡片已抽成独立模块（现挂在设置页），这里跟着代码走
+  readFile(new URL('../js/views/cards/data-manager.js', import.meta.url), 'utf8'),
   readFile(new URL('../docs/SHORTCUT_SYNC.md', import.meta.url), 'utf8'),
 ]);
 

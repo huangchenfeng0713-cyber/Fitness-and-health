@@ -1335,6 +1335,41 @@ export const FOODS = [
   { id: 'juice_drink_generic', name: '果汁饮料（含糖，通用）', alias: 'guozhi yinliao juice drink 果味饮料 果粒饮料', cat: 'drink', n: [42, 0.1, 0, 10.5, 0.1, 10, 8], s: [['一瓶', 500], ['一盒', 250]], nfs: 0, ...META_RECIPE_DRINK, note: '不是 100% 果汁；按水、果汁和添加糖的常见果汁饮料估算，优先使用包装标签', f: ['sweetdrink', 'processed', 'quick', 'est'] },
   { id: 'corn_juice', name: '鲜榨玉米汁（常见甜度）', alias: 'yumizhi corn juice 玉米饮料', cat: 'drink', n: [52, 1.2, 0.7, 10.5, 0.6, 5, 25], s: [['一杯', 300]], nfs: 1, ...META_RECIPE_DRINK, note: '按玉米、水和少量添加糖的餐馆常见配方估算', f: ['sweetdrink', 'est'] },
   { id: 'mixed_fruit_cup', name: '鲜切水果拼盘', alias: 'shuiguo pingpan fruit cup 果切 水果捞不加奶', cat: 'fruit', n: [53, 0.6, 0.2, 13, 1.4, 10.5, 2], s: [['一盒', 300], ['一小盒', 200]], ...META_RECIPE_READY, note: '按多种完整鲜果混合估算，不含酸奶、椰奶、糖浆或罐头水果', f: ['whole', 'quick', 'est'] },
+
+  // ---- 主流碳酸饮料、瓶装茶与植物蛋白饮料。
+  // 汽水和甜茶饮的糖全是加进去的，按 WHO 定义整份都算游离糖，不写 nfs；
+  // 奶茶、核桃乳这类含乳/植物蛋白的，用 nfs 扣掉其中天然存在的那部分。
+  { id: 'sprite', name: '雪碧', alias: 'xuebi sprite qishui', cat: 'drink', n: [43, 0, 0, 10.6, 0, 10.6, 12], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'sprite_zero', name: '无糖雪碧', alias: 'wutang xuebi sprite zero', cat: 'drink', n: [1, 0, 0, 0.3, 0, 0, 12], s: [['一罐', 330], ['一瓶', 500]], f: ['quick'] },
+  { id: 'fanta_orange', name: '芬达 橙味汽水', alias: 'fenda fanta chengwei', cat: 'drink', n: [46, 0, 0, 11.3, 0, 11.3, 15], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'mirinda', name: '美年达 橙味汽水', alias: 'meinianda mirinda', cat: 'drink', n: [48, 0, 0, 11.9, 0, 11.9, 15], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'seven_up', name: '七喜', alias: 'qixi 7up', cat: 'drink', n: [44, 0, 0, 10.8, 0, 10.8, 14], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'pepsi', name: '百事可乐', alias: 'baishi kele pepsi', cat: 'drink', n: [43, 0, 0, 10.9, 0, 10.9, 8], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'pepsi_zero', name: '百事可乐 无糖', alias: 'baishi wutang pepsi zero', cat: 'drink', n: [1, 0, 0, 0.2, 0, 0, 10], s: [['一罐', 330], ['一瓶', 500]], f: ['quick', 'caffeinated'] },
+  { id: 'beibingyang', name: '北冰洋 橙汁汽水', alias: 'beibingyang chengzhi qishui', cat: 'drink', n: [50, 0, 0, 12.3, 0, 12, 10], s: [['一瓶', 248]], f: ['sweetdrink', 'quick'] },
+  { id: 'bingfeng', name: '冰峰 橙味汽水', alias: 'bingfeng qishui', cat: 'drink', n: [47, 0, 0, 11.5, 0, 11.2, 10], s: [['一瓶', 330]], f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'dayao', name: '大窑 嘉宾果汁汽水', alias: 'dayao jiabin', cat: 'drink', n: [45, 0, 0, 11, 0, 10.6, 12], s: [['一瓶', 520]], f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'laoshan_cola', name: '崂山可乐', alias: 'laoshan kele', cat: 'drink', n: [44, 0, 0, 10.8, 0, 10.8, 12], s: [['一瓶', 330]], f: ['sweetdrink', 'quick', 'est'] },
+  { id: 'ginger_ale', name: '干姜水 / 姜汁汽水', alias: 'ganjiangshui ginger ale', cat: 'drink', n: [38, 0, 0, 9.4, 0, 9.4, 20], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'tonic_water', name: '汤力水', alias: 'tangli shui tonic', cat: 'drink', n: [34, 0, 0, 8.5, 0, 8.5, 10], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'soda_water', name: '苏打水（无糖）', alias: 'sudashui soda water', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 20], s: [['一瓶', 500], ['小瓶', 330]], f: ['quick'] },
+  { id: 'mineral_water', name: '矿泉水', alias: 'kuangquanshui mineral water', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 5], s: [['一瓶', 550], ['大瓶', 1000]], f: ['quick'] },
+  { id: 'kangshifu_icetea', name: '康师傅 冰红茶', alias: 'kangshifu binghongcha', cat: 'drink', n: [31, 0, 0, 7.7, 0, 7.7, 25], s: [['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'kangshifu_greentea', name: '康师傅 绿茶（蜂蜜茉莉）', alias: 'kangshifu lvcha', cat: 'drink', n: [27, 0, 0, 6.6, 0, 6.6, 20], s: [['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'tongyi_icetea', name: '统一 冰红茶', alias: 'tongyi binghongcha', cat: 'drink', n: [32, 0, 0, 8, 0, 8, 25], s: [['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'tongyi_greentea', name: '统一 绿茶', alias: 'tongyi lvcha', cat: 'drink', n: [26, 0, 0, 6.4, 0, 6.4, 20], s: [['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'suntory_oolong', name: '三得利 乌龙茶（无糖）', alias: 'sandeli wulongcha suntory', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 10], s: [['一瓶', 500]], f: ['quick', 'caffeinated'] },
+  { id: 'oriental_leaf', name: '农夫山泉 东方树叶（无糖）', alias: 'dongfangshuye oriental leaf', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 10], s: [['一瓶', 500]], f: ['quick', 'caffeinated'] },
+  { id: 'chapai', name: '农夫山泉 茶π', alias: 'chapai chapi', cat: 'drink', n: [22, 0, 0, 5.4, 0, 5.4, 15], s: [['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'vita_lemon_tea', name: '维他 柠檬茶', alias: 'weita ningmengcha vita lemon tea', cat: 'drink', n: [43, 0, 0, 10.6, 0, 10.6, 15], s: [['一盒', 250], ['一瓶', 500]], f: ['sweetdrink', 'quick', 'caffeinated'] },
+  { id: 'assam_milk_tea', name: '统一 阿萨姆奶茶', alias: 'tongyi asamu naicha', cat: 'drink', n: [60, 0.8, 1.5, 10.9, 0, 10.5, 50], s: [['一瓶', 500], ['小瓶', 250]], f: ['sweetdrink', 'quick', 'caffeinated'], nfs: 1 },
+  { id: 'wanglaoji', name: '王老吉 凉茶', alias: 'wanglaoji liangcha', cat: 'drink', n: [38, 0, 0, 9.4, 0, 9.4, 20], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'jiaduobao', name: '加多宝 凉茶', alias: 'jiaduobao liangcha', cat: 'drink', n: [37, 0, 0, 9.2, 0, 9.2, 20], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'jianlibao', name: '健力宝 运动饮料', alias: 'jianlibao', cat: 'drink', n: [42, 0, 0, 10.4, 0, 10, 40], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'] },
+  { id: 'liugehetao', name: '六个核桃 核桃乳', alias: 'liugehetao hetaoru', cat: 'drink', n: [48, 0.6, 2.4, 6.2, 0, 5.6, 45], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'], nfs: 0.5 },
+  { id: 'vitasoy_original', name: '维他奶 原味豆奶', alias: 'weitanai vitasoy', cat: 'drink', n: [45, 1.9, 1.3, 6.4, 0, 5.6, 40], s: [['一盒', 250]], f: ['sweetdrink', 'quick'], nfs: 1 },
+  { id: 'yeshu_coconut', name: '椰树 椰汁', alias: 'yeshu yezhi', cat: 'drink', n: [69, 0.6, 3, 9.9, 0, 9, 40], s: [['一罐', 330], ['一瓶', 500]], f: ['sweetdrink', 'quick'], nfs: 1 },
+  { id: 'chengzhi_milk_drink', name: '橙汁乳饮料（通用）', alias: 'chengzhi ru yinliao', cat: 'drink', n: [52, 0.9, 1, 9.9, 0, 9.4, 40], s: [['一瓶', 450]], f: ['sweetdrink', 'quick', 'processed', 'est'], nfs: 1.2 },
 ];
 
 // 旧库兼容迁移：不改营养数字，只把已能确定的来源、估算边界和糖口径显式化。

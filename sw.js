@@ -37,6 +37,12 @@ const SHELL = [
   './js/views/health.js',
   './js/views/trends.js',
   './js/views/settings.js',
+  './js/views/training.js',
+  './js/core/training.js',
+  './js/data/exercises.js',
+  './js/views/cards/profile.js',
+  './js/views/cards/targets.js',
+  './js/views/cards/data-manager.js',
   './js/workers/health-import.worker.js',
   './assets/icon.svg',
 ];

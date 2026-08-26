@@ -1,0 +1,206 @@
+/**
+ * 训练动作的重复度与组合建议。
+ *
+ * 纯函数，不碰 DOM，可以在 Node 里单测。
+ *
+ * 核心问题：同一天同时练杠铃卧推和哑铃卧推，等于把同一件事做了两遍。
+ * 判据不是名字像不像，而是「动作模式 + 主要发力肌肉」是否重合——
+ * 上斜卧推和平板卧推名字更像，但练的部位不同，不该判成重复；
+ * 而窄距卧推和绳索下压名字毫不相干，主动肌都是肱三头肌，反而有真实重叠。
+ */
+
+import { EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, EQUIPMENT } from '../data/exercises.js';
+
+const jaccard = (a = [], b = []) => {
+  const sa = new Set(a);
+  const sb = new Set(b);
+  if (!sa.size && !sb.size) return 0;
+  let inter = 0;
+  for (const v of sa) if (sb.has(v)) inter += 1;
+  return inter / (sa.size + sb.size - inter);
+};
+
+/*
+ * 权重取值说明（属于产品取舍，不是生理常数）：
+ *   主动肌 0.55  —— 练哪块肉是最重要的判据
+ *   动作模式 0.25 —— 同一个模式意味着同样的关节角度与发力顺序
+ *   协同肌 0.20  —— 只作微调，避免「都练到三头」就把一堆动作判成重复
+ */
+const W_PRIMARY = 0.55;
+const W_PATTERN = 0.25;
+const W_SECONDARY = 0.2;
+
+/** 两个动作的重合度 0~1 */
+export function overlapScore(a, b) {
+  if (!a || !b || a.id === b.id) return 1;
+  return W_PRIMARY * jaccard(a.primary, b.primary)
+    + W_PATTERN * (a.pattern === b.pattern ? 1 : 0)
+    + W_SECONDARY * jaccard(a.secondary, b.secondary);
+}
+
+export const OVERLAP_HIGH = 0.7;
+export const OVERLAP_SOME = 0.45;
+
+export function overlapLevel(score) {
+  if (score >= OVERLAP_HIGH) return 'high';
+  if (score >= OVERLAP_SOME) return 'some';
+  return 'none';
+}
+
+const toExercises = (ids = []) => ids
+  .map((id) => (typeof id === 'string' ? EXERCISE_BY_ID.get(id) : id))
+  .filter(Boolean);
+
+/** 选中的动作里，哪些两两之间重复 */
+export function findOverlaps(selection = []) {
+  const list = toExercises(selection);
+  const out = [];
+  for (let i = 0; i < list.length; i += 1) {
+    for (let j = i + 1; j < list.length; j += 1) {
+      const score = overlapScore(list[i], list[j]);
+      const level = overlapLevel(score);
+      if (level === 'none') continue;
+      out.push({
+        a: list[i],
+        b: list[j],
+        score: Math.round(score * 100) / 100,
+        level,
+        samePattern: list[i].pattern === list[j].pattern,
+        sharedPrimary: list[i].primary.filter((m) => list[j].primary.includes(m)),
+      });
+    }
+  }
+  return out.sort((x, y) => y.score - x.score);
+}
+
+/** 这套动作覆盖了哪些部位与肌肉，还缺什么 */
+export function coverage(selection = []) {
+  const list = toExercises(selection);
+  const hit = new Set();
+  for (const e of list) for (const m of e.primary) hit.add(m);
+  return GROUPS.map((g) => {
+    const covered = g.muscles.filter((m) => hit.has(m));
+    return {
+      key: g.key,
+      label: g.label,
+      exercises: list.filter((e) => e.group === g.key).length,
+      covered,
+      missing: g.muscles.filter((m) => !hit.has(m)),
+    };
+  });
+}
+
+/**
+ * 替换建议：给定已选动作，从同部位里挑与整套重合度最低的几个。
+ * 排除已选的，也排除和「要换掉的那个」本身高度重复的——换了等于没换。
+ */
+export function replacementsFor(target, selection = [], limit = 3) {
+  const goal = typeof target === 'string' ? EXERCISE_BY_ID.get(target) : target;
+  if (!goal) return [];
+  const list = toExercises(selection);
+  const chosen = new Set(list.map((e) => e.id));
+  const rest = list.filter((e) => e.id !== goal.id);
+  return EXERCISES
+    .filter((e) => e.group === goal.group && !chosen.has(e.id))
+    .map((e) => ({
+      exercise: e,
+      // 与「留下的那些动作」重合越低越好；和被换掉的那个也不能太像
+      worst: Math.max(overlapScore(e, goal), ...rest.map((r) => overlapScore(e, r)), 0),
+    }))
+    .filter((c) => overlapLevel(c.worst) !== 'high')
+    .sort((x, y) => x.worst - y.worst)
+    .slice(0, limit)
+    .map((c) => c.exercise);
+}
+
+/** 某个部位可以练哪些动作，复合动作排前面 */
+export function exercisesForGroup(groupKey) {
+  return EXERCISES
+    .filter((e) => e.group === groupKey)
+    .sort((a, b) => (b.compound ? 1 : 0) - (a.compound ? 1 : 0));
+}
+
+/**
+ * 整套训练的建议。
+ *
+ * 只给能从「动作构成」本身看出来的结论：重复、推拉失衡、缺主要动作、
+ * 复合动作该排前面。训练量、强度、周期这些要结合个人情况，不在这里瞎猜。
+ */
+export function planAdvice(selection = []) {
+  const list = toExercises(selection);
+  const tips = [];
+  if (!list.length) return tips;
+
+  const overlaps = findOverlaps(list);
+  for (const o of overlaps.filter((x) => x.level === 'high')) {
+    const alts = replacementsFor(o.b, list, 3);
+    tips.push({
+      level: 'warn',
+      key: `dup-${o.a.id}-${o.b.id}`,
+      title: `${o.a.name} 和 ${o.b.name} 练的是同一件事`,
+      text: `两者都是${PATTERNS[o.a.pattern]}、主要练${o.sharedPrimary.map((m) => MUSCLES[m]).join('、') || MUSCLES[o.a.primary[0]]}，`
+        + `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。同一次训练里放两个，多出来的量没有换来新的刺激。`
+        + (alts.length ? `把其中一个换成 ${alts.map((e) => e.name).join(' / ')} 更划算。` : ''),
+    });
+  }
+  for (const o of overlaps.filter((x) => x.level === 'some')) {
+    tips.push({
+      level: 'info',
+      key: `part-${o.a.id}-${o.b.id}`,
+      title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
+      text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
+        + '放在一起不算错，但两个都做力竭时后一个会明显掉力量，把复合动作排前面。',
+    });
+  }
+
+  // 推拉平衡：只在同时含有推或拉时才提，纯腿日不该被这条打扰
+  const pushPatterns = new Set(['horizontal_push', 'incline_push', 'vertical_push', 'dip', 'chest_fly']);
+  const pullPatterns = new Set(['horizontal_pull', 'vertical_pull', 'pullover', 'rear_delt']);
+  const push = list.filter((e) => pushPatterns.has(e.pattern)).length;
+  const pull = list.filter((e) => pullPatterns.has(e.pattern)).length;
+  if (push + pull >= 3 && (push === 0 || pull === 0 || Math.max(push, pull) >= Math.min(push, pull) * 3)) {
+    tips.push({
+      level: 'info',
+      key: 'push-pull',
+      title: push > pull ? `推的动作 ${push} 个，拉只有 ${pull} 个` : `拉的动作 ${pull} 个，推只有 ${push} 个`,
+      text: '长期偏向一侧容易让肩往前扣。不必每次都一比一，但一周之内推和拉的组数尽量接近。',
+    });
+  }
+
+  // 只做孤立动作
+  const compound = list.filter((e) => e.compound).length;
+  if (list.length >= 3 && compound === 0) {
+    tips.push({
+      level: 'info',
+      key: 'no-compound',
+      title: '这套全是孤立动作',
+      text: '孤立动作适合补短板，但整体力量和肌肉量主要靠复合动作推动。先加一个深蹲、硬拉、卧推或引体这类多关节动作打底。',
+    });
+  } else if (compound > 0) {
+    const first = list.findIndex((e) => e.compound);
+    if (first > 0 && !list[0].compound) {
+      tips.push({
+        level: 'info',
+        key: 'order',
+        title: `建议把 ${list[first].name} 排到最前面`,
+        text: '复合动作对神经和关节的要求最高，放在体力最好的时候做；孤立动作留到后面收尾。',
+      });
+    }
+  }
+
+  // 覆盖情况
+  const cov = coverage(list).filter((c) => c.exercises > 0);
+  for (const c of cov) {
+    if (c.missing.length && c.exercises >= 2) {
+      tips.push({
+        level: 'info',
+        key: `gap-${c.key}`,
+        title: `${c.label}：还没练到 ${c.missing.map((m) => MUSCLES[m]).join('、')}`,
+        text: `这次${c.label}安排了 ${c.exercises} 个动作，但都集中在 ${c.covered.map((m) => MUSCLES[m]).join('、')}。想练全的话补一个针对性动作。`,
+      });
+    }
+  }
+  return tips;
+}
+
+export { MUSCLES, PATTERNS, EQUIPMENT, GROUPS };

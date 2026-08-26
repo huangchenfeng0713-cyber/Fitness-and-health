@@ -4,25 +4,67 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
-test('所有数据操作集中在数据页，设置页不再重复导入入口', () => {
+/*
+ * 一个页面「包含」什么，应该按它挂载了哪些卡片来算，而不是按代码写在哪个文件里。
+ * 身体信息、每日目标、数据管理都抽成了独立卡片模块，可以挂到任意页面；
+ * 断言跟着页面走，之后再调整栏目分布就不用改这些用例。
+ */
+const CARD_MODULES = [
+  'js/views/cards/profile.js',
+  'js/views/cards/targets.js',
+  'js/views/cards/data-manager.js',
+];
+const page = (name) => {
+  const own = read(`js/views/${name}.js`);
+  const mounted = CARD_MODULES
+    .filter((path) => own.includes(path.replace('js/views/', './')))
+    .map((path) => read(path));
+  return [own, ...mounted].join('\n');
+};
+
+test('栏目分工：数据页看数据，设置页做维护，趋势页看目标与走势', () => {
   const app = read('js/app.js');
-  const health = read('js/views/health.js');
-  const settings = read('js/views/settings.js');
-  const dashboard = read('js/views/dashboard.js');
+  const health = page('health');
+  const settings = page('settings');
+  const trends = page('trends');
+  const dashboard = page('dashboard');
 
   assert.match(app, /key: 'health', label: '数据'/);
   assert.match(app, /key: 'diet', label: '饮食'/);
-  for (const text of ['同步 Apple 健康', '本应用备份与恢复', '手动补录']) {
+
+  // 身体信息属于「我的数据」，和健康记录同页
+  for (const text of ['身体信息', '日常活动量', '目标速率']) {
     assert.ok(health.includes(text), `数据页缺少“${text}”`);
   }
-  assert.ok(!settings.includes('function dataCard'), '设置页仍保留独立数据管理实现');
-  assert.ok(!settings.includes('导入备份'), '设置页仍出现重复导入入口');
-  assert.ok(dashboard.includes('前往数据中心同步'), '今日页缺少统一入口导航');
+  // 同步、备份、补录都是维护性操作，收进设置页
+  for (const text of ['同步 Apple 健康', '本应用备份与恢复', '手动补录']) {
+    assert.ok(settings.includes(text), `设置页缺少“${text}”`);
+    assert.ok(!health.includes(text), `数据页不该再出现“${text}”`);
+  }
+  // 每日目标和图表放一起：图画的就是「离这些数字还差多少」
+  assert.ok(trends.includes('当前每日目标'), '趋势页缺少每日目标');
+  assert.ok(!settings.includes('当前每日目标'), '设置页不该再重复每日目标');
+
+  assert.ok(!settings.includes('function dataCard'), '设置页仍保留旧的数据卡实现');
+  assert.ok(dashboard.includes("document.querySelector('.topbar-settings-btn')"),
+    '今日页的同步入口没有指向设置抽屉');
   assert.ok(!dashboard.includes('importFromClipboard'), '今日页仍在直接执行数据导入');
 });
 
+test('可移动的卡片各自成模块，换页只是改一行 import', () => {
+  // 栏目分布还会调整；卡片抽成模块后，搬家不用再搬几百行代码
+  for (const path of CARD_MODULES) {
+    const src = read(path);
+    assert.match(src, /^export function \w+Card\(/m, `${path} 没有导出卡片函数`);
+  }
+  const sw = read('sw.js');
+  for (const path of CARD_MODULES) {
+    assert.ok(sw.includes(`'./${path}'`), `${path} 没进离线外壳`);
+  }
+});
+
 test('Apple 健康同步与完整备份在文案和行为上明确区分', () => {
-  const health = read('js/views/health.js');
+  const health = page('settings');
   assert.ok(health.includes('只更新身体与活动数据，不会改动饮食记录'));
   assert.ok(health.includes('会先确认再整体替换当前本地数据，不与现有数据混合'));
   assert.ok(health.includes('payload?.app !== \'health-diet-tracker\''), '恢复入口没有校验应用备份身份');
@@ -39,15 +81,16 @@ test('长提示在窄屏内换行并限制高度，不再形成溢出的巨型�
   assert.ok(utils.includes("'aria-live': 'polite'"));
 });
 
-test('数据结果排在统一的数据管理入口之前，首屏卡片不会再被 flex 压扁', () => {
-  const health = read('js/views/health.js');
+test('数据页按「我是谁 → 我怎么样 → 明细」排序，首屏卡片不会被 flex 压扁', () => {
+  const health = page('health');
   const css = read('css/app.css');
   const rendered = health.slice(health.indexOf('export function renderHealth'));
-  assert.ok(rendered.indexOf('insightCard()') < rendered.indexOf('dataManagerCard(rerender)'),
-    '健康概览应排在导入操作之前');
-  assert.ok(rendered.indexOf('dataTable()') < rendered.indexOf('dataManagerCard(rerender)'),
-    '最近记录应排在导入操作之前');
-  const manager = health.slice(health.indexOf('function dataManagerCard'), health.indexOf('/**\n * 早期版本'));
+  const at = (name) => rendered.indexOf(name);
+  assert.ok(at('profileCard(rerender)') < at('overviewCard()'), '身体信息应排在概览之前');
+  assert.ok(at('overviewCard()') < at('insightCard()'), '概览应排在解读之前');
+  assert.ok(at('insightCard()') < at('dataTable()'), '解读应排在逐日明细之前');
+
+  const manager = read('js/views/cards/data-manager.js');
   for (const label of ['同步 Apple 健康', '手动补录', '本应用备份与恢复', '同步帮助']) {
     assert.ok(manager.includes(label), `统一数据管理卡缺少“${label}”`);
   }
@@ -67,7 +110,7 @@ test('设置从底部主栏目移到可收起的右侧抽屉，补充说明使�
 });
 
 test('设置页覆盖本地模式、两种登录和互通的登录方式', () => {
-  const settings = read('js/views/settings.js');
+  const settings = page('settings');
   const readme = read('README.md');
   for (const text of [
     '当前是本地模式', '注册账号', '使用 Google 登录', '忘记密码',
@@ -84,7 +127,7 @@ test('设置页覆盖本地模式、两种登录和互通的登录方式', () =>
 });
 
 test('账号冲突必须明确选择，退出使用先同步后清本机的安全流程', () => {
-  const settings = read('js/views/settings.js');
+  const settings = page('settings');
   assert.ok(settings.includes("resolveConflict('cloud')"), '缺少保留云端版本的选择');
   assert.ok(settings.includes("resolveConflict('device')"), '缺少保留本机版本的选择');
   assert.ok(settings.includes('不会静默覆盖'));
@@ -98,7 +141,7 @@ test('账号冲突必须明确选择，退出使用先同步后清本机的安�
 
 test('账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领', () => {
   const app = read('js/app.js');
-  const settings = read('js/views/settings.js');
+  const settings = page('settings');
   assert.ok(app.includes('accountDataLocked'), '应用入口缺少账号数据隐私锁');
   assert.ok(app.includes('账号数据已锁定'));
   assert.ok(!app.includes('先导出备份'), '未重新认证时不应允许导出原账号健康数据');
@@ -120,7 +163,7 @@ test('账号归属未确认时锁定业务界面和设置，只允许原账号�
 });
 
 test('登录账号下恢复备份和清空会明确同步影响云端', () => {
-  const health = read('js/views/health.js');
+  const health = page('settings');
   assert.ok(health.includes('getAccountState'));
   assert.ok(health.includes('恢复后的完整数据还会同步并替换当前账号的云端版本'));
   assert.ok(health.includes('清空当前账号数据'));
@@ -129,7 +172,7 @@ test('登录账号下恢复备份和清空会明确同步影响云端', () => {
 });
 
 test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因', () => {
-  const diet = read('js/views/diet.js');
+  const diet = page('diet');
   assert.ok(diet.includes("food.basis === '100ml'"));
   assert.ok(diet.includes('food.caffeineMg'));
   assert.ok(diet.includes('本份约含 ${caffeine} mg 咖啡因'));
@@ -137,7 +180,7 @@ test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因',
 });
 
 test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致', () => {
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const charts = read('js/lib/charts.js');
   assert.ok(trends.includes('首末记录相隔 7 天'));
   assert.ok(trends.includes('target: proteinThreshold'));
@@ -149,7 +192,7 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
 });
 
 test('趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据', () => {
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const charts = read('js/lib/charts.js');
   assert.ok(!trends.includes('barChart'), '趋势页仍在使用柱状图');
   for (const title of ['每日热量摄入', '每日蛋白摄入']) {
@@ -166,7 +209,7 @@ test('趋势页统计图统一为折线图，漏记日断线而不是虚构连�
 });
 
 test('清补凉支持逐项选配和份量调整，记录会保存营养与配料快照', () => {
-  const diet = read('js/views/diet.js');
+  const diet = page('diet');
   const store = read('js/lib/store.js');
   const css = read('css/app.css');
   assert.ok(diet.includes('function refreshMixedPortion(food)'));
@@ -181,8 +224,8 @@ test('清补凉支持逐项选配和份量调整，记录会保存营养与配�
 });
 
 test('普通食物记录失败会恢复按钮，条目说明不会被底栏截断', () => {
-  const diet = read('js/views/diet.js');
-  const dashboard = read('js/views/dashboard.js');
+  const diet = page('diet');
+  const dashboard = page('dashboard');
   const utils = read('js/lib/utils.js');
   const css = read('css/app.css');
   assert.ok(diet.includes('runLocalAction'));
@@ -195,11 +238,11 @@ test('普通食物记录失败会恢复按钮，条目说明不会被底栏截�
 
 test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   const advisor = read('js/core/advisor.js');
-  const dashboard = read('js/views/dashboard.js');
-  const diet = read('js/views/diet.js');
-  const settings = read('js/views/settings.js');
+  const dashboard = page('dashboard');
+  const diet = page('diet');
+  const settings = page('settings');
   assert.ok(dashboard.includes("macroMini('脂肪上限'"));
-  assert.ok(settings.includes('参考上限'));
+  assert.ok(page('trends').includes('参考上限'));
   assert.ok(dashboard.includes("basis === '100ml' ? 'ml' : 'g'"));
   assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
   assert.ok(diet.includes("isLiquid ? '毫升数' : '克数'"));
@@ -208,15 +251,15 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
 
 test('数据与趋势页显示统计截止日期，新版本可主动提示刷新', () => {
   const app = read('js/app.js');
-  const health = read('js/views/health.js');
-  const settings = read('js/views/settings.js');
-  const trends = read('js/views/trends.js');
+  const health = page('health');
+  const settings = page('settings');
+  const trends = page('trends');
   assert.ok(app.includes('topbar-context-note'));
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
   assert.ok(health.includes('截至所选日共 ${eligible.length} 天'));
-  assert.ok(settings.includes('按当前设置估算'));
+  assert.ok(trends.includes('按当前设置估算'), '每日目标卡已随趋势页显示所选日期口径');
   assert.ok(trends.includes("'当前设置估算目标'"));
 });
 
@@ -224,7 +267,7 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
 test('趋势页所有折线图共用同一横轴窗口', () => {
   // 用户实测：同一个「近 30 天」下，体重图 08-22→08-23、活动能量 07-26→08-24。
   // 折线图不传 domain 就会各画各的。
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const calls = trends.match(/lineChart\(\{[\s\S]*?\}\)/g) || [];
   assert.ok(calls.length >= 4, `折线图数量异常：${calls.length}`);
   for (const call of calls) {
@@ -235,7 +278,7 @@ test('趋势页所有折线图共用同一横轴窗口', () => {
 });
 
 test('活动能量图有平均参考线，且与卡片标签同源', () => {
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const idx = trends.indexOf("chartCard('活动能量'");
   assert.ok(idx > 0, '找不到活动能量卡片');
   const block = trends.slice(idx, idx + 900);
@@ -248,7 +291,7 @@ test('活动能量图有平均参考线，且与卡片标签同源', () => {
 test('趋势图统计到前一天为止，当天不画也不计入', () => {
   // 一天没过完，活动能量和摄入都还在累加，画出来是个必然偏低的点，
   // 会被误读成「今天掉下去了」。区间本身就止于前一天，图与平均用同一批数据。
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   assert.match(trends, /function lastEndedDay\(\)[\s\S]*?shiftDay\(state\.day, -1\)/,
     '缺少「区间止于前一天」的实现');
   assert.match(trends, /let d = lastEndedDay\(\);/, 'dateRange 仍从今天往回数');
@@ -260,14 +303,14 @@ test('趋势图统计到前一天为止，当天不画也不计入', () => {
 });
 
 test('区间档位是 7 天 / 近一个月 / 近六个月 / 全部', () => {
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const labels = [...trends.matchAll(/label: '([^']+)', days:/g)].map((m) => m[1]);
   assert.deepEqual(labels, ['7 天', '近一个月', '近六个月', '全部']);
 });
 
 test('只有 7 天视图开逐日标注与点选', () => {
   // 一个月以上一个点不到 20px，点选只会选错
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   assert.match(trends, /const isWeek = range === 7;/);
   assert.match(trends, /const pick = isWeek\s*\?\s*\{[\s\S]*?showAllDates: true,[\s\S]*?interactive: true,/);
   assert.match(trends, /:\s*\{\};/, '非 7 天视图应传空对象');
@@ -279,7 +322,7 @@ test('只有 7 天视图开逐日标注与点选', () => {
 });
 
 test('「全部」档位附一张逐日明细表', () => {
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   assert.match(trends, /range === 'all' \? fullTable\(days, dietByDate\) : null/);
   assert.match(trends, /function fullTable\(/);
   // 缺的字段要留空，不能当成 0
@@ -289,7 +332,7 @@ test('「全部」档位附一张逐日明细表', () => {
 test('一次点选让同一页所有图标注同一天', () => {
   // 「那天吃了多少、动了多少、睡了多久」是一个问题，
   // 选中状态因此放在趋势页而不是各张图内部，一次点选全页生效。
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   assert.match(trends, /^let selectedDay = null;$/m, '选中日应是模块级状态');
   assert.match(trends, /selectedX: selectedDay/, '图表没有接收选中日');
   assert.match(trends, /onPick: \(date\) => \{ selectedDay = selectedDay === date \? null : date; rerender\(\); \}/,
@@ -310,7 +353,7 @@ test('一次点选让同一页所有图标注同一天', () => {
 
 test('数值显示在图外，不遮挡数据点', () => {
   // 气泡压在数据点旁边会盖住相邻的点，手指点下去的位置又正好挡住它
-  const trends = read('js/views/trends.js');
+  const trends = page('trends');
   const charts = read('js/lib/charts.js');
   assert.match(trends, /function readoutRow\(/);
   assert.ok(trends.includes('点图上任意一天查看当天数值'), '没选中时应给出可点提示');
@@ -363,7 +406,7 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
 
 test('账号归属检查先于可交互首屏，暂时离线后可自动重连', () => {
   const app = read('js/app.js');
-  const settings = read('js/views/settings.js');
+  const settings = page('settings');
   const boot = app.slice(app.indexOf('async function boot()'));
   assert.ok(boot.indexOf('const cloudInitialization = initCloud()') < boot.indexOf('renderTabs();'),
     '账号状态必须先切成 loading，设置抽屉才不会闪现旧账号资料');
