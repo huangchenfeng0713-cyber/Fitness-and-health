@@ -1193,3 +1193,39 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* 视图里的占位容器：只换里面的内容，外层节点保持不动 */
 .view-stack { display: flex; flex-direction: column; gap: 14px; }
 .slot:empty { display: none; }
+
+
+/* ============ 健身建议 ============ */
+.ex-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.ex-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 8px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; color: inherit; font-family: inherit; text-align: left; cursor: pointer;
+}
+.ex-row:last-child { border-bottom: 0; }
+.ex-row.chosen { background: var(--accent-soft); border-radius: var(--radius-sm); }
+.ex-main { flex: 1; min-width: 0; }
+.ex-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
+.ex-tag {
+  font-size: 10.5px; color: var(--muted); background: var(--card-2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px;
+}
+.ex-tag.compound { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+.ex-muscle { font-size: 12px; color: var(--faint); margin-top: 3px; }
+.ex-clash { font-size: 12px; color: var(--danger); margin-top: 3px; }
+.ex-clash.soft { color: var(--warn); }
+.ex-pick { flex: none; width: 26px; text-align: center; font-size: 17px; color: var(--accent); }
+
+.plan-list { display: flex; flex-direction: column; }
+.plan-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.plan-row:last-child { border-bottom: 0; }
+.plan-index {
+  flex: none; width: 22px; height: 22px; border-radius: 999px;
+  background: var(--card-2); color: var(--muted);
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.plan-main { flex: 1; min-width: 0; }

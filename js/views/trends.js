@@ -3,7 +3,8 @@
 import { h, clearEl, num, shiftDay, formatHours, formatMinutes, mount, todayKey } from '../lib/utils.js';
 import { lineChart } from '../lib/charts.js';
 import { state } from '../lib/store.js';
-import { healthInsights, weightTrendStats } from '../core/health-insights.js';
+import { weightTrendStats } from '../core/health-insights.js';
+import { targetCard } from './cards/targets.js';
 
 /*
  * 区间档位。ALL 表示「全部」——覆盖到最早一条记录，并附一张逐日明细表。
@@ -15,7 +16,8 @@ const RANGES = [
   { key: 180, label: '近六个月', days: 180 },
   { key: 'all', label: '全部', days: null },
 ];
-let range = 30;
+// 默认看这一周；更长的区间另外选
+let range = 7;
 /*
  * 选中的那一天。放在这里而不是图表内部，是为了让一次点选同时作用于全部图表——
  * 「那天吃了多少、动了多少、睡了多久」是一个问题，不该点五次才看得全。
@@ -137,6 +139,42 @@ function fullTable(days, dietByDate) {
       + '单位：摄入 kcal、蛋白 g、活动/静息 kcal、体重 kg。'));
 }
 
+/**
+ * 睡眠图下面那行字：读这张图，而不是解释这张图是怎么画的。
+ *
+ * 「归到醒来那天、当天不计入」属于口径说明，不该占着图底下最显眼的位置；
+ * 那行字应该回答「我该拿这条曲线怎么办」。
+ */
+function sleepReading(points, avg) {
+  if (!points.length) return '还没有睡眠记录。';
+  const hours = points.map((p) => Number(p.y));
+  const short = hours.filter((v) => v < 6.5).length;
+  const spread = Math.round((Math.max(...hours) - Math.min(...hours)) * 10) / 10;
+  const half = Math.ceil(hours.length / 2);
+  const early = hours.slice(0, half).reduce((a, b) => a + b, 0) / half;
+  const lateCount = hours.length - half;
+  const late = lateCount ? hours.slice(half).reduce((a, b) => a + b, 0) / lateCount : early;
+  const drift = Math.round((late - early) * 10) / 10;
+
+  const parts = [];
+  if (avg != null && avg < 6.5) parts.push(`这段时间日均 ${avg} 小时，明显低于成人 7~9 小时的常见建议。`);
+  else if (avg != null && avg < 7) parts.push(`日均 ${avg} 小时，离 7 小时还差一点。`);
+  else if (avg != null) parts.push(`日均 ${avg} 小时，落在常见建议区间里。`);
+  if (short > 0) parts.push(`其中 ${short} 天不足 6.5 小时。`);
+  if (spread >= 2.5) {
+    parts.push(`最长和最短差 ${spread} 小时，作息不太稳定——固定起床时间通常比固定入睡时间更容易做到。`);
+  } else if (points.length >= 4) {
+    parts.push('曲线比较平稳，作息基本规律。');
+  }
+  if (Math.abs(drift) >= 0.6 && points.length >= 4) {
+    parts.push(drift > 0
+      ? `后半段比前半段多睡约 ${Math.abs(drift)} 小时，在往好的方向走。`
+      : `后半段比前半段少睡约 ${Math.abs(drift)} 小时，注意别继续往下掉。`);
+  }
+  if (avg != null && avg < 7) parts.push('先把每晚的睡眠机会稳定增加 30 分钟，比周末补觉更有用。');
+  return parts.join('');
+}
+
 export function renderTrends(root) {
   const rerender = () => renderTrends(root);
   clearEl(root);
@@ -147,7 +185,6 @@ export function renderTrends(root) {
   const spanDays = range === 'all' ? daysBetween(earliestDay(), endDay) : range;
   const days = dateRange(spanDays);
   const isWeek = range === 7;
-  const rangeLabel = RANGES.find((r) => r.key === range)?.label || `${spanDays} 天`;
   const health = state.healthByDate;
   const dietByDate = new Map(state.dietDaily.map((r) => [r.date, r]));
   const targets = d.targets;
@@ -190,9 +227,7 @@ export function renderTrends(root) {
   const targetContext = state.day === todayKey() ? '当前目标' : '当前设置估算目标';
   const proteinThreshold = targets.protein * 0.9;
   const proteinHit = proteinSeries.filter((p) => p.y >= proteinThreshold).length;
-  const loggedDays = kcalSeries.length;
   const avgKcal = average(kcalSeries);
-  const avgProtein = average(proteinSeries);
   const avgActive = average(activeSeries);
   const avgSleep = average(sleepSeries, 1);
   const weightStats = weightTrendStats(state.healthDays, spanDays, shiftDay(endDay, 1));
@@ -226,35 +261,10 @@ export function renderTrends(root) {
     ? `所选区间有 ${weightStats.records} 次体重记录、覆盖 ${weightStats.spanDays} 个日历日；拟合趋势 ${weightStats.kgPerWeek > 0 ? '+' : ''}${weightStats.kgPerWeek} kg/周，目标 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周。单日波动不等于脂肪变化。`
     : `已有 ${weightStats.records} 次体重记录；至少需要 4 次，且首末记录相隔 7 天，才能估算每周趋势。${isWeek ? '7 天视图本身不足以形成 7 个整日的首末间隔，请切换到「近一个月」查看。' : ''}`;
 
-  mount(root, 
+  mount(root,
+    // 目标放最上面：下面每张图画的都是「离这些数字还差多少」
+    targetCard(),
     rangeSwitch(rerender),
-
-    h('section.card.summary-card', null,
-      h('div.summary-grid', null,
-        summaryItem('饮食记录', `${loggedDays}天`, rangeLabel),
-        summaryItem('已结束日均摄入', avgKcal != null ? `${avgKcal}` : '—',
-          avgKcal != null ? `${kcalSeries.length} 个有记录日` : '暂无已结束记录日'),
-        summaryItem('已结束日均蛋白', avgProtein != null ? `${avgProtein}g` : '—',
-          avgProtein != null ? `${proteinSeries.length} 个有记录日` : '暂无已结束记录日'),
-        summaryItem('蛋白达标', proteinSeries.length ? `${proteinHit}/${proteinSeries.length}` : '—', `按${targetContext} 90%`),
-        summaryItem(`${rangeLabel}体重趋势`, weightStats.kgPerWeek != null
-          ? `${weightStats.kgPerWeek > 0 ? '+' : ''}${weightStats.kgPerWeek}` : '—',
-        `kg/周 · ${weightStats.records} 次`),
-        summaryItem('已结束日均活动', avgActive != null ? `${avgActive}` : '—',
-          avgActive != null ? `${activeSeries.length} 个记录日` : '暂无已结束记录日'),
-      )),
-
-    (() => {
-      const list = healthInsights(state.healthDays, {
-        targets, dietDaily: state.dietDaily, windowDays: spanDays, asOfDate: shiftDay(endDay, 1),
-      }).filter((i) => i.key !== 'nodata');
-      return list.length ? h('section.card', null,
-        h('div.card-head', null, h('h3', null, '这些数据说明什么'),
-          h('span.card-tag', null, rangeLabel)),
-        h('div.insight-list', null, list.map((i) => h(`div.insight.${i.level}`, null,
-          h('div.insight-title', null, i.title),
-          h('div.insight-text', null, i.text))))) : null;
-    })(),
 
     chartCard('体重', weightSeries.length ? `最新 ${num(weightSeries[weightSeries.length - 1].y, 1)} kg` : null,
       lineChart({
@@ -309,16 +319,9 @@ export function renderTrends(root) {
         data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
-      `睡眠归到醒来那天。长期睡眠不足可能影响食欲调节、注意力与恢复；这里只看时长，不代表睡眠质量。${todayNote}`,
+      sleepReading(sleepSeries, avgSleep),
       isWeek ? readoutRow(valueAt((v) => formatHours(v))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes : null))) : null) : null,
 
     range === 'all' ? fullTable(days, dietByDate) : null,
   );
-}
-
-function summaryItem(label, value, sub) {
-  return h('div.summary-item', null,
-    h('div.summary-value', null, value),
-    h('div.summary-label', null, label),
-    h('div.summary-sub', null, sub));
 }
