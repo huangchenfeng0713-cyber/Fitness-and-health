@@ -112,13 +112,21 @@ create table if not exists public.health_daily (
   source text not null default 'apple_shortcuts',
   device_id uuid references public.health_sync_devices (id) on delete set null,
   steps bigint,
+  steps_captured_at timestamptz,
   active_energy numeric,
+  active_energy_captured_at timestamptz,
   resting_energy numeric,
+  resting_energy_captured_at timestamptz,
   exercise_minutes numeric,
+  exercise_minutes_captured_at timestamptz,
   stand_minutes numeric,
+  stand_minutes_captured_at timestamptz,
   distance_km numeric,
+  distance_km_captured_at timestamptz,
   sleep_minutes numeric,
+  sleep_minutes_captured_at timestamptz,
   water_ml numeric,
+  water_ml_captured_at timestamptz,
   weight_kg numeric,
   weight_measured_at timestamptz,
   body_fat_pct numeric,
@@ -148,6 +156,47 @@ create table if not exists public.health_daily (
 -- 兼容先装过 v1.6.0 早期迁移的项目。
 alter table public.health_daily
   add column if not exists cumulative_captured_at timestamptz;
+
+-- v1.6.4: every cumulative metric needs its own cursor. A single day-level
+-- timestamp makes a later partial upload replay preserved values for fields
+-- that were not part of that upload.
+alter table public.health_daily
+  add column if not exists steps_captured_at timestamptz,
+  add column if not exists active_energy_captured_at timestamptz,
+  add column if not exists resting_energy_captured_at timestamptz,
+  add column if not exists exercise_minutes_captured_at timestamptz,
+  add column if not exists stand_minutes_captured_at timestamptz,
+  add column if not exists distance_km_captured_at timestamptz,
+  add column if not exists sleep_minutes_captured_at timestamptz,
+  add column if not exists water_ml_captured_at timestamptz;
+
+-- Backfill existing v1.6.0-v1.6.3 rows once. The legacy day cursor is the
+-- most precise timestamp those rows have, so retaining it is safer than now().
+update public.health_daily set
+  steps_captured_at = case when steps is not null
+    then coalesce(steps_captured_at, cumulative_captured_at, captured_at) end,
+  active_energy_captured_at = case when active_energy is not null
+    then coalesce(active_energy_captured_at, cumulative_captured_at, captured_at) end,
+  resting_energy_captured_at = case when resting_energy is not null
+    then coalesce(resting_energy_captured_at, cumulative_captured_at, captured_at) end,
+  exercise_minutes_captured_at = case when exercise_minutes is not null
+    then coalesce(exercise_minutes_captured_at, cumulative_captured_at, captured_at) end,
+  stand_minutes_captured_at = case when stand_minutes is not null
+    then coalesce(stand_minutes_captured_at, cumulative_captured_at, captured_at) end,
+  distance_km_captured_at = case when distance_km is not null
+    then coalesce(distance_km_captured_at, cumulative_captured_at, captured_at) end,
+  sleep_minutes_captured_at = case when sleep_minutes is not null
+    then coalesce(sleep_minutes_captured_at, cumulative_captured_at, captured_at) end,
+  water_ml_captured_at = case when water_ml is not null
+    then coalesce(water_ml_captured_at, cumulative_captured_at, captured_at) end
+where (steps is not null and steps_captured_at is null)
+   or (active_energy is not null and active_energy_captured_at is null)
+   or (resting_energy is not null and resting_energy_captured_at is null)
+   or (exercise_minutes is not null and exercise_minutes_captured_at is null)
+   or (stand_minutes is not null and stand_minutes_captured_at is null)
+   or (distance_km is not null and distance_km_captured_at is null)
+   or (sleep_minutes is not null and sleep_minutes_captured_at is null)
+   or (water_ml is not null and water_ml_captured_at is null);
 
 comment on table public.health_daily is
   'Latest accepted Apple Health values per account and local calendar day.';
@@ -464,8 +513,14 @@ begin
 
   insert into public.health_daily as h (
     user_id, date, captured_at, cumulative_captured_at, timezone, source, device_id,
-    steps, active_energy, resting_energy, exercise_minutes, stand_minutes,
-    distance_km, sleep_minutes, water_ml,
+    steps, steps_captured_at,
+    active_energy, active_energy_captured_at,
+    resting_energy, resting_energy_captured_at,
+    exercise_minutes, exercise_minutes_captured_at,
+    stand_minutes, stand_minutes_captured_at,
+    distance_km, distance_km_captured_at,
+    sleep_minutes, sleep_minutes_captured_at,
+    water_ml, water_ml_captured_at,
     weight_kg, weight_measured_at, body_fat_pct, body_fat_measured_at,
     resting_hr, resting_hr_measured_at, vo2max, vo2max_measured_at, updated_at
   ) values (
@@ -476,13 +531,21 @@ begin
     ] then p_captured_at else null end,
     p_timezone, p_source, v_device.id,
     nullif(p_payload->>'steps', '')::bigint,
+      case when p_payload ? 'steps' then p_captured_at end,
     nullif(p_payload->>'activeEnergy', '')::numeric,
+      case when p_payload ? 'activeEnergy' then p_captured_at end,
     nullif(p_payload->>'restingEnergy', '')::numeric,
+      case when p_payload ? 'restingEnergy' then p_captured_at end,
     nullif(p_payload->>'exerciseMinutes', '')::numeric,
+      case when p_payload ? 'exerciseMinutes' then p_captured_at end,
     nullif(p_payload->>'standMinutes', '')::numeric,
+      case when p_payload ? 'standMinutes' then p_captured_at end,
     nullif(p_payload->>'distanceKm', '')::numeric,
+      case when p_payload ? 'distanceKm' then p_captured_at end,
     nullif(p_payload->>'sleepMinutes', '')::numeric,
+      case when p_payload ? 'sleepMinutes' then p_captured_at end,
     nullif(p_payload->>'waterMl', '')::numeric,
+      case when p_payload ? 'waterMl' then p_captured_at end,
     nullif(p_payload->>'weightKg', '')::numeric, v_weight_at,
     nullif(p_payload->>'bodyFatPct', '')::numeric, v_body_fat_at,
     nullif(p_payload->>'restingHR', '')::numeric, v_resting_hr_at,
@@ -498,30 +561,54 @@ begin
     timezone = case when excluded.captured_at >= h.captured_at then excluded.timezone else h.timezone end,
     source = case when excluded.captured_at >= h.captured_at then excluded.source else h.source end,
     device_id = case when excluded.captured_at >= h.captured_at then excluded.device_id else h.device_id end,
-    steps = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.steps, h.steps) else h.steps end,
-    active_energy = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.active_energy, h.active_energy) else h.active_energy end,
-    resting_energy = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.resting_energy, h.resting_energy) else h.resting_energy end,
-    exercise_minutes = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.exercise_minutes, h.exercise_minutes) else h.exercise_minutes end,
-    stand_minutes = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.stand_minutes, h.stand_minutes) else h.stand_minutes end,
-    distance_km = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.distance_km, h.distance_km) else h.distance_km end,
-    sleep_minutes = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.sleep_minutes, h.sleep_minutes) else h.sleep_minutes end,
-    water_ml = case when excluded.cumulative_captured_at is not null
-      and (h.cumulative_captured_at is null or excluded.cumulative_captured_at >= h.cumulative_captured_at)
-      then coalesce(excluded.water_ml, h.water_ml) else h.water_ml end,
+    steps = case when excluded.steps_captured_at is not null
+      and (h.steps_captured_at is null or excluded.steps_captured_at >= h.steps_captured_at)
+      then excluded.steps else h.steps end,
+    steps_captured_at = case when excluded.steps_captured_at is not null
+      and (h.steps_captured_at is null or excluded.steps_captured_at >= h.steps_captured_at)
+      then excluded.steps_captured_at else h.steps_captured_at end,
+    active_energy = case when excluded.active_energy_captured_at is not null
+      and (h.active_energy_captured_at is null or excluded.active_energy_captured_at >= h.active_energy_captured_at)
+      then excluded.active_energy else h.active_energy end,
+    active_energy_captured_at = case when excluded.active_energy_captured_at is not null
+      and (h.active_energy_captured_at is null or excluded.active_energy_captured_at >= h.active_energy_captured_at)
+      then excluded.active_energy_captured_at else h.active_energy_captured_at end,
+    resting_energy = case when excluded.resting_energy_captured_at is not null
+      and (h.resting_energy_captured_at is null or excluded.resting_energy_captured_at >= h.resting_energy_captured_at)
+      then excluded.resting_energy else h.resting_energy end,
+    resting_energy_captured_at = case when excluded.resting_energy_captured_at is not null
+      and (h.resting_energy_captured_at is null or excluded.resting_energy_captured_at >= h.resting_energy_captured_at)
+      then excluded.resting_energy_captured_at else h.resting_energy_captured_at end,
+    exercise_minutes = case when excluded.exercise_minutes_captured_at is not null
+      and (h.exercise_minutes_captured_at is null or excluded.exercise_minutes_captured_at >= h.exercise_minutes_captured_at)
+      then excluded.exercise_minutes else h.exercise_minutes end,
+    exercise_minutes_captured_at = case when excluded.exercise_minutes_captured_at is not null
+      and (h.exercise_minutes_captured_at is null or excluded.exercise_minutes_captured_at >= h.exercise_minutes_captured_at)
+      then excluded.exercise_minutes_captured_at else h.exercise_minutes_captured_at end,
+    stand_minutes = case when excluded.stand_minutes_captured_at is not null
+      and (h.stand_minutes_captured_at is null or excluded.stand_minutes_captured_at >= h.stand_minutes_captured_at)
+      then excluded.stand_minutes else h.stand_minutes end,
+    stand_minutes_captured_at = case when excluded.stand_minutes_captured_at is not null
+      and (h.stand_minutes_captured_at is null or excluded.stand_minutes_captured_at >= h.stand_minutes_captured_at)
+      then excluded.stand_minutes_captured_at else h.stand_minutes_captured_at end,
+    distance_km = case when excluded.distance_km_captured_at is not null
+      and (h.distance_km_captured_at is null or excluded.distance_km_captured_at >= h.distance_km_captured_at)
+      then excluded.distance_km else h.distance_km end,
+    distance_km_captured_at = case when excluded.distance_km_captured_at is not null
+      and (h.distance_km_captured_at is null or excluded.distance_km_captured_at >= h.distance_km_captured_at)
+      then excluded.distance_km_captured_at else h.distance_km_captured_at end,
+    sleep_minutes = case when excluded.sleep_minutes_captured_at is not null
+      and (h.sleep_minutes_captured_at is null or excluded.sleep_minutes_captured_at >= h.sleep_minutes_captured_at)
+      then excluded.sleep_minutes else h.sleep_minutes end,
+    sleep_minutes_captured_at = case when excluded.sleep_minutes_captured_at is not null
+      and (h.sleep_minutes_captured_at is null or excluded.sleep_minutes_captured_at >= h.sleep_minutes_captured_at)
+      then excluded.sleep_minutes_captured_at else h.sleep_minutes_captured_at end,
+    water_ml = case when excluded.water_ml_captured_at is not null
+      and (h.water_ml_captured_at is null or excluded.water_ml_captured_at >= h.water_ml_captured_at)
+      then excluded.water_ml else h.water_ml end,
+    water_ml_captured_at = case when excluded.water_ml_captured_at is not null
+      and (h.water_ml_captured_at is null or excluded.water_ml_captured_at >= h.water_ml_captured_at)
+      then excluded.water_ml_captured_at else h.water_ml_captured_at end,
     weight_kg = case
       when excluded.weight_kg is not null
        and (h.weight_measured_at is null or excluded.weight_measured_at > h.weight_measured_at
@@ -564,9 +651,36 @@ begin
       then excluded.vo2max_measured_at else h.vo2max_measured_at end,
     updated_at = now()
   where (
-    excluded.cumulative_captured_at is not null
-    and (h.cumulative_captured_at is null
-      or excluded.cumulative_captured_at >= h.cumulative_captured_at)
+    excluded.steps_captured_at is not null
+    and (h.steps_captured_at is null or excluded.steps_captured_at >= h.steps_captured_at)
+  ) or (
+    excluded.active_energy_captured_at is not null
+    and (h.active_energy_captured_at is null
+      or excluded.active_energy_captured_at >= h.active_energy_captured_at)
+  ) or (
+    excluded.resting_energy_captured_at is not null
+    and (h.resting_energy_captured_at is null
+      or excluded.resting_energy_captured_at >= h.resting_energy_captured_at)
+  ) or (
+    excluded.exercise_minutes_captured_at is not null
+    and (h.exercise_minutes_captured_at is null
+      or excluded.exercise_minutes_captured_at >= h.exercise_minutes_captured_at)
+  ) or (
+    excluded.stand_minutes_captured_at is not null
+    and (h.stand_minutes_captured_at is null
+      or excluded.stand_minutes_captured_at >= h.stand_minutes_captured_at)
+  ) or (
+    excluded.distance_km_captured_at is not null
+    and (h.distance_km_captured_at is null
+      or excluded.distance_km_captured_at >= h.distance_km_captured_at)
+  ) or (
+    excluded.sleep_minutes_captured_at is not null
+    and (h.sleep_minutes_captured_at is null
+      or excluded.sleep_minutes_captured_at >= h.sleep_minutes_captured_at)
+  ) or (
+    excluded.water_ml_captured_at is not null
+    and (h.water_ml_captured_at is null
+      or excluded.water_ml_captured_at >= h.water_ml_captured_at)
   ) or (
     excluded.weight_kg is not null
     and (h.weight_measured_at is null or excluded.weight_measured_at > h.weight_measured_at

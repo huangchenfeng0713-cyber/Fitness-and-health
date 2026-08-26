@@ -5,7 +5,7 @@ import { state, saveProfile } from '../lib/store.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
   resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
-  resolveConflict, syncNow,
+  resolveConflict, syncNow, initCloud,
 } from '../lib/account.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
@@ -471,18 +471,29 @@ function lockedAccount(account) {
 }
 
 function unavailableLockedAccount(account) {
+  const retryBtn = h('button.secondary-btn', {
+    type: 'button',
+    onclick: () => runAccountAction(retryBtn, async () => {
+      const next = await initCloud();
+      if (next.transitionReason === 'auth-unavailable') {
+        throw new Error(next.error || '账号服务仍不可用，请检查网络后重试');
+      }
+      return next;
+    }, { success: '账号服务已重新连接' }),
+  }, '重新连接账号服务');
   return h('div.account-conflict', { role: 'alert' },
     h('strong', null, '云账号暂时不可用，原账号数据已锁定'),
-    h('p', null, '应用不会把这份账号数据当作访客记录展示或交给另一个账号。请在站点配置或网络恢复后刷新，再用原账号重新验证。'),
+    h('p', null, '应用不会把这份账号数据当作访客记录展示或交给另一个账号。网络恢复后可直接重新连接，再用原账号验证，无需刷新整页。'),
     account.error && h('p.account-error', null, accountError(account.error)),
     h('div.account-actions', null,
-      h('button.secondary-btn', { type: 'button', onclick: () => location.reload() }, '重新检查账号服务'),
+      retryBtn,
       h('a.inline-link', { href: 'docs/CLOUD_SYNC.md', target: '_blank', rel: 'noopener' }, '查看部署检查')));
 }
 
 function accountCard() {
   const account = getAccountState();
-  const configured = account.configured !== false && account.phase !== 'local';
+  // phase=local 也可能只是配置正确但 SDK/网络暂时不可用；不能误报成管理员未配置。
+  const configured = account.configured !== false;
   const actionableConflict = (account.status === 'conflict' || account.phase === 'conflict'
     || account.syncStatus === 'conflict') && account.user && account.conflict;
   let content;

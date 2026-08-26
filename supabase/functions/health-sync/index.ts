@@ -77,6 +77,10 @@ function asObject(value: unknown): Record<string, unknown> | null {
     ? value as Record<string, unknown> : null;
 }
 
+function hasOwn(value: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
 function localDateAt(instant: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
@@ -86,7 +90,64 @@ function localDateAt(instant: Date, timezone: string) {
 }
 
 function validTimestamp(value: unknown) {
-  return typeof value === "string" && value.length <= 64 && Number.isFinite(Date.parse(value));
+  if (typeof value !== "string" || value.length > 64) return false;
+  const text = value.trim();
+  // Require an unambiguous RFC 3339 instant. Date-only or timezone-less text
+  // is interpreted differently by browsers/servers and can shift a daily total.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/i.test(text)) {
+    return false;
+  }
+  return Number.isFinite(Date.parse(text));
+}
+
+function dateHasTimeComponent(value: unknown) {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  const datePrefix = text.match(/^\d{4}-\d{1,2}-\d{1,2}/)?.[0];
+  if (datePrefix) {
+    const suffix = text.slice(datePrefix.length);
+    if (suffix.startsWith("T") || suffix.startsWith("t") || /^\s+\S/.test(suffix)) return true;
+  }
+  return /[ T]\d{1,2}:\S*/.test(text);
+}
+
+function resolveCapturedTimestamp(body: Record<string, unknown>, fallback: string) {
+  const capturedAtProvided = hasOwn(body, "capturedAt");
+  const timestampProvided = hasOwn(body, "timestamp");
+  const dateTimeProvided = dateHasTimeComponent(body.date);
+  const providedValues = [
+    ...(capturedAtProvided ? [body.capturedAt] : []),
+    ...(timestampProvided ? [body.timestamp] : []),
+    ...(dateTimeProvided ? [body.date] : []),
+  ];
+  if (providedValues.some((value) => !validTimestamp(value))) {
+    return { ok: false as const, code: "invalid_timestamp" as const };
+  }
+  if (new Set(providedValues.map((value) => Date.parse(String(value)))).size > 1) {
+    return { ok: false as const, code: "timestamp_conflict" as const };
+  }
+  const capturedAt = capturedAtProvided
+    ? String(body.capturedAt)
+    : timestampProvided
+      ? String(body.timestamp)
+      : dateTimeProvided
+        ? String(body.date)
+        : fallback;
+  return { ok: true as const, capturedAt, capturedProvided: providedValues.length > 0 };
+}
+
+function missingMeasurementTimeField(
+  payload: Record<string, unknown>,
+  body: Record<string, unknown>,
+) {
+  for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
+    if (payload[metric] == null) continue;
+    const measuredAt = body[measuredKey];
+    if (measuredAt == null || (typeof measuredAt === "string" && !measuredAt.trim())) {
+      return measuredKey;
+    }
+  }
+  return null;
 }
 
 function validDateKey(value: string) {
@@ -199,10 +260,11 @@ Deno.serve(async (req) => {
     return response(400, { ok: false, code: "invalid_timezone" });
   }
 
-  const dateHasTime = typeof body.date === "string" && /[ T]\d{1,2}:\d{2}/.test(body.date);
-  const capturedCandidate = body.capturedAt ?? body.timestamp ?? (dateHasTime ? body.date : null);
-  const capturedProvided = validTimestamp(capturedCandidate);
-  const capturedAt = capturedProvided ? String(capturedCandidate) : new Date().toISOString();
+  const capturedResolution = resolveCapturedTimestamp(body, new Date().toISOString());
+  if (!capturedResolution.ok) {
+    return response(400, { ok: false, code: capturedResolution.code });
+  }
+  const { capturedAt, capturedProvided } = capturedResolution;
   const captured = new Date(capturedAt);
   if (captured.getTime() > Date.now() + 10 * 60 * 1000) {
     return response(400, { ok: false, code: "future_timestamp" });
@@ -230,8 +292,17 @@ Deno.serve(async (req) => {
   }
   if (!metricCount) return response(400, { ok: false, code: "no_metrics" });
 
+  const missingMeasurementTime = missingMeasurementTimeField(payload, body);
+  if (missingMeasurementTime) {
+    return response(400, {
+      ok: false,
+      code: "missing_measurement_time",
+      field: missingMeasurementTime,
+    });
+  }
+
   for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
-    if (payload[metric] == null || body[measuredKey] == null || body[measuredKey] === "") continue;
+    if (payload[metric] == null) continue;
     if (!validTimestamp(body[measuredKey])) {
       return response(400, { ok: false, code: "invalid_measurement_time", field: measuredKey });
     }

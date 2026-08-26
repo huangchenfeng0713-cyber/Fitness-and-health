@@ -519,6 +519,75 @@ test('认证层同时支持邮箱密码、Google 登录、Google 关联和设置
   auth.destroy();
 });
 
+test('认证组件首次离线失败后可原地重试，并且只保留一个状态监听', async () => {
+  const client = fakeClient();
+  const originalSubscribe = client.auth.onAuthStateChange;
+  let activeListeners = 0;
+  let maxActiveListeners = 0;
+  client.auth.onAuthStateChange = (listener) => {
+    const result = originalSubscribe(listener);
+    activeListeners += 1;
+    maxActiveListeners = Math.max(maxActiveListeners, activeListeners);
+    const originalUnsubscribe = result.data.subscription.unsubscribe;
+    result.data.subscription.unsubscribe = () => {
+      activeListeners -= 1;
+      originalUnsubscribe();
+    };
+    return result;
+  };
+  let attempts = 0;
+  const auth = createCloudAuth({
+    config: {
+      supabaseUrl: 'https://retry-test.supabase.co',
+      supabasePublishableKey: 'sb_publishable_retry-test-key',
+    },
+    createClient: () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('offline');
+      return client;
+    },
+  });
+
+  const first = await auth.initialize();
+  assert.equal(first.available, false);
+  const recovered = await auth.initialize();
+  assert.equal(recovered.available, true);
+  assert.equal(attempts, 2);
+  assert.equal(activeListeners, 1);
+  assert.equal(maxActiveListeners, 1);
+  auth.destroy();
+  assert.equal(activeListeners, 0);
+});
+
+test('账号控制器在网络恢复后可重建认证和同步，不要求刷新页面', async () => {
+  const client = fakeClient();
+  let attempts = 0;
+  const controller = createAccountController({
+    config: {
+      supabaseUrl: 'https://retry-controller.supabase.co',
+      supabasePublishableKey: 'sb_publishable_retry-controller-key',
+    },
+    createClient: () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('offline');
+      return client;
+    },
+    dbApi: fakeDb(snapshot('guest')),
+    storage: fakeStorage(),
+    afterLocalReplace: async () => {},
+    debounceMs: 60_000,
+  });
+
+  await controller.initialize();
+  assert.equal(controller.state.status, 'local');
+  assert.equal(controller.state.configured, true);
+  await controller.initialize();
+  assert.equal(controller.state.status, 'signedOut');
+  assert.equal(controller.state.configured, true);
+  assert.equal(attempts, 2);
+  controller.destroy();
+});
+
 test('浏览器配置只接受 publishable key 或 role=anon 的可解码 JWT', () => {
   const jwt = (role) => [
     Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url'),
@@ -1042,4 +1111,33 @@ test('导入校验在事务前拒绝超量、重复主键、非有限数和过�
   const longText = snapshot('long', { settings: 1 });
   longText.settings[0].value = 'x'.repeat(1_000_001);
   assert.throws(() => validateImportPayload(longText), /过长文本/);
+});
+
+test('恶意云快照在 revision 比较前先校验，失败时本机数据保持原样', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const poisoned = snapshot('cloud', { diet: 1 });
+  let cursor = poisoned;
+  for (let i = 0; i < 30; i += 1) {
+    cursor.nested = {};
+    cursor = cursor.nested;
+  }
+  const db = fakeDb(local, {
+    owner: 'u1', revision: 1, dirty: true, changeSeq: 4, epoch: 2,
+  });
+  const client = fakeClient({
+    session: { user: accountUser('u1') },
+    rows: [remoteRow('u1', 2, poisoned)],
+  });
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+
+  await controller.initialize();
+
+  assert.equal(controller.state.status, 'error');
+  assert.match(controller.state.error, /安全校验|嵌套过深/);
+  assert.equal(db.read().diet[0].name, 'device');
+  assert.equal(db.readCloudMetadata().revision, 1);
+  assert.equal(db.readCloudMetadata().dirty, true);
+  controller.destroy();
 });

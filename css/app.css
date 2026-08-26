@@ -838,8 +838,10 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   border: 1px solid var(--border); border-radius: 9px; background: var(--card-2);
   color: var(--text); font-size: 10px; -webkit-overflow-scrolling: touch;
 }
-.sync-credential-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 10px; }
+.sync-credential-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-top: 10px; }
 .sync-credential-actions .primary-btn { margin: 0; min-height: 40px; }
+.sync-credential-actions .secondary-btn { min-height: 40px; }
+.sync-credential-note { margin: 8px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 .sync-device-list { margin-top: 12px; border-top: 1px solid var(--border); }
 .sync-device-list-head,
 .sync-device-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

@@ -14,12 +14,19 @@ const remoteRow = {
   source: 'apple_shortcuts',
   device_id: 'device-1',
   steps: '1594',
+  steps_captured_at: '2026-08-25T06:09:00.000Z',
   active_energy: '103.21',
+  active_energy_captured_at: '2026-08-25T06:08:00.000Z',
   resting_energy: '791.67',
+  resting_energy_captured_at: '2026-08-25T06:07:00.000Z',
   exercise_minutes: 3,
+  exercise_minutes_captured_at: '2026-08-25T06:09:00.000Z',
   stand_minutes: 36,
+  stand_minutes_captured_at: '2026-08-25T06:09:00.000Z',
   distance_km: '1.113',
+  distance_km_captured_at: '2026-08-25T06:09:00.000Z',
   sleep_minutes: 352,
+  sleep_minutes_captured_at: '2026-08-25T06:00:00.000Z',
   weight_kg: 59,
   resting_hr: 70,
   weight_measured_at: '2026-08-25T01:00:00.000Z',
@@ -35,14 +42,36 @@ test('账号每日健康行映射到现有本地字段并保留同步版本', ()
   assert.equal(day.sleepMinutes, 352);
   assert.equal(day.weightKg, 59);
   assert.equal(day.restingHR, 70);
-  assert.equal(day.energyObservedAt, '2026-08-25T06:09:00.000Z');
+  assert.equal(day.energyObservedAt, '2026-08-25T06:07:00.000Z');
   assert.equal(day.weightMeasuredAt, undefined, '测量时间只参与服务端新旧判断，不应污染本地健康字段');
   assert.deepEqual(day._cloudHealthSync, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     capturedAt: '2026-08-25T06:10:00.000Z',
     updatedAt: '2026-08-25T06:10:04.000Z',
     deviceId: 'device-1',
     source: 'apple_shortcuts',
+    fieldCursors: {
+      steps: '2026-08-25T06:09:00.000Z',
+      activeEnergy: '2026-08-25T06:08:00.000Z',
+      restingEnergy: '2026-08-25T06:07:00.000Z',
+      exerciseMinutes: '2026-08-25T06:09:00.000Z',
+      standMinutes: '2026-08-25T06:09:00.000Z',
+      distanceKm: '2026-08-25T06:09:00.000Z',
+      sleepMinutes: '2026-08-25T06:00:00.000Z',
+      weightKg: '2026-08-25T01:00:00.000Z',
+      restingHR: '2026-08-25T06:10:00.000Z',
+    },
+    fieldValues: {
+      steps: 1594,
+      activeEnergy: 103.21,
+      restingEnergy: 791.67,
+      exerciseMinutes: 3,
+      standMinutes: 36,
+      distanceKm: 1.113,
+      sleepMinutes: 352,
+      weightKg: 59,
+      restingHR: 70,
+    },
   });
 });
 
@@ -64,6 +93,47 @@ test('只合并比本地云版本更新的每日行', () => {
   const newer = { ...remoteRow, updated_at: '2026-08-25T06:15:00.000Z', steps: 2000 };
   assert.equal(newerCloudHealthDays([newer], local)[0].steps, 2000);
   assert.equal(newerCloudHealthDays([remoteRow], []).length, 1);
+});
+
+test('部分累计上传只下发真正变动的字段，不重放同一行里保留的旧值', () => {
+  const first = cloudHealthRowToDay(remoteRow);
+  const localAfterOfficialImport = {
+    ...first,
+    steps: 1700,
+    activeEnergy: 120,
+    restingEnergy: 810,
+    weightKg: 60,
+  };
+  const stepsOnly = {
+    ...remoteRow,
+    updated_at: '2026-08-25T06:20:04.000Z',
+    captured_at: '2026-08-25T06:20:00.000Z',
+    cumulative_captured_at: '2026-08-25T06:20:00.000Z',
+    steps: 2000,
+    steps_captured_at: '2026-08-25T06:20:00.000Z',
+  };
+
+  const patch = newerCloudHealthDays([stepsOnly], [localAfterOfficialImport])[0];
+  assert.equal(patch.steps, 2000);
+  assert.equal(patch.activeEnergy, undefined);
+  assert.equal(patch.restingEnergy, undefined);
+  assert.equal(patch.weightKg, undefined);
+  assert.equal(patch.energyObservedAt, undefined);
+  assert.equal(patch._cloudHealthSync.fieldValues.activeEnergy, 103.21);
+
+  const energyLater = {
+    ...stepsOnly,
+    updated_at: '2026-08-25T06:25:04.000Z',
+    active_energy: 130,
+    active_energy_captured_at: '2026-08-25T06:25:00.000Z',
+  };
+  const energyPatch = newerCloudHealthDays([energyLater], [{
+    ...localAfterOfficialImport,
+    ...patch,
+  }])[0];
+  assert.equal(energyPatch.activeEnergy, 130);
+  assert.equal(energyPatch.restingEnergy, undefined);
+  assert.equal(energyPatch.energyObservedAt, '2026-08-25T06:07:00.000Z');
 });
 
 test('账号健康日期范围忽略坏日期并按日期排序', () => {

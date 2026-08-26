@@ -102,6 +102,7 @@ export function createCloudAuth({
   const inspection = inspectCloudConfig(config);
   let supabase = client;
   let initialized = false;
+  let initializing = null;
   let authSubscription = null;
 
   const state = {
@@ -142,49 +143,63 @@ export function createCloudAuth({
 
   async function initialize() {
     if (initialized) return snapshot();
-    initialized = true;
-    if (!state.configured) return snapshot();
-
-    try {
-      if (!supabase) {
-        const factory = createClient || await withTimeout(
-          loadCreateClient(), timeoutMs, '云账号组件加载超时，本机模式仍可使用',
-        );
-        supabase = await factory(
-          inspection.config.supabaseUrl,
-          inspection.config.supabasePublishableKey,
-          {
-            auth: {
-              persistSession: true,
-              autoRefreshToken: true,
-              detectSessionInUrl: true,
-              flowType: 'pkce',
-            },
-          },
-        );
+    if (initializing) return initializing;
+    initializing = (async () => {
+      if (!state.configured) {
+        initialized = true;
+        return snapshot();
       }
-      if (!supabase?.auth) throw new Error('Supabase Auth 不可用');
-      state.available = true;
 
-      const listenerResult = supabase.auth.onAuthStateChange?.((event, session) => {
-        updateSession(session, event);
-      });
-      authSubscription = listenerResult?.data?.subscription || listenerResult?.subscription || null;
+      try {
+        if (!supabase) {
+          const factory = createClient || await withTimeout(
+            loadCreateClient(), timeoutMs, '云账号组件加载超时，本机模式仍可使用',
+          );
+          supabase = await factory(
+            inspection.config.supabaseUrl,
+            inspection.config.supabasePublishableKey,
+            {
+              auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                flowType: 'pkce',
+              },
+            },
+          );
+        }
+        if (!supabase?.auth) throw new Error('Supabase Auth 不可用');
+        state.available = true;
 
-      const { data, error } = await withTimeout(
-        supabase.auth.getSession(), timeoutMs, '云账号连接超时，本机模式仍可使用',
-      );
-      if (error) throw error;
-      updateSession(data?.session || null, 'INITIAL_SESSION');
-      return snapshot();
-    } catch (error) {
-      authSubscription?.unsubscribe?.();
-      authSubscription = null;
-      state.available = false;
-      state.error = authError(error, '云账号服务暂时不可用，本机数据不受影响').message;
-      emit('AUTH_UNAVAILABLE');
-      return snapshot();
-    }
+        // A failed getSession attempt unsubscribes below. Retrying after the
+        // network comes back must create exactly one fresh auth listener.
+        authSubscription?.unsubscribe?.();
+        const listenerResult = supabase.auth.onAuthStateChange?.((event, session) => {
+          updateSession(session, event);
+        });
+        authSubscription = listenerResult?.data?.subscription || listenerResult?.subscription || null;
+
+        const { data, error } = await withTimeout(
+          supabase.auth.getSession(), timeoutMs, '云账号连接超时，本机模式仍可使用',
+        );
+        if (error) throw error;
+        initialized = true;
+        updateSession(data?.session || null, 'INITIAL_SESSION');
+        return snapshot();
+      } catch (error) {
+        authSubscription?.unsubscribe?.();
+        authSubscription = null;
+        // Transient SDK/network failures are retryable. Keeping initialized
+        // false lets an online event or the next login action recover without
+        // requiring a full page reload.
+        initialized = false;
+        state.available = false;
+        state.error = authError(error, '云账号服务暂时不可用，本机数据不受影响').message;
+        emit('AUTH_UNAVAILABLE');
+        return snapshot();
+      }
+    })().finally(() => { initializing = null; });
+    return initializing;
   }
 
   function ensureAvailable() {

@@ -356,8 +356,22 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
   assert.ok(worker.includes('if (cached) return cached'), '当前控制器必须固定读取同一版应用外壳');
   assert.ok(worker.includes('addAll(SHELL)'), '新缓存必须在激活前一次性取得全部应用外壳');
   assert.ok(app.indexOf('void registerServiceWorker({ waitForControl: false })')
-    < app.indexOf('await initCloud()'), '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
+    < app.indexOf('const cloudInitialization = initCloud()'),
+  '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
   assert.ok(app.includes('accountBootstrapPending'), '并行初始化时仍须锁住未确认归属的个人数据');
+});
+
+test('账号归属检查先于可交互首屏，暂时离线后可自动重连', () => {
+  const app = read('js/app.js');
+  const settings = read('js/views/settings.js');
+  const boot = app.slice(app.indexOf('async function boot()'));
+  assert.ok(boot.indexOf('const cloudInitialization = initCloud()') < boot.indexOf('renderTabs();'),
+    '账号状态必须先切成 loading，设置抽屉才不会闪现旧账号资料');
+  assert.ok(app.includes("window.addEventListener('online'"), '网络恢复时缺少账号服务重试');
+  assert.ok(app.includes("account.transitionReason === 'auth-unavailable'"));
+  assert.ok(settings.includes('const configured = account.configured !== false;'),
+    '配置存在但网络离线时不应误报为管理员未配置');
+  assert.ok(settings.includes('重新连接账号服务'));
 });
 
 test('启动卡住时提供只清程序缓存的自救入口，不会删除 IndexedDB 记录', () => {

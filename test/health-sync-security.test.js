@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { stripTypeScriptTypes } from 'node:module';
 
 const [schema, edge, healthView, healthClient, serviceWorker] = await Promise.all([
   readFile(new URL('../supabase/schema.sql', import.meta.url), 'utf8'),
@@ -9,6 +10,14 @@ const [schema, edge, healthView, healthClient, serviceWorker] = await Promise.al
   readFile(new URL('../js/lib/health-cloud-sync.js', import.meta.url), 'utf8'),
   readFile(new URL('../sw.js', import.meta.url), 'utf8'),
 ]);
+
+const validationHelpersSource = edge.slice(
+  edge.indexOf('const snapshotMetricTimes'),
+  edge.indexOf('async function sha256Hex'),
+);
+const validationHelpers = new Function(`${stripTypeScriptTypes(validationHelpersSource)}
+  return { resolveCapturedTimestamp, missingMeasurementTimeField };
+`)();
 
 test('健康同步表强制 RLS，浏览器不能读取令牌哈希或越权写健康表', () => {
   for (const table of ['health_sync_devices', 'health_daily', 'health_sync_events']) {
@@ -52,4 +61,91 @@ test('原始设备令牌只留在当前页面内存，账号切换会丢弃旧�
   assert.doesNotMatch(healthClient, /localStorage|sessionStorage|setSetting|db\.put/);
   assert.match(healthClient, /assertCurrentAccount/);
   assert.match(healthClient, /health_account_changed/);
+});
+
+test('显式采集时间无效时拒绝请求，只有完全省略时间才使用服务器时间', () => {
+  const fallback = '2026-08-26T08:00:00.000Z';
+  for (const body of [
+    { capturedAt: 'not-a-time' },
+    { capturedAt: null },
+    { timestamp: '' },
+    { timestamp: '2026-08-26' },
+    { timestamp: '2026-08-26T12:00:00' },
+    { timestamp: '2026-08-26T25:00:00+08:00' },
+    { date: '2026-08-26Tnot-a-time' },
+    { date: '2026-08-26 25:99' },
+  ]) {
+    const result = validationHelpers.resolveCapturedTimestamp(body, fallback);
+    assert.equal(result.ok, false, JSON.stringify(body));
+    assert.equal(result.code, 'invalid_timestamp');
+  }
+
+  const omitted = validationHelpers.resolveCapturedTimestamp({ date: '2026-08-26' }, fallback);
+  assert.equal(omitted.ok, true);
+  assert.equal(omitted.capturedAt, fallback);
+  assert.equal(omitted.capturedProvided, false);
+
+  const alias = validationHelpers.resolveCapturedTimestamp(
+    { timestamp: '2026-08-26T07:30:00+08:00', date: '2026-08-26' },
+    fallback,
+  );
+  assert.equal(alias.ok, true);
+  assert.equal(alias.capturedAt, '2026-08-26T07:30:00+08:00');
+  assert.equal(alias.capturedProvided, true);
+  const conflict = validationHelpers.resolveCapturedTimestamp({
+    capturedAt: '2026-08-26T07:30:00+08:00',
+    timestamp: '2026-08-26T08:30:00+08:00',
+  }, fallback);
+  assert.equal(conflict.ok, false);
+  assert.equal(conflict.code, 'timestamp_conflict');
+  assert.match(edge, /code:\s*"invalid_timestamp"/);
+});
+
+test('四项快照指标分别要求对应测量时间，同时保留别名和跨日期任务', () => {
+  const requirements = {
+    weightKg: 'weightMeasuredAt',
+    bodyFatPct: 'bodyFatMeasuredAt',
+    restingHR: 'restingHRMeasuredAt',
+    vo2max: 'vo2maxMeasuredAt',
+  };
+  for (const [metric, measuredAt] of Object.entries(requirements)) {
+    assert.equal(
+      validationHelpers.missingMeasurementTimeField({ [metric]: 1 }, {}),
+      measuredAt,
+    );
+    assert.equal(
+      validationHelpers.missingMeasurementTimeField(
+        { [metric]: 1 },
+        { [measuredAt]: '2026-08-25T23:55:00-04:00' },
+      ),
+      null,
+    );
+  }
+  assert.match(edge, /code:\s*"missing_measurement_time"/);
+  assert.match(edge, /weightmeasuredat:\s*"weightMeasuredAt"/);
+  assert.match(edge, /bodyfatmeasuredat:\s*"bodyFatMeasuredAt"/);
+  assert.match(edge, /restinghrmeasuredat:\s*"restingHRMeasuredAt"/);
+  assert.match(edge, /vo2maxmeasuredat:\s*"vo2maxMeasuredAt"/);
+  assert.match(edge, /if \(measuredDate === date\) continue;[\s\S]+?measurementJobs\.push/);
+});
+
+test('每项累计指标使用独立采集游标，部分上传不会推进或重放其它字段', () => {
+  const pairs = [
+    ['steps', 'steps_captured_at'],
+    ['active_energy', 'active_energy_captured_at'],
+    ['resting_energy', 'resting_energy_captured_at'],
+    ['exercise_minutes', 'exercise_minutes_captured_at'],
+    ['stand_minutes', 'stand_minutes_captured_at'],
+    ['distance_km', 'distance_km_captured_at'],
+    ['sleep_minutes', 'sleep_minutes_captured_at'],
+    ['water_ml', 'water_ml_captured_at'],
+  ];
+  for (const [field, cursor] of pairs) {
+    assert.match(schema, new RegExp(`add column if not exists ${cursor} timestamptz`, 'i'));
+    assert.match(schema, new RegExp(
+      `${field} = case when excluded\\.${cursor} is not null[\\s\\S]+?excluded\\.${cursor} >= h\\.${cursor}`,
+      'i',
+    ));
+  }
+  assert.match(schema, /Backfill existing v1\.6\.0-v1\.6\.3 rows once/);
 });

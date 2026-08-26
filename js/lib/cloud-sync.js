@@ -515,7 +515,23 @@ export function createCloudSync({
       { maybe: true, operation: '读取云端数据' },
     );
     throwQueryError(result?.error, '读取云端数据失败');
-    return normalizeRemote(result?.data);
+    const remote = normalizeRemote(result?.data);
+    if (!remote) return null;
+    // Validate before any equality/revision shortcut. Otherwise a directly
+    // tampered remote payload could reach recursive comparison before
+    // importAll's transactional validator and freeze the login flow.
+    assertSnapshotSize(remote.payload, maxSnapshotBytes);
+    try {
+      const validate = dbApi.validateImportPayload || defaultDb.validateImportPayload;
+      validate(remote.payload);
+    } catch (error) {
+      throw new CloudSyncError(
+        `云端数据未通过安全校验，本机数据未被覆盖：${error.message}`,
+        'invalid_remote',
+        error,
+      );
+    }
+    return remote;
   }
 
   async function insertRemote(userId, snapshot, bytes) {
