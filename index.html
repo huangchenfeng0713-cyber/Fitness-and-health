@@ -23,7 +23,20 @@
   <div id="app">
     <header class="topbar"><div id="topbar-inner" class="topbar-inner"></div></header>
     <div id="banner" class="banner-slot"></div>
-    <main id="view" class="view"></main>
+    <main id="view" class="view">
+      <section id="boot-screen" role="status" aria-live="polite"
+        style="margin:24px;padding:24px;border:1px solid rgba(128,128,128,.22);border-radius:24px;background:var(--card,#fff);box-shadow:0 8px 28px rgba(0,0,0,.06);text-align:center">
+        <strong style="display:block;font-size:18px;margin-bottom:8px">正在打开健康饮食助手</strong>
+        <span id="boot-message" style="display:block;color:#7a8188;line-height:1.6">正在读取这台设备上的记录并确认账号状态…</span>
+        <button id="boot-repair" type="button" hidden
+          style="margin-top:16px;min-height:44px;padding:0 18px;border:0;border-radius:14px;background:#119b7c;color:#fff;font:inherit;font-weight:700">
+          修复缓存并重新打开
+        </button>
+        <small id="boot-note" hidden style="display:block;margin-top:10px;color:#8a9096;line-height:1.5">
+          只清理网页程序缓存，不会删除健康、饮食或账号记录。
+        </small>
+      </section>
+    </main>
     <nav id="tabbar" class="tabbar"></nav>
   </div>
   <noscript><p style="padding:2rem;text-align:center">这个应用需要 JavaScript 才能运行。</p></noscript>
@@ -33,6 +46,69 @@
       supabaseUrl: 'https://kdkykrshqiamwecohxgw.supabase.co',
       supabasePublishableKey: 'sb_publishable_af7poqn7uHi8-NOFQMllTg_NKCecDuY',
     };
+
+    // 模块没能完整加载时也要留一条自救通道。这里只清 Service Worker 与 Cache Storage，
+    // 用户记录所在的 IndexedDB 不会被碰到。
+    (() => {
+      let finished = false;
+      const screen = document.getElementById('boot-screen');
+      const message = document.getElementById('boot-message');
+      const repair = document.getElementById('boot-repair');
+      const note = document.getElementById('boot-note');
+      let timer = null;
+
+      const showRecovery = (reason = '') => {
+        if (finished || !screen?.isConnected) return;
+        message.textContent = reason || '启动时间过长。可能是旧版缓存不完整，或还有另一个旧页面占用本地数据库。';
+        repair.hidden = false;
+        note.hidden = false;
+      };
+
+      window.__HEALTH_DIET_BOOT__ = {
+        ready() {
+          finished = true;
+          clearTimeout(timer);
+        },
+        fail(error) {
+          const detail = String(error?.message || error || '').slice(0, 180);
+          showRecovery(detail ? `启动失败：${detail}` : '启动失败，请修复缓存后重试。');
+        },
+      };
+
+      repair.addEventListener('click', async () => {
+        repair.disabled = true;
+        repair.textContent = '正在修复…';
+        message.textContent = '正在移除旧版程序缓存；你的健康与饮食记录会原样保留。';
+        try {
+          const scope = new URL('./', document.baseURI).href;
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations
+              .filter((registration) => registration.scope.startsWith(scope))
+              .map((registration) => registration.unregister()));
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys
+              .filter((key) => key.startsWith('health-diet-'))
+              .map((key) => caches.delete(key)));
+          }
+        } finally {
+          location.reload();
+        }
+      });
+
+      window.addEventListener('error', (event) => {
+        const target = event.target;
+        if (target?.tagName === 'SCRIPT' || /module|import|script/i.test(event.message || '')) {
+          showRecovery('启动文件没有完整加载，通常是旧版缓存与新版文件混用造成的。');
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', (event) => {
+        if (!finished) window.__HEALTH_DIET_BOOT__.fail(event.reason);
+      });
+      timer = setTimeout(() => showRecovery(), 12_000);
+    })();
   </script>
   <script type="module" src="js/app.js"></script>
 </body>

@@ -337,7 +337,7 @@ test('Service Worker 缓存名跟着版本号走', () => {
     `sw.js 的 CACHE 名里没有 package.json 的版本号 ${pkg.version}`);
 });
 
-test('账号 SDK 固定版本并在首次成功加载后支持离线恢复', () => {
+test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线恢复', () => {
   const config = read('js/config/cloud.js');
   const worker = read('sw.js');
   const app = read('js/app.js');
@@ -349,9 +349,25 @@ test('账号 SDK 固定版本并在首次成功加载后支持离线恢复', () 
   assert.ok(worker.includes('await cache.put(e.request, res.clone())'));
   assert.ok(worker.includes('k !== SDK_CACHE'), '应用升级时不应删除已按需缓存的 SDK 依赖图');
   assert.ok(worker.includes('k.startsWith(CACHE_PREFIX)'), '应用升级时只能清理本应用命名空间内的旧缓存');
-  assert.ok(worker.includes("'code', 'error', 'error_code', 'error_description'"), 'OAuth 回调查询不应写入离线缓存');
-  assert.ok(app.indexOf('await registerServiceWorker({ waitForControl: inspectCloudConfig().configured })')
-    < app.indexOf('await initCloud()'), '首次账号 SDK 加载前 Service Worker 尚未接管页面');
+  assert.ok(worker.includes('const shellRequest = navigation || SHELL_URLS.has(e.request.url)'));
+  assert.ok(worker.includes('if (cached) return cached'), '当前控制器必须固定读取同一版应用外壳');
+  assert.ok(worker.includes('addAll(SHELL)'), '新缓存必须在激活前一次性取得全部应用外壳');
+  assert.ok(app.indexOf('void registerServiceWorker({ waitForControl: false })')
+    < app.indexOf('await initCloud()'), '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
+  assert.ok(app.includes('accountBootstrapPending'), '并行初始化时仍须锁住未确认归属的个人数据');
+});
+
+test('启动卡住时提供只清程序缓存的自救入口，不会删除 IndexedDB 记录', () => {
+  const html = read('index.html');
+  const app = read('js/app.js');
+  assert.ok(html.includes('正在打开健康饮食助手'));
+  assert.ok(html.includes('修复缓存并重新打开'));
+  assert.ok(html.includes("key.startsWith('health-diet-')"));
+  assert.ok(html.includes('registration.unregister()'));
+  assert.ok(!/indexedDB\.deleteDatabase|clearAllData/.test(html), '缓存修复不得删除用户记录');
+  assert.ok(html.includes('setTimeout(() => showRecovery(), 12_000)'));
+  assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.ready?.()'));
+  assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.fail?.(error)'));
 });
 
 test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', () => {

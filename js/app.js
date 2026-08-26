@@ -36,6 +36,7 @@ let settingsRoot = null;
 let settingsOpen = false;
 let settingsOpener = null;
 let settingsCloseTimer = null;
+let accountBootstrapPending = false;
 
 /** 设置是全局偏好，不占一个主栏目；从右侧抽屉随时打开。 */
 function ensureSettingsDrawer() {
@@ -189,7 +190,8 @@ function isEditing() {
 }
 
 function accountDataLocked(account = getAccountState()) {
-  return account.ownershipPending === true
+  return accountBootstrapPending
+    || account.ownershipPending === true
     || account.status === 'locked'
     || (account.status === 'loading' && !account.user)
     || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
@@ -197,6 +199,15 @@ function accountDataLocked(account = getAccountState()) {
 
 function renderAccountLock() {
   const account = getAccountState();
+  if (accountBootstrapPending) {
+    clearEl(viewRoot).append(h('section.card.account-data-lock', {
+      role: 'status', 'aria-live': 'polite',
+    },
+    h('span.status-pill', null, '正在启动'),
+    h('h2', null, '正在确认账号与本机记录'),
+    h('p', null, '完成前暂不显示个人数据，避免账号切换时短暂出现上一份记录。网络较慢时可能需要几秒。')));
+    return;
+  }
   const orphan = account.conflict?.reason === 'orphan-local-data';
   const transitioning = account.ownershipPending === true && account.status !== 'locked' && !orphan;
   const signingOut = account.transitionReason === 'safe-signout';
@@ -408,19 +419,29 @@ async function boot() {
     clearEl(viewRoot).append(h('section.card', null,
       h('h3.card-title', null, '本地存储不可用'),
       h('p.empty-hint', null, '浏览器的 IndexedDB 打不开。如果在无痕模式下浏览，请换普通窗口再试。')));
+    window.__HEALTH_DIET_BOOT__?.ready?.();
     return;
   }
 
-  // 云账号 SDK 是按需加载的跨源模块。若本次部署启用了云账号，先让新版 Service Worker
-  // 接管页面，这样首次成功登录加载到的完整依赖图就能进入离线缓存，而不是要等第二次打开。
-  await registerServiceWorker({ waitForControl: inspectCloudConfig().configured });
+  // 先画出明确的启动状态，再检查账号。旧版把 Service Worker 与账号初始化全部 await 完
+  // 才首绘，网络稍慢时会留下十几秒空白，看起来就像页面彻底卡死。
+  accountBootstrapPending = inspectCloudConfig().configured;
+  renderTabs();
+  renderTopbar();
+  syncOnboarding();
+  renderCurrent();
+
+  // 更新缓存与账号初始化并行进行；账号归属确认前仍由 accountBootstrapPending 锁住个人数据。
+  // 这比先等 Service Worker 接管再联网快，也不会为了首屏速度牺牲账号隔离。
+  void registerServiceWorker({ waitForControl: false });
 
   // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
-  // 放在首屏渲染前初始化，避免恢复会话或切换账号时短暂显示另一份本地数据。
   try {
     await initCloud();
   } catch (err) {
     console.warn('云账号初始化失败，已保留本地模式', err);
+  } finally {
+    accountBootstrapPending = false;
   }
 
   renderTabs();
@@ -428,6 +449,7 @@ async function boot() {
   syncOnboarding();
   renderCurrent();
   if (openSettingsOnBoot) openSettings();
+  window.__HEALTH_DIET_BOOT__?.ready?.();
 
   runUrlImport();
 
@@ -525,4 +547,7 @@ async function boot() {
   });
 }
 
-boot();
+boot().catch((error) => {
+  console.error('应用启动失败', error);
+  window.__HEALTH_DIET_BOOT__?.fail?.(error);
+});
