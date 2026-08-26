@@ -605,11 +605,11 @@ export function createCloudSync({
     return publicState();
   }
 
-  async function beginSafeSignOut() {
+  async function beginSafeSignOut({ preserveLocal = false } = {}) {
     if (pendingConflict || (state.ownershipPending && transitionReason !== 'safe-signout')) {
       throw new CloudConflictError('本地与云端存在冲突，解决后才能安全退出');
     }
-    return beginTransition('safe-signout');
+    return beginTransition(preserveLocal ? 'preserved-signout' : 'safe-signout');
   }
 
   function assertCurrent(userId, token) {
@@ -930,7 +930,7 @@ export function createCloudSync({
     await applyRemote(remote, 'cloud-newer', user.id, token, captured);
   }
 
-  async function suspend({ reason = 'auth-lost' } = {}) {
+  async function suspend({ reason = 'auth-lost', preserveOwned = false } = {}) {
     generation += 1;
     clearTimer();
     await metadata.load({ refresh: true });
@@ -943,7 +943,10 @@ export function createCloudSync({
     await metadata.flush();
     currentUser = null;
     const owned = Boolean(metadata.owner);
-    const preserved = owned && (metadata.dirty || Boolean(pendingConflict));
+    // 用户明确选择“保留本机记录并退出”时，即使当前 metadata 不脏也不能清库。
+    // 云端请求已经失败，不能据此证明本机副本可安全丢弃；将其锁住，待原账号
+    // 重新登录后再协商版本。
+    const preserved = owned && (preserveOwned || metadata.dirty || Boolean(pendingConflict));
     if (!owned) transitionReason = null;
     patchState({
       syncStatus: preserved ? 'locked' : 'idle',
@@ -956,8 +959,8 @@ export function createCloudSync({
     return { ...publicState(), preserved, owned, reason };
   }
 
-  async function detach({ forceClear = false, reason = 'auth-lost' } = {}) {
-    const suspended = await suspend({ reason });
+  async function detach({ forceClear = false, preserveOwned = false, reason = 'auth-lost' } = {}) {
+    const suspended = await suspend({ reason, preserveOwned });
     if (!forceClear && suspended.preserved) return suspended;
     if (!forceClear && !suspended.owned) {
       if (metadata.writeLocked) await metadata.clear();
@@ -1083,8 +1086,15 @@ export function createCloudSync({
     clearTimer();
     if (!currentUser) return publicState();
     if (pendingConflict) throw new CloudConflictError('本机与云端存在冲突，解决后才能安全退出');
-    // 即使本机没有 dirty，也必须重新读取远端 revision；否则另一台设备刚上传后，
-    // 当前设备会在未发现冲突的情况下退出并清掉尚未拉取的数据。
+    // 本机没有未上传修改时可以直接退出：另一台设备的新 revision 已经安全存在云端，
+    // 清掉当前设备的旧副本不会造成数据丢失。旧逻辑在这里仍强制读取云端，网络稍慢
+    // 就让用户永远退不出去，同时并没有增加实际的数据安全性。
+    if (!metadata.dirty) return {
+      ...publicState(), changeSeq: metadata.changeSeq, epoch: metadata.epoch,
+    };
+
+    // 只有本机确有待上传修改时，才必须读取远端 revision 后再条件更新，避免覆盖
+    // 另一台设备刚写入的版本。
     await syncNow();
     await metadata.load({ refresh: true });
     await metadata.flush();

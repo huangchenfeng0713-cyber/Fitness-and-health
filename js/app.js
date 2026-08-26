@@ -211,20 +211,26 @@ function renderAccountLock() {
   const orphan = account.conflict?.reason === 'orphan-local-data';
   const transitioning = account.ownershipPending === true && account.status !== 'locked' && !orphan;
   const signingOut = account.transitionReason === 'safe-signout';
+  const preservedExit = account.transitionReason === 'preserved-signout';
   const unavailable = account.transitionReason === 'auth-unavailable';
   clearEl(viewRoot).append(h('section.card.account-data-lock', {
     role: 'alert', 'aria-live': 'assertive',
   },
   h('span.status-pill.warn', null, transitioning ? '正在保护账号数据' : '账号数据已锁定'),
   h('h2', null, transitioning
-    ? (signingOut ? '正在安全退出' : '正在确认账号数据归属')
-    : (orphan ? '请先确认这份本机数据属于谁' : unavailable ? '云账号暂时不可用' : '登录状态已失效')),
+    ? (preservedExit ? '正在保留本机记录并退出'
+      : signingOut ? '正在安全退出' : '正在确认账号数据归属')
+    : (orphan ? '请先确认这份本机数据属于谁'
+      : unavailable ? '云账号暂时不可用'
+        : preservedExit ? '已退出，原账号记录已锁定保留' : '登录状态已失效')),
   h('p', null, transitioning
     ? '确认完成前不会显示或修改本机健康数据，避免账号切换期间短暂泄露上一份记录。'
     : orphan
       ? '检测到没有可靠账号归属的本机记录。为防止把上一位用户的数据上传到新账号，确认前不会显示、修改或自动上传。'
       : unavailable
         ? '本机仍有明确属于原账号的数据。账号服务恢复前会保持锁定，不会降级为访客数据展示。'
+        : preservedExit
+          ? '云端同步未完成，因此应用没有删除本机记录。重新登录原账号后可恢复并继续同步。'
         : '本机仍有属于原账号且尚未确认同步的数据。为防止丢失或被其他账号看到，重新验证原账号前不会显示或修改。'),
   !transitioning && h('p.empty-hint', null, orphan
     ? '在“设置 → 账号与云同步”中明确选择保留本机数据或采用云端数据。'

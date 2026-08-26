@@ -91,6 +91,9 @@ test('账号冲突必须明确选择，退出使用先同步后清本机的安�
   assert.ok(settings.includes('signOutSafely'), '退出没有走安全登出接口');
   assert.ok(settings.includes('退出前会先确认最新数据已上传'));
   assert.ok(settings.includes('成功后会从这台设备清除该账号的数据'));
+  assert.ok(settings.includes('signOutPreservingLocal'), '同步失败后缺少保留本机记录的退出路径');
+  assert.ok(settings.includes('保留本机记录并退出'));
+  assert.ok(settings.includes('只能重新登录原账号后恢复'));
 });
 
 test('账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领', () => {
