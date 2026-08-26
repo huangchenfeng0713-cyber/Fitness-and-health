@@ -4,6 +4,9 @@ export const MAX_CLOUD_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 export const CLOUD_SNAPSHOT_SCHEMA_VERSION = 1;
 
 const REMOTE_FIELDS = 'user_id,schema_version,revision,payload,updated_at';
+// 写入成功后只取 revision 和时间戳。旧实现把刚上传的整份 payload 又完整下载一遍，
+// 历史健康数据较多时会把一次同步的流量近乎翻倍，也更容易在移动网络上超时。
+const REMOTE_WRITE_FIELDS = 'user_id,schema_version,revision,updated_at';
 const META_PREFIX = 'health-diet.cloud.v1';
 
 export class CloudSyncError extends Error {
@@ -30,6 +33,12 @@ function byteLength(value) {
   const json = JSON.stringify(value);
   if (json == null) throw new CloudSyncError('本机数据无法序列化，尚未上传', 'invalid_snapshot');
   return { json, bytes: new TextEncoder().encode(json).byteLength };
+}
+
+function formatBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(value / 1024))} KB`;
 }
 
 export function assertSnapshotSize(snapshot, limit = MAX_CLOUD_SNAPSHOT_BYTES) {
@@ -310,7 +319,8 @@ export function createCloudSync({
   afterLocalReplace = null,
   debounceMs = 1200,
   maxSnapshotBytes = MAX_CLOUD_SNAPSHOT_BYTES,
-  remoteTimeoutMs = 8000,
+  remoteTimeoutMs = 12_000,
+  uploadTimeoutMs = 30_000,
   now = () => new Date(),
 } = {}) {
   if (!client?.from) throw new TypeError('云同步需要 Supabase client');
@@ -386,7 +396,7 @@ export function createCloudSync({
   }
 
   async function runRemoteQuery(query, {
-    maybe = false, operation = '云端请求',
+    maybe = false, operation = '云端请求', timeoutMs = remoteTimeoutMs,
   } = {}) {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const abortable = controller && typeof query?.abortSignal === 'function'
@@ -399,7 +409,7 @@ export function createCloudSync({
           timer = setTimeout(() => {
             controller?.abort();
             reject(new CloudSyncError(`${operation}超时，本地数据已保留`, 'remote_timeout'));
-          }, Math.max(1, Number(remoteTimeoutMs) || 8000));
+          }, Math.max(1, Number(timeoutMs) || Number(remoteTimeoutMs) || 12_000));
         }),
       ]);
     } finally {
@@ -475,7 +485,7 @@ export function createCloudSync({
     return normalizeRemote(result?.data);
   }
 
-  async function insertRemote(userId, snapshot) {
+  async function insertRemote(userId, snapshot, bytes) {
     const row = {
       user_id: userId,
       schema_version: CLOUD_SNAPSHOT_SCHEMA_VERSION,
@@ -483,14 +493,14 @@ export function createCloudSync({
       payload: snapshot,
     };
     const result = await runRemoteQuery(
-      client.from(table).insert(row).select(REMOTE_FIELDS),
-      { operation: '首次上传账号数据' },
+      client.from(table).insert(row).select(REMOTE_WRITE_FIELDS),
+      { operation: `首次上传账号数据（约 ${formatBytes(bytes)}）`, timeoutMs: uploadTimeoutMs },
     );
     throwQueryError(result?.error, '首次上传账号数据失败');
     return normalizeRemote(result?.data || row);
   }
 
-  async function updateRemote(userId, expectedRevision, snapshot) {
+  async function updateRemote(userId, expectedRevision, snapshot, bytes) {
     const nextRevision = expectedRevision + 1;
     const result = await runRemoteQuery(
       client.from(table)
@@ -501,8 +511,12 @@ export function createCloudSync({
         })
         .eq('user_id', userId)
         .eq('revision', expectedRevision)
-        .select(REMOTE_FIELDS),
-      { maybe: true, operation: '上传账号数据' },
+        .select(REMOTE_WRITE_FIELDS),
+      {
+        maybe: true,
+        operation: `上传账号数据（约 ${formatBytes(bytes)}）`,
+        timeoutMs: uploadTimeoutMs,
+      },
     );
     throwQueryError(result?.error, '上传账号数据失败');
     return normalizeRemote(result?.data);
@@ -781,11 +795,11 @@ export function createCloudSync({
     if (captured.owner !== userId || captured.epoch !== metadata.epoch) {
       throw new CloudSyncError('账号数据状态已变化，请重新同步', 'sync_cancelled');
     }
-    const { snapshot } = assertSnapshotSize(captured.snapshot, maxSnapshotBytes);
+    const { snapshot, bytes } = assertSnapshotSize(captured.snapshot, maxSnapshotBytes);
     let remote;
     if (expectedRevision === 0) {
       try {
-        remote = await insertRemote(userId, snapshot);
+        remote = await insertRemote(userId, snapshot, bytes);
       } catch (error) {
         if (error?.code === '23505') {
           const latest = await fetchRemote(userId);
@@ -795,7 +809,7 @@ export function createCloudSync({
         throw error;
       }
     } else {
-      remote = await updateRemote(userId, expectedRevision, snapshot);
+      remote = await updateRemote(userId, expectedRevision, snapshot, bytes);
       if (!remote) {
         const latest = await fetchRemote(userId);
         assertCurrent(userId, token);

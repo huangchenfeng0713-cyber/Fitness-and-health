@@ -184,9 +184,12 @@ class FakeQuery {
     this.action = null;
     this.filters = [];
     this.value = null;
+    this.selectedFields = null;
   }
 
-  select() {
+  select(fields = null) {
+    this.selectedFields = fields;
+    this.client.selectFields.push({ action: this.action || 'select', fields });
     if (!this.action) this.action = 'select';
     return this;
   }
@@ -250,6 +253,7 @@ function fakeClient({ session = null, rows = [], nextSignInUserId = 'signed-in' 
   const client = {
     rows: new Map(rows.map((row) => [row.user_id, clone(row)])),
     calls,
+    selectFields: [],
     failQueries: false,
     clock: 0,
     onSelect: null,
@@ -622,6 +626,53 @@ test('本机已同步时即使云端查询故障也能正常安全退出', async
   assert.equal(controller.state.status, 'signedOut');
   assert.equal(client.auth.signOutCalls, 1);
   assert.equal(db.clearCount, 1);
+  controller.destroy();
+});
+
+test('账号快照写入后只回传 revision 元数据，不把整份 payload 再下载一次', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({ session: { user: accountUser('u1') }, rows: [remoteRow('u1', 1, local)] });
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+  await controller.initialize();
+  db.mutate((data) => data.diet.push({ id: 2, date: '2026-08-24', name: 'new' }));
+
+  await controller.syncNow();
+
+  const writeSelect = client.selectFields.findLast((call) => call.action === 'update');
+  assert.equal(writeSelect?.fields, 'user_id,schema_version,revision,updated_at');
+  assert.ok(!writeSelect.fields.includes('payload'));
+  assert.equal(client.rows.get('u1').payload.diet.at(-1).name, 'new');
+  controller.destroy();
+});
+
+test('大快照上传使用独立宽限时限，超时时提示本次数据量并保留本地修改', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({ session: { user: accountUser('u1') }, rows: [remoteRow('u1', 1, local)] });
+  const controller = createAccountController({
+    client,
+    dbApi: db,
+    storage: fakeStorage(),
+    afterLocalReplace: async () => {},
+    debounceMs: 60_000,
+    syncFactory: (options) => createCloudSync({
+      ...options, remoteTimeoutMs: 100, uploadTimeoutMs: 5,
+    }),
+  });
+  await controller.initialize();
+  db.mutate((data) => data.diet.push({ id: 2, date: '2026-08-24', name: 'unsynced' }));
+  client.onUpdate = async () => new Promise(() => {});
+
+  await assert.rejects(controller.syncNow(), (error) => {
+    assert.equal(error.code, 'remote_timeout');
+    assert.match(error.message, /上传账号数据（约 \d+ KB）超时/);
+    return true;
+  });
+  assert.equal(db.readCloudMetadata().dirty, true);
+  assert.equal(db.read().diet.at(-1).name, 'unsynced');
   controller.destroy();
 });
 

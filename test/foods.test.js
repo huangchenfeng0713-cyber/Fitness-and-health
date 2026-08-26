@@ -8,7 +8,7 @@ import {
 } from '../js/data/foods.js';
 
 test('食物库规模与索引完整', () => {
-  assert.ok(FOODS.length >= 942, `只有 ${FOODS.length} 条`);
+  assert.ok(FOODS.length >= 1010, `只有 ${FOODS.length} 条`);
   assert.equal(FOOD_BY_ID.size, FOODS.length, 'id 有重复，索引会丢条目');
 });
 
@@ -68,6 +68,37 @@ test('清补凉原料可独立选择和调量，营养按实际配方逐项求�
     kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0,
     totalSugar: 0, sugar: 0, sodium: 0,
   });
+});
+
+test('品牌烤肉覆盖安又胖及主要连锁菜单，旧品牌名也能搜索', () => {
+  const expectedCounts = {
+    ayp_: 22,
+    muwu_: 10,
+    xita_: 10,
+    jiutian_: 10,
+    fengmao_: 8,
+    feiha_: 8,
+  };
+  for (const [prefix, count] of Object.entries(expectedCounts)) {
+    const foods = FOODS.filter((food) => food.id.startsWith(prefix));
+    assert.equal(foods.length, count, `${prefix} 只有 ${foods.length} 条`);
+    for (const food of foods) {
+      assert.equal(food.cat, 'chain');
+      assert.equal(food.source?.type, 'recipe', `${food.name} 未披露估算来源`);
+      assert.ok(food.source?.accessed && food.note, `${food.name} 缺核对日期或估算边界`);
+      assert.ok(isEstimated(food), `${food.name} 不应伪装成官方营养数据`);
+    }
+  }
+
+  const brands = ['安又胖', '安三胖', '木屋烧烤', '西塔老太太', '九田家', '丰茂烤串', '破店肥哈'];
+  assert.deepEqual(brands.filter((brand) => searchFoods(brand).length === 0), []);
+  assert.equal(searchFoods('安又胖')[0].id, 'ayp_black_pork_belly');
+  assert.equal(searchFoods('安三胖')[0].id, 'ayp_black_pork_belly');
+
+  for (const term of ['厚切黑猪五花', '原切牛肋排卷', '招牌秘制牛肉', '果味横膈膜',
+    '吾桑格', '苏尼特羊肉串', '重磅横膈膜', '黑牛牡蛎肉', '破店大肉筋']) {
+    assert.ok(searchFoods(term).length > 0, `搜不到品牌烤肉“${term}”`);
+  }
 });
 
 const FUNCTIONAL_DRINK_IDS = [
