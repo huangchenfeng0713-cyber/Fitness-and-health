@@ -5,18 +5,11 @@
  * 身高体重体脂本来就是「我的数据」，和健康记录放在一起才顺。
  */
 
-import { h, num, toast, infoTip } from '../../lib/utils.js';
+import { h, num, toast, infoTip, field } from '../../lib/utils.js';
 import { state, saveProfile } from '../../lib/store.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
 } from '../../core/nutrition.js';
-
-function field(label, control, hint, extraClass = '') {
-  return h(`label.form-field${extraClass ? `.${extraClass}` : ''}`, null,
-    h('span', null, label),
-    control,
-    hint && h('small.field-hint', null, hint));
-}
 
 /**
  * 身体信息表单。

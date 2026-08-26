@@ -1,6 +1,6 @@
 /** 设置：账号、数据管理（同步/备份/补录）与计算偏好。身体信息在数据页，每日目标在趋势页。 */
 
-import { h, clearEl, toast, mount, infoTip, confirmAction } from '../lib/utils.js';
+import { h, clearEl, toast, mount, infoTip, confirmAction, field } from '../lib/utils.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
 import {

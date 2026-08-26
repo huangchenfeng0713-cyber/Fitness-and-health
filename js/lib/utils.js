@@ -65,6 +65,20 @@ export function clearEl(el) {
  * 把不影响主流程的补充说明收进一个可点击的小圆点里。
  * 使用原生 details，键盘、读屏和无 JavaScript 的场景都能正常展开。
  */
+/**
+ * 表单字段：标签 + 控件 + 可选说明。
+ *
+ * 放在 utils 而不是某张卡片里：身体信息、账号、反馈都在用它，
+ * 之前它跟着身体信息卡搬进 cards/profile.js，设置页当场整个白屏
+ * （field is not defined）。通用的东西就该住在通用的地方。
+ */
+export function field(label, control, hint, extraClass = '') {
+  return h(`label.form-field${extraClass ? `.${extraClass}` : ''}`, null,
+    h('span', null, label),
+    control,
+    hint && h('small.field-hint', null, hint));
+}
+
 export function infoTip(label, ...children) {
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, '!'),
