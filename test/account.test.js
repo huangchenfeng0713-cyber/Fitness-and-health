@@ -424,19 +424,23 @@ test('其他设备先更新 revision 时，本机修改进入冲突而不是覆�
   sync.destroy();
 });
 
-test('安全退出前即使本机不脏也会检查远端 revision 并拉取较新数据', async () => {
+test('本机没有待上传修改时安全退出不依赖再次读取云端', async () => {
   const db = fakeDb(snapshot('device', { diet: 1 }));
   const client = fakeClient();
   const sync = createCloudSync({ client, dbApi: db, storage: fakeStorage(), debounceMs: 60_000 });
   await sync.setUser({ id: 'u1' });
   await sync.resolveConflict('device');
+  let selects = 0;
+  client.onSelect = async () => { selects += 1; };
   client.rows.set('u1', remoteRow('u1', 2, snapshot('new-cloud', { diet: 2 })));
 
+  await sync.beginSafeSignOut();
   await sync.flush();
 
-  assert.equal(sync.revision, 2);
-  assert.equal(db.read().diet.length, 2);
-  assert.equal(db.read().diet[0].name, 'new-cloud');
+  assert.equal(selects, 0, '云端已有安全副本时，退出不应被一次额外读取卡住');
+  assert.equal(sync.revision, 1);
+  assert.equal(db.read().diet.length, 1);
+  await sync.cancelTransition();
   sync.destroy();
 });
 
@@ -600,6 +604,67 @@ test('安全退出会先同步、只退出本设备，然后清除本地账号�
   assert.equal(db.read().diet.length, 0);
   assert.equal(db.readCloudMetadata().owner, null);
   assert.equal(db.readCloudMetadata().writeLocked, false);
+  controller.destroy();
+});
+
+test('本机已同步时即使云端查询故障也能正常安全退出', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({ session: { user: accountUser('u1') }, rows: [remoteRow('u1', 1, local)] });
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+  await controller.initialize();
+  client.failQueries = true;
+
+  await controller.signOutSafely();
+
+  assert.equal(controller.state.status, 'signedOut');
+  assert.equal(client.auth.signOutCalls, 1);
+  assert.equal(db.clearCount, 1);
+  controller.destroy();
+});
+
+test('未同步记录遇到云端超时后可选择保留本机并退出', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({
+    session: { user: accountUser('u1') },
+    rows: [remoteRow('u1', 1, local)],
+    nextSignInUserId: 'u1',
+  });
+  const controller = createAccountController({
+    client,
+    dbApi: db,
+    storage: fakeStorage(),
+    afterLocalReplace: async () => {},
+    debounceMs: 60_000,
+    syncFactory: (options) => createCloudSync({ ...options, remoteTimeoutMs: 5 }),
+  });
+  await controller.initialize();
+  db.mutate((data) => data.diet.push({ id: 2, date: '2026-08-24', name: 'unsynced' }));
+  await waitFor(() => db.readCloudMetadata().dirty, 'durable dirty');
+  client.onSelect = async () => new Promise(() => {});
+
+  await assert.rejects(controller.signOutSafely(), (error) => error.code === 'remote_timeout');
+  assert.equal(controller.state.user.id, 'u1');
+  assert.equal(db.clearCount, 0);
+
+  await controller.signOutPreservingLocal();
+
+  assert.equal(client.auth.signOutCalls, 1);
+  assert.equal(controller.state.user, null);
+  assert.equal(controller.state.status, 'locked');
+  assert.equal(controller.state.transitionReason, 'preserved-signout');
+  assert.equal(db.clearCount, 0);
+  assert.equal(db.read().diet.at(-1).name, 'unsynced');
+  assert.equal(db.readCloudMetadata().writeLocked, true);
+
+  client.onSelect = null;
+  await controller.signInWithPassword('u1@example.com', 'password-123');
+  await waitFor(() => controller.state.status === 'signedIn', 'same account recovery');
+  assert.equal(db.readCloudMetadata().writeLocked, false);
+  assert.equal(client.rows.get('u1').payload.diet.at(-1).name, 'unsynced');
   controller.destroy();
 });
 

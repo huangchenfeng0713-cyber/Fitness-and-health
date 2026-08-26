@@ -70,6 +70,7 @@ export function createAccountController({
   let syncedUserId = null;
   let authQueue = Promise.resolve();
   let safeSignOutInProgress = false;
+  let preserveLocalSignOutInProgress = false;
   let safeSignOutHandled = false;
 
   function emit() {
@@ -116,28 +117,36 @@ export function createAccountController({
   async function handleAuthUser(user, event = 'AUTH_CHANGED') {
     if (!sync) return;
     if (!user) {
-      const intentional = event === 'SAFE_SIGNED_OUT' || safeSignOutInProgress;
+      const preserving = event === 'PRESERVED_SIGNED_OUT' || preserveLocalSignOutInProgress;
+      const intentional = preserving || event === 'SAFE_SIGNED_OUT' || safeSignOutInProgress;
+      const signOutReason = preserving ? 'preserved-signout'
+        : intentional ? 'safe-signout' : 'unexpected-signout';
       if (intentional && safeSignOutHandled) return;
       patch({
         status: 'loading',
         syncStatus: 'syncing',
         ownershipPending: true,
-        transitionReason: intentional ? 'safe-signout' : 'unexpected-signout',
+        transitionReason: signOutReason,
         error: null,
       });
       if (intentional) safeSignOutHandled = true;
       syncedUserId = null;
-      const detached = intentional
+      const detached = preserving
+        ? await sync.detach({ preserveOwned: true, reason: signOutReason })
+        : intentional
         ? await sync.detach({ forceClear: true, reason: 'safe-signout' })
         : await sync.detach({ reason: 'unexpected-signout' });
       setUserState(null, []);
       if (detached.preserved) {
+        const preservedMessage = preserving
+          ? '已退出账号；本机记录未删除并已锁定，重新登录原账号后可继续同步'
+          : '登录状态已失效，本机未同步数据已锁定保留';
         patch({
           status: 'locked', syncStatus: 'locked', conflict: detached.conflict || null,
           lastSyncedAt: detached.lastSyncedAt || null,
-          error: detached.error || '登录状态已失效，本机未同步数据已锁定保留',
+          error: preserving ? preservedMessage : (detached.error || preservedMessage),
           ownershipPending: true,
-          transitionReason: detached.transitionReason || 'unexpected-signout',
+          transitionReason: detached.transitionReason || signOutReason,
         });
         return;
       }
@@ -375,6 +384,35 @@ export function createAccountController({
     return publicState(state);
   }
 
+  /**
+   * 云端暂时不可达时仍允许退出，但绝不清除本机副本。副本会保持账号归属锁，
+   * 只能由同一账号重新认证后解锁，避免下一位登录者看到或接管这些记录。
+   */
+  async function signOutPreservingLocal() {
+    await ensureInitialized();
+    if (!state.user) return publicState(state);
+    await sync.beginSafeSignOut({ preserveLocal: true });
+    try {
+      patch({
+        status: 'loading', syncStatus: 'syncing', error: null,
+        ownershipPending: true, transitionReason: 'preserved-signout',
+      });
+      safeSignOutInProgress = true;
+      preserveLocalSignOutInProgress = true;
+      safeSignOutHandled = false;
+      await auth.signOut();
+      await queueAuthUser(null, 'PRESERVED_SIGNED_OUT');
+    } catch (error) {
+      if (!safeSignOutHandled) await sync.cancelTransition();
+      throw error;
+    } finally {
+      safeSignOutInProgress = false;
+      preserveLocalSignOutInProgress = false;
+      safeSignOutHandled = false;
+    }
+    return publicState(state);
+  }
+
   function subscribe(listener) {
     if (typeof listener !== 'function') throw new TypeError('云账号监听器必须是函数');
     listeners.add(listener);
@@ -406,6 +444,7 @@ export function createAccountController({
     resolveCloudConflict,
     resolveConflict: resolveCloudConflict,
     signOutSafely,
+    signOutPreservingLocal,
     signOut: signOutSafely,
     destroy,
   };
@@ -477,6 +516,10 @@ export const resolveConflict = resolveCloudConflict;
 
 export function signOutSafely(...args) {
   return account().signOutSafely(...args);
+}
+
+export function signOutPreservingLocal(...args) {
+  return account().signOutPreservingLocal(...args);
 }
 
 export const signOut = signOutSafely;

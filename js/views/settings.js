@@ -4,7 +4,8 @@ import { h, clearEl, num, toast, mount, infoTip, confirmAction } from '../lib/ut
 import { state, saveProfile } from '../lib/store.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
-  resetPassword, setPassword, linkGoogle, signOutSafely, resolveConflict, syncNow,
+  resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
+  resolveConflict, syncNow,
 } from '../lib/account.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
@@ -398,6 +399,15 @@ function signedInAccount(account) {
       runAccountAction(logoutBtn, signOutSafely, { success: '已安全退出账号' });
     },
   }, '安全退出');
+  const preserveLogoutBtn = account.syncStatus === 'error' && h('button.text-btn.danger', {
+    type: 'button',
+    onclick: () => {
+      if (!confirmAction('这会退出账号，但不会删除或上传当前本机记录。记录会锁定在这台设备上，只能重新登录原账号后恢复；期间不能切换给其他账号使用。继续吗？')) return;
+      runAccountAction(preserveLogoutBtn, signOutPreservingLocal, {
+        success: '已退出；本机记录已锁定保留',
+      });
+    },
+  }, '保留本机记录并退出');
 
   const password = h('input', {
     type: 'password', autocomplete: 'new-password', minlength: 8,
@@ -429,8 +439,12 @@ function signedInAccount(account) {
       h(`span.account-sync-badge.${statusKind}`, { role: 'status', 'aria-live': 'polite' }, statusText)),
     (account.phase === 'conflict' || account.syncStatus === 'conflict')
       ? conflictPanel(account)
-      : h('div.account-actions', null, syncBtn, logoutBtn),
-    h('p.privacy-note', null, '同步仅写入当前账号的专属数据行；退出成功后，本机不会继续保留该账号的健康与饮食记录。已连接的快捷指令会继续写入原账号，需在数据页单独撤销。'),
+      : h('div', null,
+        h('div.account-actions', null, syncBtn, logoutBtn),
+        preserveLogoutBtn && h('div.account-offline-signout', null,
+          h('span', null, '云同步失败时仍可退出；本机记录会锁定保留，不会交给其他账号。'),
+          preserveLogoutBtn)),
+    h('p.privacy-note', null, '正常安全退出会在确认待上传修改后清除本机账号记录；“保留本机记录并退出”则只锁定、不删除。已连接的快捷指令会继续写入原账号，需在数据页单独撤销。'),
     h('details.account-linking', null,
       h('summary', null, '管理登录方式'),
       h('p', null, '设置密码后可以用相同邮箱登录；绑定 Google 后也仍是同一个账号。'),
@@ -443,10 +457,15 @@ function signedInAccount(account) {
 }
 
 function lockedAccount(account) {
+  const preservedExit = account.transitionReason === 'preserved-signout';
   return h('div', null,
     h('div.account-conflict', { role: 'alert' },
-      h('strong', null, '原账号的数据仍锁定在这台设备上'),
-      h('p', null, '登录状态意外失效时，应用不会清除或展示原账号的数据，也不会允许另一个账号接管。请用原来的邮箱或 Google 账号重新登录。'),
+      h('strong', null, preservedExit
+        ? '已退出，原账号记录已在本机锁定保留'
+        : '原账号的数据仍锁定在这台设备上'),
+      h('p', null, preservedExit
+        ? '由于云端同步未完成，应用没有删除这份记录。重新登录原来的邮箱或 Google 账号即可恢复并继续同步；其他账号不能接管。'
+        : '登录状态意外失效时，应用不会清除或展示原账号的数据，也不会允许另一个账号接管。请用原来的邮箱或 Google 账号重新登录。'),
       account.error && h('p.account-error', null, accountError(account.error))),
     signedOutAccount(account));
 }
@@ -474,8 +493,11 @@ function accountCard() {
   } else if (actionableConflict) {
     content = signedInAccount(account);
   } else if (account.ownershipPending === true) {
+    const preservingExit = account.transitionReason === 'preserved-signout';
     content = h('div.account-loading', { role: 'status', 'aria-live': 'polite' },
-      h('strong', null, account.transitionReason === 'safe-signout' ? '正在安全退出…' : '正在确认账号数据归属…'),
+      h('strong', null, preservingExit
+        ? '正在保留本机记录并退出…'
+        : account.transitionReason === 'safe-signout' ? '正在安全退出…' : '正在确认账号数据归属…'),
       h('span', null, '完成前暂不提供同步、退出或登录方式修改，避免与账号切换并发。'));
   } else if (!configured) {
     content = h('div.account-local', null,
