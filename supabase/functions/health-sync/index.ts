@@ -1,0 +1,328 @@
+import { createClient } from "npm:@supabase/supabase-js@2.112.4";
+
+const corsHeaders = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-headers": "content-type,x-health-sync-token",
+  "access-control-allow-methods": "POST,OPTIONS",
+};
+
+const numericRanges: Record<string, [number, number]> = {
+  steps: [0, 250000],
+  activeEnergy: [0, 30000],
+  restingEnergy: [0, 10000],
+  exerciseMinutes: [0, 1440],
+  standMinutes: [0, 1440],
+  distanceKm: [0, 1000],
+  sleepMinutes: [0, 1440],
+  waterMl: [0, 100000],
+  weightKg: [1, 500],
+  bodyFatPct: [1, 75],
+  restingHR: [20, 250],
+  vo2max: [5, 120],
+};
+
+const aliases: Record<string, string> = {
+  steps: "steps", stepcount: "steps", "步数": "steps",
+  activeenergy: "activeEnergy", activeenergykcal: "activeEnergy", "活动能量": "activeEnergy",
+  restingenergy: "restingEnergy", restingenergykcal: "restingEnergy", basalenergy: "restingEnergy",
+  "静息能量": "restingEnergy",
+  exerciseminutes: "exerciseMinutes", appleexercisetime: "exerciseMinutes", "锻炼时间": "exerciseMinutes",
+  standminutes: "standMinutes", applestandtime: "standMinutes",
+  distancekm: "distanceKm", distance: "distanceKm", walkingrunningdistance: "distanceKm", "距离": "distanceKm",
+  sleepminutes: "sleepMinutes", sleep: "sleepMinutes", "睡眠": "sleepMinutes",
+  waterml: "waterMl", water: "waterMl", "饮水": "waterMl",
+  weightkg: "weightKg", weight: "weightKg", bodymass: "weightKg", "体重": "weightKg",
+  bodyfatpct: "bodyFatPct", bodyfat: "bodyFatPct", bodyfatpercentage: "bodyFatPct", "体脂率": "bodyFatPct",
+  restinghr: "restingHR", restingheartrate: "restingHR", "静息心率": "restingHR",
+  vo2max: "vo2max",
+};
+
+const measurementAliases: Record<string, string> = {
+  weightmeasuredat: "weightMeasuredAt",
+  bodyfatmeasuredat: "bodyFatMeasuredAt",
+  restinghrmeasuredat: "restingHRMeasuredAt",
+  vo2maxmeasuredat: "vo2maxMeasuredAt",
+};
+
+const snapshotMetricTimes: Record<string, string> = {
+  weightKg: "weightMeasuredAt",
+  bodyFatPct: "bodyFatMeasuredAt",
+  restingHR: "restingHRMeasuredAt",
+  vo2max: "vo2maxMeasuredAt",
+};
+
+const envelopeAliases: Record<string, string> = {
+  date: "date", timestamp: "timestamp", capturedat: "capturedAt",
+  timezone: "timezone", source: "source", syncid: "syncId",
+  protocolversion: "protocolVersion",
+};
+
+function response(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
+function normalizeKey(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && !Array.isArray(value) && typeof value === "object"
+    ? value as Record<string, unknown> : null;
+}
+
+function localDateAt(instant: Date, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function validTimestamp(value: unknown) {
+  return typeof value === "string" && value.length <= 64 && Number.isFinite(Date.parse(value));
+}
+
+function validDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+}
+
+function normalizeDate(value: unknown, captured: Date, timezone: string) {
+  if (typeof value === "string") {
+    const text = value.trim();
+    let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[ T])/);
+    if (!match) match = text.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日/);
+    if (match) {
+      const [, year, month, day] = match;
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    }
+    const parsed = Date.parse(text);
+    if (Number.isFinite(parsed)) return localDateAt(new Date(parsed), timezone);
+  }
+  return localDateAt(captured, timezone);
+}
+
+async function sha256Hex(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function readLimitedText(req: Request, limit: number) {
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (declared > limit) throw new Error("payload_too_large");
+  const reader = req.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    length += value.byteLength;
+    if (length > limit) {
+      await reader.cancel();
+      throw new Error("payload_too_large");
+    }
+    chunks.push(value);
+  }
+  const merged = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+}
+
+function flattenMetrics(value: unknown) {
+  const metrics = asObject(value);
+  if (!metrics) return {};
+  const flat: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(metrics)) {
+    const item = asObject(raw);
+    flat[key] = item && "value" in item ? item.value : raw;
+    if (item?.observedAt) flat[`${key}MeasuredAt`] = item.observedAt;
+  }
+  return flat;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== "POST") return response(405, { ok: false, code: "method_not_allowed" });
+
+  const token = (req.headers.get("x-health-sync-token") || "").trim();
+  if (!/^hds_[A-Za-z0-9_-]{40,100}$/.test(token)) {
+    return response(401, { ok: false, code: "invalid_token" });
+  }
+
+  let envelope: Record<string, unknown>;
+  try {
+    const text = await readLimitedText(req, 16 * 1024);
+    const parsed = asObject(JSON.parse(text));
+    if (!parsed) return response(400, { ok: false, code: "invalid_payload" });
+    envelope = parsed;
+  } catch (error) {
+    if (error instanceof Error && error.message === "payload_too_large") {
+      return response(413, { ok: false, code: "payload_too_large" });
+    }
+    return response(400, { ok: false, code: "invalid_json" });
+  }
+
+  const wrapped = asObject(envelope.payload) || {};
+  const combined = { ...envelope, ...wrapped, ...flattenMetrics(envelope.metrics) };
+  const body: Record<string, unknown> = {};
+  for (const [rawKey, value] of Object.entries(combined)) {
+    const normalized = normalizeKey(rawKey);
+    const key = aliases[normalized] || measurementAliases[normalized]
+      || envelopeAliases[normalized] || rawKey.trim();
+    body[key] = value;
+  }
+
+  const protocolVersion = body.protocolVersion == null ? 1 : Number(body.protocolVersion);
+  if (protocolVersion !== 1) return response(400, { ok: false, code: "unsupported_protocol" });
+
+  const timezone = typeof body.timezone === "string" && body.timezone.trim()
+    ? body.timezone.trim() : "Asia/Shanghai";
+  if (timezone.length > 64) return response(400, { ok: false, code: "invalid_timezone" });
+  try { localDateAt(new Date(), timezone); } catch {
+    return response(400, { ok: false, code: "invalid_timezone" });
+  }
+
+  const dateHasTime = typeof body.date === "string" && /[ T]\d{1,2}:\d{2}/.test(body.date);
+  const capturedCandidate = body.capturedAt ?? body.timestamp ?? (dateHasTime ? body.date : null);
+  const capturedProvided = validTimestamp(capturedCandidate);
+  const capturedAt = capturedProvided ? String(capturedCandidate) : new Date().toISOString();
+  const captured = new Date(capturedAt);
+  if (captured.getTime() > Date.now() + 10 * 60 * 1000) {
+    return response(400, { ok: false, code: "future_timestamp" });
+  }
+  const date = normalizeDate(body.date, captured, timezone);
+  const latestDate = localDateAt(new Date(Date.now() + 10 * 60 * 1000), timezone);
+  if (!validDateKey(date) || date < "2000-01-01" || date > latestDate) {
+    return response(400, { ok: false, code: "invalid_date" });
+  }
+  if (capturedProvided && localDateAt(captured, timezone) !== date) {
+    return response(400, { ok: false, code: "date_timezone_mismatch" });
+  }
+
+  const payload: Record<string, unknown> = {};
+  let metricCount = 0;
+  for (const [key, [min, max]] of Object.entries(numericRanges)) {
+    let value = body[key];
+    if (value == null || value === "") continue;
+    if (typeof value === "string" && value.trim()) value = Number(value.trim());
+    if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
+      return response(400, { ok: false, code: "invalid_metric", field: key });
+    }
+    payload[key] = value;
+    metricCount += 1;
+  }
+  if (!metricCount) return response(400, { ok: false, code: "no_metrics" });
+
+  for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
+    if (payload[metric] == null || body[measuredKey] == null || body[measuredKey] === "") continue;
+    if (!validTimestamp(body[measuredKey])) {
+      return response(400, { ok: false, code: "invalid_measurement_time", field: measuredKey });
+    }
+    const measured = new Date(String(body[measuredKey]));
+    if (measured.getTime() > Date.now() + 10 * 60 * 1000) {
+      return response(400, { ok: false, code: "future_measurement_time", field: measuredKey });
+    }
+    const measuredDate = localDateAt(measured, timezone);
+    if (!validDateKey(measuredDate) || measuredDate < "2000-01-01" || measuredDate > latestDate) {
+      return response(400, { ok: false, code: "invalid_measurement_time", field: measuredKey });
+    }
+    payload[measuredKey] = body[measuredKey];
+  }
+
+  const url = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceRoleKey) return response(500, { ok: false, code: "server_not_configured" });
+
+  const tokenHash = await sha256Hex(token);
+  let syncId = typeof body.syncId === "string" ? body.syncId.trim() : "";
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(syncId)) {
+    syncId = `auto_${(await sha256Hex(`${tokenHash}|${JSON.stringify(combined)}`)).slice(0, 48)}`;
+  }
+  const source = typeof body.source === "string" && body.source.trim()
+    ? body.source.trim().slice(0, 40) : "apple_shortcuts";
+
+  const supabase = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  type IngestJob = {
+    kind: string;
+    date: string;
+    capturedAt: string;
+    payload: Record<string, unknown>;
+    syncId: string;
+  };
+  const mainPayload = { ...payload };
+  const measurementJobs: IngestJob[] = [];
+  for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
+    const measuredAt = mainPayload[measuredKey];
+    if (mainPayload[metric] == null || typeof measuredAt !== "string") continue;
+    const measuredDate = localDateAt(new Date(measuredAt), timezone);
+    if (measuredDate === date) continue;
+    measurementJobs.push({
+      kind: metric,
+      date: measuredDate,
+      capturedAt: measuredAt,
+      payload: { [metric]: mainPayload[metric], [measuredKey]: measuredAt },
+      syncId: `${syncId.slice(0, 106)}:${metric}`,
+    });
+    delete mainPayload[metric];
+    delete mainPayload[measuredKey];
+  }
+
+  const hasMainMetric = Object.keys(numericRanges).some((key) => mainPayload[key] != null);
+  const jobs: IngestJob[] = [
+    ...(hasMainMetric ? [{ kind: "daily", date, capturedAt, payload: mainPayload, syncId }] : []),
+    ...measurementJobs,
+  ];
+  const accepted: Array<Record<string, unknown>> = [];
+  for (const job of jobs) {
+    const result = await supabase.rpc("ingest_health_sync", {
+      p_token_hash: tokenHash,
+      p_sync_id: job.syncId,
+      p_captured_at: job.capturedAt,
+      p_date: job.date,
+      p_timezone: timezone,
+      p_source: source,
+      p_payload: job.payload,
+    });
+    if (result.error) {
+      console.error("health-sync ingest failed", result.error.code);
+      return response(500, { ok: false, code: "ingest_failed" });
+    }
+    if (!result.data?.ok && result.data?.code === "invalid_token") return response(401, result.data);
+    if (!result.data?.ok && result.data?.code === "rate_limited") return response(429, result.data);
+    if (!result.data?.ok) return response(500, result.data || { ok: false, code: "empty_result" });
+    accepted.push({ ...result.data, kind: job.kind });
+  }
+
+  const updatedAt = accepted.map((item) => String(item.updatedAt || ""))
+    .filter((value) => Number.isFinite(Date.parse(value)))
+    .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null;
+  return response(200, {
+    ok: true,
+    applied: accepted.some((item) => item.applied === true),
+    duplicate: accepted.length > 0 && accepted.every((item) => item.duplicate === true),
+    date,
+    updatedAt,
+    measurements: accepted.filter((item) => item.kind !== "daily")
+      .map((item) => ({ metric: item.kind, date: item.date, applied: item.applied })),
+  });
+});

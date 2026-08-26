@@ -392,6 +392,7 @@ export function createAccountController({
 
   return {
     state,
+    get client() { return auth.client; },
     initialize,
     subscribe,
     signUpWithPassword,
@@ -419,6 +420,11 @@ function account(options = undefined) {
 
 export function getAccountState() {
   return publicState(cloudState);
+}
+
+/** 复用账号模块已经初始化的客户端，避免健康同步再创建一套 Auth 会话。 */
+export function getCloudClient() {
+  return account().client || null;
 }
 
 export function subscribeCloud(listener) {
