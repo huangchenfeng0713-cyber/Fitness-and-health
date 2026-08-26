@@ -91,6 +91,36 @@ const SOURCE_POWERADE = Object.freeze({
   ref: 'Coca-Cola POWERADE 官方产品营养表代表口味',
   accessed: '2026-08-24',
 });
+const SOURCE_AYP_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '安又胖（原安三胖）官网产品页、正大广场门店页及携程合生汇菜单核对品名；营养按同类原料与常见腌料估算',
+  accessed: '2026-08-26',
+});
+const SOURCE_MUWU_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '木屋烧烤官网及携程门店菜单核对品名；营养按同类烤串配方估算',
+  accessed: '2026-08-26',
+});
+const SOURCE_XITA_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '西塔老太太泥炉烤肉携程门店菜单核对品名；营养按同类肉品与腌料估算',
+  accessed: '2026-08-26',
+});
+const SOURCE_JIUTIAN_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '九田家黑牛烤肉多门店公开菜单核对品名；营养按同类肉品与配方估算',
+  accessed: '2026-08-26',
+});
+const SOURCE_FENGMAO_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '丰茂烤串公开门店菜单核对品名；营养按同类烤串配方估算',
+  accessed: '2026-08-26',
+});
+const SOURCE_FEIHA_BBQ = Object.freeze({
+  type: 'recipe',
+  ref: '破店肥哈东北烧烤携程门店菜单核对品名；营养按同类东北烧烤配方估算',
+  accessed: '2026-08-26',
+});
 const META_RECIPE_READY = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
@@ -124,6 +154,17 @@ const META_USDA_READY = Object.freeze({
 const META_USDA_DRINK = Object.freeze({
   source: SOURCE_USDA, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
+
+function brandedBbqFood({
+  id, name, alias, n, servingGrams, source, servingLabel = '一份可食部', note = '', flags = [],
+}) {
+  return {
+    id, name, alias, cat: 'chain', n, s: [[servingLabel, servingGrams]],
+    source, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+    note: `${note ? `${note}；` : ''}品牌未公开完整营养表，按同类原料、常见腌料和烤制成品率估算；门店、批次及实际蘸料会有差异`,
+    f: [...flags, 'est'],
+  };
+}
 
 export const FOODS = [
   // ---------- 主食 ----------
@@ -1202,6 +1243,83 @@ export const FOODS = [
       ],
     },
   },
+
+  // ---------- 品牌烤肉与烤串 ----------
+  // 品牌大多只公开菜单、不公开营养表。这里核对真实在售/推荐菜名，营养统一按
+  // 同类原料、常见腌料和烤制成品率估算，并在每个条目的来源与说明中披露边界。
+  brandedBbqFood({ id: 'ayp_black_pork_belly', name: '安又胖 厚切黑猪五花肉', alias: '安三胖 anyoupang ansanpang heiqie heizhu wuhua 韩国烤肉', n: [431, 15, 39, 5, 0.2, 3, 650], servingGrams: 150, source: SOURCE_AYP_BBQ, note: '常用份量按一盘烤熟可食部估重' }),
+  brandedBbqFood({ id: 'ayp_big_pork_belly', name: '安又胖 超级big胖猪五花', alias: '安三胖 anyoupang ansanpang big pangzhu wuhua 超级胖猪五花', n: [455, 14, 43, 3, 0, 1.5, 620], servingGrams: 180, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_beef_short_rib_roll', name: '安又胖 原切牛肋排卷', alias: '安三胖 anyoupang ansanpang niuleipai juan beef short rib roll', n: [335, 20, 27, 3, 0, 1, 420], servingGrams: 150, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_secret_beef', name: '安又胖 招牌秘制牛肉', alias: '安三胖 anyoupang ansanpang mizhi niurou 招牌牛肉', n: [230, 20, 14, 6, 0.2, 4, 720], servingGrams: 150, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_secret_woosamgyeop', name: '安又胖 秘制吾桑格', alias: '安三胖 anyoupang ansanpang wusangge woosamgyeop 牛五花 薄切肥牛', n: [354, 17, 30, 4, 0.1, 2, 650], servingGrams: 150, source: SOURCE_AYP_BBQ, note: '“吾桑格”按韩式牛五花薄片估算' }),
+  brandedBbqFood({ id: 'ayp_fruit_woosamgyeop', name: '安又胖 果味吾桑格', alias: '安三胖 anyoupang ansanpang guowei wusangge woosamgyeop 牛五花', n: [365, 17, 29, 9, 0.2, 6, 720], servingGrams: 150, source: SOURCE_AYP_BBQ, note: '“吾桑格”按韩式牛五花薄片并计入果味腌料估算' }),
+  brandedBbqFood({ id: 'ayp_fruit_skirt', name: '安又胖 果味横膈膜', alias: '安三胖 anyoupang ansanpang guowei henggemo skirt steak', n: [224, 22, 12, 7, 0.3, 5, 680], servingGrams: 150, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_jar_beef_rib_finger', name: '安又胖 坛香秘制牛肋条', alias: '安三胖 anyoupang ansanpang tanxiang mizhi niuleitiao rib finger', n: [260, 21, 18, 3.5, 0.2, 2, 720], servingGrams: 150, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_fruit_pork_rib', name: '安又胖 妈妈的果味猪排', alias: '安三胖 anyoupang ansanpang mama guowei zhupai pork steak', n: [271, 19, 19, 6, 0.2, 4, 700], servingGrams: 160, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_m6_ribeye', name: '安又胖 原切M6肋眼牛排', alias: '安三胖 anyoupang ansanpang m6 leiyan niupai ribeye 黑松露', n: [292, 23, 22, 0.5, 0, 0, 360], servingGrams: 180, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_wasabi_egg_beef', name: '安又胖 山葵蛋滑烧肉', alias: '安三胖 anyoupang ansanpang shankui danhua shaorou wasabi egg beef', n: [210, 17, 14, 4, 0.2, 2, 600], servingGrams: 150, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_pork_sausage', name: '安又胖 济州岛手作猪腿肠', alias: '安三胖 anyoupang ansanpang jeju zhutuichang sausage 风干肠', n: [309, 15, 25, 6, 0.2, 2, 950], servingGrams: 100, source: SOURCE_AYP_BBQ, flags: ['processed'] }),
+  brandedBbqFood({ id: 'ayp_spicy_chicken_feet', name: '安又胖 韩式火辣鸡爪', alias: '安三胖 anyoupang ansanpang huola jizhua spicy chicken feet', n: [220, 18, 12, 10, 0.5, 6, 900], servingGrams: 180, source: SOURCE_AYP_BBQ, note: '按去骨可食部和附着酱汁估算，不含骨重' }),
+  brandedBbqFood({ id: 'ayp_spicy_rice_cake', name: '安又胖 妈妈的辣年糕条', alias: '安三胖 anyoupang ansanpang mama la niangaotiao tteokbokki', n: [204, 4, 2, 43, 1, 12, 650], servingGrams: 180, source: SOURCE_AYP_BBQ, flags: ['refined'] }),
+  brandedBbqFood({ id: 'ayp_fishcake_rice_cake', name: '安又胖 鱼饼炒年糕', alias: '安三胖 anyoupang ansanpang yubing chao niangao fishcake tteokbokki', n: [186, 6, 4, 32, 1, 9, 780], servingGrams: 220, source: SOURCE_AYP_BBQ, flags: ['processed', 'refined'] }),
+  brandedBbqFood({ id: 'ayp_bibimbap', name: '安又胖 国民拌饭', alias: '安三胖 anyoupang ansanpang guomin banfan bibimbap', n: [150, 6, 5, 21, 1.5, 3, 520], servingGrams: 400, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_tuna_rice_ball', name: '安又胖 手作金枪鱼饭团', alias: '安三胖 anyoupang ansanpang jinqiangyu fantuan tuna rice ball', n: [204, 7, 6, 31, 1, 2, 480], servingGrams: 180, source: SOURCE_AYP_BBQ, flags: ['processed'] }),
+  brandedBbqFood({ id: 'ayp_rock_fried_chicken', name: '安又胖 摇滚炸鸡', alias: '安三胖 anyoupang ansanpang yaogun zhaji 爆汁炸鸡 fried chicken', n: [298, 19, 19, 13, 0.5, 2, 760], servingGrams: 200, source: SOURCE_AYP_BBQ, flags: ['fried', 'processed'] }),
+  brandedBbqFood({ id: 'ayp_grilled_pineapple', name: '安又胖 烤菠萝', alias: '安三胖 anyoupang ansanpang kao boluo grilled pineapple', n: [97, 0.5, 2.5, 19, 2, 14, 120], servingGrams: 120, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_pumpkin_porridge', name: '安又胖 南瓜粥', alias: '安三胖 anyoupang ansanpang nangua zhou pumpkin porridge', n: [56, 1.2, 1, 11, 0.8, 5, 120], servingGrams: 220, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_potato_salad', name: '安又胖 土豆泥', alias: '安三胖 anyoupang ansanpang tudouni potato salad', n: [166, 2, 12, 13, 1.2, 2, 420], servingGrams: 100, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_tiramisu_bingsu', name: '安又胖 首尔提拉米苏雪花冰', alias: '安三胖 anyoupang ansanpang shouer tiramisu xuehuabing bingsu', n: [194, 3, 7, 30, 0.5, 24, 95], servingGrams: 350, source: SOURCE_AYP_BBQ, flags: ['processed'] }),
+
+  brandedBbqFood({ id: 'muwu_lamb_skewer', name: '木屋烧烤 烤羔羊肉串', alias: 'muwu shaokao gaoyang yangrouchuan lamb skewer 招牌羊肉串', n: [259, 20, 19, 2, 0, 0.5, 620], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_grilled_wings', name: '木屋烧烤 招牌烤翅', alias: 'muwu shaokao kaochi mizhi chi chicken wings 蜜汁翅', n: [271, 20, 19, 5, 0.2, 3, 720], servingGrams: 100, servingLabel: '一份（2只）', source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_oyster', name: '木屋烧烤 烤湛江生蚝', alias: 'muwu shaokao zhanjiang shenghao oyster', n: [106, 10, 3, 10, 0.5, 3, 680], servingGrams: 120, servingLabel: '一份（4只可食部）', source: SOURCE_MUWU_BBQ, note: '按蚝肉和蒜蓉调味计，不含贝壳' }),
+  brandedBbqFood({ id: 'muwu_pork_belly', name: '木屋烧烤 烤五花肉', alias: 'muwu shaokao wuhuarou pork belly', n: [391, 16, 35, 3, 0, 1, 650], servingGrams: 120, source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_chicken_cartilage', name: '木屋烧烤 烤鸡脆骨', alias: 'muwu shaokao jicuigu chicken cartilage', n: [190, 20, 10, 5, 0.2, 2, 780], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_spicy_pork_skewer', name: '木屋烧烤 泼辣猪小串', alias: 'muwu shaokao pola zhuxiaochuan spicy pork skewer', n: [240, 19, 16, 5, 0.3, 3, 750], servingGrams: 100, servingLabel: '一份（5串）', source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_bursting_tofu', name: '木屋烧烤 包浆豆腐', alias: 'muwu shaokao baojiang doufu grilled tofu', n: [168, 10, 10, 10, 1, 2, 720], servingGrams: 150, source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_grilled_intestine', name: '木屋烧烤 烤肥肠', alias: 'muwu shaokao feichang grilled intestine', n: [316, 13, 28, 3, 0, 1, 700], servingGrams: 100, servingLabel: '一份（3串）', source: SOURCE_MUWU_BBQ }),
+  brandedBbqFood({ id: 'muwu_grilled_bread', name: '木屋烧烤 烤面包片', alias: 'muwu shaokao mianbaopian grilled bread', n: [328, 8, 12, 48, 2, 8, 420], servingGrams: 80, servingLabel: '一份（2片）', source: SOURCE_MUWU_BBQ, flags: ['refined'] }),
+  brandedBbqFood({ id: 'muwu_fried_rice', name: '木屋烧烤 木屋炒饭', alias: 'muwu shaokao chaofan fried rice 紫金酱油炒饭', n: [197, 5, 7, 29, 1, 2, 620], servingGrams: 350, source: SOURCE_MUWU_BBQ }),
+
+  brandedBbqFood({ id: 'xita_signature_beef', name: '西塔老太太 老太太特色肥瘦', alias: 'xita laotaitai feishou beef 泥炉烤肉', n: [331, 19, 27, 3, 0, 1, 600], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_rolled_short_rib', name: '西塔老太太 秘制卷牛肋排', alias: 'xita laotaitai mizhi juan niuleipai short rib', n: [331, 20, 27, 2, 0, 1, 520], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_heavy_skirt', name: '西塔老太太 重磅横膈膜', alias: 'xita laotaitai zhongbang henggemo skirt steak', n: [229, 22, 13, 6, 0, 3, 650], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_secret_beef_belly', name: '西塔老太太 秘制牛五花', alias: 'xita laotaitai mizhi niuwuhua beef belly', n: [350, 18, 30, 2, 0, 1, 600], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_snow_beef', name: '西塔老太太 吉品雪花肉', alias: 'xita laotaitai jipin xuehuarou marbled beef 极品雪花肉', n: [320, 21, 26, 0.5, 0, 0, 380], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_sandalwood_rib_finger', name: '西塔老太太 檀香小肋条肉', alias: 'xita laotaitai tanxiang xiaoleitiao rib finger', n: [276, 21, 20, 3, 0, 1.5, 650], servingGrams: 150, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_dry_sausage', name: '西塔老太太 烤风干肠', alias: 'xita laotaitai fengganchang dry sausage', n: [340, 17, 28, 5, 0, 2, 1050], servingGrams: 100, source: SOURCE_XITA_BBQ, flags: ['processed'] }),
+  brandedBbqFood({ id: 'xita_old_bibimbap', name: '西塔老太太 老式拌饭', alias: 'xita laotaitai laoshi banfan bibimbap', n: [149, 5, 4, 24, 1.5, 3, 520], servingGrams: 400, source: SOURCE_XITA_BBQ }),
+  brandedBbqFood({ id: 'xita_butter_rice_cake', name: '西塔老太太 黄油米饼', alias: 'xita laotaitai huangyou mibing butter rice cake', n: [246, 4, 8, 40, 1, 5, 480], servingGrams: 120, source: SOURCE_XITA_BBQ, flags: ['refined'] }),
+  brandedBbqFood({ id: 'xita_seafood_pancake', name: '西塔老太太 泥炉海鲜葱饼', alias: 'xita laotaitai haixian congbing seafood pancake', n: [191, 8, 9, 20, 1, 2, 650], servingGrams: 220, source: SOURCE_XITA_BBQ }),
+
+  brandedBbqFood({ id: 'jiutian_beef_rib_finger', name: '九田家 黑牛肋条', alias: 'jiutianjia heiniu leitiao beef rib finger', n: [271, 21, 19, 4, 0, 2, 690], servingGrams: 150, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_oyster_blade', name: '九田家 黑牛牡蛎肉', alias: 'jiutianjia heiniu muli beef oyster blade', n: [249, 22, 17, 2, 0, 1, 520], servingGrams: 150, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_chuck_roll', name: '九田家 黑牛上脑', alias: 'jiutianjia heiniu shangnao chuck roll', n: [284, 21, 22, 0.5, 0, 0, 420], servingGrams: 150, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_seasoned_pork_belly', name: '九田家 调味猪五花', alias: 'jiutianjia tiaowei zhu wuhua pork belly', n: [390, 15, 34, 6, 0, 3, 700], servingGrams: 150, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_beef_tongue', name: '九田家 黑牛牛舌', alias: 'jiutianjia heiniu niushe beef tongue', n: [259, 21, 19, 1, 0, 0.5, 520], servingGrams: 120, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_secret_fatty_beef', name: '九田家 秘制肥牛', alias: 'jiutianjia mizhi feiniu marinated fatty beef', n: [331, 18, 27, 4, 0, 2, 650], servingGrams: 150, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_lamb_chop', name: '九田家 锡盟羊排', alias: 'jiutianjia ximeng yangpai lamb chop', n: [291, 20, 23, 1, 0, 0.5, 560], servingGrams: 160, note: '按去骨可食部估算', source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_teriyaki_chicken_rice', name: '九田家 照烧鸡腿饭', alias: 'jiutianjia zhaoshao jitui fan teriyaki chicken rice', n: [168, 8, 6, 21, 1, 3, 580], servingGrams: 450, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_beef_bibimbap', name: '九田家 牛肉石锅拌饭', alias: 'jiutianjia niurou shiguo banfan bibimbap', n: [158, 7, 5, 22, 1.5, 3, 560], servingGrams: 450, source: SOURCE_JIUTIAN_BBQ }),
+  brandedBbqFood({ id: 'jiutian_seaweed_soup', name: '九田家 海带汤', alias: 'jiutianjia haidai tang seaweed soup', n: [45, 4, 2, 3, 0.7, 0.5, 650], servingGrams: 300, note: '按整碗汤计；不喝汤时钠摄入更低', source: SOURCE_JIUTIAN_BBQ }),
+
+  brandedBbqFood({ id: 'fengmao_sunit_lamb_skewer', name: '丰茂烤串 苏尼特羊肉串', alias: 'fengmao kaochuan sunite yangrouchuan lamb skewer', n: [259, 20, 19, 2, 0, 0.5, 620], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_large_lamb_skewer', name: '丰茂烤串 羊肉大串', alias: 'fengmao kaochuan yangrou dachuan large lamb skewer', n: [266, 20, 20, 1.5, 0, 0.5, 600], servingGrams: 120, servingLabel: '一份（2串）', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_beef_skewer', name: '丰茂烤串 精品牛排串', alias: 'fengmao kaochuan niupai chuan beef skewer', n: [245, 21, 17, 2, 0, 0.5, 620], servingGrams: 100, servingLabel: '一份（3串）', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_beef_tendon', name: '丰茂烤串 牛板筋', alias: 'fengmao kaochuan niubanjin beef tendon', n: [160, 25, 4, 6, 0, 1, 750], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_lamb_chop', name: '丰茂烤串 爱的小羊排', alias: 'fengmao kaochuan xiaoyangpai lamb chop', n: [300, 20, 24, 1, 0, 0.5, 560], servingGrams: 160, note: '按去骨可食部估算', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_pork_enoki', name: '丰茂烤串 五花肉卷金针菇', alias: 'fengmao kaochuan wuhuarou juan jinzhengu', n: [248, 13, 18, 9, 1, 3, 680], servingGrams: 120, source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_chicken_cartilage', name: '丰茂烤串 哎呀掌中宝', alias: 'fengmao kaochuan zhangzhongbao chicken cartilage', n: [219, 18, 15, 3, 0.2, 1, 700], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_FENGMAO_BBQ }),
+  brandedBbqFood({ id: 'fengmao_sausage', name: '丰茂烤串 烤香肠', alias: 'fengmao kaochuan xiangchang grilled sausage', n: [300, 14, 24, 7, 0.3, 3, 980], servingGrams: 100, servingLabel: '一份（2根）', source: SOURCE_FENGMAO_BBQ, flags: ['processed'] }),
+
+  brandedBbqFood({ id: 'feiha_meat_tendon', name: '破店肥哈 破店大肉筋', alias: 'podian feiha daroujin meat tendon 东北烧烤', n: [253, 22, 17, 3, 0, 1, 720], servingGrams: 100, servingLabel: '一份（3串）', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_chicken_cartilage', name: '破店肥哈 鸡脆骨', alias: 'podian feiha jicuigu chicken cartilage', n: [199, 20, 11, 5, 0.2, 2, 760], servingGrams: 90, servingLabel: '一份（3串）', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_beef_tongue', name: '破店肥哈 一口大牛舌', alias: 'podian feiha niushe beef tongue', n: [259, 21, 19, 1, 0, 0.5, 540], servingGrams: 100, servingLabel: '一份（3串）', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_grilled_intestine', name: '破店肥哈 烤肥肠', alias: 'podian feiha kaofeichang grilled intestine', n: [316, 13, 28, 3, 0, 1, 720], servingGrams: 100, servingLabel: '一份（3串）', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_qq_chicken_rack', name: '破店肥哈 QQ鸡架', alias: 'podian feiha qq jijia chicken rack 沈阳鸡架', n: [280, 20, 20, 5, 0.2, 1, 800], servingGrams: 180, note: '按去除大骨后的可食部和附着调味计', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_cold_noodle', name: '破店肥哈 大冷面', alias: 'podian feiha dalengmian korean cold noodle', n: [108, 3, 1, 22, 1, 4, 600], servingGrams: 500, note: '按面、配菜和整碗汤计；不喝汤时钠摄入更低', source: SOURCE_FEIHA_BBQ }),
+  brandedBbqFood({ id: 'feiha_grilled_bread', name: '破店肥哈 烤面包', alias: 'podian feiha kao mianbao grilled bread', n: [323, 8, 11, 49, 2, 8, 420], servingGrams: 100, servingLabel: '一份（2片）', source: SOURCE_FEIHA_BBQ, flags: ['refined'] }),
+  brandedBbqFood({ id: 'feiha_crayfish_tail', name: '破店肥哈 麻辣龙虾尾', alias: 'podian feiha mala longxiawei crayfish tail', n: [144, 16, 7, 4, 0.3, 1, 850], servingGrams: 220, note: '按去壳虾尾可食部和附着酱汁计，不含壳与盘底余汁', source: SOURCE_FEIHA_BBQ }),
 
   // ---------- 果汁与常见即饮果蔬饮品（液体均按 100ml） ----------
   { id: 'juice_apple', name: '苹果汁（100%）', alias: 'pingguozhi apple juice 纯果汁', cat: 'drink', n: [46, 0.1, 0.1, 11.3, 0.2, 9.6, 4], s: [['一杯', 250], ['一小瓶', 300]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
