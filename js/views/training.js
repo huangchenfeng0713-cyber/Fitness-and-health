@@ -69,11 +69,11 @@ function pickerCard(rerender) {
   const group = GROUPS.find((g) => g.key === activeGroup);
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '挑动作'),
+      h('h3', null, '动作选择'),
       h('span.card-tag', null, `${group.label} · ${list.length} 个`)),
     groupTabs(rerender),
     h('p.form-hint', { style: { margin: '8px 0 4px' } },
-      `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今天的计划，再点一下取消。`),
+      `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今日计划，再点一下取消。`),
     h('div.ex-list', null, list.map((e) => exerciseRow(e, rerender))));
 }
 
@@ -81,14 +81,14 @@ function planCard(rerender) {
   const list = pickedExercises();
   if (!list.length) {
     return h('section.card', null,
-      h('div.card-head', null, h('h3', null, '今天的计划')),
+      h('div.card-head', null, h('h3', null, '今日计划')),
       h('p.empty-hint', null, '还没选动作。从上面按部位挑几个，这里会告诉你有没有练重复、还缺哪些部位。'));
   }
   const overlaps = findOverlaps(list);
   const cov = coverage(list).filter((c) => c.exercises > 0);
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '今天的计划'),
+      h('h3', null, '今日计划'),
       h('div.card-head-actions', null,
         h('span.card-tag', null, `${list.length} 个动作`),
         h('button.text-btn', { onclick: () => { picked = []; rerender(); } }, '清空'))),
@@ -110,7 +110,7 @@ function adviceCard() {
   const tips = planAdvice(pickedExercises());
   if (!tips.length) return null;
   return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '组合建议')),
+    h('div.card-head', null, h('h3', null, '训练建议')),
     h('div.insight-list', null, tips.map((t) => h(`div.insight.${t.level}`, null,
       h('div.insight-title', null, t.title),
       h('div.insight-text', null, t.text)))));

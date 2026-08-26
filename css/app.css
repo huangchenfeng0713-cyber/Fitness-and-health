@@ -988,8 +988,29 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .data-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .data-table tr.current td { background: var(--accent-soft); font-weight: 600; }
 
-/* ============ 趋势页 ============ */
+/* ============ 趋势图 ============ */
 .range-switch { display: flex; gap: 6px; justify-content: center; }
+
+/*
+ * 图表选择器。七个选项换行铺开而不是横向滚动：横滚会把后面几张图藏在屏幕外，
+ * 不点一下根本不知道有静息心率这张图。换行最多占三行，全部可见。
+ */
+.chart-switch {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+/* 没有数据的图仍可点开——点进去会说明缺什么，比直接藏起来好找 */
+.chip-btn.empty { opacity: .45; }
+.chip-btn.empty.active { opacity: 1; }
+.trend-picker .card-head { margin-bottom: 10px; }
+
+/* 走势解读：这是结论不是脚注，比 .form-hint 更实一点 */
+.chart-note {
+  margin-top: 10px; padding: 9px 11px;
+  background: var(--card-2); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+  font-size: 12.5px; line-height: 1.65; color: var(--muted);
+}
 .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 8px; }
 .summary-item { text-align: center; }
 .summary-value { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -1016,7 +1037,6 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   background: var(--card-2); border-radius: var(--radius-sm);
   font-size: 13px;
 }
-.chart-readout.empty { color: var(--faint); font-size: 12px; justify-content: center; }
 .readout-day { color: var(--muted); font-variant-numeric: tabular-nums; }
 .readout-value { font-weight: 650; font-variant-numeric: tabular-nums; margin-left: auto; }
 /* 图表本身不该吃掉页面滚动，只在可点的落点区拦手势 */

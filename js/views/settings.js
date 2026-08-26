@@ -1,6 +1,7 @@
-/** 设置：账号、数据管理（同步/备份/补录）与计算偏好。身体信息在数据页，每日目标在趋势页。 */
+/** 设置：身体信息、账号、数据管理（同步/备份/补录）与计算偏好。 */
 
 import { h, clearEl, toast, mount, infoTip, confirmAction, field } from '../lib/utils.js';
+import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
 import {
@@ -474,6 +475,8 @@ export function renderSettings(root) {
       ? '未登录时数据只保存在当前设备；登录后可同步到账号专属云端空间。'
       : '当前为本地模式，数据只保存在这台设备的浏览器里。';
   mount(root,
+    // 身体信息排最上面：它是一切目标计算的输入，改它的频率也最高
+    profileCard(rerender),
     slot,
     dataManagerCard(rerender),
     toggleCard(),

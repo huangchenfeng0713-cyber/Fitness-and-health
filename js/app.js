@@ -6,7 +6,6 @@ import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
-import { renderTrends } from './views/trends.js';
 import { renderTraining } from './views/training.js';
 import { renderSettings } from './views/settings.js';
 import { APP_VERSION } from './core/feedback.js';
@@ -19,7 +18,6 @@ const TABS = [
   { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
   { key: 'diet', label: '饮食', icon: 'add', render: renderDiet, dated: true },
   { key: 'health', label: '数据', icon: 'data', render: renderHealth },
-  { key: 'trends', label: '趋势', icon: 'trend', render: renderTrends },
   { key: 'training', label: '健身', icon: 'training', render: renderTraining },
 ];
 
@@ -28,7 +26,6 @@ const TAB_ICON = {
   add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   data: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h3l2-6 4 11 2-5h5"/></svg>',
   training: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>',
-  trend: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17V9M12 17V5M19 17v-7"/><path d="M3 20h18"/></svg>',
   settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>',
 };
 
@@ -128,7 +125,7 @@ function renderTopbar() {
     // 健身页不按日期统计，标「数据截至」只会让人以为动作库跟日期有关
     const noteText = tab.key === 'training'
       ? '按部位挑动作，实时检查有没有练重复'
-      : `${tab.key === 'trends' ? '统计' : '数据'}截至 ${cutoff}`;
+      : `数据截至 ${cutoff}`;
     context.append(
       h('h1', null, tab.label),
       h('span.topbar-context-note', null, noteText),

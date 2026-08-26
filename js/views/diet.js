@@ -83,7 +83,7 @@ function buildShell(root) {
   nodes.searchCard = h('section.card', null,
     h('div.card-head.search-card-head', null,
       h('div', null,
-        h('h3', null, '记录吃了什么'),
+        h('h3', null, '饮食记录'),
         h('p.card-desc', null, '搜索名称、拼音或品牌，也可以按分类浏览 900+ 种食物。'))),
     h('div.search-row', null, nodes.searchInput, nodes.customToggle),
     nodes.customBox,
@@ -153,7 +153,7 @@ function suggestionBlock() {
   const meal = state.derived.advice.budget.meal;
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '现在推荐'),
+      h('h3', null, '当前饮食推荐'),
       h('span.card-tag', null, `${MEAL_LABEL[meal.key]} · 还差 ${num(Math.max(state.derived.advice.gaps.protein.remaining, 0), 0)}g 蛋白`)),
     h('div.rec-list', null, rec.slice(0, 3).map((item) => h('div.rec-row', null,
       h('div.rec-info', null,
@@ -733,7 +733,7 @@ function refreshEntries() {
 
   if (!entries.length) {
     mount(nodes.entries, h('section.card', null,
-      h('div.card-head', null, h('h3', null, '这一天的记录')),
+      h('div.card-head', null, h('h3', null, '饮食记录编辑')),
       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
       copyRow()));
     return;
@@ -744,7 +744,7 @@ function refreshEntries() {
 
   mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '这一天的记录'),
+      h('h3', null, '饮食记录编辑'),
       h('span.card-tag', null,
         `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`)),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
