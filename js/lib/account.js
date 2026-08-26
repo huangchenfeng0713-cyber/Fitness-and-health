@@ -221,7 +221,9 @@ export function createAccountController({
       const authState = await auth.initialize();
       state.configured = Boolean(authState.configured);
       if (!authState.configured || !authState.available || !auth.client) {
-        initialized = true;
+        // Missing configuration is stable, while a configured service that is
+        // temporarily offline must remain retryable when the network returns.
+        initialized = !authState.configured;
         let durableProtection = false;
         let durableProbeError = null;
         if (typeof localDb.getCloudSyncMetadata === 'function') {
@@ -229,11 +231,13 @@ export function createAccountController({
             const durable = await localDb.getCloudSyncMetadata();
             if (durable?.owner) {
               durableProtection = true;
-              await localDb.setCloudSyncMetadata({
-                ...durable,
-                epoch: Math.max(0, Number(durable.epoch) || 0) + 1,
-                writeLocked: true,
-              });
+              if (!durable.writeLocked) {
+                await localDb.setCloudSyncMetadata({
+                  ...durable,
+                  epoch: Math.max(0, Number(durable.epoch) || 0) + 1,
+                  writeLocked: true,
+                });
+              }
             } else if (durable?.writeLocked) {
               // owner=null + locked can be an interrupted claim/switch. Without
               // authentication it is impossible to prove whose data is visible,

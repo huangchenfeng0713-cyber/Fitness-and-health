@@ -54,6 +54,7 @@ function shortcutConfig(credential) {
       'X-Health-Sync-Token': credential.token,
     },
     bodyExample: {
+      protocolVersion: 1,
       timestamp: '2026-08-25T14:10:00+08:00',
       date: '2026-08-25',
       timezone: 'Asia/Shanghai',
@@ -61,16 +62,6 @@ function shortcutConfig(credential) {
       steps: 4217,
       activeEnergyKcal: 203.6,
       restingEnergyKcal: 912.4,
-      exerciseMinutes: 18,
-      standMinutes: 246,
-      distanceKm: 3.12,
-      sleepMinutes: 431,
-      weightKg: 59,
-      weightMeasuredAt: '2026-08-25T07:35:00+08:00',
-      bodyFatPct: 18.5,
-      bodyFatMeasuredAt: '2026-08-25T07:35:00+08:00',
-      restingHR: 70,
-      restingHRMeasuredAt: '2026-08-25T06:20:00+08:00',
     },
   }, null, 2);
 }
@@ -309,7 +300,7 @@ function automaticSyncPanel(rerender) {
     h('div.sync-credential-head', null,
       h('div', null,
         h('strong', null, `${credential.deviceName} 的一次性连接信息`),
-        h('span', null, '令牌关闭后无法再次查看；丢失时请撤销设备并重新生成。')),
+        h('span', null, '先复制基础配置，再在 iPhone 上打开快捷指令；令牌关闭后无法再次查看。')),
       h('span.status-pill.warn', null, '仅显示一次')),
     credentialField('上传 URL', credential.endpoint, '复制 URL', '上传 URL 已复制'),
     credentialField('设备令牌', credential.token, '复制令牌', '设备令牌已复制'),
@@ -318,10 +309,16 @@ function automaticSyncPanel(rerender) {
         type: 'button',
         onclick: () => copyText(shortcutConfig(credential), '完整快捷指令配置已复制')
           .catch((error) => toast(error.message, 'error')),
-      }, '复制完整配置'),
+      }, '1. 复制基础配置'),
+      h('button.secondary-btn', {
+        type: 'button',
+        onclick: () => { window.location.href = 'shortcuts://create-shortcut'; },
+      }, '2. 在 iPhone 上新建'),
       h('button.text-btn', {
         type: 'button', onclick: () => { forgetGeneratedHealthSyncCredential(); rerender(); },
-      }, '我已保存，隐藏')));
+      }, '已保存，隐藏')),
+    h('p.sync-credential-note', null,
+      '基础模板只包含步数、活动能量和静息能量。没有样本的字段要省略；体重、体脂、睡眠等请确认基础同步成功后再按帮助页添加。'));
 
   const deviceList = devices.length
     ? h('div.sync-device-list', null,
@@ -404,7 +401,13 @@ function importPanel(rerender) {
   });
 
   const drop = h('div.dropzone', {
+    role: 'button', tabindex: 0, 'aria-label': '选择 Apple 健康导出文件',
     onclick: () => input.click(),
+    onkeydown: (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      input.click();
+    },
     ondragover: (e) => { e.preventDefault(); e.currentTarget.classList.add('over'); },
     ondragleave: (e) => e.currentTarget.classList.remove('over'),
     ondrop: (e) => {
@@ -493,12 +496,12 @@ function importPanel(rerender) {
 
 function guidePanel() {
   const shortcutRecipe = [
-    '先登录本应用，在“同步 Apple 健康”里生成连接信息，并保存上传 URL 与设备令牌',
-    '打开「快捷指令」App → + 新建；分别读取今天的步数、活动能量、静息能量、锻炼时间、站立时间、距离和睡眠总计',
-    '体重、体脂率与静息心率选择“最新一条”，同时读取该样本的开始日期作为对应的 measuredAt；不要把多天数值相加',
-    '添加“字典”，键名使用 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal、exerciseMinutes、standMinutes、distanceKm、sleepMinutes，以及测量值和对应的 measuredAt',
+    '先登录本应用，在“同步 Apple 健康”里生成连接信息，点击“复制基础配置”保存上传 URL、设备令牌和字段示例',
+    '在 iPhone 上点击“新建”直接打开「快捷指令」编辑器；首次只读取今天的步数、活动能量和静息能量并分别求总和',
+    '添加“字典”，放入 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal；某项没有样本时省略该键，不要填 0',
     '添加“获取 URL 内容”：方法选 POST，请求体选 JSON；标头增加 X-Health-Sync-Token，值填刚才保存的设备令牌',
     '首次手动运行并允许读取健康数据；返回 ok: true 就表示已经写入账号',
+    '基础同步稳定后再添加锻炼、站立和距离；体重、体脂等必须同时上传真实 measuredAt。睡眠容易因阶段重叠重复，默认不添加',
   ];
 
   const automationRecipe = [

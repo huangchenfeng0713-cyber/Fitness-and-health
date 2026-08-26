@@ -429,21 +429,30 @@ async function boot() {
     return;
   }
 
-  // 先画出明确的启动状态，再检查账号。旧版把 Service Worker 与账号初始化全部 await 完
-  // 才首绘，网络稍慢时会留下十几秒空白，看起来就像页面彻底卡死。
+  // 不等待网络即可先画出明确的启动状态，但必须在任何可交互 UI 出现前启动
+  // 账号归属检查。initialize() 会同步把公开状态切成 loading，设置抽屉因此也
+  // 使用与主视图相同的保护门，不会在这几秒里闪现旧账号的身体资料。
   accountBootstrapPending = inspectCloudConfig().configured;
+  void registerServiceWorker({ waitForControl: false });
+  const cloudInitialization = initCloud();
+  window.addEventListener('online', () => {
+    // The online event can arrive while the first attempt is still timing out.
+    // Wait for that idempotent attempt, then start one fresh retry if needed.
+    void initCloud().then(() => {
+      const account = getAccountState();
+      const authUnavailable = account.configured
+        && (account.transitionReason === 'auth-unavailable' || account.status === 'local');
+      return authUnavailable ? initCloud() : null;
+    }).catch((error) => console.warn('云账号重新连接失败', error));
+  });
   renderTabs();
   renderTopbar();
   syncOnboarding();
   renderCurrent();
 
-  // 更新缓存与账号初始化并行进行；账号归属确认前仍由 accountBootstrapPending 锁住个人数据。
-  // 这比先等 Service Worker 接管再联网快，也不会为了首屏速度牺牲账号隔离。
-  void registerServiceWorker({ waitForControl: false });
-
   // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
   try {
-    await initCloud();
+    await cloudInitialization;
   } catch (err) {
     console.warn('云账号初始化失败，已保留本地模式', err);
   } finally {
