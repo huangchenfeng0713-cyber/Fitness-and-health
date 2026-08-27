@@ -122,7 +122,7 @@ function pickerCard(rerender) {
     groupTabs(rerender),
     equipTabs(rerender, all),
     h('p.form-hint', { style: { margin: '10px 0 4px' } },
-      `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今日计划，再点一下取消。`),
+      `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今日训练，再点一下取消。`),
     list.length
       ? h('div.ex-list', null, list.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
       : h('p.empty-hint', null, `${group.label}下没有${filter.label}动作，换个器械档位看看。`));
@@ -198,12 +198,12 @@ function planRow(exercise, index) {
 
 function planCard() {
   const list = pickedExercises();
-  const dayLabel = state.day === todayKey() ? '今日计划' : `${state.day} 的训练`;
+  const dayLabel = state.day === todayKey() ? '已选动作建议' : `${state.day} 的训练`;
   if (!list.length) {
+    // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
     return h('section.card', null,
       h('div.card-head', null, h('h3', null, dayLabel)),
-      h('p.empty-hint', null, '还没选动作。从下面按部位挑几个，这里会告诉你有没有练重复、还缺哪些部位。'
-        + '选好的动作按日期存下来，刷新或换设备都还在。'));
+      h('p.empty-hint', null, '请添加训练动作'));
   }
   const overlaps = findOverlaps(list);
   const cov = coverage(list).filter((c) => c.exercises > 0);
@@ -283,8 +283,8 @@ function starterCard(rerender) {
   if (!combo.length) return null;
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, `${group.label}怎么练`),
-      h('span.card-tag', null, '起手组合')),
+      h('h3', null, '动作推荐'),
+      h('span.card-tag', null, `${group.label} · 起手组合`)),
     h('p.form-hint', { style: { marginBottom: '10px' } },
       '三个不同的动作模式，各自补上另外两个练不到的地方，之间没有重复。'),
     h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,

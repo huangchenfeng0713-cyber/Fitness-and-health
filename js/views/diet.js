@@ -20,6 +20,7 @@ import {
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { recommendCard, avoidCard, waterCard } from './cards/meal-advice.js';
 
 const ui = {
   query: '',
@@ -51,7 +52,8 @@ function buildShell(root) {
   nodes.portion = h('div.slot');
   nodes.customBox = h('div.slot');
   nodes.entries = h('div.slot');
-  nodes.suggest = h('div.slot');
+  nodes.water = h('div.slot');
+  nodes.advice = h('div.slot');
 
   nodes.searchInput = h('input.search-input', {
     type: 'search',
@@ -94,7 +96,8 @@ function buildShell(root) {
     nodes.portion);
 
   nodes.root = h('div.view-stack', null,
-    nodes.quick, nodes.searchCard, nodes.entries, nodes.suggest);
+    // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
+    nodes.quick, nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
   mount(root, nodes.root);
 }
 
@@ -148,40 +151,12 @@ function refreshCategories() {
  * 记录页内容天然偏短，下方常空一大片；而这一页的用途就是记东西，
  * 把「现在该吃什么」放这儿既填了空白，也正好是用户要的下一步。
  */
-function suggestionBlock() {
-  const rec = state.derived?.advice?.recommend;
-  if (!rec?.length) return null;
-  const meal = state.derived.advice.budget.meal;
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('h3', null, '当前饮食推荐'),
-      h('span.card-tag', null, `${MEAL_LABEL[meal.key]} · 还差 ${num(Math.max(state.derived.advice.gaps.protein.remaining, 0), 0)}g 蛋白`)),
-    h('div.rec-list', null, rec.slice(0, 3).map((item) => h('div.rec-row', null,
-      h('div.rec-info', null,
-        h('div.rec-name', null, item.food.name,
-          isEstimated(item.food) && h('span.chip.chip-est', null, '估算')),
-        h('div.rec-portion', null, item.portionLabel)),
-      h('div.rec-nums', null,
-        h('span.rec-kcal', null, `${item.nutrients.kcal}`),
-        h('span.rec-unit', null, 'kcal'),
-        h('span.rec-prot', null, `蛋白 ${item.nutrients.protein}g`)),
-      h('button.add-btn', {
-        'aria-label': `记录 ${item.food.name}`,
-        onclick: async (ev) => {
-          const result = await runLocalAction(ev.currentTarget,
-            () => addEntry({ foodId: item.food.id, grams: item.grams, meal: meal.key }),
-            '记录食物');
-          if (!result.ok) return;
-          toast(`已记录 ${item.food.name} ${item.grams}${item.food.basis === '100ml' ? 'ml' : 'g'}`, 'ok');
-        },
-      }, '＋')))));
-}
 
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query && !ui.category) { refreshSuggestions(); return; }
-  clearEl(nodes.suggest);
+  if (!ui.query && !ui.category) { refreshAdvice(); return; }
+  refreshAdvice();
 
   const results = ui.query
     ? searchFoods(ui.query, allFoods(), 24)
@@ -209,7 +184,7 @@ function refreshResults() {
 
 function selectFood(food) {
   ui.selected = food;
-  if (nodes.suggest) clearEl(nodes.suggest);
+  refreshAdvice();
   ui.unitIdx = 0;
   ui.qty = 1;
   ui.sugar = DEFAULT_SUGAR_LEVEL;
@@ -350,7 +325,7 @@ function refreshMixedPortion(food) {
     nodes.searchInput.value = '';
     refreshResults();
     refreshPortion();
-    refreshSuggestions();
+    refreshAdvice();
   };
 
   refreshMealChips();
@@ -365,7 +340,7 @@ function refreshMixedPortion(food) {
         food.note && infoTip('查看估算说明', h('p', null, food.note)),
         h('button.icon-btn', {
           'aria-label': '取消',
-          onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
+          onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
         }, '×'))),
 
     h('div.mix-summary', null,
@@ -551,7 +526,7 @@ function refreshPortion() {
     nodes.searchInput.value = '';
     refreshResults();
     refreshPortion();
-    refreshSuggestions();
+    refreshAdvice();
   };
 
   refreshMealChips();
@@ -570,7 +545,7 @@ function refreshPortion() {
         food.note && infoTip('查看食物说明', h('p', null, food.note)),
         h('button.icon-btn', {
           'aria-label': '取消',
-          onclick: () => { ui.selected = null; refreshPortion(); refreshSuggestions(); },
+          onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
         }, '×'))),
 
     sugarRow && h('div.field-label', null, '糖度'),
@@ -718,12 +693,6 @@ function refreshCustomForm() {
   ));
 }
 
-function refreshSuggestions() {
-  if (!nodes.suggest) return;
-  clearEl(nodes.suggest);
-  if (ui.query || ui.selected) return;
-  mount(nodes.suggest, suggestionBlock());
-}
 
 function refreshEntries() {
   clearEl(nodes.entries);
@@ -819,6 +788,21 @@ function copyRow() {
 
 /* ---------------------------------------------------------------- 入口 */
 
+/*
+ * 「当前饮食推荐 / 现在别碰 / 喝水」从今日页搬过来。
+ * 今日页回答「我今天怎么样」，这三张回答「我现在该做什么」——
+ * 真要照着做的时候人已经在这一页了，隔着一次切页反而多余。
+ */
+function refreshAdvice() {
+  clearEl(nodes.water);
+  clearEl(nodes.advice);
+  const rerender = () => refreshAdvice();
+  mount(nodes.water, waterCard(rerender));
+  // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
+  if (ui.query || ui.selected) return;
+  mount(nodes.advice, recommendCard(rerender), avoidCard(rerender));
+}
+
 export function renderDiet(root) {
   // 外壳还挂在页面上就只做增量刷新，被别的页面清掉了才重建
   if (nodes.root?.parentNode !== root) {
@@ -830,5 +814,5 @@ export function renderDiet(root) {
   }
   refreshQuick();
   refreshEntries();
-  refreshSuggestions();
+  refreshAdvice();
 }
