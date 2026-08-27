@@ -149,7 +149,7 @@ test('长提示在窄屏内换行并限制高度，不再形成溢出的巨型�
   assert.ok(utils.includes("'aria-live': 'polite'"));
 });
 
-test('数据页只留目标和趋势，解读收到每张图下面', () => {
+test('数据页只留健康数据和趋势，解读收到每张图下面', () => {
   // 原先「近 14 天概览」「健康数据解读」「最近记录」三张卡加上趋势图，
   // 一页四五屏、三处在说同一批数字。
   const health = page('health');
@@ -157,8 +157,9 @@ test('数据页只留目标和趋势，解读收到每张图下面', () => {
   const css = read('css/app.css');
   const rendered = health.slice(health.indexOf('export function renderHealth'));
   const at = (name) => rendered.indexOf(name);
-  assert.ok(at('targetCard()') < at('trendCharts(rerender)'), '目标应排在趋势图之前');
-  for (const gone of ['overviewCard(', 'insightCard(', 'dataTable(']) {
+  assert.ok(at('healthMetricsCard()') >= 0, '数据页缺少健康数据卡');
+  assert.ok(at('healthMetricsCard()') < at('trendCharts(rerender)'), '健康数据应排在趋势图之前');
+  for (const gone of ['overviewCard(', 'insightCard(', 'dataTable(', 'targetCard(']) {
     assert.ok(!rendered.includes(gone), `${gone} 应该已经移除`);
   }
   // 移掉的步数与锻炼解读要在图表里补回来，功能不能因为搬家而少
