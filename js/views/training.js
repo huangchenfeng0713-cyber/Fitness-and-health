@@ -10,6 +10,7 @@
 
 import { h, clearEl, mount, num, todayKey, infoTip } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
+import { BODY_BASE, REGIONS, VIEW_LABEL } from '../data/body-map.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import {
   exercisesForGroup, findOverlaps, coverage, planAdvice, starterCombo,
@@ -57,6 +58,65 @@ function muscleLine(e) {
   return secondary ? `${primary}　协同：${secondary}` : primary;
 }
 
+/*
+ * 人体部位图。
+ *
+ * 挑动作本来就是「我今天想练这块」，指着图上那块比在五个文字标签里挑更直接。
+ * 正反两张并排：背和斜方肌在正面图上画不出来，硬塞只会让人对不上位置。
+ *
+ * 三种状态叠在同一块形上：
+ *   选中   —— 现在在看这一组，实心强调色
+ *   已覆盖 —— 今日已选的动作练到了这块，淡一层强调色
+ *   其余   —— 中性底
+ * 「已覆盖」是这张图真正有用的地方：一眼看出今天哪儿练了、哪儿空着。
+ */
+function bodyMap(rerender) {
+  const covered = new Set();
+  for (const e of pickedExercises()) {
+    for (const m of [...e.primary, ...e.secondary]) {
+      const g = GROUPS.find((x) => x.muscles.includes(m));
+      if (g) covered.add(g.key);
+    }
+  }
+  const ns = 'http://www.w3.org/2000/svg';
+  const draw = (spec, className) => {
+    const node = document.createElementNS(ns, spec.shape === 'circle' ? 'circle' : 'rect');
+    if (spec.shape === 'circle') {
+      node.setAttribute('cx', spec.cx); node.setAttribute('cy', spec.cy); node.setAttribute('r', spec.r);
+    } else {
+      node.setAttribute('x', spec.x); node.setAttribute('y', spec.y);
+      node.setAttribute('width', spec.w); node.setAttribute('height', spec.h);
+      node.setAttribute('rx', spec.rx ?? 4);
+    }
+    node.setAttribute('class', className);
+    return node;
+  };
+
+  const view = (side) => {
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 182');
+    svg.setAttribute('class', 'body-view');
+    for (const base of BODY_BASE) svg.append(draw(base, 'body-base'));
+    for (const r of REGIONS.filter((x) => x.view === side)) {
+      const state = activeGroup === r.group ? ' active' : covered.has(r.group) ? ' covered' : '';
+      const node = draw(r, `body-region${state}`);
+      const label = GROUPS.find((g) => g.key === r.group)?.label || r.group;
+      node.setAttribute('role', 'button');
+      node.setAttribute('tabindex', '0');
+      node.setAttribute('aria-label', label);
+      node.setAttribute('aria-pressed', String(activeGroup === r.group));
+      const pick = () => { activeGroup = r.group; showAllExercises = false; rerender(); };
+      node.addEventListener('click', pick);
+      node.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
+      });
+      svg.append(node);
+    }
+    return h('div.body-side', null, svg, h('span.body-side-label', null, VIEW_LABEL[side]));
+  };
+  return h('div.body-map', null, view('front'), view('back'));
+}
+
 function groupTabs(rerender) {
   return h('div.range-switch', null,
     GROUPS.map((g) => h('button', {
@@ -89,11 +149,16 @@ function exerciseRow(e, rerender, lastDone) {
     },
   },
   h('div.ex-main', null,
-    h('div.ex-name', null,
-      h('strong', null, e.name),
-      h('span.ex-tag', null, PATTERNS[e.pattern]),
+    h('div.ex-name', null, h('strong', null, e.name)),
+    /*
+     * 默认只给一行：主要练哪儿 · 什么模式。
+     * 原先每行都把主动肌和所有协同肌铺开（「胸大肌中部　协同：三角肌前束、肱三头肌」），
+     * 十几行叠起来全是同一批肌肉名，扫的时候反而找不到动作名在哪。
+     * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
+     */
+    h('div.ex-muscle', null,
+      `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`,
       e.compound ? h('span.ex-tag.compound', null, '复合') : null),
-    h('div.ex-muscle', null, muscleLine(e)),
     clash && clash.level === 'high'
       ? h('div.ex-clash', null, `与已选的「${clash.other.name}」刺激高度相似`)
       : clash ? h('div.ex-clash.soft', null, `与「${clash.other.name}」部分重叠`) : null,
@@ -135,6 +200,7 @@ function pickerCard(rerender) {
     h('div.card-head', null,
       h('h3', null, '动作选择'),
       h('span.card-tag', null, `${group.label} · ${list.length} 个`)),
+    bodyMap(rerender),
     groupTabs(rerender),
     equipTabs(rerender, all),
     list.length
@@ -308,9 +374,8 @@ function starterCard(rerender) {
     h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,
       h('span.plan-index', null, String(i + 1)),
       h('div.plan-main', null,
-        h('div.ex-name', null, h('strong', null, e.name),
-          h('span.ex-tag', null, PATTERNS[e.pattern])),
-        h('div.ex-muscle', null, muscleLine(e)))))),
+        h('div.ex-name', null, h('strong', null, e.name)),
+        h('div.ex-muscle', null, `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`))))),
     h('button.secondary-btn.full', {
       style: { marginTop: '12px' },
       onclick: () => updateSession(() => combo.map((e) => ({ id: e.id, sets: [], done: false }))),

@@ -658,6 +658,25 @@ html, body { height: 100%; overflow: hidden; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ============ 人体部位图 ============ */
+.body-map { display: flex; justify-content: center; gap: 22px; margin: 2px 0 12px; }
+.body-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.body-view { width: 80px; height: 146px; display: block; }
+.body-side-label { font-size: var(--fs-caption); color: var(--faint); }
+/* 头和脖子只是让人认出这是个人，不可点 */
+.body-base { fill: var(--track); }
+.body-region {
+  fill: var(--track); cursor: pointer;
+  transition: fill .16s ease;
+}
+.body-region:hover { fill: color-mix(in srgb, var(--accent) 22%, var(--track)); }
+/* 今日已选的动作练到了这块 */
+/* 已覆盖只是一层浅底：选中那块要能从里面跳出来 */
+.body-region.covered { fill: color-mix(in srgb, var(--accent) 26%, var(--track)); }
+/* 现在在看这一组 */
+.body-region.active { fill: var(--accent); }
+.body-region:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 /* ============ 按钮 / 表单 ============ */
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
 
@@ -1542,7 +1561,8 @@ body.sheet-open {
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px;
 }
 .ex-tag.compound { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
-.ex-muscle { font-size: 12.5px; color: var(--faint); margin-top: 3px; }
+.ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ex-muscle-old { font-size: 12.5px; color: var(--faint); margin-top: 3px; }
 .ex-clash { font-size: 12.5px; color: var(--danger); margin-top: 3px; }
 .ex-clash.soft { color: var(--warn); }
 .ex-pick { flex: none; width: 26px; text-align: center; font-size: 17px; color: var(--accent); }

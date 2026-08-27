@@ -227,6 +227,41 @@ test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
   assert.ok(!/'饮水'/.test(metrics), '饮水已从健康数据卡撤掉');
 });
 
+test('健身页有人体部位图，点哪块选哪组，已练的会点亮', () => {
+  /*
+   * 挑动作本来就是「我今天想练这块」，指着图上那块比在五个文字标签里挑更直接。
+   * 正反两张并排：背和斜方肌在正面图上画不出来，硬塞会让人对不上位置。
+   */
+  const training = read('js/views/training.js');
+  const map = read('js/data/body-map.js');
+  const css = read('css/app.css');
+  assert.match(training, /function bodyMap\(rerender\)/, '没有部位图');
+  assert.match(training, /view\('front'\), view\('back'\)/, '缺正面或背面');
+  // 五个组在图上都得点得到，否则有的组只能靠文字标签选
+  const groups = new Set((map.match(/group: '(\w+)'/g) || []).map((m) => m.split("'")[1]));
+  for (const key of ['chest', 'shoulder', 'back', 'leg', 'core']) {
+    assert.ok(groups.has(key), `部位图上点不到「${key}」`);
+  }
+  // 三种状态：选中 / 已覆盖 / 其余
+  assert.match(training, /covered\.has\(r\.group\) \? ' covered'/, '没有标出今天已经练到的部位');
+  for (const cls of ['.body-region.active', '.body-region.covered']) {
+    assert.ok(css.includes(cls), `${cls} 没有样式`);
+  }
+  // 图上的块要能用键盘操作
+  assert.match(training, /node\.setAttribute\('tabindex', '0'\)/, '部位块不能聚焦');
+  assert.match(training, /ev\.key === 'Enter' \|\| ev\.key === ' '/, '部位块不能用键盘选中');
+});
+
+test('动作行默认只给一行：练哪儿、什么模式', () => {
+  // 原先每行都把主动肌和所有协同肌铺开，十几行叠起来全是同一批肌肉名，
+  // 扫的时候反而找不到动作名在哪
+  const training = read('js/views/training.js');
+  const rows = training.match(/\$\{MUSCLES\[e\.primary\[0\]\] \|\| ''\} · \$\{PATTERNS\[e\.pattern\]\}/g) || [];
+  assert.ok(rows.length >= 2, `挑动作和动作推荐都该用一行式，只找到 ${rows.length} 处`);
+  // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
+  assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
+});
+
 test('动作列表默认只出前几个，但已选的绝不会被藏起来', () => {
   // 一个部位三十来个动作是整整一屏半；而列表里那一行的 ✓ 就是取消选择的入口，
   // 收起时把它藏掉，等于选了就撤不掉。
