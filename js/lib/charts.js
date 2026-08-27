@@ -71,7 +71,18 @@ function el(tag, attrs = {}) {
 }
 
 /** 进度环 */
-export function ring({ pct = 0, size = 92, stroke = 9, color = 'var(--accent)', label = '', sub = '' }) {
+/**
+ * 环形进度。
+ *
+ * `overIsBad` 默认关掉：超过 100% 是不是坏事，只有调用方知道。
+ * 原先这里写死「>105% 一律画成 danger」，于是无论主卡传什么颜色进来都会被
+ * 就地改红 —— 增重计划要求每天吃超，圆环却一直在报警，两者对不上。
+ * 饮水环同理，多喝一点也不是错误。
+ */
+export function ring({
+  pct = 0, size = 92, stroke = 9, color = 'var(--accent)', label = '', sub = '',
+  overIsBad = false,
+}) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const clamped = Math.max(0, Math.min(pct, 130));
@@ -84,7 +95,7 @@ export function ring({ pct = 0, size = 92, stroke = 9, color = 'var(--accent)', 
   }));
   const arc = el('circle', {
     cx: size / 2, cy: size / 2, r, fill: 'none',
-    stroke: clamped > 105 ? 'var(--danger)' : color,
+    stroke: overIsBad && clamped > 105 ? 'var(--danger)' : color,
     'stroke-width': stroke, 'stroke-linecap': 'round',
     'stroke-dasharray': `${dash} ${c}`,
     transform: `rotate(-90 ${size / 2} ${size / 2})`,
@@ -103,6 +114,29 @@ export function ring({ pct = 0, size = 92, stroke = 9, color = 'var(--accent)', 
     svg.append(s);
   }
   return svg;
+}
+
+/**
+ * 区间落点条。
+ *
+ * 热量和脂肪是「落在范围里就对」，不是「填得越满越好」。用填充长度画区间
+ * 会骗人：填到 100% 看着像圆满，其实可能刚好越过上界。所以中间一段浅色是
+ * 目标区间，一根竖标记落在哪就是哪。
+ *
+ * @param {number} markerPct 落点位置 0~100（core/metrics.js 的 rangePosition 算好）
+ */
+export function rangeBar({ markerPct = 50, color = 'var(--accent)', level = 'met' }) {
+  const wrap = document.createElement('div');
+  wrap.className = `range-bar ${level}`;
+  const band = document.createElement('div');
+  band.className = 'range-bar-band';
+  wrap.append(band);
+  const marker = document.createElement('div');
+  marker.className = 'range-bar-marker';
+  marker.style.left = `${Math.max(0, Math.min(100, markerPct))}%`;
+  marker.style.background = color;
+  wrap.append(marker);
+  return wrap;
 }
 
 /**

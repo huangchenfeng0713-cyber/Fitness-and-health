@@ -424,6 +424,9 @@ export function dailyTargets(profile, dynamic = null) {
   // fat 是用于闭合宏量热量的计划点，不是“吃过就超标”的上限。
   // AMDR 的真正上界是总能量的 35%，单独返回给界面与推荐算法使用。
   const fatUpper = round((kcal * 0.35) / ATWATER.fat);
+  // AMDR 的下界是 20%。界面把脂肪当区间画，两头都得有依据，
+  // 不能一头是文献值、另一头随手取个数。
+  const fatLower = round((kcal * 0.20) / ATWATER.fat);
   const carbRounded = round(Math.max(0,
     (kcal - proteinRounded * ATWATER.protein - fatRounded * ATWATER.fat) / ATWATER.carb), 1);
 
@@ -455,6 +458,7 @@ export function dailyTargets(profile, dynamic = null) {
     proteinCapped,
     fat: fatRounded,
     fatUpper,
+    fatLower,
     carb: carbRounded,
     fiber: round(clamp((kcal / 1000) * 14, 25, 30)),
     sodium: 2000,       // mg，约等于 5g 食盐

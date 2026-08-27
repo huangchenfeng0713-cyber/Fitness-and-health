@@ -234,7 +234,42 @@ export function recompute(now = new Date()) {
     }
   }
 
-  const targets = dailyTargets(calcProfile, dynamic);
+  /*
+   * 目标用「近期节奏」算，当天固定；实时那份只用来说今天实际收支。
+   *
+   * 原先目标直接跟着今天的 Apple 累计走：白天按 2076 kcal 吃，晚上手表把活动
+   * 能量同步上来，目标当场变成 1399，同一顿饭从「刚好」变成「超标 180」——
+   * 用户什么都没做错，是脚下的尺子在动。
+   *
+   * 现在目标那把尺子用近 14 天设备记录的日均（完整天的记录，不含外推），
+   * 一天之内不会变；今天动得多还是少，交给下面这个实时收支去说。
+   * 两个数字各回答各的问题，不再互相打架。
+   */
+  const planned = p.useAppleEnergy && (baseline.restingEnergy > 0 || baseline.activeEnergy > 0)
+    ? dynamicTDEE({
+      bmr,
+      baselineResting: baseline.restingEnergy,
+      baselineActive: baseline.activeEnergy,
+      observationFraction: 1,
+      fallbackTDEE: stat.tdee,
+    })
+    : null;
+
+  const targets = dailyTargets(calcProfile, planned);
+
+  /*
+   * 今日实际能量收支：吃进去的 减 今天真的消耗掉的。
+   * 这个数一天之内会随手表更新而变，本来就该变——它说的是「今天」，
+   * 不是「今天该吃多少」。
+   */
+  const liveTdee = dynamic ? Math.round(dynamic.tdee) : null;
+  const liveEnergy = liveTdee != null ? {
+    tdee: liveTdee,
+    surplus: Math.round((Number(intake.kcal) || 0) - liveTdee),
+    plannedSurplus: targets.dailyDelta,
+    // 目标算的是近期节奏，实时这份是今天：差多少就是「今天比平时多动/少动了多少」
+    vsPlanned: Math.round(liveTdee - targets.tdee),
+  } : null;
   const advice = buildAdvice({
     targets,
     intake,
@@ -251,7 +286,7 @@ export function recompute(now = new Date()) {
 
   state.derived = {
     effectiveProfile, health, baseline, dynamic, targets, intake, advice, isToday, bmr,
-    staticTdee: stat.tdee, energyData, profileError, bodySource,
+    staticTdee: stat.tdee, energyData, profileError, bodySource, liveEnergy,
     demoMode: p.demoMode === true || p.onboarded !== true || profileError != null,
   };
   return state.derived;

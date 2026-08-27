@@ -112,6 +112,47 @@ try {
   }
   check('健康数据 1~8 项都排得平整', badLayouts.length === 0, badLayouts.join('；'));
 
+  /*
+   * 颜色语义：红色只留给真上限。
+   *
+   * 单元测试能验 core/metrics.js 算出的 level，但拦不住有人在视图里把 level
+   * 接错了线——比如又给热量条加上 overIsBad。这里直接量渲染出来的颜色。
+   */
+  await page.evaluate(async () => {
+    const { addEntry, saveProfile } = await import('./js/lib/store.js');
+    // 增重计划下确实吃超：这正是原先会整圈变红的情形，必须真的越过目标才测得到
+    await saveProfile({ goal: 'bulk', rateKgPerWeek: 0.3, onboarded: true, demoMode: false });
+    await addEntry({ foodId: 'rice_white', grams: 1800 });
+    await addEntry({ foodId: 'oil', grams: 160 });
+  });
+  await page.evaluate(() => document.querySelectorAll('.tab')[0]?.click());
+  await page.waitForTimeout(600);
+  const semantics = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.metric-row')].map((r) => ({
+      label: r.querySelector('.metric-row-label')?.textContent || '',
+      level: /\b(met|near|over|plain)\b/.exec(r.className)?.[1] || '?',
+      bare: r.classList.contains('bare'),
+    }));
+    const ring = document.querySelector('.ring circle:nth-of-type(2)');
+    const foot = document.querySelector('.hero-ring-note')?.textContent || '';
+    return { rows, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
+  });
+  const carb = semantics.rows.find((r) => r.label.includes('碳水'));
+  const water = semantics.rows.find((r) => r.label.includes('饮水'));
+  const wrongRed = semantics.rows.filter((r) => r.level === 'over'
+    && !['钠', '游离糖'].some((k) => r.label.includes(k)));
+  const problems = [
+    !carb && '碳水那行没渲染出来',
+    carb && !carb.bare && '碳水（余数）不该画进度条',
+    water && !water.bare && '饮水（记录）不该画进度条',
+    wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
+    /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
+    !/多|超/.test(semantics.foot) && `没吃超，圆环颜色这条没测到（${semantics.foot}）`,
+    /* 增重计划下吃超时圆环不能是红的 */
+    /rgb\(2[0-9]{2},\s*6[0-9],/.test(semantics.ringStroke || '') && `热量圆环画成了红色 ${semantics.ringStroke}`,
+  ].filter(Boolean);
+  check('指标颜色语义：红色只给真上限', problems.length === 0, problems.join('；'));
+
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);

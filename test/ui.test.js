@@ -355,7 +355,10 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   const dashboard = page('dashboard');
   const diet = page('diet');
   const settings = page('settings');
-  assert.ok(dashboard.includes("macroMini('脂肪上限'"));
+  // 脂肪现在按区间画：下界 AMDR 20%、上界 35%，两头都得有依据
+  const metrics = read('js/core/metrics.js');
+  assert.match(metrics, /lo: targets\.fatLower[\s\S]*hi: targets\.fatUpper/, '脂肪区间没有用 AMDR 两端');
+  assert.match(read('js/core/nutrition.js'), /const fatLower = round\(\(kcal \* 0\.20\) \/ ATWATER\.fat\)/);
   assert.ok(dashboard.includes('参考上限'), '脂肪的参考上限依据要写清楚');
   // 记录行搬到饮食页之后，液体用 ml 这条也跟着搬了过去
   assert.ok(diet.includes("findFood(e.foodId)?.basis === '100ml'"));
@@ -579,8 +582,9 @@ test('短标签不会被从中间断成两截', () => {
   // 实测 393px 屏：「游离糖上限」被断成「游离糖上 / 限」，「1g 蛋白」被断成「蛋 / 白」。
   // 中文默认允许在任意两个字之间断行，短标签必须显式挡住。
   const css = read('css/app.css');
-  assert.match(css, /\.micro-label \{[^}]*flex: 0 0 100%/, '营养微量标签没有独占一行');
-  assert.match(css, /\.micro-label \{[^}]*white-space: nowrap/);
+  for (const cls of ['.metric-row-label', '.metric-row-value', '.metric-row-note', '.hero-ring-note']) {
+    assert.match(css, new RegExp(`\\${cls} \\{[^}]*white-space: nowrap`), `${cls} 会被从中间断开`);
+  }
   assert.match(css, /\.card-tag \{[\s\S]*?word-break: keep-all;[\s\S]*?\}/, '卡片角标仍会在词内断行');
 });
 
