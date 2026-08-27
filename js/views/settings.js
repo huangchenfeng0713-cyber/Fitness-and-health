@@ -397,7 +397,12 @@ function currentDiagnostics() {
   });
 }
 
-function feedbackCard() {
+/*
+ * 反馈和「关于」合成一张卡。
+ * 「关于」只有四行字，单独占一张让本来就三屏多的抽屉又长一截；
+ * 两者都属于「这个应用本身的事」，放一起也说得通。
+ */
+function feedbackCard({ about = null } = {}) {
   const input = h('textarea.feedback-area', {
     rows: 4,
     placeholder: feedbackKind(feedbackDraft.kind).placeholder,
@@ -442,11 +447,13 @@ function feedbackCard() {
 
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '意见反馈'),
+      h('h3', null, '关于与反馈'),
       infoTip('查看反馈隐私说明',
         h('p', null, '提交时会附带应用版本、浏览器、语言和各类记录条数，便于排查。'),
         h('p', null, '不会附带体重、体脂、生日或具体饮食内容；打开 GitHub 后仍由你确认提交。'))),
-    h('p.form-hint', null, '选择类型，写清问题，然后打开 GitHub 提交。'),
+    about,
+    h('p.form-hint', { style: { marginTop: about ? '12px' : '0' } },
+      '有问题或想法：选择类型，写清问题，然后打开 GitHub 提交。'),
     h('div.form-grid', null, field('反馈类型', kindSelect, null, 'span-all')),
     input,
     submitBtn,
@@ -480,13 +487,12 @@ export function renderSettings(root) {
     slot,
     dataManagerCard(rerender),
     toggleCard(),
-    feedbackCard(),
-    h('section.card.about', null,
-      h('div.card-head', null, h('h3', null, '关于')),
-      h('p', null, `版本 v${APP_VERSION}`),
-      h('p', null, accountCopy),
-      h('p', null, '同步、补录、备份与恢复都在本页的“数据管理”里；“数据”栏目只看结果，不做维护操作。'),
-      h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。'),
-    ),
+    feedbackCard({
+      about: h('div.about-block', null,
+        h('p', null, `版本 v${APP_VERSION}`),
+        h('p', null, accountCopy),
+        h('p', null, '同步、补录、备份与恢复都在本页的“数据管理”里；“数据”栏目只看结果，不做维护操作。'),
+        h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。')),
+    }),
   );
 }

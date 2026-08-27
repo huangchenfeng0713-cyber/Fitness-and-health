@@ -89,8 +89,11 @@ zip 路径是全流式的（中央目录 → `Blob.slice` → `DecompressionStre
 
 ### IndexedDB
 
-`DB_VERSION = 1`，四个 store：`health`（key 为 `YYYY-MM-DD`）、`diet`（自增 id + `date` 索引）、
-`settings`（键值对）、`customFoods`。加 store 或索引要同时改 `DB_VERSION` 和 `onupgradeneeded`。
+`DB_VERSION = 3`，五个 store：`health`（key 为 `YYYY-MM-DD`）、`diet`（自增 id + `date` 索引）、
+`settings`（键值对）、`customFoods`、`training`（key 为 `YYYY-MM-DD`）。
+加 store 或索引要同时改 `DB_VERSION` 和 `onupgradeneeded`，并且同步三处：
+`IMPORT_LIMITS`（导入体积上限）、`validateImportPayload`（恢复备份时的校验）、
+`cloud-sync.js` 里那份 store 名单（漏了换设备就丢数据）。
 
 ## 食物库的数据契约
 
