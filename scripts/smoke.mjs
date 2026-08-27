@@ -158,6 +158,36 @@ try {
   ].filter(Boolean);
   check('指标颜色语义：红色只给真上限', problems.length === 0, problems.join('；'));
 
+  /*
+   * 「你现在看到的数字不对」这几条必须一眼认得出是警告。
+   * 一次样式重构里 .data-freshness 被连带删掉，文案还在、颜色和正文一样，
+   * 单元测试全绿——这类退化只有量渲染结果才拦得住。
+   */
+  // 前面那条检查存过一份真实档案，警告就不显示了——这里先把它切回演示态
+  await page.evaluate(async () => {
+    const { saveProfile } = await import('./js/lib/store.js');
+    await saveProfile({ demoMode: true });
+  });
+  await page.evaluate(() => document.querySelectorAll('.tab')[0]?.click());
+  await page.waitForTimeout(600);
+  const warnLook = await page.evaluate(() => {
+    const el = document.querySelector('.data-freshness.warn');
+    if (!el) return { missing: true };
+    const cs = getComputedStyle(el);
+    const bg = cs.backgroundColor;
+    const transparent = /rgba\(0,\s*0,\s*0,\s*0\)|^transparent$/.test(bg);
+    const body = getComputedStyle(document.querySelector('.hero-detail') || document.body).color;
+    return { bg, transparent, sameAsBody: cs.color === body, pad: cs.padding };
+  });
+  check('演示/过期这类警告看得出是警告',
+    !warnLook.missing && !warnLook.transparent && !warnLook.sameAsBody,
+    warnLook.missing ? '页面上没有这条警告（演示档案下应当有）'
+      : `底色 ${warnLook.bg}${warnLook.sameAsBody ? '，文字颜色和正文一样' : ''}`);
+  await page.evaluate(async () => {
+    const { saveProfile } = await import('./js/lib/store.js');
+    await saveProfile({ demoMode: false });
+  });
+
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);
