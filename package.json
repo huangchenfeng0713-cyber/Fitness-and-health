@@ -1,6 +1,6 @@
 {
   "name": "health-diet-tracker",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "private": true,
   "type": "module",
   "description": "Apple 健康同步 + 饮食记录 + 实时营养建议的纯前端网页应用",

@@ -12,7 +12,8 @@
 import {
   h, clearEl, num, mount, infoTip,
 } from '../lib/utils.js';
-import { ring, macroBar } from '../lib/charts.js';
+import { ring, macroBar, rangeBar } from '../lib/charts.js';
+import { dailyMetrics, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 
@@ -31,20 +32,61 @@ function moreToggle(key, total, shown, rerender) {
 
 /* ---------------------------------------------------------------- 主卡 */
 
+/*
+ * 一行一个指标，每行按自己的性质画。
+ *
+ * 以前七项共用一根「填满了没有」的进度条，于是碳水也长着一根没填满的条、
+ * 旁边写「还差 29g」——碳水是蛋白和脂肪分完热量之后的余数，照那根条去补，
+ * 是界面在劝人多吃。性质和措辞都由 core/metrics.js 定，这里只负责画。
+ */
+const KIND_COLOR = {
+  kcal: 'var(--accent)', protein: 'var(--protein)', fat: 'var(--fat)',
+  carb: 'var(--carb)', fiber: 'var(--fiber)', sodium: 'var(--muted)',
+  sugar: 'var(--muted)', water: 'var(--water)',
+};
+
+/*
+ * 余数和记录不画条。
+ *
+ * 条形天然在说「离满还有多远」。碳水是余数、饮水是记录，两者都没有"满"这回事，
+ * 给它们画一根填了 92% 的条，等于用图形推翻了旁边那句「不必吃满」。
+ * 没有进度可言的指标，就只报数字。
+ */
+const HAS_BAR = new Set([KIND.floor, KIND.ceiling, KIND.range]);
+
+function metricRow(m) {
+  const { state: st } = m;
+  const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
+  return h('div', { class: `metric-row ${st.level}${HAS_BAR.has(m.kind) ? '' : ' bare'}` },
+    h('div.metric-row-top', null,
+      h('span.metric-row-label', null, m.label),
+      h('strong.metric-row-value', null, `${value}${m.unit}`),
+      h('span.metric-row-note', null, st.note)),
+    !HAS_BAR.has(m.kind) ? null
+      : st.markerPct != null
+        ? rangeBar({ markerPct: st.markerPct, color: KIND_COLOR[m.key], level: st.level })
+        : macroBar({
+          value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
+          // 只有真上限会画成红色，下限和余数不会
+          overIsBad: m.kind === KIND.ceiling,
+        }));
+}
+
 function heroCard(advice, targets, derived) {
   const { status, gaps } = advice;
-  const left = gaps.kcal.remaining;
-  const over = left < 0;
+  const metrics = dailyMetrics(targets, gaps, derived.health?.waterMl);
+  const kcal = metrics.find((m) => m.key === 'kcal');
+  const rest = metrics.filter((m) => m.key !== 'kcal');
 
-  const macroMini = (label, g, color, { target = g.target, upperLimit = false } = {}) => {
-    const pct = target > 0 ? (g.eaten / target) * 100 : 0;
-    return h('div.mini-macro', null,
-    h('div.mini-macro-top', null,
-      h('span', null, label),
-      h('strong', { class: upperLimit && pct > 105 ? 'over' : '' }, `${num(g.eaten)}`),
-      h('span.mini-macro-target', null, `/${num(target)}g`)),
-    macroBar({ value: g.eaten, target, color, overIsBad: upperLimit }));
-  };
+  /*
+   * 圆环画的是「落在计划区间的哪里」，不是「占目标的百分之几」。
+   *
+   * 原先只要超一点就整圈变红。可增重计划本来就要求每天吃超——把执行计划
+   * 画成危险色，等于界面自己跟自己打架。区间内是绿的，出了区间是橙的，
+   * 红色只留给真正的上限（钠、游离糖）。
+   */
+  const inRange = kcal.state.level === 'met';
+  const diff = Math.round(kcal.eaten - targets.kcal);
 
   return h(`section.card.hero.${status.level}`, null,
     h('div.hero-head', null,
@@ -54,40 +96,52 @@ function heroCard(advice, targets, derived) {
       heroInfo(derived, targets)),
     h('p.hero-detail', null, status.detail),
 
+    // 圆环说「吃到计划的哪儿了」，右边说「今天实际收支」，都是热量的事，放一起
     h('div.hero-body', null,
       h('div.hero-ring', null,
         ring({
+          /*
+           * 弧长仍然是「吃了目标的百分之几」——这是圆环唯一直观的读法。
+           * 一度改成画区间落点，结果吃了 90% 的人看到一个几乎空的圈，
+           * 数字和图形对不上。判断交给颜色：区间内绿、出界橙，红色不给热量用。
+           */
           pct: gaps.kcal.pct,
-          size: 108,
+          size: 104,
           stroke: 10,
-          label: num(Math.abs(left)),
-          sub: over ? 'kcal 超出' : 'kcal 热量余量',
-          color: over ? 'var(--danger)'
-            : status.level === 'warn' ? 'var(--warn)' : 'var(--accent)',
-        })),
-      h('div.hero-macros', null,
-        macroMini('蛋白质', gaps.protein, 'var(--protein)'),
-        macroMini('碳水', gaps.carb, 'var(--carb)'),
-        macroMini('脂肪上限', gaps.fat, 'var(--fat)', {
-          target: targets.fatUpper || gaps.fat.target, upperLimit: true,
-        }))),
+          label: num(kcal.eaten),
+          sub: `/ ${num(targets.kcal)} kcal`,
+          color: inRange ? 'var(--accent)' : 'var(--warn)',
+        }),
+        h('p.hero-ring-note', { class: `hero-ring-note${inRange ? '' : ' warn'}` },
+          inRange ? '在计划范围内'
+            : diff > 0 ? `比计划多 ${num(diff)} kcal` : `比计划少 ${num(-diff)} kcal`)),
+      energyBalance(derived, targets)),
 
-    h('div.hero-foot', null,
-      h('span', null, `已摄入 ${num(gaps.kcal.eaten)}`),
-      h('span', null, `目标摄入 ${num(targets.kcal)}`),
-      h('span', null, derived.dynamic
-        ? `预计总消耗 ${num(targets.tdee)}`
-        : `基础代谢 ${num(targets.bmr)}`),
-      h('span', null, `${targets.dailyDelta > 0 ? '计划盈余' : targets.dailyDelta < 0 ? '计划赤字' : '计划平衡'} ${num(Math.abs(targets.dailyDelta))}`)),
-
+    h('div.metric-list', null, rest.map(metricRow)),
     energyFreshness(derived),
-
-    h('div.hero-micros', null,
-      microChip('纤维', gaps.fiber, 'g'),
-      microChip('钠上限', gaps.sodium, 'mg', true),
-      microChip('游离糖上限', gaps.sugar, 'g', true),
-      microChip('饮水', waterGap(derived), 'ml')),
   );
+}
+
+/*
+ * 计划 / 实际分成两行说。
+ *
+ * 「今日目标 2076」是按近期节奏定的，一天之内不会动；「今天实际消耗 1746」
+ * 跟着手表走，本来就该动。以前只有一个数，手表一同步目标就跳，
+ * 同一顿饭从「刚好」变成「超标」——用户什么都没做错，是脚下的尺子在动。
+ */
+function energyBalance(derived, targets) {
+  const live = derived.liveEnergy;
+  const planWord = targets.dailyDelta > 0 ? '计划盈余' : targets.dailyDelta < 0 ? '计划赤字' : '计划平衡';
+  const line = (k, v) => h('div.energy-line', null,
+    h('span.energy-key', null, k), h('strong.energy-val', null, v));
+  return h('div.energy-block', null,
+    line(planWord, `${num(Math.abs(targets.dailyDelta))} kcal`),
+    live
+      ? line('今日实际消耗', `${num(live.tdee)} kcal`)
+      : line('预计总消耗', `${num(targets.tdee)} kcal`),
+    live
+      ? line(`实际${live.surplus >= 0 ? '盈余' : '缺口'}`, `${num(Math.abs(live.surplus))} kcal`)
+      : line('基础代谢', `${num(targets.bmr)} kcal`));
 }
 
 /*
@@ -127,8 +181,19 @@ function heroInfo(derived, targets) {
     freshness = `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`;
   }
   return infoTip('查看目标计算依据',
-    h('p', null, h('strong', null,
-      `${GOALS[targets.goal].label} · ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`)),
+    /*
+     * 「增肌 · +0.3 kg/周」是把程序算不出来的东西说成了结论：
+     * 它能规划的只是体重变化速度，长的是肌肉还是别的，这里判断不了。
+     * 目标名保留（那是你想做的事），但数字明确标成「计划体重」。
+     */
+    h('p', null, h('strong', null, `${GOALS[targets.goal].label}`),
+      targets.rateKgPerWeek === 0
+        ? ' · 计划体重维持不变'
+        : ` · 计划体重 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`),
+    h('p', null,
+      `按 7700 kcal/kg 的脂肪当量换算，相当于每天${targets.dailyDelta >= 0 ? '多' : '少'}吃 `
+      + `${num(Math.abs(targets.dailyDelta))} kcal。这只是能量换算，`
+      + '程序规划的是体重变化速度，不能保证增减的是肌肉还是脂肪。'),
     freshness && h('p', null, freshness),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
@@ -164,26 +229,6 @@ function energyFreshness(derived) {
   }
   return null;
 }
-
-/** 饮水记在健康数据里，不走饮食条目，所以 gaps 里没有它 */
-function waterGap(derived) {
-  const target = Number(derived.targets?.waterMl) || 0;
-  const eaten = Number(derived.health?.waterMl) || 0;
-  return { target, eaten, remaining: target - eaten, pct: target > 0 ? Math.round((eaten / target) * 100) : 0 };
-}
-
-function microChip(label, g, unit, upperLimit = false) {
-  const level = upperLimit
-    ? g.pct > 105 ? 'over' : g.pct >= 80 ? 'near' : ''
-    : g.pct >= 100 ? 'met' : '';
-  return h(`div.micro-chip.${level}`, null,
-    h('span.micro-label', null, label),
-    h('span.micro-val', null, `${num(g.eaten, unit === 'g' ? 1 : 0)}`),
-    h('span.micro-target', null, `/${num(g.target)}${unit}`));
-}
-
-
-
 
 /* ---------------------------------------------------------------- 提示 */
 
