@@ -8,7 +8,8 @@
 import { h, clearEl, mount } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
 import {
-  exercisesForGroup, findOverlaps, coverage, planAdvice, overlapScore, overlapLevel,
+  exercisesForGroup, findOverlaps, coverage, planAdvice, starterCombo,
+  overlapScore, overlapLevel,
 } from '../core/training.js';
 
 let activeGroup = 'chest';
@@ -167,22 +168,14 @@ function adviceCard(rerender) {
 function starterCard(rerender) {
   if (picked.length) return null;
   const group = GROUPS.find((g) => g.key === activeGroup);
-  const list = exercisesForGroup(activeGroup);
-  // 从复合动作起手，再挑两个和它重合最低的，凑一个不重复的起手组合
-  const anchor = list.find((e) => e.compound) || list[0];
-  const rest = list
-    .filter((e) => e.id !== anchor.id)
-    .map((e) => ({ e, s: overlapScore(e, anchor) }))
-    .sort((a, b) => a.s - b.s)
-    .slice(0, 2)
-    .map((c) => c.e);
-  const combo = [anchor, ...rest];
+  const combo = starterCombo(activeGroup);
+  if (!combo.length) return null;
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, `${group.label}怎么练`),
       h('span.card-tag', null, '起手组合')),
     h('p.form-hint', { style: { marginBottom: '10px' } },
-      '按「一个复合动作打底 + 两个补不同角度」搭的，三个动作之间没有重复。'),
+      '三个不同的动作模式，各自补上另外两个练不到的地方，之间没有重复。'),
     h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,
       h('span.plan-index', null, String(i + 1)),
       h('div.plan-main', null,

@@ -292,3 +292,19 @@ test('真正久坐的人（步数也低）不会被误判成数据错误', () =>
   const sedentary = healthInsights(mkDays(14, () => ({ steps: 900, activeEnergy: 15 })));
   assert.equal(byKey(sedentary, 'suspect_energy'), undefined, '步数也低时应视为真实久坐，而非数据问题');
 });
+
+test('概览与解读的日均睡眠是同一个数，不会因两次取整差出 0.1 小时', () => {
+  // 实测：同一页概览写 6.8 小时、下面的健康数据解读写 6.7 小时。
+  // 原因是概览先把分钟均值四舍五入成整数，再除 60 又 round 一次。
+  const days = [
+    { date: '2026-08-20', sleepMinutes: 400 },
+    { date: '2026-08-21', sleepMinutes: 409 },
+    { date: '2026-08-22', sleepMinutes: 404.5 },
+  ];
+  const summary = healthSummary(days, 14, '2026-08-22');
+  const insight = healthInsights(days, { windowDays: 14, asOfDate: '2026-08-22' })
+    .find((i) => i.key === 'sleep');
+  assert.equal(summary.sleepHours, insight.metric,
+    `概览 ${summary.sleepHours} 小时 与解读 ${insight.metric} 小时对不上`);
+  assert.equal(summary.sleepHours, 6.7);
+});

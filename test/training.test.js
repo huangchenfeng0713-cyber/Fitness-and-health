@@ -5,7 +5,7 @@ import {
 } from '../js/data/exercises.js';
 import {
   overlapScore, overlapLevel, findOverlaps, coverage,
-  replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice,
+  replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice, starterCombo,
 } from '../js/core/training.js';
 
 test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
@@ -213,4 +213,38 @@ test('替换建议优先同类：不拿孤立动作换掉复合动作', () => {
   const forIsolation = replacementsFor('db_fly', ['cable_fly', 'db_fly']);
   assert.ok(forIsolation.length && !forIsolation[0].compound,
     `孤立动作的首选替换不该是复合动作：${forIsolation[0]?.name}`);
+});
+
+test('起手组合是三个不同的动作模式，不会搭成「一个卧推 + 两个飞鸟」', () => {
+  // 动作库补大之后，「挑重合最低的两个」永远挑到孤立动作：
+  // 胸日会变成三个动作全压在胸大肌中部，上胸下胸一个没练到。
+  for (const g of GROUPS) {
+    const combo = starterCombo(g.key);
+    assert.equal(combo.length, 3, `${g.label} 的起手组合凑不齐三个`);
+    assert.equal(new Set(combo.map((e) => e.pattern)).size, 3,
+      `${g.label} 起手组合里有重样的动作模式：${combo.map((e) => e.name).join('、')}`);
+    assert.equal(findOverlaps(combo).filter((o) => o.level === 'high').length, 0,
+      `${g.label} 起手组合里有高度重复`);
+    // 每个动作都要补上前面练不到的地方
+    const seen = new Set();
+    combo.forEach((e, i) => {
+      if (i > 0) {
+        assert.ok(e.primary.some((m) => !seen.has(m)),
+          `${e.name} 没有补上任何新肌肉`);
+      }
+      for (const m of e.primary) seen.add(m);
+    });
+  }
+});
+
+test('起手组合从复合动作打底', () => {
+  for (const key of ['chest', 'shoulder', 'back', 'leg']) {
+    assert.ok(starterCombo(key)[0].compound,
+      `${key} 的起手第一个动作不是复合动作`);
+  }
+  // 胸日三个动作要能覆盖上中下胸
+  const chest = starterCombo('chest').flatMap((e) => e.primary);
+  for (const m of ['pec_upper', 'pec_mid', 'pec_lower']) {
+    assert.ok(chest.includes(m), `胸日起手组合没练到 ${MUSCLES[m]}`);
+  }
 });

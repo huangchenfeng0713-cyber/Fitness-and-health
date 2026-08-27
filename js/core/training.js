@@ -150,6 +150,49 @@ export function exercisesForGroup(groupKey) {
 }
 
 /**
+ * 某个部位的起手组合。
+ *
+ * 早先只是「挑一个复合动作，再配两个和它重合最低的」。动作库补到 100 多个之后，
+ * 重合最低的永远是孤立动作——胸日会被搭成「一个卧推 + 两个飞鸟」，
+ * 三个动作全压在胸大肌中部，上胸下胸一个没练到。
+ *
+ * 现在的规则：三个动作必须是三个不同的动作模式（推 / 拉 / 铰链…），
+ * 每一步只收「至少练到一块还没练到的肌肉」的，其中复合动作优先，
+ * 再按库里的录入顺序（主流动作排在前面）。
+ *
+ * 换模式这条比「多覆盖几块肌肉」更管用：只按覆盖面排会搭出
+ * 「杠铃划船 + 俯卧撑胸划船」这种两个水平拉，或者把早安式体前屈顶进新手方案。
+ */
+export function starterCombo(groupKey, size = 3) {
+  const list = exercisesForGroup(groupKey);
+  if (!list.length) return [];
+  const anchor = list.find((e) => e.compound) || list[0];
+  const combo = [anchor];
+  const covered = new Set(anchor.primary);
+  while (combo.length < size) {
+    const patterns = new Set(combo.map((e) => e.pattern));
+    const pool = list.filter((e) => !combo.some((c) => c.id === e.id));
+    // 模式不重样是硬要求；实在挑不出来（动作少的部位）才放宽
+    const fresh = pool.filter((e) => !patterns.has(e.pattern));
+    const next = (fresh.length ? fresh : pool)
+      .map((e, order) => ({
+        exercise: e,
+        order,
+        fillsGap: e.primary.some((m) => !covered.has(m)),
+        worst: Math.max(...combo.map((c) => overlapScore(e, c)), 0),
+      }))
+      .filter((c) => overlapLevel(c.worst) !== 'high')
+      .sort((a, b) => (Number(b.fillsGap) - Number(a.fillsGap))
+        || (Number(b.exercise.compound) - Number(a.exercise.compound))
+        || (a.order - b.order))[0];
+    if (!next) break;
+    combo.push(next.exercise);
+    for (const m of next.exercise.primary) covered.add(m);
+  }
+  return combo;
+}
+
+/**
  * 整套训练的建议。
  *
  * 只给能从「动作构成」本身看出来的结论：重复、推拉失衡、缺主要动作、

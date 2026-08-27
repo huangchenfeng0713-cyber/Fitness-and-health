@@ -268,6 +268,12 @@ html, body { height: 100%; overflow: hidden; }
 .card-tag {
   max-width: 44%; font-size: 11px; line-height: 1.4; color: var(--faint);
   text-align: right; flex-shrink: 0; overflow-wrap: anywhere;
+  /*
+   * 中文默认可以在任意两个字之间断行，「1g 蛋白」会被断成「蛋 / 白」。
+   * keep-all 让词内不断、仍可在空格和标点处换行；配合上面的 anywhere
+   * 兜底，真的塞不下的超长串还是会断，不会撑破卡片。
+   */
+  word-break: keep-all;
 }
 
 .info-tip { position: relative; flex: none; }
@@ -360,11 +366,16 @@ html, body { height: 100%; overflow: hidden; }
   color: var(--warn);
 }
 .micro-chip {
-  flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 3px;
+  flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: 1px 3px;
   background: var(--card-2); border: 1px solid var(--border); border-radius: 9px;
   padding: 6px 4px; font-size: 11px; min-width: 0;
 }
-.micro-label { color: var(--faint); }
+/*
+ * 标签独占一行。三个格子平分 393px 的屏，「游离糖上限」和数字挤在同一行时
+ * 会被从中间断成「游离糖上 / 限」——中文默认允许在任意两字之间断行。
+ */
+.micro-label { flex: 0 0 100%; text-align: center; white-space: nowrap; color: var(--faint); }
 .micro-val { font-weight: 650; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .micro-target { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .micro-chip.near { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }

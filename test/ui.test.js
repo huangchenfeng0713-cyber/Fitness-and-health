@@ -465,3 +465,12 @@ test('7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切�
   assert.match(charts, /const anchor = i === 0 \? 'start' : i === labelDays\.length - 1 \? 'end' : 'middle'/);
   assert.match(charts, /'text-anchor': anchor/);
 });
+
+test('短标签不会被从中间断成两截', () => {
+  // 实测 393px 屏：「游离糖上限」被断成「游离糖上 / 限」，「1g 蛋白」被断成「蛋 / 白」。
+  // 中文默认允许在任意两个字之间断行，短标签必须显式挡住。
+  const css = read('css/app.css');
+  assert.match(css, /\.micro-label \{[^}]*flex: 0 0 100%/, '营养微量标签没有独占一行');
+  assert.match(css, /\.micro-label \{[^}]*white-space: nowrap/);
+  assert.match(css, /\.card-tag \{[\s\S]*?word-break: keep-all;[\s\S]*?\}/, '卡片角标仍会在词内断行');
+});
