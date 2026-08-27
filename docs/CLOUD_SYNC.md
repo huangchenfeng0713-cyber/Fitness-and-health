@@ -33,6 +33,19 @@ supabase functions deploy health-sync --no-verify-jwt
 `health-sync`。迁移是幂等的：它会为步数、能量等累计指标补上各自的采集时间，
 避免一次只上传部分指标时把同一行中保留的旧值再次下发；不会删除现有健康记录。
 
+**升级到 v1.7.0 必须重新部署 `health-sync`**，否则白天跑快捷指令时静息心率为 0 会让
+整次上传返回 400，同一次的步数与能量一并丢失。这一版**只改了 Edge Function，
+没有改 `schema.sql`**，不需要重跑 SQL：
+
+```bash
+supabase functions deploy health-sync --no-verify-jwt
+```
+
+也可以在 Supabase 后台 → Edge Functions → `health-sync` 的在线编辑器里，
+用仓库中 [`supabase/functions/health-sync/index.ts`](../supabase/functions/health-sync/index.ts)
+的全文覆盖后点 Deploy，效果相同。部署完成后重新跑一次快捷指令，
+返回里应出现 `stored` / `skipped` / `rejected` 三个字段。
+
 v1.6.5 增加了部署顺序保护：如果 Pages 已更新而数据库迁移尚未执行，网页会临时回退到
 v1.6.3 的旧列读取，不会中断账号健康页；但只有完成上述迁移后，部分指标隔离才真正生效。
 
