@@ -503,3 +503,64 @@ test('身体信息不可用时，界面说清是哪一条不合格', () => {
   assert.match(store, /const calcProfile = profileCheck\.valid/, '没有退回默认档案');
   assert.ok(!/dailyTargets\(effectiveProfile/.test(store), '目标仍在用未经校验的档案计算');
 });
+
+test('食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着', () => {
+  // 写死必然漂移：库里已经 1080 项时，饮食页还写着「900+ 种」、README 写着 1010。
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /\$\{allFoods\(\)\.length\} 种食物/, '界面上的食物数仍是写死的');
+  assert.ok(!diet.includes('900+'), '还残留写死的旧数字');
+
+  const readme = read('README.md');
+  const claimed = Number(readme.match(/内置 (\d+) 种常见食物/)?.[1]);
+  const source = read('js/data/foods.js');
+  const actual = (source.match(/\{ id: '/g) || []).length;
+  assert.ok(Number.isFinite(claimed), 'README 里找不到食物数量');
+  assert.ok(Math.abs(claimed - actual) <= 5,
+    `README 写 ${claimed} 种，实际约 ${actual} 种`);
+});
+
+test('趋势图写明统计到昨天，不与顶栏的「数据截至今天」打架', () => {
+  // 同一页两个截止日期：顶栏说「数据截至 今天」，图却只画到昨天。
+  // 不说清会让人以为图坏了或数据没导进来。
+  const health = page('health');
+  assert.match(health, /统计到昨天（\$\{endDay\}）为止/, '趋势卡没说明截止到昨天');
+  assert.ok(health.includes('今天还没过完，画进去必然是个偏低的点'), '没说明为什么不画今天');
+  assert.match(health, /state\.day === todayKey\(\)\s*\?[\s\S]{0,120}统计到 \$\{endDay\} 为止/,
+    '看历史日期时应说「所选日期当天不计入」，而不是照抄「昨天」');
+});
+
+test('设置页不再把用户指向已经搬走的数据管理', () => {
+  // 数据管理搬进设置抽屉后，关于卡片仍写着「都在“数据”栏目」，
+  // 底下还有个 #health 链接——会把人送到一个没有数据管理的页面。
+  const settings = read('js/views/settings.js');
+  assert.ok(!settings.includes("href: '#health'"), '还留着指向数据页的死链');
+  assert.ok(settings.includes('都在本页的“数据管理”里'), '没有指向正确位置');
+
+  // 用户可见文案里不该再出现已经不存在的「趋势页」
+  for (const file of ['js/core/advisor.js', 'js/core/health-insights.js', 'js/core/nutrition.js']) {
+    const src = read(file).split('\n')
+      .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+      .join('\n');
+    assert.ok(!src.includes('趋势页'), `${file} 的用户文案里还有「趋势页」`);
+  }
+});
+
+test('训练计划按天落库，不再是刷新就没的页面内存', () => {
+  // 之前是 `let picked = []`：选好的动作刷新一下全没，记不下来的计划等于没记
+  const training = read('js/views/training.js');
+  assert.ok(!/^let picked = \[\];$/m.test(training), '计划仍存在页面内存里');
+  assert.match(training, /const picked = \(\) => session\(\)\.items/, '计划应从 store 读');
+  assert.match(training, /saveTraining/, '没有写库入口');
+
+  const db = read('js/lib/db.js');
+  assert.match(db, /training: 'training'/, 'training store 没登记');
+  assert.match(db, /createObjectStore\(STORES\.training, \{ keyPath: 'date' \}\)/);
+  // 加 store 必须同时改版本号，否则老用户的库里不会创建它
+  assert.match(db, /const DB_VERSION = 3;/, 'DB_VERSION 没跟着加 store 一起升');
+  assert.match(db, /training: 50_000/, '导入体积上限漏了 training');
+  assert.match(db, /assertUnique\('training', 'date', validDayKey\)/, '恢复备份时没校验 training');
+
+  // 备份和云同步都要带上，否则换设备训练记录就丢了
+  const sync = read('js/lib/cloud-sync.js');
+  assert.match(sync, /'customFoods', 'training'/, '云同步没带上 training');
+});

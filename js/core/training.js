@@ -232,7 +232,7 @@ export function planAdvice(selection = []) {
     dupTips.push({
       level: 'warn',
       key: `dup-${o.a.id}-${o.b.id}`,
-      title: `${o.a.name} 和 ${o.b.name} 练的是同一件事`,
+      title: `${o.a.name} 和 ${o.b.name} 的刺激高度相似`,
       // 建议要能直接点，光念一串动作名等于让人回到列表里自己找。
       // 动作名只出现在按钮上，正文不再重复念一遍。
       actions: alts.map((e) => ({ id: e.id, label: e.name, replaces: o.b.id })),
@@ -241,8 +241,9 @@ export function planAdvice(selection = []) {
         + (o.a.equipment === o.b.equipment
           ? `器械也一样（${EQUIPMENT[o.a.equipment]}），只是换了台机子。`
           : `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。`)
-        + '同一次训练里放两个，多出来的量没有换来新的刺激。'
-        + (alts.length ? `换掉 ${o.b.name}、改成下面任意一个更划算，它们和这套都不重复。` : ''),
+        + '同一次训练里放两个，多出来的组数主要是加训练量，不是加新的刺激角度——'
+        + '要不要保留取决于你的训练目的和这一周的总量。'
+        + (alts.length ? `如果想换个角度，把 ${o.b.name} 换成下面任意一个，它们和这套都不重复。` : ''),
     });
   }
   tips.push(...dupTips);
@@ -252,7 +253,7 @@ export function planAdvice(selection = []) {
     tips.push({
       level: 'info',
       key: 'dup-more',
-      title: `另有 ${stillOverlapping.length} 个动作和上面这些重复`,
+      title: `另有 ${stillOverlapping.length} 个动作和上面这些刺激相似`,
       text: '先按上面的建议换掉几个，剩下的重叠多半会跟着消失，调整完再看一遍这里。',
     });
   }
@@ -268,7 +269,8 @@ export function planAdvice(selection = []) {
       key: `part-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
       text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
-        + '放在一起不算错，但两个都做力竭时后一个会明显掉力量，把复合动作排前面。',
+        + '放在一起很常见，只是两个都做到接近力竭时，后一个的可用负荷会明显下降；'
+        + '把复合动作排前面通常更划算。',
     });
   }
   if (somes.length > 3) {
@@ -276,7 +278,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'part-more',
       title: `还有 ${somes.length - 3} 组动作部分重叠`,
-      text: '部分重叠不算错，这里只列最像的三组；真正要处理的是上面那些高度重复。',
+      text: '部分重叠不算错，这里只列最像的三组；更值得先看的是上面那些刺激高度相似的。',
     });
   }
 
@@ -335,3 +337,118 @@ export function planAdvice(selection = []) {
 }
 
 export { MUSCLES, PATTERNS, EQUIPMENT, GROUPS };
+
+/* ------------------------------------------------- 训练记录 ------------- */
+
+/**
+ * 一天的训练记录。
+ *
+ * 之前「今日计划」只存在页面内存里（`let picked = []`），刷新就没了——
+ * 记不下来的计划等于没记，所以从 v1.7.4 起按天落库。
+ *
+ * 结构刻意做得很浅：{ date, items: [{ id, sets: [{ reps, weightKg }], done }] }。
+ * 组数用数组而不是「组数 × 次数」两个数字，是因为递减组、递增重量这些
+ * 真实练法里每组本来就不一样，压成两个数字会逼人取平均，反而失真。
+ */
+const MAX_SETS = 20;
+const MAX_REPS = 500;
+const MAX_WEIGHT_KG = 500;
+
+const clampNum = (value, min, max) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(max, Math.max(min, n));
+};
+
+/** 把任意来源（旧备份、云端、手输）的记录清洗成可用结构，坏数据丢掉而不是抛异常 */
+export function normalizeSession(raw = {}) {
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  const seen = new Set();
+  const clean = [];
+  for (const item of items) {
+    const id = typeof item?.id === 'string' ? item.id : null;
+    if (!id || seen.has(id) || !EXERCISE_BY_ID.has(id)) continue;
+    seen.add(id);
+    const sets = (Array.isArray(item.sets) ? item.sets : []).slice(0, MAX_SETS).map((set) => ({
+      reps: clampNum(set?.reps, 0, MAX_REPS),
+      weightKg: clampNum(set?.weightKg, 0, MAX_WEIGHT_KG),
+    }));
+    clean.push({ id, sets, done: item.done === true });
+  }
+  return { date: typeof raw.date === 'string' ? raw.date : '', items: clean };
+}
+
+/** 这次练了多少：总组数、完成组数、按部位的组数，以及能算出来的总容量 */
+export function sessionVolume(session) {
+  const { items } = normalizeSession(session);
+  const byGroup = {};
+  let sets = 0;
+  let doneSets = 0;
+  let tonnage = 0;
+  let weighed = 0;
+  for (const item of items) {
+    const exercise = EXERCISE_BY_ID.get(item.id);
+    const counted = item.sets.length;
+    sets += counted;
+    byGroup[exercise.group] = (byGroup[exercise.group] || 0) + counted;
+    for (const set of item.sets) {
+      if (set.reps > 0) doneSets += 1;
+      if (set.reps > 0 && set.weightKg > 0) {
+        tonnage += set.reps * set.weightKg;
+        weighed += 1;
+      }
+    }
+  }
+  return {
+    exercises: items.length,
+    sets,
+    doneSets,
+    byGroup,
+    // 只有真的填了重量的组才计入总容量；一组都没填时给 null，不要显示 0 kg
+    tonnage: weighed ? Math.round(tonnage) : null,
+    weighedSets: weighed,
+  };
+}
+
+/**
+ * 最近练过的动作，最近的排前面。
+ * 用来在动作列表上标「上次练过」，省得每次从头翻。
+ */
+export function recentExercises(sessions = [], { limit = 12, before = null } = {}) {
+  const seen = new Map();
+  const ordered = [...sessions]
+    .filter((s) => s?.date && (!before || s.date < before))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const session of ordered) {
+    for (const item of normalizeSession(session).items) {
+      if (!seen.has(item.id)) seen.set(item.id, session.date);
+      if (seen.size >= limit) break;
+    }
+    if (seen.size >= limit) break;
+  }
+  return [...seen].map(([id, date]) => ({ exercise: EXERCISE_BY_ID.get(id), date }))
+    .filter((r) => r.exercise);
+}
+
+/**
+ * 近一周各部位练了多少组。
+ *
+ * 只报数字，不给「每周该练几组」的结论——那要结合训练年限、恢复能力和目的，
+ * 从「这周练了什么」里看不出来。
+ */
+export function weeklyVolume(sessions = [], endDate, days = 7) {
+  const end = String(endDate || '');
+  const start = end ? new Date(Date.parse(`${end}T00:00:00Z`) - (days - 1) * 86400000)
+    .toISOString().slice(0, 10) : '';
+  const inWindow = sessions.filter((s) => s?.date && s.date >= start && s.date <= end);
+  const byGroup = {};
+  let sets = 0;
+  for (const session of inWindow) {
+    const volume = sessionVolume(session);
+    sets += volume.sets;
+    for (const [group, n] of Object.entries(volume.byGroup)) {
+      byGroup[group] = (byGroup[group] || 0) + n;
+    }
+  }
+  return { days, sessions: inWindow.length, sets, byGroup, start, end };
+}

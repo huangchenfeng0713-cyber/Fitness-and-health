@@ -790,3 +790,55 @@ test('家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计', ()
     assert.match(FOOD_BY_ID.get(id).note || '', /可食部/, `${id} 没说明按可食部计`);
   }
 });
+
+test('菜肴的游离糖只算加进去的那部分，食材自带的糖不计', () => {
+  // 总糖是一回事，WHO 游离糖是另一回事。之前 229 道菜全都没写 nfs，
+  // 炒青菜里青菜自带的糖也被计进游离糖上限——一天三盘菜能凭空多出十几克。
+  const dishes = FOODS.filter((f) => f.cat === 'dish');
+  assert.ok(dishes.every((f) => f.nfs !== undefined), '还有菜肴没有游离糖口径');
+
+  // 不放糖的做法：清蒸、白灼、汆汤、清炒、水煮、炖菜
+  for (const id of [
+    'steamed_fish', 'white_cut_chicken', 'chicken_soup', 'stir_veg', 'stir_youmaicai',
+    'corn_rib_soup', 'yam_rib_soup', 'boiled_fish', 'chicken_mushroom_stew', 'pork_cucumber',
+  ]) {
+    const food = FOOD_BY_ID.get(id);
+    assert.equal(freeSugarPer100(food), 0, `${food.name} 的糖不该算成游离糖`);
+  }
+
+  // 糖是主味的：绝大部分是加进去的
+  for (const id of ['sweet_sour_rib', 'guobaorou', 'sweet_sour_pork', 'cola_chicken_wing']) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(freeSugarFactor(food) > 0.8, `${food.name} 的游离糖占比只有 ${freeSugarFactor(food)}`);
+  }
+
+  // 家常炒菜：一撮提鲜糖，剩下的是蔬菜自带
+  for (const id of ['pork_pepper_shred', 'pork_edamame', 'stir_pumpkin']) {
+    const food = FOOD_BY_ID.get(id);
+    const factor = freeSugarFactor(food);
+    assert.ok(factor > 0 && factor < 0.35,
+      `${food.name} 的游离糖占比 ${factor} 不像家常炒菜`);
+  }
+
+  // 加进去的糖不可能超过总糖
+  for (const food of dishes) {
+    assert.ok(food.nfs >= 0 && food.nfs <= food.n[5] + 1e-9,
+      `${food.name} 的内源糖 ${food.nfs} 超过总糖 ${food.n[5]}`);
+  }
+});
+
+test('乳糖和整食自带的糖不计入游离糖', () => {
+  // 每天一杯全脂拿铁 250ml：4.3g 全是牛奶乳糖，之前整整算进游离糖上限
+  for (const [name, expected] of [
+    ['拿铁（全脂）', 0], ['乳清蛋白粉', 0], ['蛋白奶昔（即饮）', 0],
+    ['板栗（熟）', 0], ['纳豆', 0], ['窝头（玉米面）', 0], ['肉粽', 0],
+  ]) {
+    const food = FOODS.find((f) => f.name === name);
+    assert.ok(food, `找不到 ${name}`);
+    assert.equal(freeSugarPer100(food), expected, `${name} 的糖不该算成游离糖`);
+  }
+  // 加糖乳制品只扣掉乳糖那部分，加进去的糖照算
+  const condensed = FOODS.find((f) => f.name === '炼乳');
+  assert.equal(condensed.nfs, 12, '炼乳的乳糖估计值被改了');
+  assert.ok(freeSugarPer100(condensed) > 40, '炼乳加进去的糖必须照算');
+});

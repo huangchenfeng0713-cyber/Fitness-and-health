@@ -691,7 +691,7 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
       `初步体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
       goalRate !== 0 && Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(perWeek) > 0.15
         ? `与目标方向（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）相反。短期水分会干扰斜率，先核对饮食记录并继续观察；至少积累 28 天且有足够称重点后，再按小步幅调整热量。`
-        : `目标为 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。短期趋势易受水分影响；是否调整热量请以至少 28 天的趋势页判断为准。`,
+        : `目标为 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。短期趋势易受水分影响；是否调整热量请以至少 28 天的体重趋势图判断为准。`,
     );
   }
 

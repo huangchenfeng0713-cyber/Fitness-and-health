@@ -4,7 +4,7 @@ import {
   h, clearEl, num, formatMinutes, formatHours, toast, mount, todayKey, runLocalAction,
 } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
-import { state, addEntry, findFood } from '../lib/store.js';
+import { state, addEntry, findFood, saveHealthDay } from '../lib/store.js';
 import { CATEGORIES, isEstimated } from '../data/foods.js';
 import { MEAL_LABEL } from '../core/advisor.js';
 
@@ -268,6 +268,52 @@ function entriesCard() {
   );
 }
 
+/*
+ * 一键喝水。
+ *
+ * 白水以前只能当普通食物记一笔，或者去设置里手动补录——两条路都太重，
+ * 结果就是「饮水参考 1700ml」这个目标从来没人对得上。这里直接点两下加杯水。
+ *
+ * 落在健康数据的 waterMl 字段上，和 Apple 健康导入的饮水是同一个数。
+ */
+const WATER_STEPS = [
+  { label: '一杯', ml: 250 },
+  { label: '大杯', ml: 400 },
+  { label: '一瓶', ml: 550 },
+];
+
+function waterCard(health, targets, rerender) {
+  const drunk = Number(health?.waterMl) || 0;
+  const goal = Number(targets?.waterMl) || 0;
+  const pct = goal > 0 ? Math.min(100, Math.round((drunk / goal) * 100)) : 0;
+  const add = async (ml) => {
+    const next = Math.max(0, Math.round(drunk + ml));
+    await saveHealthDay(state.day, { waterMl: next, source: 'manual' });
+    rerender();
+  };
+  return h('section.card', null,
+    h('div.card-head', null,
+      h('div', null,
+        h('h3', null, '喝水'),
+        h('p.card-desc', null, goal
+          ? `今天 ${num(drunk)} / ${num(goal)} ml`
+          : `今天 ${num(drunk)} ml`)),
+      h('div.card-head-actions', null,
+        goal ? h('span.card-tag', null, `${pct}%`) : null,
+        drunk > 0 ? h('button.text-btn', {
+          onclick: () => add(-WATER_STEPS[0].ml),
+          'aria-label': '撤销上一杯',
+        }, '撤销一杯') : null)),
+    goal ? h('div.water-bar', null,
+      h('div.water-fill', { style: { width: `${pct}%` } })) : null,
+    h('div.btn-row', { style: { marginTop: '10px' } },
+      WATER_STEPS.map((step) => h('button.secondary-btn', {
+        onclick: () => add(step.ml),
+      }, `+${step.label} ${step.ml}ml`))),
+    h('p.form-hint', null,
+      '记在健康数据的饮水里，和 Apple 健康导入的是同一个数；导入会按更新时间覆盖手动记录。'));
+}
+
 export function renderDashboard(root) {
   const rerender = () => renderDashboard(root);
   const d = state.derived;
@@ -280,6 +326,7 @@ export function renderDashboard(root) {
     avoidCard(advice, rerender),
     insightsCard(advice, rerender),
     healthCard(health),
+    waterCard(health, targets, rerender),
     entriesCard(),
   );
 }

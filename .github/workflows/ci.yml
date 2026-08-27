@@ -1,0 +1,55 @@
+# 每次 PR 和推 main 都跑：单元测试 + 浏览器冒烟。
+#
+# 为什么要有浏览器那一层：过去几次真出问题的地方都在浏览器集成层，
+# 不在计算函数里——启动失败吞掉自救按钮、身体信息不合格白屏、
+# 推荐份量漏出浮点数，三个都是 393 项单元测试全绿的情况下漏过去的。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  # 零依赖，几秒就跑完；跑不过就没必要开浏览器了
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: node --test
+        run: npm test
+      - name: 覆盖率
+        run: node --experimental-test-coverage --test test/*.test.js | tail -30
+
+  smoke:
+    name: 浏览器冒烟
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # --no-save：playwright 只是 CI 工具，不能进 package.json。
+      # 这个项目的约定是运行时零依赖，浏览器直接加载 js/ 下的 ES 模块。
+      - name: 装 Chromium
+        run: |
+          npm i --no-save playwright@1.56.0
+          npx playwright install --with-deps chromium
+
+      # 页面必须走 http(s)：ES 模块和 Module Worker 在 file:// 下加载不了
+      - name: 起静态服务器
+        run: |
+          python3 -m http.server 8137 &
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:8137/index.html && break
+            sleep 1
+          done
+
+      - name: 冒烟
+        run: node scripts/smoke.mjs http://127.0.0.1:8137

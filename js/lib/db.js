@@ -4,13 +4,14 @@
  */
 
 const DB_NAME = 'health-diet-tracker';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export const STORES = {
   health: 'health',       // 每日 Apple 健康数据，key = 'YYYY-MM-DD'
   diet: 'diet',           // 饮食条目，key = 自增 id，索引 date
   settings: 'settings',   // 键值对配置
   customFoods: 'customFoods', // 用户自建食物
+  training: 'training',   // 每日训练记录，key = 'YYYY-MM-DD'
 };
 
 // 内部归属信息绝不能进入 exportAll/importAll，否则会被当作账号数据上传并在设备间复制。
@@ -28,6 +29,7 @@ const IMPORT_LIMITS = Object.freeze({
   diet: 200_000,
   settings: 20_000,
   customFoods: 50_000,
+  training: 50_000,
   maxDepth: 16,
   maxNodes: 2_000_000,
   maxObjectKeys: 512,
@@ -121,6 +123,7 @@ export function validateImportPayload(payload) {
   }
   assertUnique('settings', 'key', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
   assertUnique('customFoods', 'id', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
+  assertUnique('training', 'date', validDayKey);
   return rows;
 }
 
@@ -180,6 +183,10 @@ export function openDB() {
       }
       if (!db.objectStoreNames.contains(STORES.customFoods)) {
         db.createObjectStore(STORES.customFoods, { keyPath: 'id' });
+      }
+      // v1.7.4 起训练计划按天落库；之前只存在页面内存里，刷新就没了
+      if (!db.objectStoreNames.contains(STORES.training)) {
+        db.createObjectStore(STORES.training, { keyPath: 'date' });
       }
       if (!db.objectStoreNames.contains(INTERNAL_STORES.cloudMeta)) {
         db.createObjectStore(INTERNAL_STORES.cloudMeta, { keyPath: 'key' });

@@ -339,7 +339,11 @@ export function trendCharts(rerender) {
   return [
     h('section.card.trend-picker', null,
       h('div.card-head', null,
-        h('h3', null, '趋势'),
+        h('div', null,
+          h('h3', null, '趋势'),
+          h('p.card-desc', null, state.day === todayKey()
+            ? `统计到昨天（${endDay}）为止：今天还没过完，画进去必然是个偏低的点。`
+            : `统计到 ${endDay} 为止，所选日期当天不计入。`)),
         h('span.card-tag', null, RANGES.find((r) => r.key === range)?.label || `${spanDays} 天`)),
       rangeSwitch(rerender),
       chartSwitch(rerender, availability)),

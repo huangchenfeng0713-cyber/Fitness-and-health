@@ -9,7 +9,15 @@ npm test                                              # 全部测试（node --te
 node --test test/nutrition.test.js                    # 单个文件
 node --test --test-name-pattern='Katch' test/*.test.js  # 按用例名筛选
 npm run serve                                         # python3 -m http.server 8080
+
+# 浏览器冒烟：起动、四个栏目、IndexedDB 落库、Service Worker 接管
+# CI 会自己跑；本地要跑得先起服务器，playwright 用 PLAYWRIGHT_PATH 指过去
+node scripts/smoke.mjs http://127.0.0.1:8080
 ```
+
+`.github/workflows/ci.yml` 在每个 PR 上跑单元测试 + 浏览器冒烟。
+**浏览器那一层不是可有可无的**：启动失败吞掉自救按钮、身体信息不合格白屏、
+推荐份量漏出浮点数，这三个都是几百项单元测试全绿的情况下漏过去的。
 
 **没有构建、没有依赖、没有 lint 配置。** `package.json` 里没有 `dependencies`，测试直接跑源码。
 不要引入 npm 包、打包器或框架 —— 浏览器直接加载 `js/` 下的 ES 模块。
@@ -81,8 +89,11 @@ zip 路径是全流式的（中央目录 → `Blob.slice` → `DecompressionStre
 
 ### IndexedDB
 
-`DB_VERSION = 1`，四个 store：`health`（key 为 `YYYY-MM-DD`）、`diet`（自增 id + `date` 索引）、
-`settings`（键值对）、`customFoods`。加 store 或索引要同时改 `DB_VERSION` 和 `onupgradeneeded`。
+`DB_VERSION = 3`，五个 store：`health`（key 为 `YYYY-MM-DD`）、`diet`（自增 id + `date` 索引）、
+`settings`（键值对）、`customFoods`、`training`（key 为 `YYYY-MM-DD`）。
+加 store 或索引要同时改 `DB_VERSION` 和 `onupgradeneeded`，并且同步三处：
+`IMPORT_LIMITS`（导入体积上限）、`validateImportPayload`（恢复备份时的校验）、
+`cloud-sync.js` 里那份 store 名单（漏了换设备就丢数据）。
 
 ## 食物库的数据契约
 
@@ -122,6 +133,9 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
 - BMR 使用公式原值，不设 800 kcal 下限；每日热量目标下限是女 1200 / 男 1500 kcal，
   不与 BMR 取最大值。饮水参考固定为男 1700 / 女 1500 ml。
 - `sugar` 目标和饮食汇总表示 WHO 游离糖，不是总糖或狭义添加糖。
+  菜肴按 `DISH_ADDED_SUGAR` 表逐道扣掉食材自带的糖（表里没有的按不加糖处理）；
+  乳糖和整食内源糖用 `natsugar` 标记。**加新菜时要顺手在那张表里给个值**，
+  漏了会被当成完全不加糖。
 - 体脂率输入会切换到 Katch-McArdle，但家用 BIA 误差会传导到结果，界面不得宣称“更准”。
 
 ## 容易踩的坑
