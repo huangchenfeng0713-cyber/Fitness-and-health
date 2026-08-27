@@ -9,6 +9,7 @@ import {
   dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
+import { normalizeSession } from '../core/training.js';
 import {
   computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
   findImplausibleDays, clearImplausibleValues, implausibleFields, isPlausibleHealthValue,
@@ -48,6 +49,7 @@ export const state = {
   dietEntries: [],       // 当前日期的饮食条目
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
   customFoods: [],
+  trainingDays: [],      // 每日训练记录，按日期
   favorites: [],         // 常吃食物 id
   lastImport: null,
   derived: null,
@@ -94,13 +96,14 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, favorites, lastImport, customFoods, healthDays, dietAll] = await Promise.all([
+  const [profile, favorites, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', []),
     db.getSetting('lastImport', null),
     db.getAll(db.STORES.customFoods),
     db.getAll(db.STORES.health),
     db.getAll(db.STORES.diet),
+    db.getAll(db.STORES.training),
   ]);
 
   state.profile = migrateStoredProfile(profile);
@@ -117,6 +120,7 @@ async function hydrateStore({ notify = false } = {}) {
   state.favorites = favorites || [];
   state.lastImport = lastImport;
   state.customFoods = customFoods || [];
+  state.trainingDays = (training || []).map(normalizeSession).filter((s) => s.date);
   setHealthDays(healthDays || []);
   rebuildDietDaily(dietAll || []);
   state.dietEntries = (dietAll || []).filter((e) => e.date === state.day);
@@ -320,6 +324,32 @@ export async function saveProfile(patch) {
   state.profile = next;
   recompute();
   emit();
+}
+
+/**
+ * 保存某一天的训练记录。
+ *
+ * 空计划直接删掉那一行，不留 { items: [] } 的空壳——否则「最近练过」和
+ * 周容量统计会把空白日也算成练过一次。
+ */
+export async function saveTraining(date, session) {
+  const clean = normalizeSession({ ...session, date });
+  const rest = state.trainingDays.filter((s) => s.date !== date);
+  if (!clean.items.length) {
+    await db.del(db.STORES.training, date);
+    state.trainingDays = rest;
+  } else {
+    const row = { ...clean, updatedAt: new Date().toISOString() };
+    await db.put(db.STORES.training, row);
+    state.trainingDays = [...rest, clean].sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+  emit();
+  return clean;
+}
+
+/** 某一天的训练记录；没有就给一个空的，调用方不用判空 */
+export function trainingFor(date) {
+  return state.trainingDays.find((s) => s.date === date) || { date, items: [] };
 }
 
 export function compositionNote(components = []) {

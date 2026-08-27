@@ -6,6 +6,7 @@ import {
 import {
   overlapScore, overlapLevel, findOverlaps, coverage,
   replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice, starterCombo,
+  normalizeSession, sessionVolume, weeklyVolume, recentExercises,
 } from '../js/core/training.js';
 
 test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
@@ -291,4 +292,64 @@ test('重复提示不把话说死：重复度只看动作构成，看不出训�
   // 但也不能含糊到没有立场——要说清「相似在哪」和「取决于什么」
   assert.ok(all.includes('刺激高度相似'));
   assert.ok(all.includes('取决于你的训练目的和这一周的总量'));
+});
+
+test('训练记录：坏数据清洗掉，不抛异常', () => {
+  const dirty = normalizeSession({
+    date: '2026-08-27',
+    items: [
+      { id: 'bench_press_bb', sets: [{ reps: 8, weightKg: 60 }, { reps: '10', weightKg: '62.5' }] },
+      { id: 'bench_press_bb', sets: [] },              // 重复
+      { id: '不存在的动作', sets: [{ reps: 5 }] },        // 库里没有
+      { id: 'squat_bb', sets: [{ reps: 9e9, weightKg: -3 }] }, // 越界
+      null, 'x', 42,
+    ],
+  });
+  assert.deepEqual(dirty.items.map((i) => i.id), ['bench_press_bb', 'squat_bb']);
+  assert.deepEqual(dirty.items[0].sets[1], { reps: 10, weightKg: 62.5 }, '字符串数字应被接受');
+  const [clamped] = dirty.items[1].sets;
+  assert.ok(clamped.reps <= 500 && clamped.weightKg >= 0, `越界值没夹住：${JSON.stringify(clamped)}`);
+});
+
+test('训练量只统计真的填了的组，没填重量不冒充 0 kg', () => {
+  const noWeight = sessionVolume({ items: [{ id: 'pushup', sets: [{ reps: 20 }, { reps: 18 }] }] });
+  assert.equal(noWeight.sets, 2);
+  assert.equal(noWeight.doneSets, 2);
+  assert.equal(noWeight.tonnage, null, '一组重量都没填时不该给出总容量');
+
+  const mixed = sessionVolume({
+    items: [
+      { id: 'bench_press_bb', sets: [{ reps: 8, weightKg: 60 }, { reps: 8 }] },
+      { id: 'lat_pulldown', sets: [{ reps: 12, weightKg: 45 }] },
+    ],
+  });
+  assert.equal(mixed.sets, 3);
+  assert.equal(mixed.weighedSets, 2);
+  assert.equal(mixed.tonnage, 8 * 60 + 12 * 45);
+  assert.deepEqual(mixed.byGroup, { chest: 2, back: 1 });
+});
+
+test('周训练量按日期窗口统计，窗口外的不算', () => {
+  const sessions = [
+    { date: '2026-08-27', items: [{ id: 'bench_press_bb', sets: [{ reps: 8 }] }] },
+    { date: '2026-08-21', items: [{ id: 'squat_bb', sets: [{ reps: 5 }, { reps: 5 }] }] },
+    { date: '2026-08-20', items: [{ id: 'deadlift', sets: [{ reps: 3 }] }] },  // 窗口外
+  ];
+  const week = weeklyVolume(sessions, '2026-08-27');
+  assert.equal(week.start, '2026-08-21');
+  assert.equal(week.sessions, 2);
+  assert.equal(week.sets, 3);
+  assert.deepEqual(week.byGroup, { chest: 1, leg: 2 });
+});
+
+test('最近练过按日期倒序，且不含当天', () => {
+  const sessions = [
+    { date: '2026-08-20', items: [{ id: 'squat_bb', sets: [] }] },
+    { date: '2026-08-25', items: [{ id: 'bench_press_bb', sets: [] }, { id: 'squat_bb', sets: [] }] },
+    { date: '2026-08-27', items: [{ id: 'deadlift', sets: [] }] },
+  ];
+  const recent = recentExercises(sessions, { before: '2026-08-27' });
+  assert.deepEqual(recent.map((r) => r.exercise.id), ['bench_press_bb', 'squat_bb']);
+  assert.equal(recent[0].date, '2026-08-25');
+  assert.equal(recent[1].date, '2026-08-25', '同一动作应取最近那次的日期');
 });

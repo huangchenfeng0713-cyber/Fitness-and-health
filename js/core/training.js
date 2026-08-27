@@ -337,3 +337,118 @@ export function planAdvice(selection = []) {
 }
 
 export { MUSCLES, PATTERNS, EQUIPMENT, GROUPS };
+
+/* ------------------------------------------------- 训练记录 ------------- */
+
+/**
+ * 一天的训练记录。
+ *
+ * 之前「今日计划」只存在页面内存里（`let picked = []`），刷新就没了——
+ * 记不下来的计划等于没记，所以从 v1.7.4 起按天落库。
+ *
+ * 结构刻意做得很浅：{ date, items: [{ id, sets: [{ reps, weightKg }], done }] }。
+ * 组数用数组而不是「组数 × 次数」两个数字，是因为递减组、递增重量这些
+ * 真实练法里每组本来就不一样，压成两个数字会逼人取平均，反而失真。
+ */
+const MAX_SETS = 20;
+const MAX_REPS = 500;
+const MAX_WEIGHT_KG = 500;
+
+const clampNum = (value, min, max) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(max, Math.max(min, n));
+};
+
+/** 把任意来源（旧备份、云端、手输）的记录清洗成可用结构，坏数据丢掉而不是抛异常 */
+export function normalizeSession(raw = {}) {
+  const items = Array.isArray(raw.items) ? raw.items : [];
+  const seen = new Set();
+  const clean = [];
+  for (const item of items) {
+    const id = typeof item?.id === 'string' ? item.id : null;
+    if (!id || seen.has(id) || !EXERCISE_BY_ID.has(id)) continue;
+    seen.add(id);
+    const sets = (Array.isArray(item.sets) ? item.sets : []).slice(0, MAX_SETS).map((set) => ({
+      reps: clampNum(set?.reps, 0, MAX_REPS),
+      weightKg: clampNum(set?.weightKg, 0, MAX_WEIGHT_KG),
+    }));
+    clean.push({ id, sets, done: item.done === true });
+  }
+  return { date: typeof raw.date === 'string' ? raw.date : '', items: clean };
+}
+
+/** 这次练了多少：总组数、完成组数、按部位的组数，以及能算出来的总容量 */
+export function sessionVolume(session) {
+  const { items } = normalizeSession(session);
+  const byGroup = {};
+  let sets = 0;
+  let doneSets = 0;
+  let tonnage = 0;
+  let weighed = 0;
+  for (const item of items) {
+    const exercise = EXERCISE_BY_ID.get(item.id);
+    const counted = item.sets.length;
+    sets += counted;
+    byGroup[exercise.group] = (byGroup[exercise.group] || 0) + counted;
+    for (const set of item.sets) {
+      if (set.reps > 0) doneSets += 1;
+      if (set.reps > 0 && set.weightKg > 0) {
+        tonnage += set.reps * set.weightKg;
+        weighed += 1;
+      }
+    }
+  }
+  return {
+    exercises: items.length,
+    sets,
+    doneSets,
+    byGroup,
+    // 只有真的填了重量的组才计入总容量；一组都没填时给 null，不要显示 0 kg
+    tonnage: weighed ? Math.round(tonnage) : null,
+    weighedSets: weighed,
+  };
+}
+
+/**
+ * 最近练过的动作，最近的排前面。
+ * 用来在动作列表上标「上次练过」，省得每次从头翻。
+ */
+export function recentExercises(sessions = [], { limit = 12, before = null } = {}) {
+  const seen = new Map();
+  const ordered = [...sessions]
+    .filter((s) => s?.date && (!before || s.date < before))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const session of ordered) {
+    for (const item of normalizeSession(session).items) {
+      if (!seen.has(item.id)) seen.set(item.id, session.date);
+      if (seen.size >= limit) break;
+    }
+    if (seen.size >= limit) break;
+  }
+  return [...seen].map(([id, date]) => ({ exercise: EXERCISE_BY_ID.get(id), date }))
+    .filter((r) => r.exercise);
+}
+
+/**
+ * 近一周各部位练了多少组。
+ *
+ * 只报数字，不给「每周该练几组」的结论——那要结合训练年限、恢复能力和目的，
+ * 从「这周练了什么」里看不出来。
+ */
+export function weeklyVolume(sessions = [], endDate, days = 7) {
+  const end = String(endDate || '');
+  const start = end ? new Date(Date.parse(`${end}T00:00:00Z`) - (days - 1) * 86400000)
+    .toISOString().slice(0, 10) : '';
+  const inWindow = sessions.filter((s) => s?.date && s.date >= start && s.date <= end);
+  const byGroup = {};
+  let sets = 0;
+  for (const session of inWindow) {
+    const volume = sessionVolume(session);
+    sets += volume.sets;
+    for (const [group, n] of Object.entries(volume.byGroup)) {
+      byGroup[group] = (byGroup[group] || 0) + n;
+    }
+  }
+  return { days, sessions: inWindow.length, sets, byGroup, start, end };
+}

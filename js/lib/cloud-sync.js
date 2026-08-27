@@ -54,7 +54,7 @@ export function assertSnapshotSize(snapshot, limit = MAX_CLOUD_SNAPSHOT_BYTES) {
 
 export function snapshotHasUserData(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return false;
-  return ['health', 'diet', 'settings', 'customFoods']
+  return ['health', 'diet', 'settings', 'customFoods', 'training']
     .some((key) => Array.isArray(snapshot[key]) && snapshot[key].length > 0);
 }
 

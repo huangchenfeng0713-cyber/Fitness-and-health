@@ -544,3 +544,23 @@ test('设置页不再把用户指向已经搬走的数据管理', () => {
     assert.ok(!src.includes('趋势页'), `${file} 的用户文案里还有「趋势页」`);
   }
 });
+
+test('训练计划按天落库，不再是刷新就没的页面内存', () => {
+  // 之前是 `let picked = []`：选好的动作刷新一下全没，记不下来的计划等于没记
+  const training = read('js/views/training.js');
+  assert.ok(!/^let picked = \[\];$/m.test(training), '计划仍存在页面内存里');
+  assert.match(training, /const picked = \(\) => session\(\)\.items/, '计划应从 store 读');
+  assert.match(training, /saveTraining/, '没有写库入口');
+
+  const db = read('js/lib/db.js');
+  assert.match(db, /training: 'training'/, 'training store 没登记');
+  assert.match(db, /createObjectStore\(STORES\.training, \{ keyPath: 'date' \}\)/);
+  // 加 store 必须同时改版本号，否则老用户的库里不会创建它
+  assert.match(db, /const DB_VERSION = 3;/, 'DB_VERSION 没跟着加 store 一起升');
+  assert.match(db, /training: 50_000/, '导入体积上限漏了 training');
+  assert.match(db, /assertUnique\('training', 'date', validDayKey\)/, '恢复备份时没校验 training');
+
+  // 备份和云同步都要带上，否则换设备训练记录就丢了
+  const sync = read('js/lib/cloud-sync.js');
+  assert.match(sync, /'customFoods', 'training'/, '云同步没带上 training');
+});
