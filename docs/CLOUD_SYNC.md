@@ -49,8 +49,10 @@ supabase functions deploy health-sync --no-verify-jwt
 1. Supabase 后台 → 右上角头像 → **Account Settings → Access Tokens** → 生成一个 token 并复制。
    - **Resource access** 选 Project，指到本项目（ref `kdkykrshqiamwecohxgw`）。
    - **Permissions** 至少给 Edge Functions 的写入权限，其余保持 None。
-   - **Expires in 别用默认的 7 天**：过期后自动部署会开始失败，而网页照常更新，
-     又会回到「前端是新的、服务端是旧的」这种最难查的状态。
+   - **Expires in 别用默认的 7 天**，选上限（目前最长 90 天）。到期后自动部署会失败，
+     而网页照常更新，如果没注意到就会回到「前端是新的、服务端是旧的」这种最难查的状态。
+     流程失败时会明确打出「多半是令牌过期」并给出换发地址，GitHub 也会发邮件通知。
+     换发只需重新生成令牌并更新同名 secret，workflow 不用改。
 2. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，
    名字填 `SUPABASE_ACCESS_TOKEN`，值粘贴刚才的 token。
 3. 之后合并 PR 即可；也可以在 **Actions → 部署 health-sync → Run workflow** 手动触发。
