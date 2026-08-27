@@ -642,58 +642,16 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
   }
 
   /*
-   * 近期摄入趋势。
+   * 「近 N 天日均摄入」「蛋白达标几天」「体重趋势 x kg/周」原先都在这里出现一次，
+   * 数据页的热量 / 蛋白 / 体重三张图下面又各说了一遍，而且图那边说得更全
+   * （超标几天、后半段比前半段多吃多少、掉得快不快）。
    *
-   * 分母必须是「真正记了饮食的天数」（baseline.loggedDays），不是日历天数。
-   * 没记的日子不在样本里，把它们当成 0 kcal 会造出「近 14 天日均赤字 3168 kcal」
-   * 这种根本不存在的结论——那 13 天只是没记。
+   * 今日提示只回答「今天怎么样」，走势归数据页——同一个结论在两页各写一遍，
+   * 不会让人更明白，只会让今日页变长。
    *
-   * 样本太小时干脆不下结论：1-2 天的均值说明不了趋势。
+   * 注意：「样本不足就不下结论」这条口径也跟着搬了过去，
+   * 由 core/trend-reading.js 的 MIN_POINTS_FOR_CLAIM 把关。
    */
-  const MIN_LOGGED_DAYS = 3;
-  const logged = baseline.loggedDays ?? 0;
-  if (logged >= MIN_LOGGED_DAYS && baseline.kcalIntake != null) {
-    const diff = round(baseline.kcalIntake - targets.kcal);
-    const scope = `有记录的 ${logged} 天`;
-    if (Math.abs(diff) > targets.kcal * 0.1) {
-      // 7700 kcal/kg 是 Wishnofsky 1958 的经验值，只是「脂肪当量」的换算，
-      // 不等于实际会掉多少体重（真实减重里还有瘦体重和水分）。措辞照此保留。
-      add(
-        diff > 0 ? 'warn' : 'info',
-        `${scope}平均${diff > 0 ? '高于' : '低于'}目标 ${Math.abs(diff)} kcal/天`,
-        `按 7700 kcal/kg 的脂肪当量换算，相当于每周 ${round((Math.abs(diff) * 7) / 7700, 2)} kg 的`
-        + `${diff > 0 ? '盈余' : '赤字'}（只是能量换算，不等于体重真会这样变）。`
-        + (diff > 0
-          ? '先从最容易砍的项目下手：饮料、油、加工零食。'
-          : '若体重下降过快（>1%/周）建议把赤字收小一点。')
-        + (logged < (baseline.windowDays || 14)
-          ? `注意这是 ${logged} 天的平均，没记录的日子没有计入。`
-          : ''),
-      );
-    }
-    if (baseline.proteinHitDays != null) {
-      add('info', `${scope}里蛋白达标 ${baseline.proteinHitDays} 天`,
-        baseline.proteinHitDays >= logged * 0.7
-          ? '蛋白执行得不错，保持住。'
-          : '蛋白达标率偏低。把高蛋白食物固定安排进早餐和加餐，比每天临时想吃什么更容易坚持。');
-    }
-  } else if (logged > 0 && logged < MIN_LOGGED_DAYS) {
-    add('info', `只有 ${logged} 天的饮食记录`,
-      `摄入趋势要至少 ${MIN_LOGGED_DAYS} 天才算得出来。记满几天之后，这里会给出平均摄入与目标的差距。`);
-  }
-
-  // 体重趋势 vs 目标速率
-  if (baseline.weightTrend != null && Math.abs(baseline.weightTrend) > 0.01) {
-    const perWeek = round(baseline.weightTrend, 2);
-    const goalRate = targets.rateKgPerWeek;
-    add(
-      'info',
-      `初步体重趋势 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周`,
-      goalRate !== 0 && Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(perWeek) > 0.15
-        ? `与目标方向（${goalRate > 0 ? '+' : ''}${goalRate} kg/周）相反。短期水分会干扰斜率，先核对饮食记录并继续观察；至少积累 28 天且有足够称重点后，再按小步幅调整热量。`
-        : `目标为 ${goalRate > 0 ? '+' : ''}${goalRate} kg/周。短期趋势易受水分影响；是否调整热量请以至少 28 天的体重趋势图判断为准。`,
-    );
-  }
 
   // 饮水
   if (health.waterMl != null && targets.waterMl) {

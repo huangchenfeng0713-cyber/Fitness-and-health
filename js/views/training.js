@@ -20,6 +20,13 @@ import {
 let activeGroup = 'chest';
 // 展开着记组数的那个动作；纯界面状态，不落库
 let expanded = null;
+/*
+ * 动作列表默认只出前几个。一个部位三十来个动作是整整一屏半，
+ * 而真正要挑的时候人是先切部位、再切器械档位，把范围缩到几个才开始看——
+ * 一上来就铺满，反而看不出这一档里有什么。
+ */
+const LIST_PREVIEW = 8;
+let showAllExercises = false;
 
 const session = () => trainingFor(state.day);
 const picked = () => session().items.map((i) => i.id);
@@ -54,7 +61,7 @@ function groupTabs(rerender) {
   return h('div.range-switch', null,
     GROUPS.map((g) => h('button', {
       class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
-      onclick: () => { activeGroup = g.key; rerender(); },
+      onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
     }, g.label)));
 }
 
@@ -101,7 +108,7 @@ function equipTabs(rerender, all) {
       const n = all.filter(f.match).length;
       return h('button', {
         class: `chip-btn${equipFilter === f.key ? ' active' : ''}${n ? '' : ' empty'}`,
-        onclick: () => { equipFilter = f.key; rerender(); },
+        onclick: () => { equipFilter = f.key; showAllExercises = false; rerender(); },
       }, `${f.label} ${n}`);
     }));
 }
@@ -115,6 +122,15 @@ function pickerCard(rerender) {
   const filter = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
   const list = all.filter(filter.match);
   const group = GROUPS.find((g) => g.key === activeGroup);
+  /*
+   * 收起时也不能把已选的动作藏掉：这一行的 ✓ 就是取消选择的入口，
+   * 藏起来等于选了就撤不掉。排在第 8 个之后的已选项直接接到末尾，
+   * 不打乱原顺序（同部位是按主次排的）。
+   */
+  const chosen = new Set(picked());
+  const visible = showAllExercises
+    ? list
+    : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '动作选择'),
@@ -124,8 +140,11 @@ function pickerCard(rerender) {
     h('p.form-hint', { style: { margin: '10px 0 4px' } },
       `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今日训练，再点一下取消。`),
     list.length
-      ? h('div.ex-list', null, list.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
-      : h('p.empty-hint', null, `${group.label}下没有${filter.label}动作，换个器械档位看看。`));
+      ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
+      : h('p.empty-hint', null, `${group.label}下没有${filter.label}动作，换个器械档位看看。`),
+    list.length > LIST_PREVIEW ? h('button.more-btn', {
+      onclick: () => { showAllExercises = !showAllExercises; rerender(); },
+    }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null);
 }
 
 /*

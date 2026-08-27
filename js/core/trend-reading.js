@@ -52,6 +52,15 @@ const join = (parts) => parts.filter(Boolean).join('');
 function readKcal(points, { target }) {
   const s = analyzeSeries(points);
   if (!s) return '这段时间还没有饮食记录，记满几天就能看出摄入的稳定程度。';
+  /*
+   * 一两天的均值不是「日均摄入」。以前这句话在今日提示里也说一遍，那边有这道门槛；
+   * 现在摄入结论只剩这一处，门槛得跟着搬过来，否则记了一天就会看到
+   * 「日均 1287 kcal，比目标低 700」——那只是那一天，不是平均。
+   */
+  if (s.n < MIN_POINTS_FOR_CLAIM) {
+    return `有记录的 ${s.n} 天里日均 ${s.avg} kcal。`
+      + `再记满 ${MIN_POINTS_FOR_CLAIM - s.n} 天，这里会给出和目标的差距、超标了几天。`;
+  }
   const over = points.filter((p) => target > 0 && Number(p.y) > target * 1.05).length;
   const under = points.filter((p) => target > 0 && Number(p.y) < target * 0.75).length;
   const gap = target > 0 ? round(s.avg - target) : null;
@@ -76,6 +85,11 @@ function readProtein(points, { target, threshold }) {
   const s = analyzeSeries(points);
   if (!s) return '这段时间还没有饮食记录，记满几天才能看出蛋白是否吃够。';
   const hit = points.filter((p) => Number(p.y) >= threshold).length;
+  // 同上：两天里达标一天不叫「达标率 50%」
+  if (s.n < MIN_POINTS_FOR_CLAIM) {
+    return `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`
+      + `再记满 ${MIN_POINTS_FOR_CLAIM - s.n} 天才谈得上达标率。`;
+  }
   const rate = s.n ? hit / s.n : 0;
   return join([
     `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`,

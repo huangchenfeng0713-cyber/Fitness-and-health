@@ -288,45 +288,32 @@ test('游离糖：完整水果与纯奶不计入上限，风味酸奶只计添�
 
 /* -------------------------- 结论必须配得上样本量 -------------------------- */
 
-test('只记了 1 天时不下「近 14 天平均」的结论', () => {
-  // 用户实测：14 天健康数据 + 1 天饮食记录，
-  // 曾报出「近 14 天平均低于目标 3168 kcal/天，每周 2.88 kg 脂肪赤字」
+test('多日趋势归数据页的图，今日提示不再重复一遍', () => {
+  /*
+   * 用户实测：14 天健康数据 + 1 天饮食记录，
+   * 曾报出「近 14 天平均低于目标 3168 kcal/天，相当于每周 2.88 kg 脂肪赤字」——
+   * 那 13 天只是没记。
+   *
+   * 「分母是有记录的天数、样本不足就不下结论」这条口径没有取消，
+   * 只是跟着这几条结论一起搬到了数据页的图下面，
+   * 现在由 core/trend-reading.js 把关（见 test/trend-reading.test.js）。
+   * 这里守的是另一件事：搬走之后别再有人把它们加回今日提示。
+   */
   const a = buildAdvice({
     targets, profile, intake: zero, entries: [], now: at('12:30'),
-    baseline: { days: 14, windowDays: 14, healthDaysCounted: 14, loggedDays: 1,
-      activeEnergy: 310, kcalIntake: 1287, proteinIntake: 75, proteinHitDays: 0 },
+    baseline: {
+      days: 14, windowDays: 14, healthDaysCounted: 14, loggedDays: 5,
+      activeEnergy: 310, kcalIntake: 1200, proteinIntake: 70, proteinHitDays: 1,
+      weightTrend: 1.2,
+    },
   });
   const titles = a.insights.map((i) => i.title);
-  assert.ok(!titles.some((t) => /近 14 天平均/.test(t)), `不该出现 14 天的平均结论：${titles.join(' / ')}`);
-  assert.ok(!titles.some((t) => /近 14 天蛋白达标/.test(t)), `不该把没记的日子算成没达标：${titles.join(' / ')}`);
-  assert.ok(titles.some((t) => /只有 1 天的饮食记录/.test(t)), `应说明样本不足：${titles.join(' / ')}`);
-});
-
-test('样本够了才给平均摄入偏差，且写明真实天数', () => {
-  const a = buildAdvice({
-    targets, profile, intake: zero, entries: [], now: at('12:30'),
-    baseline: { days: 14, windowDays: 14, healthDaysCounted: 14, loggedDays: 5,
-      activeEnergy: 310, kcalIntake: 1200, proteinIntake: 70, proteinHitDays: 1 },
-  });
-  const hit = a.insights.find((i) => /平均低于目标/.test(i.title));
-  assert.ok(hit, '5 天样本应该给出结论');
-  assert.ok(/有记录的 5 天/.test(hit.title), `标题要写明真实天数：${hit.title}`);
-  assert.ok(/没记录的日子没有计入/.test(hit.text), '要提醒样本小于窗口');
-  assert.ok(/脂肪当量/.test(hit.text) && /不等于体重真会这样变/.test(hit.text),
-    '7700 kcal/kg 只是能量换算，措辞不能说成一定会瘦多少');
-  const prot = a.insights.find((i) => /蛋白达标/.test(i.title));
-  assert.ok(/有记录的 5 天/.test(prot.title), `蛋白达标率的分母也要真实：${prot.title}`);
-});
-
-test('首页的短期体重斜率不直接给出激进热量调整', () => {
-  const a = buildAdvice({
-    targets, profile, intake: zero, entries: [], now: at('12:30'),
-    baseline: { weightTrend: 1.2, loggedDays: 0 },
-  });
-  const insight = a.insights.find((i) => /体重趋势/.test(i.title));
-  assert.ok(insight);
-  assert.doesNotMatch(insight.text, /调整约 [+-]?\d+ kcal/);
-  assert.match(insight.text, /至少积累 28 天/);
+  for (const dup of [/平均[^，。]*目标/, /蛋白达标 \d+ 天/, /体重趋势/, /近 \d+ 天/, /天的饮食记录/]) {
+    assert.ok(!titles.some((t) => dup.test(t)),
+      `多日趋势只该出现在数据页的图下面：${titles.join(' / ')}`);
+  }
+  // 今天本身的判断照旧要给
+  assert.ok(titles.length > 0, '今日提示不该被清空');
 });
 
 test('没填生日时会说明年龄是估算的', () => {

@@ -90,7 +90,7 @@ export function renderHealth(root) {
   mount(root,
     repairCard(rerender),
     implausibleCard(rerender),
-    targetCard(),
+    targetCard(rerender),
     ...(trendCharts(rerender) || []),
   );
 }
