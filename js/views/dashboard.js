@@ -81,6 +81,16 @@ function heroCard(advice, targets, derived) {
 
 function energyFreshness(derived) {
   const meta = derived.energyData;
+  /*
+   * 身体信息本身算不出目标时要说清是哪一条不合格。
+   * 笼统说「演示数据」会让人以为只是没填，实际是填了但被拒——
+   * 常见于恢复了一份旧备份，或换设备后云端同步下来的旧档案。
+   */
+  if (derived.profileError) {
+    return h('p.data-freshness.warn', null,
+      `身体信息暂时算不出目标（${derived.profileError}），下面的数字来自默认档案。`
+      + '请到右上角“设置 → 身体信息”修正后保存。');
+  }
   if (derived.demoMode) {
     return h('p.data-freshness.warn', null, '当前使用演示身体数据，热量与营养目标不是你的个性化结果。请到“设置”填写真实信息。');
   }

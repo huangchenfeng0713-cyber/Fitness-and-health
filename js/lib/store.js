@@ -176,9 +176,25 @@ export function recompute(now = new Date()) {
     if (hcm > 0 && !p.heightCm) effectiveProfile.heightCm = hcm;
   }
 
+  /*
+   * 身体信息算不出目标时，退回默认档案继续跑，绝不把异常抛出去。
+   *
+   * recompute() 在 boot 的 hydrateStore() 里就会执行一次。之前这里让
+   * RangeError 直接冒泡：恢复了一份含 16 岁生日的备份之后，整个应用起不来，
+   * 首屏还显示成「本地存储不可用，IndexedDB 打不开」——既救不回来，
+   * 报错还指向完全无关的方向（用户连设置抽屉都打不开，没法回去改那条数据）。
+   *
+   * 现在把原因记进 derived.profileError，界面照常渲染并提示去哪儿修。
+   */
+  const profileCheck = validateProfile(effectiveProfile);
+  const profileError = profileCheck.valid ? null : profileCheck.errors.join('；');
+  const calcProfile = profileCheck.valid
+    ? effectiveProfile
+    : { ...DEFAULT_PROFILE, sex: effectiveProfile.sex || DEFAULT_PROFILE.sex };
+
   const baseline = computeBaseline(state.healthDays, state.dietDaily, state.day);
-  const { kcal: bmr } = basalMetabolicRate(effectiveProfile);
-  const stat = staticTDEE(effectiveProfile);
+  const { kcal: bmr } = basalMetabolicRate(calcProfile);
+  const stat = staticTDEE(calcProfile);
 
   const intake = sumNutrients(state.dietEntries);
 
@@ -207,7 +223,7 @@ export function recompute(now = new Date()) {
     }
   }
 
-  const targets = dailyTargets(effectiveProfile, dynamic);
+  const targets = dailyTargets(calcProfile, dynamic);
   const advice = buildAdvice({
     targets,
     intake,
@@ -224,7 +240,8 @@ export function recompute(now = new Date()) {
 
   state.derived = {
     effectiveProfile, health, baseline, dynamic, targets, intake, advice, isToday, bmr,
-    staticTdee: stat.tdee, energyData, demoMode: p.demoMode === true || p.onboarded !== true,
+    staticTdee: stat.tdee, energyData, profileError,
+    demoMode: p.demoMode === true || p.onboarded !== true || profileError != null,
   };
   return state.derived;
 }

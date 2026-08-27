@@ -474,3 +474,20 @@ test('短标签不会被从中间断成两截', () => {
   assert.match(css, /\.micro-label \{[^}]*white-space: nowrap/);
   assert.match(css, /\.card-tag \{[\s\S]*?word-break: keep-all;[\s\S]*?\}/, '卡片角标仍会在词内断行');
 });
+
+test('身体信息不可用时，界面说清是哪一条不合格', () => {
+  // 笼统说「演示数据」会让人以为只是没填，实际是填了但被拒——
+  // 常见于恢复了一份旧备份，或换设备后云端同步下来的旧档案。
+  const dashboard = page('dashboard');
+  assert.match(dashboard, /derived\.profileError/, '首屏没有读取身体信息的错误原因');
+  assert.ok(dashboard.includes('身体信息暂时算不出目标'), '缺少可操作的提示文案');
+  assert.ok(dashboard.includes('设置 → 身体信息'), '没有告诉用户去哪里改');
+  // 提示要排在笼统的「演示身体数据」之前，否则具体原因会被它盖掉
+  const at = (s) => dashboard.indexOf(s);
+  assert.ok(at('derived.profileError') < at('当前使用演示身体数据'), '具体原因被笼统提示盖住了');
+
+  const store = read('js/lib/store.js');
+  assert.match(store, /const profileCheck = validateProfile\(effectiveProfile\)/);
+  assert.match(store, /const calcProfile = profileCheck\.valid/, '没有退回默认档案');
+  assert.ok(!/dailyTargets\(effectiveProfile/.test(store), '目标仍在用未经校验的档案计算');
+});
