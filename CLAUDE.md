@@ -9,7 +9,15 @@ npm test                                              # 全部测试（node --te
 node --test test/nutrition.test.js                    # 单个文件
 node --test --test-name-pattern='Katch' test/*.test.js  # 按用例名筛选
 npm run serve                                         # python3 -m http.server 8080
+
+# 浏览器冒烟：起动、四个栏目、IndexedDB 落库、Service Worker 接管
+# CI 会自己跑；本地要跑得先起服务器，playwright 用 PLAYWRIGHT_PATH 指过去
+node scripts/smoke.mjs http://127.0.0.1:8080
 ```
+
+`.github/workflows/ci.yml` 在每个 PR 上跑单元测试 + 浏览器冒烟。
+**浏览器那一层不是可有可无的**：启动失败吞掉自救按钮、身体信息不合格白屏、
+推荐份量漏出浮点数，这三个都是几百项单元测试全绿的情况下漏过去的。
 
 **没有构建、没有依赖、没有 lint 配置。** `package.json` 里没有 `dependencies`，测试直接跑源码。
 不要引入 npm 包、打包器或框架 —— 浏览器直接加载 `js/` 下的 ES 模块。

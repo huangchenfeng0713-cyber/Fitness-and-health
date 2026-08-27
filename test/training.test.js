@@ -97,10 +97,10 @@ test('按部位取动作，复合动作排在前面', () => {
 
 test('组合建议：重复、推拉失衡、全孤立动作都能指出来', () => {
   const dup = planAdvice(['bench_press_bb', 'bench_press_db']);
-  assert.ok(dup.some((t) => t.level === 'warn' && /同一件事/.test(t.title)));
+  assert.ok(dup.some((t) => t.level === 'warn' && /刺激高度相似/.test(t.title)));
   // 动作名只出现在按钮上，正文不再重复念一遍
   const dupTip = dup.find((t) => t.key.startsWith('dup-'));
-  assert.ok(/换掉 哑铃卧推/.test(dupTip.text), '没指明该换掉哪一个');
+  assert.ok(/把 哑铃卧推 换成/.test(dupTip.text), '没指明该换掉哪一个');
   assert.ok(dupTip.actions.length, '没给出替换方案');
 
   const allPush = planAdvice(['bench_press_bb', 'ohp_db', 'incline_bench_db', 'cable_fly']);
@@ -277,4 +277,18 @@ test('正常规模的一套动作不会被汇总提示打扰', () => {
   // 五个动作、彼此不重复：不该冒出「还有 N 组重叠」这种话
   const tips = planAdvice(['bench_press_bb', 'lat_pulldown', 'squat_bb', 'plank', 'lateral_raise_db']);
   assert.ok(!tips.some((t) => t.key === 'dup-more' || t.key === 'part-more'), JSON.stringify(tips.map((t) => t.title)));
+});
+
+
+test('重复提示不把话说死：重复度只看动作构成，看不出训练量和负荷', () => {
+  // 「练的是同一件事」「多出来的量没有换来新刺激」把训练效果说成了动作构成的函数。
+  // 实际还取决于负荷、总量、频率和动作顺序——这些从「选了哪几个动作」里看不出来。
+  const tips = planAdvice(['bench_press_bb', 'bench_press_db', 'cable_fly', 'db_fly']);
+  const all = tips.map((t) => `${t.title}${t.text}`).join('');
+  for (const tooAbsolute of ['练的是同一件事', '没有换来新的刺激']) {
+    assert.ok(!all.includes(tooAbsolute), `措辞过于绝对：${tooAbsolute}`);
+  }
+  // 但也不能含糊到没有立场——要说清「相似在哪」和「取决于什么」
+  assert.ok(all.includes('刺激高度相似'));
+  assert.ok(all.includes('取决于你的训练目的和这一周的总量'));
 });

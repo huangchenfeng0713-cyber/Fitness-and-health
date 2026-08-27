@@ -122,7 +122,7 @@ function weightTrendStatsFromDays(days) {
   };
 }
 
-/** 趋势页和健康解读共用的体重拟合口径。 */
+/** 趋势图和健康解读共用的体重拟合口径。 */
 export function weightTrendStats(healthDays = [], windowDays = 30, asOfDate = null) {
   return weightTrendStatsFromDays(windowedDays(healthDays, windowDays, asOfDate));
 }

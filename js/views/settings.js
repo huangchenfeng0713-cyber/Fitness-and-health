@@ -485,8 +485,7 @@ export function renderSettings(root) {
       h('div.card-head', null, h('h3', null, '关于')),
       h('p', null, `版本 v${APP_VERSION}`),
       h('p', null, accountCopy),
-      h('p', null, '同步、补录、备份与恢复都在“数据”栏目。'),
-      h('a.inline-link', { href: '#health' }, '前往数据中心'),
+      h('p', null, '同步、补录、备份与恢复都在本页的“数据管理”里；“数据”栏目只看结果，不做维护操作。'),
       h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。'),
     ),
   );

@@ -232,7 +232,7 @@ export function planAdvice(selection = []) {
     dupTips.push({
       level: 'warn',
       key: `dup-${o.a.id}-${o.b.id}`,
-      title: `${o.a.name} 和 ${o.b.name} 练的是同一件事`,
+      title: `${o.a.name} 和 ${o.b.name} 的刺激高度相似`,
       // 建议要能直接点，光念一串动作名等于让人回到列表里自己找。
       // 动作名只出现在按钮上，正文不再重复念一遍。
       actions: alts.map((e) => ({ id: e.id, label: e.name, replaces: o.b.id })),
@@ -241,8 +241,9 @@ export function planAdvice(selection = []) {
         + (o.a.equipment === o.b.equipment
           ? `器械也一样（${EQUIPMENT[o.a.equipment]}），只是换了台机子。`
           : `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。`)
-        + '同一次训练里放两个，多出来的量没有换来新的刺激。'
-        + (alts.length ? `换掉 ${o.b.name}、改成下面任意一个更划算，它们和这套都不重复。` : ''),
+        + '同一次训练里放两个，多出来的组数主要是加训练量，不是加新的刺激角度——'
+        + '要不要保留取决于你的训练目的和这一周的总量。'
+        + (alts.length ? `如果想换个角度，把 ${o.b.name} 换成下面任意一个，它们和这套都不重复。` : ''),
     });
   }
   tips.push(...dupTips);
@@ -252,7 +253,7 @@ export function planAdvice(selection = []) {
     tips.push({
       level: 'info',
       key: 'dup-more',
-      title: `另有 ${stillOverlapping.length} 个动作和上面这些重复`,
+      title: `另有 ${stillOverlapping.length} 个动作和上面这些刺激相似`,
       text: '先按上面的建议换掉几个，剩下的重叠多半会跟着消失，调整完再看一遍这里。',
     });
   }
@@ -268,7 +269,8 @@ export function planAdvice(selection = []) {
       key: `part-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
       text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
-        + '放在一起不算错，但两个都做力竭时后一个会明显掉力量，把复合动作排前面。',
+        + '放在一起很常见，只是两个都做到接近力竭时，后一个的可用负荷会明显下降；'
+        + '把复合动作排前面通常更划算。',
     });
   }
   if (somes.length > 3) {
@@ -276,7 +278,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'part-more',
       title: `还有 ${somes.length - 3} 组动作部分重叠`,
-      text: '部分重叠不算错，这里只列最像的三组；真正要处理的是上面那些高度重复。',
+      text: '部分重叠不算错，这里只列最像的三组；更值得先看的是上面那些刺激高度相似的。',
     });
   }
 
