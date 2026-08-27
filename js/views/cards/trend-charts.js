@@ -77,12 +77,27 @@ const average = (points, decimals = 0) => {
   return Math.round(value * scale) / scale;
 };
 
-function rangeSwitch(rerender) {
-  return h('div.range-switch', null,
-    RANGES.map((r) => h('button', {
-      class: `chip-btn${range === r.key ? ' active' : ''}`,
-      onclick: () => { range = r.key; rerender(); },
-    }, r.label)));
+/*
+ * 区间和图表都用原生 <select>。
+ *
+ * 之前是两排按钮：九张图加四个区间铺开就占掉大半屏，而每次只看其中一个，
+ * 剩下的全是噪音。原生下拉在 iOS 上是系统滚轮，比自绘的列表更顺手，
+ * 也不用自己处理键盘和无障碍。
+ */
+function picker({ label, value, options, onPick }) {
+  const select = h('select.trend-select', {
+    'aria-label': label,
+    onchange: (ev) => onPick(ev.target.value),
+  }, options.map((o) => h('option', { value: String(o.key) }, o.label)));
+  /*
+   * 选中值建完再赋，不要靠 option 的 selected 属性：
+   * h() 把 `selected: ''` 当成假值跳过，结果一个选项都没被标记，
+   * select 会默默落到第一项——下拉显示「热量摄入」而图画的是体重。
+   */
+  select.value = String(value);
+  return h('div.trend-picker-field', null,
+    h('span.trend-picker-label', null, label),
+    h('div.trend-select-wrap', null, select, h('span.trend-select-caret', { 'aria-hidden': 'true' }, '⌄')));
 }
 
 /*
@@ -146,7 +161,9 @@ const CHARTS = [
   { key: 'kcal', label: '热量摄入' },
   { key: 'protein', label: '蛋白摄入' },
   { key: 'weight', label: '体重' },
+  { key: 'steps', label: '步数' },
   { key: 'active', label: '活动能量' },
+  { key: 'exercise', label: '锻炼时间' },
   { key: 'sleep', label: '睡眠' },
   { key: 'restingHR', label: '静息心率' },
   { key: 'balance', label: '热量收支' },
@@ -158,13 +175,7 @@ let activeChart = 'kcal';
  */
 let chartPicked = false;
 
-function chartSwitch(rerender, availability) {
-  return h('div.chart-switch', null,
-    CHARTS.map((c) => h('button', {
-      class: `chip-btn${activeChart === c.key ? ' active' : ''}${availability[c.key] ? '' : ' empty'}`,
-      onclick: () => { activeChart = c.key; chartPicked = true; rerender(); },
-    }, c.label)));
-}
+
 
 export function trendCharts(rerender) {
   const d = state.derived;
@@ -187,6 +198,8 @@ export function trendCharts(rerender) {
   const kcalSeries = kcalTimeline.filter((p) => p.y != null);
   const proteinSeries = proteinTimeline.filter((p) => p.y != null);
   const activeSeries = series(days, (date) => health.get(date)?.activeEnergy ?? null);
+  const stepsSeries = series(days, (date) => health.get(date)?.steps ?? null);
+  const exerciseSeries = series(days, (date) => health.get(date)?.exerciseMinutes ?? null);
   const hrSeries = series(days, (date) => {
     const v = health.get(date)?.restingHR;
     return v > 0 ? v : null;
@@ -212,6 +225,8 @@ export function trendCharts(rerender) {
   const proteinHit = proteinSeries.filter((p) => p.y >= proteinThreshold).length;
   const avgKcal = average(kcalSeries);
   const avgActive = average(activeSeries);
+  const avgSteps = average(stepsSeries);
+  const avgExercise = average(exerciseSeries);
   const avgSleep = average(sleepSeries, 1);
   const avgHR = average(hrSeries);
   const weightStats = weightTrendStats(state.healthDays, spanDays, shiftDay(endDay, 1));
@@ -238,6 +253,7 @@ export function trendCharts(rerender) {
     weight: weightSeries.length > 0, active: activeSeries.length > 0,
     sleep: sleepSeries.length > 0, restingHR: hrSeries.length > 0,
     balance: balanceSeries.length > 0,
+    steps: stepsSeries.length > 0, exercise: exerciseSeries.length > 0,
   };
 
   const SPEC = {
@@ -280,6 +296,30 @@ export function trendCharts(rerender) {
       }),
       readout: readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))),
       tip: '拟合趋势按所选区间内的全部称重估算；单日波动主要是水分与排空差异。',
+    }),
+    steps: () => ({
+      title: '步数',
+      tag: avgSteps != null ? `已结束日平均 ${num(avgSteps)} 步` : null,
+      chart: lineChart({
+        data: stepsSeries, color: 'var(--accent)', unit: '步', domain: axisDomain, ...pick,
+        target: avgSteps, targetLabel: avgSteps != null ? `平均 ${num(avgSteps)}` : '',
+        emptyText: '还没有步数记录',
+      }),
+      note: trendReading('steps', stepsSeries, {}),
+      readout: readoutRow(valueAt((v) => `${num(v)} 步`)((dd) => health.get(dd)?.steps ?? null)),
+      tip: '步数来自手机或手表的计步器。多设备同时佩戴时按来源取较大值，不做累加。',
+    }),
+    exercise: () => ({
+      title: '锻炼时间',
+      tag: avgExercise != null ? `已结束日平均 ${formatMinutes(avgExercise)}` : null,
+      chart: lineChart({
+        data: exerciseSeries, color: 'var(--fiber)', unit: '分钟', domain: axisDomain, ...pick,
+        target: 150 / 7, targetLabel: '每周 150 分钟',
+        emptyText: '还没有锻炼记录',
+      }),
+      note: trendReading('exercise', exerciseSeries, {}),
+      readout: readoutRow(valueAt((v) => formatMinutes(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
+      tip: '参考线是 WHO 每周 150 分钟中等强度活动折算到每天（约 21 分钟）。只统计设备记录到的时长。',
     }),
     active: () => ({
       title: '活动能量',
@@ -337,18 +377,8 @@ export function trendCharts(rerender) {
   const todayNote = state.day === todayKey() ? '当天数据要等这一天过完才会出现。' : '';
 
   return [
-    h('section.card.trend-picker', null,
-      h('div.card-head', null,
-        h('div', null,
-          h('h3', null, '趋势'),
-          h('p.card-desc', null, state.day === todayKey()
-            ? `统计到昨天（${endDay}）为止：今天还没过完，画进去必然是个偏低的点。`
-            : `统计到 ${endDay} 为止，所选日期当天不计入。`)),
-        h('span.card-tag', null, RANGES.find((r) => r.key === range)?.label || `${spanDays} 天`)),
-      rangeSwitch(rerender),
-      chartSwitch(rerender, availability)),
-
-    h('section.card', null,
+    // 选择器和图合成一张卡：它们本来就是一件事，分成两块只是多一道分隔线
+    h('section.card.trend-card', null,
       h('div.card-head', null,
         h('h3', null, spec.title),
         h('div.card-head-actions', null,
@@ -356,6 +386,25 @@ export function trendCharts(rerender) {
           infoTip('查看这张图的统计口径',
             h('p', null, spec.tip),
             h('p', null, `统计到 ${endDay} 为止；${todayNote || '所选日期当天不计入。'}`)))),
+
+      h('div.trend-pickers', null,
+        picker({
+          label: '看什么',
+          value: activeChart,
+          options: CHARTS.map((c) => ({
+            key: c.key,
+            // 没数据的仍然能选：点进去会说明缺什么，比直接藏起来好找
+            label: availability[c.key] ? c.label : `${c.label}（暂无数据）`,
+          })),
+          onPick: (key) => { activeChart = key; chartPicked = true; rerender(); },
+        }),
+        picker({
+          label: '时间段',
+          value: range,
+          options: RANGES.map((r) => ({ key: r.key, label: r.label })),
+          onPick: (key) => { range = key === 'all' ? 'all' : Number(key); rerender(); },
+        })),
+
       h('div.chart-wrap', null, spec.chart),
       spec.readout,
       h('p.chart-note', null, spec.note)),

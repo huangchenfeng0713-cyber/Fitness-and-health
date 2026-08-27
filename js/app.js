@@ -124,7 +124,7 @@ function renderTopbar() {
     context.classList.add('topbar-page-context');
     // 健身页不按日期统计，标「数据截至」只会让人以为动作库跟日期有关
     const noteText = tab.key === 'training'
-      ? '按部位挑动作，实时检查有没有练重复'
+      ? '按部位挑动作，记下组数与重量'
       : `数据截至 ${cutoff}`;
     context.append(
       h('h1', null, tab.label),

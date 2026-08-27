@@ -35,15 +35,22 @@
   --safe-left: var(--env-left);
   --safe-right: var(--env-right);
 
-  --radius: 19px;
+  --radius: 18px;
   --radius-sm: 12px;
-  --shadow: 0 1px 2px rgba(16, 36, 29, .04), 0 8px 28px rgba(16, 36, 29, .045);
+  /*
+   * Apple 的分组列表靠「底色 + 白卡 + 极轻阴影」分层，不画描边。
+   * 描边在深色下尤其显脏，去掉之后卡片边缘更干净，层次靠底色对比给。
+   */
+  --shadow: 0 1px 1px rgba(16, 36, 29, .03), 0 6px 20px rgba(16, 36, 29, .05);
+  /* 分隔线按 iOS 的 hairline 走：物理一像素，不随缩放变粗 */
+  --hairline: rgba(60, 60, 67, .12);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro SC", "PingFang SC", "Hiragino Sans GB",
           "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
+    --hairline: rgba(235, 235, 245, .14);
     --bg: #0d1014;
     --card: #161b20;
     --card-2: #1c2228;
@@ -251,9 +258,9 @@ html, body { height: 100%; overflow: hidden; }
 /* ============ 卡片 ============ */
 .card {
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 17px 16px;
   box-shadow: var(--shadow);
 }
 .card-head {
@@ -1331,3 +1338,99 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   font-variant-numeric: tabular-nums;
 }
 .plan-main { flex: 1; min-width: 0; }
+
+/* ============ Apple 风格细化 ============
+ *
+ * 只调质感，不动结构：卡片去描边、分隔线走 hairline、按钮和输入靠近 iOS 控件。
+ * 三条实际约束：
+ *   1. 输入类字号不得小于 16px，否则 iOS 聚焦时会整页缩放；
+ *   2. 可点区域不小于 44px，这是 Apple HIG 的最小命中尺寸；
+ *   3. 分隔线用 hairline 颜色而不是 --border，描边色在深色下会显脏。
+ */
+
+/* 标题层级：字重更大、字距收紧，接近 SF 的观感 */
+.card-head h3 { letter-spacing: -.015em; }
+h1, h2, h3 { letter-spacing: -.02em; }
+
+/* 列表分隔线统一走 hairline，并且左侧内缩——iOS 的分组列表就是这么分行的 */
+.plan-row, .plan-row-wrap, .rec-row, .avoid-row, .entry-row,
+.sync-device-row, .data-table td, .data-table th {
+  border-bottom-color: var(--hairline);
+}
+
+/* 主按钮：实心强调色、圆角 12、字重 600，高度够手指点 */
+.primary-btn, .secondary-btn {
+  min-height: 44px; border-radius: 12px; font-weight: 600;
+  letter-spacing: -.01em;
+  transition: transform .12s ease, opacity .12s ease, background-color .12s ease;
+}
+.primary-btn:active, .secondary-btn:active, .chip-btn:active, .add-btn:active {
+  transform: scale(.97);
+}
+/* 次要按钮用「强调色的淡底 + 强调色文字」，这是 iOS 里最常见的 tinted 按钮 */
+.secondary-btn {
+  background: var(--accent-soft);
+  border: 0;
+  color: var(--accent);
+}
+
+/* 胶囊按钮做成 iOS 分段控件的观感 */
+.chip-btn {
+  border-radius: 999px; min-height: 32px;
+  transition: background-color .12s ease, color .12s ease, transform .12s ease;
+}
+
+/* 输入控件：底色填充、无描边，聚焦时给强调色描边 */
+.search-input, .set-input, .form-field input, .form-field select, .feedback-area {
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: var(--card-2);
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.search-input:focus, .set-input:focus,
+.form-field input:focus, .form-field select:focus, .feedback-area:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--card);
+}
+
+/* ---- 趋势卡的下拉选择 ---- */
+.trend-pickers {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin: 12px 0 4px;
+}
+.trend-picker-field { min-width: 0; }
+.trend-picker-label {
+  display: block; font-size: 11px; color: var(--faint);
+  margin-bottom: 5px; letter-spacing: .02em;
+}
+.trend-select-wrap { position: relative; }
+/*
+ * 原生 select 收起箭头自己画：各浏览器的默认箭头样式差得太远，
+ * 统一之后深浅色和圆角才对得上。
+ */
+.trend-select {
+  appearance: none; -webkit-appearance: none;
+  width: 100%; min-height: 40px; padding: 0 30px 0 12px;
+  border: 0; border-radius: 11px;
+  background: var(--card-2); color: var(--text);
+  font: inherit; font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+  cursor: pointer;
+}
+.trend-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.trend-select-caret {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-60%);
+  pointer-events: none; color: var(--faint); font-size: 15px;
+}
+.trend-card .chart-wrap { margin-top: 6px; }
+
+/* 走势解读：去掉左侧色条，改成整块淡底，读起来更像一段话而不是一条警告 */
+.chart-note {
+  border-left: 0;
+  background: var(--card-2);
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+}
+
+/* 数值读数行也统一到同一种淡底卡片 */
+.chart-readout { border-radius: var(--radius-sm); }

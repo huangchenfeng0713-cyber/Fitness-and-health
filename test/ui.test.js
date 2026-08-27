@@ -14,6 +14,7 @@ const CARD_MODULES = [
   'js/views/cards/targets.js',
   'js/views/cards/data-manager.js',
   'js/views/cards/trend-charts.js',
+  'js/views/cards/meal-advice.js',
 ];
 const page = (name) => {
   const own = read(`js/views/${name}.js`);
@@ -87,16 +88,25 @@ test('长提示在窄屏内换行并限制高度，不再形成溢出的巨型�
   assert.ok(utils.includes("'aria-live': 'polite'"));
 });
 
-test('数据页按「我怎么样 → 目标 → 走势 → 明细」排序，首屏卡片不会被 flex 压扁', () => {
+test('数据页只留目标和趋势，解读收到每张图下面', () => {
+  // 原先「近 14 天概览」「健康数据解读」「最近记录」三张卡加上趋势图，
+  // 一页四五屏、三处在说同一批数字。
   const health = page('health');
   const settings = page('settings');
   const css = read('css/app.css');
   const rendered = health.slice(health.indexOf('export function renderHealth'));
   const at = (name) => rendered.indexOf(name);
-  assert.ok(at('overviewCard()') < at('insightCard()'), '概览应排在解读之前');
-  assert.ok(at('insightCard()') < at('targetCard()'), '解读应排在每日目标之前');
   assert.ok(at('targetCard()') < at('trendCharts(rerender)'), '目标应排在趋势图之前');
-  assert.ok(at('trendCharts(rerender)') < at('dataTable()'), '趋势图应排在逐日明细之前');
+  for (const gone of ['overviewCard(', 'insightCard(', 'dataTable(']) {
+    assert.ok(!rendered.includes(gone), `${gone} 应该已经移除`);
+  }
+  // 移掉的步数与锻炼解读要在图表里补回来，功能不能因为搬家而少
+  const charts = read('js/views/cards/trend-charts.js');
+  for (const key of ["key: 'steps'", "key: 'exercise'"]) {
+    assert.ok(charts.includes(key), `趋势图缺少 ${key}`);
+  }
+  const reading = read('js/core/trend-reading.js');
+  assert.match(reading, /steps: readSteps, exercise: readExercise/, '新图没有对应的解读');
   // 身体信息挪到了设置页最上面：它是目标计算的输入，不是「最近怎么样」的一部分
   const drawer = settings.slice(settings.indexOf('export function renderSettings'));
   assert.ok(drawer.indexOf('profileCard(rerender)') > 0, '设置页缺少身体信息');
@@ -240,12 +250,11 @@ test('清补凉支持逐项选配和份量调整，记录会保存营养与配�
 });
 
 test('普通食物记录失败会恢复按钮，条目说明不会被底栏截断', () => {
+  // 推荐卡从今日页搬到饮食页后，一键记录的入口也跟着过去了
   const diet = page('diet');
-  const dashboard = page('dashboard');
   const utils = read('js/lib/utils.js');
   const css = read('css/app.css');
   assert.ok(diet.includes('runLocalAction'));
-  assert.ok(dashboard.includes('runLocalAction'));
   assert.ok(utils.includes('control.disabled = wasDisabled'));
   assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*position: fixed/);
   assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*bottom: calc\(78px \+ var\(--safe-bottom\)\)/);
@@ -274,7 +283,6 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
-  assert.ok(health.includes('截至所选日共 ${eligible.length} 天'));
   assert.ok(trends.includes('按当前设置估算'), '每日目标卡应按所选日期给出口径');
   assert.ok(trends.includes("'当前设置估算目标'"));
 });
@@ -519,14 +527,24 @@ test('食物数量不写死：界面上的数由食物库自己算，README 的�
     `README 写 ${claimed} 种，实际约 ${actual} 种`);
 });
 
-test('趋势图写明统计到昨天，不与顶栏的「数据截至今天」打架', () => {
-  // 同一页两个截止日期：顶栏说「数据截至 今天」，图却只画到昨天。
-  // 不说清会让人以为图坏了或数据没导进来。
+test('统计截止日期收在信息按钮里，不再占一整段正文', () => {
+  // 那段话每次进页面都要读一遍，实际只在第一次有用。
   const health = page('health');
-  assert.match(health, /统计到昨天（\$\{endDay\}）为止/, '趋势卡没说明截止到昨天');
-  assert.ok(health.includes('今天还没过完，画进去必然是个偏低的点'), '没说明为什么不画今天');
-  assert.match(health, /state\.day === todayKey\(\)\s*\?[\s\S]{0,120}统计到 \$\{endDay\} 为止/,
-    '看历史日期时应说「所选日期当天不计入」，而不是照抄「昨天」');
+  assert.ok(!health.includes('今天还没过完，画进去必然是个偏低的点'), '正文里还留着那段说明');
+  // 但口径本身不能丢，得能在信息按钮里查到
+  assert.match(health, /统计到 \$\{endDay\} 为止；\$\{todayNote \|\| '所选日期当天不计入。'\}/);
+});
+
+test('区间与图表改用下拉，不再铺一屏按钮', () => {
+  // 九张图加四个区间铺开就占掉大半屏，而每次只看其中一个。
+  const health = page('health');
+  assert.match(health, /h\('select\.trend-select'/, '没有改成原生下拉');
+  assert.ok(!health.includes("h('div.chart-switch'"), '还留着一排图表按钮');
+  assert.ok(!health.includes("h('div.range-switch'"), '还留着一排区间按钮');
+  // 没数据的图仍可选，点进去会说明缺什么
+  assert.match(health, /availability\[c\.key\] \? c\.label : `\$\{c\.label\}（暂无数据）`/);
+  // 选择器和图必须在同一张卡里
+  assert.match(health, /h\('section\.card\.trend-card'[\s\S]{0,900}h\('div\.trend-pickers'/);
 });
 
 test('设置页不再把用户指向已经搬走的数据管理', () => {

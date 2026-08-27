@@ -197,9 +197,44 @@ function readBalance(points) {
   ]);
 }
 
+/** 步数：绝对值 + 稳定性，参考分档见 docs/算法依据.md */
+function readSteps(points) {
+  const s = analyzeSeries(points);
+  if (!s) return '这段时间还没有步数记录。';
+  const low = points.filter((p) => Number(p.y) < 4000).length;
+  return join([
+    `日均 ${s.avg} 步，区间内 ${s.min} ~ ${s.max} 步。`,
+    s.avg < 5000 ? '低于本应用的下限参考分档；先把每天的日常走动加到 5000 步，比一次走很多更容易坚持。'
+      : s.avg < 7500 ? '处在中间参考区间。若身体状况允许，可以循序增加到约 7000-8000 步。'
+        : '已经在较高的参考区间；再往上加的边际获益变小，把力气放在运动强度上更划算。',
+    low >= MIN_POINTS_FOR_CLAIM ? `其中 ${low} 天不到 4000 步。` : '',
+    s.enoughForTrend && Math.abs(s.drift) >= Math.max(800, s.avg * 0.15)
+      ? (s.drift > 0 ? `后半段比前半段多走约 ${Math.abs(s.drift)} 步/天。`
+        : `后半段比前半段少走约 ${Math.abs(s.drift)} 步/天。`)
+      : '',
+    '步数只反映走动量，替代不了运动强度和久坐时间的判断。',
+  ]);
+}
+
+/** 锻炼时间：对照 WHO 每周 150 分钟 */
+function readExercise(points) {
+  const s = analyzeSeries(points);
+  if (!s) return '这段时间还没有锻炼记录。';
+  const weekly = Math.round((s.avg * 7));
+  const zero = points.filter((p) => Number(p.y) <= 0).length;
+  return join([
+    `日均 ${s.avg} 分钟，按这个节奏一周约 ${weekly} 分钟。`,
+    weekly >= 150 ? '达到 WHO 每周 150 分钟中等强度身体活动的建议。'
+      : `离 WHO 建议的每周 150 分钟还差约 ${150 - weekly} 分钟。`,
+    zero ? `其中 ${zero} 天没有记录到锻炼。` : '',
+    '这里只统计设备记录到的锻炼时长，不含力量训练的组间休息。',
+  ]);
+}
+
 const READERS = {
   kcal: readKcal, protein: readProtein, weight: readWeight,
   active: readActive, sleep: readSleep, restingHR: readRestingHR, balance: readBalance,
+  steps: readSteps, exercise: readExercise,
 };
 
 /** 统一入口：metric 决定用哪套说法 */
