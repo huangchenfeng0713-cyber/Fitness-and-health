@@ -128,6 +128,36 @@ test('目标是维持时不谈快慢，只说有没有稳住', () => {
   assert.match(drift, /目标是维持，但每周涨了 0\.35 kg/);
 });
 
+test('摄入样本不足 3 天时不给「日均比目标差多少」的结论', () => {
+  /*
+   * 这道门槛原先在今日提示那边（buildInsights）。摄入结论搬到图下面之后，
+   * 门槛也只剩这一道：记了一天就说「日均 1287 kcal，比目标低 713」，
+   * 那是那一天，不是平均。
+   */
+  const one = trendReading('kcal', pts(1287), { target: 2000 });
+  assert.match(one, /有记录的 1 天里日均 1287 kcal/);
+  assert.doesNotMatch(one, /比目标[高低]/);
+  assert.match(one, /再记满 2 天/);
+
+  const enough = trendReading('kcal', pts(1287, 1300, 1400), { target: 2000 });
+  assert.match(enough, /有记录的 3 天里日均 1329 kcal，比目标低 671 kcal/);
+});
+
+test('蛋白样本不足时只报天数，不下达标率的判断', () => {
+  const two = trendReading('protein', pts(120, 60), { target: 120, threshold: 108 });
+  assert.match(two, /有记录的 2 天里达标 1 天/);
+  assert.doesNotMatch(two, /执行得不错|一半多的日子|达标率偏低/);
+  assert.match(two, /再记满 1 天/);
+});
+
+test('体重解读只说趋势和快慢，不直接开热量处方', () => {
+  // 两周的斜率里有一大半是水分。看着它调热量，调的多半是水。
+  const text = trendReading('weight', pts(62, 61.4, 60.8, 60.2), {
+    kgPerWeek: -0.9, goalRate: -0.5, records: 4, spanDays: 14,
+  });
+  assert.doesNotMatch(text, /调整约 [+-]?\d+ kcal|每天(多|少)吃 \d+ kcal/);
+});
+
 test('静息心率持续上升时点名可能的原因', () => {
   const up = trendReading('restingHR', pts(56, 57, 62, 64));
   assert.match(up, /日均 60 bpm，区间内 56 ~ 64 bpm/);

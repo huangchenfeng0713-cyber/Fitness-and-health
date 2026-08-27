@@ -58,6 +58,49 @@ test('栏目分工：数据页看数据与走势，设置页放身体信息与�
   assert.ok(!dashboard.includes('importFromClipboard'), '今日页仍在直接执行数据导入');
 });
 
+test('同一批数字不在两页各写一遍', () => {
+  /*
+   * 简化那一轮盘出来的重复：
+   *  - 今日的「今日记录」和饮食页的「饮食记录编辑」是同一批记录，一个只读一个可编辑；
+   *  - 今日主卡已经把八项目标当分母写了一遍（85/87g 蛋白、1867/2000mg 钠）；
+   *  - 「初步体重趋势 +0.14 kg/周」和体重图下面那段话说的是同一件事，图那边说得更全。
+   * 功能一项没少，只是各自留在该在的那一页。
+   */
+  const dashboard = page('dashboard');
+  const diet = page('diet');
+
+  const mounted = dashboard.slice(dashboard.indexOf('export function renderDashboard'));
+  assert.ok(!/entriesCard|'今日记录'/.test(mounted), '今日页又挂回了只读的记录卡');
+  assert.ok(diet.includes('饮食记录编辑'), '可编辑的那张记录卡不能一起没了');
+
+  // Apple 健康在今日页只留一行，六张趋势图在数据页
+  assert.ok(dashboard.includes("h('div.stat-line'"), 'Apple 健康卡应是一行摘要');
+  assert.ok(!/healthCard[\s\S]{0,1200}health-strip/.test(dashboard),
+    'Apple 健康卡又铺回了六宫格');
+  assert.match(dashboard, /\.filter\(\(\[, v\]\) => v != null\)/,
+    '没有值的项应当直接不出现，而不是排一串「—」');
+
+  // 每日目标默认收起
+  const targets = read('js/views/cards/targets.js');
+  assert.match(targets, /let open = false/, '目标卡应默认收起');
+  assert.match(targets, /open\s*\?\s*h\('div\.target-list'/, '展开后才列完整八项');
+  for (const keep of ['clampedByFloor', 'rateWasClamped']) {
+    assert.ok(targets.includes(keep), `「你填的数被改过了」这类提示不能跟着收起：${keep}`);
+  }
+});
+
+test('动作列表默认只出前几个，但已选的绝不会被藏起来', () => {
+  // 一个部位三十来个动作是整整一屏半；而列表里那一行的 ✓ 就是取消选择的入口，
+  // 收起时把它藏掉，等于选了就撤不掉。
+  const training = read('js/views/training.js');
+  assert.match(training, /const LIST_PREVIEW = \d+/);
+  assert.match(training, /list\.slice\(LIST_PREVIEW\)\.filter\(\(e\) => chosen\.has\(e\.id\)\)/,
+    '排在预览之后的已选动作要接到末尾');
+  // 换部位、换器械档位都要收回去，否则换一档还是满屏
+  const resets = training.match(/showAllExercises = false/g) || [];
+  assert.ok(resets.length >= 2, `切部位和切器械档位都要收回预览：只找到 ${resets.length} 处`);
+});
+
 test('可移动的卡片各自成模块，换页只是改一行 import', () => {
   // 栏目分布还会调整；卡片抽成模块后，搬家不用再搬几百行代码
   for (const path of CARD_MODULES) {
@@ -268,7 +311,8 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   const settings = page('settings');
   assert.ok(dashboard.includes("macroMini('脂肪上限'"));
   assert.ok(page('health').includes('参考上限'));
-  assert.ok(dashboard.includes("basis === '100ml' ? 'ml' : 'g'"));
+  // 记录行搬到饮食页之后，液体用 ml 这条也跟着搬了过去
+  assert.ok(diet.includes("findFood(e.foodId)?.basis === '100ml'"));
   assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
   assert.ok(diet.includes("isLiquid ? '毫升数' : '克数'"));
   assert.ok(advisor.includes("food.basis === '100ml' ? 'ml' : 'g'"));

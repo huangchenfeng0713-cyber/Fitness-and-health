@@ -1,11 +1,16 @@
-/** 今日总览：一眼看懂「还能吃多少、该吃什么、别碰什么」 */
+/**
+ * 今日：我今天怎么样。状态、提示、Apple 健康快照。
+ *
+ * 这一页只回答「现在什么情况」。吃什么去饮食页，走势去数据页——
+ * 原先这里还挂着一张只读的「今日记录」，和饮食页那张可编辑的是同一批数据，
+ * 看到了也改不了，反而得再翻一页。
+ */
 
 import {
   h, clearEl, num, formatMinutes, formatHours, mount, todayKey,
 } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
-import { state, findFood } from '../lib/store.js';
-import { MEAL_LABEL } from '../core/advisor.js';
+import { state } from '../lib/store.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
 
@@ -152,26 +157,31 @@ function healthCard(health) {
   const isToday = state.day === todayKey();
   // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
   const needsImport = isToday && (!has || health.activeEnergy == null);
-  const items = [
-    ['步数', health.steps != null ? num(health.steps) : '—'],
-    ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)}` : '—', 'kcal'],
-    ['锻炼', health.exerciseMinutes != null ? formatMinutes(health.exerciseMinutes) : '—'],
-    ['睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : '—',
-      health.sleepMinutes != null ? '小时' : ''],
+  /*
+   * 一行摘要，不是六宫格。
+   * 这六项在数据页各有一张趋势图，那边才是看走势的地方；
+   * 今日页只需要回答「今天同步上来了没有、大概多少」，占掉三行网格不值。
+   * 没有值的项直接不出现——一排「—」既占地方又什么都没说。
+   */
+  const bits = [
+    ['步数', health.steps != null ? num(health.steps) : null],
+    ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)} kcal` : null],
+    ['锻炼', health.exerciseMinutes != null ? formatMinutes(health.exerciseMinutes) : null],
+    ['睡眠', health.sleepMinutes != null ? `${formatHours(health.sleepMinutes, { unit: false })} 小时` : null],
     // 这张卡只展示所选日期的健康记录；档案体重不能冒充当天 Apple 数据。
-    ['体重', health.weightKg != null ? num(health.weightKg, 1) : '—', health.weightKg != null ? 'kg' : ''],
-    ['体脂', health.bodyFatPct != null ? num(health.bodyFatPct, 1) : '—', '%'],
-  ];
+    ['体重', health.weightKg != null ? `${num(health.weightKg, 1)} kg` : null],
+    ['体脂', health.bodyFatPct != null ? `${num(health.bodyFatPct, 1)}%` : null],
+  ].filter(([, v]) => v != null);
   const sourceLabel = health.source === 'manual'
     ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, 'Apple 健康'),
       h('span.card-tag', null, has ? sourceLabel : '未同步')),
-    has
-      ? h('div.health-strip', null, items.map(([k, v, u]) => h('div.health-cell', null,
-        h('div.health-value', null, v, u && h('span.health-unit', null, u)),
-        h('div.health-label', null, k))))
+    bits.length
+      ? h('div.stat-line', null, bits.map(([k, v]) => h('span.stat-bit', null,
+        h('span.stat-key', null, k),
+        h('strong', null, v))))
       : h('p.empty-hint', null, isToday
         ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
         : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
@@ -180,29 +190,6 @@ function healthCard(health) {
       '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
   );
 }
-
-/* ---------------------------------------------------------------- 记录摘要 */
-
-function entriesCard() {
-  const entries = state.dietEntries;
-  if (!entries.length) return null;
-  const byMeal = {};
-  for (const e of entries) (byMeal[e.meal] ||= []).push(e);
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('h3', null, '今日记录'),
-      h('span.card-tag', null, `${entries.length} 项 · ${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal`)),
-    h('div.entry-summary', null,
-      Object.entries(byMeal).map(([meal, list]) => h('div.entry-meal', null,
-        h('div.entry-meal-head', null,
-          h('strong', null, MEAL_LABEL[meal] || meal),
-          h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
-        h('div.entry-meal-items', null,
-          list.map((e) => h('span.entry-tag', null,
-            `${e.name} ${num(e.grams)}${findFood(e.foodId)?.basis === '100ml' ? 'ml' : 'g'}`)))))),
-  );
-}
-
 
 export function renderDashboard(root) {
   const rerender = () => renderDashboard(root);
@@ -214,6 +201,5 @@ export function renderDashboard(root) {
     heroCard(advice, targets, d),
     insightsCard(advice, rerender),
     healthCard(health),
-    entriesCard(),
   );
 }
