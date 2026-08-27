@@ -82,6 +82,27 @@ export function profileCard(rerender) {
     onchange: (e) => { d.birthday = e.target.value; touch(); },
   });
 
+  /*
+   * 身高、体重只从 Apple 健康读，读到过就不再让人改。
+   *
+   * 两个来源同时存在的时候，界面上摆着一个能编辑的输入框，算目标时用的却是
+   * 设备记录——改了没反应，比锁死更让人困惑。所以设备给过值就直接显示那个值，
+   * 并写清是哪天读到的（称重不是每天都有，看到的常常是前几天那次）。
+   *
+   * 设备从来没给过这一项时输入框照常可用：新用户第一次打开、或者刚把健康数据
+   * 清空重来，总得有办法把身高填进去，否则连静息能量都算不出来。
+   */
+  const bodySource = state.derived?.bodySource || {};
+  // 身高是整数居多，写成「176.0 cm」反倒像在标一个并不存在的精度
+  const trim = (v) => String(Math.round(v * 10) / 10);
+  const lockedField = (label, key, unit, fmt = (v) => num(v, 1)) => {
+    const hit = bodySource[key];
+    if (!hit) return null;
+    return field(label,
+      h('div.locked-value', null, h('strong', null, `${fmt(hit.value)} ${unit}`)),
+      `来自 Apple 健康 · ${hit.date.slice(5)}`);
+  };
+
   const numInput = (key, step = '0.1', placeholder = '') => h('input', {
     type: 'number', step, inputmode: 'decimal', placeholder,
     value: d[key] != null ? d[key] : '',
@@ -115,7 +136,7 @@ export function profileCard(rerender) {
   // 下方的体征小卡展示的是「已保存」的口径，避免草稿态给出误导性的数字
   const p = state.profile;
   const w = state.derived?.effectiveProfile?.weightKg ?? p.weightKg;
-  const bmiVal = bmi(w, p.heightCm);
+  const bmiVal = bmi(w, state.derived?.effectiveProfile?.heightCm ?? p.heightCm);
   const cat = bmiCategory(bmiVal);
   const lbm = leanBodyMass(w, state.derived?.effectiveProfile?.bodyFatPct ?? p.bodyFatPct);
 
@@ -126,15 +147,21 @@ export function profileCard(rerender) {
         dirtyMark,
         infoTip('查看身体信息用途',
           h('p', null, '身高、体重、生日和性别用于估算静息能量。'),
+          h('p', null,
+            '身高、体重、体脂只从 Apple 健康读取，取的是所选日期之前最近一次记录——'
+            + '称重不是每天都有，没有新记录时会一直沿用上一次读到的值。'
+            + '设备从来没给过这一项时，才由你自己填。'),
           h('p', null, '填写体脂率后会改用瘦体重公式；家用体脂秤数值只适合观察趋势。')))),
     h('div.form-grid', null,
       field('性别', sexSelect),
       // 生日独占一整行：iOS Safari 的原生日期控件固有宽度大，挤在半格里容易溢出
       field('生日', birthday, '用于计算个人目标', 'span-all'),
-      field('身高（cm）', numInput('heightCm', '0.5')),
-      field('体重（kg）', numInput('weightKg', '0.1'),
-        p.syncWeightFromApple ? '计算时采用所选日期之前最新的 Apple 健康记录' : null),
-      field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
+      lockedField('身高（cm）', 'heightCm', 'cm', trim)
+        || field('身高（cm）', numInput('heightCm', '0.5'), '同步 Apple 健康后改由设备记录填写'),
+      lockedField('体重（kg）', 'weightKg', 'kg')
+        || field('体重（kg）', numInput('weightKg', '0.1'), '同步 Apple 健康后改由设备记录填写'),
+      lockedField('体脂率（%）', 'bodyFatPct', '%')
+        || field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
       // 选项文字长（「轻度活动（每周 1-3 次）」），半格会被截断
       field('日常活动量', activity, '选择平时的生活强度', 'span-all'),
       field('目标', goal),

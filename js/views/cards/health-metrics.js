@@ -9,7 +9,7 @@
  */
 
 import { h, num, formatHours, todayKey } from '../../lib/utils.js';
-import { state } from '../../lib/store.js';
+import { state, latestHealthEntry } from '../../lib/store.js';
 
 const svg = (path, { fill = false } = {}) => {
   const ns = 'http://www.w3.org/2000/svg';
@@ -39,7 +39,6 @@ const ICONS = {
   weightKg: 'M5.6 8h12.8l1.6 11.5a1.4 1.4 0 0 1-1.4 1.5H5.4A1.4 1.4 0 0 1 4 19.5L5.6 8ZM12 3.5A2.6 2.6 0 0 1 14.6 6c0 .8-.3 1.4-.8 2h-3.6c-.5-.6-.8-1.2-.8-2A2.6 2.6 0 0 1 12 3.5Z',
   bodyFatPct: 'M12 3.5c3.4 3.3 5.5 5.9 5.5 8.7a5.5 5.5 0 0 1-11 0c0-2.8 2.1-5.4 5.5-8.7Z',
   restingHR: 'M3.5 12.5h3l1.8-4 2.7 8 2.4-6 1.6 3.4h5',
-  waterMl: 'M12 3.5c3.4 3.3 5.5 5.9 5.5 8.7a5.5 5.5 0 0 1-11 0c0-2.8 2.1-5.4 5.5-8.7Z',
 };
 
 /*
@@ -75,6 +74,21 @@ export function healthMetricsCard() {
   const isToday = state.day === todayKey();
   // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
   const needsImport = isToday && (!has || health.activeEnergy == null);
+  /*
+   * 体重和体脂用「所选日期之前最近一次」，不是当天那条。
+   *
+   * 其余几项每天都有，体重却是几天才称一次——按当天取的话这一格大部分日子
+   * 都是空的，而空着并不代表体重未知。沿用最近一次读到的值，
+   * 同时把日期标在名字后面，免得把前几天的数当成今天刚称的。
+   */
+  const carried = (key) => {
+    const today = Number(health[key]);
+    if (Number.isFinite(today) && today > 0) return { value: today, date: null };
+    const hit = latestHealthEntry(key, state.day);
+    return hit ? { value: hit.value, date: hit.date.slice(5) } : null;
+  };
+  const weight = carried('weightKg');
+  const bodyFat = carried('bodyFatPct');
   // 没有值的项直接不出现——一排「—」既占地方又什么都没说
   const cells = [
     ['steps', '步数', health.steps != null ? num(health.steps) : null, ''],
@@ -82,10 +96,8 @@ export function healthMetricsCard() {
     ['exerciseMinutes', '锻炼', health.exerciseMinutes != null ? num(health.exerciseMinutes) : null, '分钟'],
     ['sleepMinutes', '睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : null, '小时'],
     ['restingHR', '静息心率', health.restingHR != null ? num(health.restingHR) : null, 'bpm'],
-    // 这张卡只展示所选日期的健康记录；档案体重不能冒充当天 Apple 数据。
-    ['weightKg', '体重', health.weightKg != null ? num(health.weightKg, 1) : null, 'kg'],
-    ['bodyFatPct', '体脂', health.bodyFatPct != null ? num(health.bodyFatPct, 1) : null, '%'],
-    ['waterMl', '饮水', health.waterMl != null ? num(health.waterMl) : null, 'ml'],
+    ['weightKg', weight?.date ? `体重 ${weight.date}` : '体重', weight ? num(weight.value, 1) : null, 'kg'],
+    ['bodyFatPct', bodyFat?.date ? `体脂 ${bodyFat.date}` : '体脂', bodyFat ? num(bodyFat.value, 1) : null, '%'],
   ].filter(([, , v]) => v != null);
   const sourceLabel = health.source === 'manual'
     ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
@@ -100,9 +112,12 @@ export function healthMetricsCard() {
         h('div.metric-body', null,
           h('div.metric-value', null, value, unit && h('span.metric-unit', null, unit)),
           h('div.metric-label', null, label)))))
-      : h('p.empty-hint', null, isToday
-        ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
-        : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
+      : h('p.empty-hint', null, has
+        // 同步上来了别的字段（比如只有饮水），但这几项一个都没有
+        ? '这一天同步上来的数据里没有可展示的指标。'
+        : isToday
+          ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
+          : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
     needsImport && dataCenterBtn(),
     needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
       '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
