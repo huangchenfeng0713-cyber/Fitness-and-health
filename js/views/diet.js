@@ -20,7 +20,7 @@ import {
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
-import { recommendCard, avoidCard, waterCard } from './cards/meal-advice.js';
+import { recommendCard, waterCard } from './cards/meal-advice.js';
 
 const ui = {
   query: '',
@@ -97,7 +97,7 @@ function buildShell(root) {
 
   nodes.root = h('div.view-stack', null,
     // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
-    nodes.quick, nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
+    nodes.quick, nodes.searchCard, nodes.entries, nodes.water, nodes.advice);
   mount(root, nodes.root);
 }
 
@@ -800,7 +800,7 @@ function refreshAdvice() {
   mount(nodes.water, waterCard(rerender));
   // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
   if (ui.query || ui.selected) return;
-  mount(nodes.advice, recommendCard(rerender), avoidCard(rerender));
+  mount(nodes.advice, recommendCard(rerender));
 }
 
 export function renderDiet(root) {

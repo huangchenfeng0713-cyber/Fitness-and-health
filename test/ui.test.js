@@ -11,7 +11,7 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
  */
 const CARD_MODULES = [
   'js/views/cards/profile.js',
-  'js/views/cards/targets.js',
+  'js/views/cards/health-metrics.js',
   'js/views/cards/data-manager.js',
   'js/views/cards/trend-charts.js',
   'js/views/cards/meal-advice.js',
@@ -48,13 +48,28 @@ test('栏目分工：数据页看数据与走势，设置页放身体信息与�
   }
   assert.ok(!read('js/views/health.js').includes('dataManagerCard'),
     '数据页不该再挂数据管理卡');
-  // 每日目标和图表放一起：图画的就是「离这些数字还差多少」
-  assert.ok(health.includes('当前每日目标'), '数据页缺少每日目标');
+  /*
+   * 每日目标长在今日页的主卡上：那里每一项都带着「已摄入 / 目标摄入」，
+   * 比单独列一张只有目标的表多告诉你一件事——还差多少。
+   * 数据页那张撤了，八项目标和它们的依据要在今日页找得到。
+   */
+  for (const item of ['纤维', '钠上限', '游离糖上限', '饮水']) {
+    assert.ok(dashboard.includes(item), `今日主卡缺少目标项「${item}」`);
+  }
+  assert.ok(dashboard.includes("infoTip('查看目标计算依据'"), '目标依据没有跟着搬到今日页');
+  assert.ok(!health.includes('当前每日目标'), '数据页不该再单列一张只有目标的表');
   assert.ok(!settings.includes('当前每日目标'), '设置页不该再重复每日目标');
+  // 健康数据摆在数据页最上面，和下面那张画同一批指标的趋势卡挨着
+  const dataMounted = health.slice(health.indexOf('export function renderHealth'));
+  assert.ok(dataMounted.indexOf('healthMetricsCard()') < dataMounted.indexOf('trendCharts(rerender)'),
+    '健康数据应排在趋势图之前');
+  assert.ok(!dashboard.includes("h3', null, 'Apple 健康'"), '今日页不该再挂健康数据卡');
 
   assert.ok(!settings.includes('function dataCard'), '设置页仍保留旧的数据卡实现');
-  assert.ok(dashboard.includes("document.querySelector('.topbar-settings-btn')"),
-    '今日页的同步入口没有指向设置抽屉');
+  // 同步入口跟着健康数据卡搬到了数据页，仍然只是把设置抽屉打开
+  assert.ok(health.includes("document.querySelector('.topbar-settings-btn')"),
+    '数据页的同步入口没有指向设置抽屉');
+  assert.ok(!health.includes('importFromClipboard'), '数据页仍在直接执行数据导入');
   assert.ok(!dashboard.includes('importFromClipboard'), '今日页仍在直接执行数据导入');
 });
 
@@ -73,19 +88,22 @@ test('同一批数字不在两页各写一遍', () => {
   assert.ok(!/entriesCard|'今日记录'/.test(mounted), '今日页又挂回了只读的记录卡');
   assert.ok(diet.includes('饮食记录编辑'), '可编辑的那张记录卡不能一起没了');
 
-  // Apple 健康在今日页只留一行，六张趋势图在数据页
-  assert.ok(dashboard.includes("h('div.stat-line'"), 'Apple 健康卡应是一行摘要');
-  assert.ok(!/healthCard[\s\S]{0,1200}health-strip/.test(dashboard),
-    'Apple 健康卡又铺回了六宫格');
-  assert.match(dashboard, /\.filter\(\(\[, v\]\) => v != null\)/,
+  // 健康数据每项配一个图标：六项全是数字加两个汉字，扫一眼分不出哪个是哪个
+  const metrics = read('js/views/cards/health-metrics.js');
+  assert.match(metrics, /\.filter\(\(\[, , v\]\) => v != null\)/,
     '没有值的项应当直接不出现，而不是排一串「—」');
+  for (const key of ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'weightKg', 'restingHR']) {
+    assert.ok(new RegExp(`${key}:\\s*'M`).test(metrics), `指标 ${key} 没有图标`);
+  }
 
-  // 每日目标默认收起
-  const targets = read('js/views/cards/targets.js');
-  assert.match(targets, /let open = false/, '目标卡应默认收起');
-  assert.match(targets, /open\s*\?\s*h\('div\.target-list'/, '展开后才列完整八项');
+  // 目标依据收进圈里的感叹号，但「你现在看到的数字不对」这几条不许收
+  assert.match(dashboard, /function heroInfo\(/, '目标依据应收进主卡右上角');
+  for (const keep of ['profileError', 'demoMode', 'missingObservationTime']) {
+    assert.ok(new RegExp(`energyFreshness[\\s\\S]*${keep}`).test(dashboard),
+      `出了问题的提示不能收进折叠面板：${keep}`);
+  }
   for (const keep of ['clampedByFloor', 'rateWasClamped']) {
-    assert.ok(targets.includes(keep), `「你填的数被改过了」这类提示不能跟着收起：${keep}`);
+    assert.ok(dashboard.includes(keep), `「你填的数被改过了」这类提示不能丢：${keep}`);
   }
 });
 
@@ -131,7 +149,7 @@ test('长提示在窄屏内换行并限制高度，不再形成溢出的巨型�
   assert.ok(utils.includes("'aria-live': 'polite'"));
 });
 
-test('数据页只留目标和趋势，解读收到每张图下面', () => {
+test('数据页只留健康数据和趋势，解读收到每张图下面', () => {
   // 原先「近 14 天概览」「健康数据解读」「最近记录」三张卡加上趋势图，
   // 一页四五屏、三处在说同一批数字。
   const health = page('health');
@@ -139,8 +157,9 @@ test('数据页只留目标和趋势，解读收到每张图下面', () => {
   const css = read('css/app.css');
   const rendered = health.slice(health.indexOf('export function renderHealth'));
   const at = (name) => rendered.indexOf(name);
-  assert.ok(at('targetCard()') < at('trendCharts(rerender)'), '目标应排在趋势图之前');
-  for (const gone of ['overviewCard(', 'insightCard(', 'dataTable(']) {
+  assert.ok(at('healthMetricsCard()') >= 0, '数据页缺少健康数据卡');
+  assert.ok(at('healthMetricsCard()') < at('trendCharts(rerender)'), '健康数据应排在趋势图之前');
+  for (const gone of ['overviewCard(', 'insightCard(', 'dataTable(', 'targetCard(']) {
     assert.ok(!rendered.includes(gone), `${gone} 应该已经移除`);
   }
   // 移掉的步数与锻炼解读要在图表里补回来，功能不能因为搬家而少
@@ -310,7 +329,7 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   const diet = page('diet');
   const settings = page('settings');
   assert.ok(dashboard.includes("macroMini('脂肪上限'"));
-  assert.ok(page('health').includes('参考上限'));
+  assert.ok(dashboard.includes('参考上限'), '脂肪的参考上限依据要写清楚');
   // 记录行搬到饮食页之后，液体用 ml 这条也跟着搬了过去
   assert.ok(diet.includes("findFood(e.foodId)?.basis === '100ml'"));
   assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
@@ -327,7 +346,6 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
-  assert.ok(trends.includes('按当前设置估算'), '每日目标卡应按所选日期给出口径');
   assert.ok(trends.includes("'当前设置估算目标'"));
 });
 

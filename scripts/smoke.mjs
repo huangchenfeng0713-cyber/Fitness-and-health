@@ -74,6 +74,44 @@ try {
         .filter(Boolean).join('，'));
   }
 
+  /*
+   * 健康数据的格子排布。
+   *
+   * 有几项完全看当天同步上来了什么，1~8 项都可能。列数算错的话末行会只剩一个，
+   * 孤零零吊在中间。而且这里用的是 CSS 自定义属性——h() 早先用
+   * Object.assign(el.style, ...) 写它，不报错也不生效，排版看着"没变"而已，
+   * 单元测试一个都拦不住。
+   */
+  const FIELDS = {
+    steps: 8432, activeEnergy: 312, exerciseMinutes: 25, sleepMinutes: 402,
+    restingHR: 58, weightKg: 62.4, bodyFatPct: 18.1, waterMl: 1250,
+  };
+  const badLayouts = [];
+  for (let n = 1; n <= 8; n += 1) {
+    await page.evaluate(async (keep) => {
+      const { saveHealthDay } = await import('./js/lib/store.js');
+      const day = new Date().toLocaleDateString('sv-SE');
+      const blank = Object.fromEntries(Object.keys(keep.all).map((k) => [k, null]));
+      await saveHealthDay(day, { ...blank, source: 'manual' });
+      await saveHealthDay(day, { ...keep.patch, source: 'manual' });
+    }, { all: FIELDS, patch: Object.fromEntries(Object.entries(FIELDS).slice(0, n)) });
+    await page.evaluate(() => [...document.querySelectorAll('.tab')]
+      .find((x) => x.textContent.includes('数据'))?.click());
+    await page.waitForTimeout(400);
+    const r = await page.evaluate(() => {
+      const grid = document.querySelector('.metric-grid');
+      if (!grid) return null;
+      const cells = [...grid.querySelectorAll('.metric-cell')];
+      const tops = [...new Set(cells.map((c) => Math.round(c.getBoundingClientRect().top)))];
+      const rows = tops.map((t) => cells.filter((c) => Math.round(c.getBoundingClientRect().top) === t).length);
+      return { rows, cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
+    });
+    if (!r) badLayouts.push(`${n} 项没渲染出格子`);
+    else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
+    else if (r.rows.length > 1 && r.rows[r.rows.length - 1] === 1) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一个`);
+  }
+  check('健康数据 1~8 项都排得平整', badLayouts.length === 0, badLayouts.join('；'));
+
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);

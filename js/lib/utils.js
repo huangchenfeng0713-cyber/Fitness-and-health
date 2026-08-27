@@ -1,5 +1,18 @@
 /** 通用工具：DOM、日期、格式化 */
 
+/*
+ * 自定义属性（--foo）必须走 setProperty。
+ * Object.assign(el.style, { '--metric-cols': '4' }) 不报错也不生效——
+ * 健康数据的列数就是这么静默失灵的，排版看着没变，查了半天才发现值根本没写进去。
+ */
+function applyStyle(el, styles) {
+  for (const [key, value] of Object.entries(styles)) {
+    if (value == null) continue;
+    if (key.startsWith('--')) el.style.setProperty(key, String(value));
+    else el.style[key] = value;
+  }
+}
+
 /** 极简 DOM 构建器：h('div.card#main', {onclick}, ...children) */
 export function h(spec, props = null, ...children) {
   const parts = String(spec).split('.');
@@ -21,7 +34,7 @@ export function h(spec, props = null, ...children) {
     for (const [k, v] of Object.entries(props)) {
       if (v == null || v === false) continue;
       if (k === 'class') el.className = `${el.className} ${v}`.trim();
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') applyStyle(el, v);
       else if (k === 'html') el.innerHTML = v;
       else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
       else if (k === 'dataset') Object.assign(el.dataset, v);

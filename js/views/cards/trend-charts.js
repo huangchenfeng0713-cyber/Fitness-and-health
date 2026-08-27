@@ -95,8 +95,11 @@ function picker({ label, value, options, onPick }) {
    * select 会默默落到第一项——下拉显示「热量摄入」而图画的是体重。
    */
   select.value = String(value);
+  /*
+   * 「看什么」「时间段」这两行字不写在界面上：下拉里第一项就写着「热量摄入」
+   * 和「7 天」，标签只是把同一件事再说一遍。aria-label 保留，读屏仍念得出来。
+   */
   return h('div.trend-picker-field', null,
-    h('span.trend-picker-label', null, label),
     h('div.trend-select-wrap', null, select, h('span.trend-select-caret', { 'aria-hidden': 'true' }, '⌄')));
 }
 
@@ -314,7 +317,7 @@ export function trendCharts(rerender) {
       tag: avgExercise != null ? `已结束日平均 ${formatMinutes(avgExercise)}` : null,
       chart: lineChart({
         data: exerciseSeries, color: 'var(--fiber)', unit: '分钟', domain: axisDomain, ...pick,
-        target: 150 / 7, targetLabel: '每周 150 分钟',
+        target: 150 / 7, targetLabel: '建议 每周 150 分钟',
         emptyText: '还没有锻炼记录',
       }),
       note: trendReading('exercise', exerciseSeries, {}),
@@ -336,12 +339,13 @@ export function trendCharts(rerender) {
       title: '睡眠',
       tag: avgSleep != null ? `已结束日平均 ${formatHours(avgSleep * 60)}` : null,
       chart: lineChart({
-        data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '7 小时',
+        data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '建议 7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
       note: trendReading('sleep', sleepSeries, {}),
       readout: readoutRow(valueAt((v) => formatHours(v * 60))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes / 60 : null))),
-      tip: '睡眠归到醒来那天，只统计真正入睡的片段；这里只看时长，不代表睡眠质量。',
+      tip: '虚线是成人 7~9 小时建议区间的下沿，不是这段时间的平均——平均写在卡片右上角。'
+        + '睡眠归到醒来那天，只统计真正入睡的片段；这里只看时长，不代表睡眠质量。',
     }),
     restingHR: () => ({
       title: '静息心率',

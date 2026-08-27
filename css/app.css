@@ -15,6 +15,7 @@
   --carb: #e0932f;
   --fat: #dd7b5a;
   --fiber: #2f9e6f;
+  --water: #3b8fc4;
   --warn: #d9822b;
   --danger: #d64545;
   --ok: #0f9d76;
@@ -66,6 +67,7 @@
     --carb: #eeae55;
     --fat: #ec9878;
     --fiber: #4dbd8d;
+    --water: #5fb0e0;
     --warn: #e8a04d;
     --danger: #f06a6a;
     --ok: #2dc39a;
@@ -320,7 +322,8 @@ html, body { height: 100%; overflow: hidden; }
 .hero.warn { border-top-color: var(--warn); }
 .hero.bad { border-top-color: var(--danger); }
 
-.hero-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hero-head { display: flex; align-items: flex-start; gap: 10px; }
+.hero-head-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 1; }
 .hero-head h2 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -.015em; }
 .status-pill {
   font-size: 11px; padding: 2.5px 9px; border-radius: 999px; white-space: nowrap;
@@ -352,13 +355,22 @@ html, body { height: 100%; overflow: hidden; }
 }
 .macro-bar-over { height: 100%; background: var(--danger); opacity: .55; }
 
+/*
+ * 四项排两行两列，不用 flex 换行。
+ * 「已摄入 / 目标摄入 / 预计总消耗 / 计划平衡」四条长短不一，让它自己折的话
+ * 前三条挤在一行、第四条孤零零掉到下一行，左右对不齐。
+ */
 .hero-foot {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; padding-top: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px;
+  margin-top: 14px; padding-top: 12px;
   border-top: 1px solid var(--border); font-size: 11.5px; color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.hero-foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.hero-micros { display: flex; gap: 6px; margin-top: 10px; }
+/* 四项挤成一行时「饮水 550 /1700ml」会折成两截，两行两列反而更矮也更好读 */
+.hero-micros { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; }
+@media (min-width: 460px) { .hero-micros { grid-template-columns: repeat(4, 1fr); } }
 .data-freshness {
   margin: 9px 0 0;
   padding: 7px 9px;
@@ -373,7 +385,7 @@ html, body { height: 100%; overflow: hidden; }
   color: var(--warn);
 }
 .micro-chip {
-  flex: 1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
   gap: 1px 3px;
   background: var(--card-2); border: 1px solid var(--border); border-radius: 9px;
   padding: 6px 4px; font-size: 11px; min-width: 0;
@@ -419,11 +431,6 @@ html, body { height: 100%; overflow: hidden; }
 .add-btn:disabled { opacity: .45; }
 
 /* ============ 避免 ============ */
-.avoid-list { display: flex; flex-direction: column; }
-.avoid-row { padding: 10px 0; border-top: 1px solid var(--border); }
-.avoid-list > .avoid-row:first-child { border-top: 0; padding-top: 2px; }
-.avoid-name { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; flex-wrap: wrap; }
-.avoid-reason { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 3px; }
 
 .chip {
   font-size: 10.5px; padding: 1.5px 6px; border-radius: 5px; white-space: nowrap;
@@ -494,16 +501,16 @@ html, body { height: 100%; overflow: hidden; }
 .ex-last { font-size: 11px; color: var(--faint); margin-top: 2px; }
 
 /* 喝水进度：细一条就够，别喧宾夺主 */
-.water-bar {
-  height: 8px; border-radius: 999px; background: var(--track);
-  overflow: hidden; margin-top: 4px;
+.water-body { display: flex; align-items: center; gap: 16px; margin-top: 2px; }
+.water-ring { flex: none; color: var(--water); }
+.water-actions { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+.water-actions .secondary-btn { flex: none; min-height: 38px; padding: 8px 6px; }
+.water-actions .secondary-btn.active {
+  border-color: var(--accent); color: #fff; background: var(--accent); font-weight: 600;
 }
-.water-fill {
-  height: 100%; border-radius: 999px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 55%, #4aa3d8), var(--accent));
-  transition: width .25s ease;
-}
-.water-bar + .btn-row .secondary-btn { flex: 1; min-width: 0; }
+.water-custom { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.water-custom .set-input { flex: 1; min-width: 0; text-align: left; }
+.water-custom-ok { flex: none; min-height: 38px; padding: 8px 18px; }
 
 /* 「关于」并进反馈卡后，两段内容之间要有明确的分界 */
 .about-block {
@@ -515,15 +522,30 @@ html, body { height: 100%; overflow: hidden; }
 .tip-action-note { font-size: 10.5px; color: var(--faint); }
 .chip-btn.active .tip-action-note { color: color-mix(in srgb, #fff 75%, transparent); }
 
-/* ============ 一行摘要（Apple 健康、收起时的每日目标） ============ */
-/* 中文默认可在任意两字之间断行，「体重 62.0 kg」会被拆成两截，整条按项不换行 */
-.stat-line {
-  display: flex; flex-wrap: wrap; gap: 6px 14px;
-  font-size: 13.5px; font-variant-numeric: tabular-nums;
+/* ============ 健康数据（带图标的指标格） ============ */
+/*
+ * 一行三个、每格自己居中。
+ *
+ * 原先是两列、图标在左文字在右：左格的字结束在半屏处，右格的图标又从半屏开始，
+ * 中间那道参差的缝把整块拉歪了；而且指标数是奇数（有几项就显示几项），
+ * 最后总剩一个孤零零贴在左边。改成居中的格子后，凑不满的那行自己居中，
+ * 剩一个剩两个都还是对称的。
+ */
+.metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 6px; --metric-cols: 3; }
+.metric-cell {
+  flex: 0 0 calc((100% - (var(--metric-cols) - 1) * 6px) / var(--metric-cols));
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 0; text-align: center;
 }
-.stat-bit { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.stat-key { font-size: 12px; color: var(--muted); }
-.stat-bit strong { font-weight: 600; }
+.metric-icon { width: 22px; height: 22px; flex: none; color: var(--muted); opacity: .8; }
+.metric-body { min-width: 0; }
+/* 中文默认可在任意两字之间断行，「静息心率」会被拆成两截 */
+.metric-value {
+  font-size: 17px; font-weight: 600; line-height: 1.15;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.metric-unit { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.metric-label { font-size: 11.5px; color: var(--faint); margin-top: 3px; white-space: nowrap; }
 
 /* ============ 按钮 / 表单 ============ */
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
@@ -1353,7 +1375,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 h1, h2, h3 { letter-spacing: -.02em; }
 
 /* 列表分隔线统一走 hairline，并且左侧内缩——iOS 的分组列表就是这么分行的 */
-.plan-row, .plan-row-wrap, .rec-row, .avoid-row, .entry-row,
+.plan-row, .plan-row-wrap, .rec-row, .entry-row,
 .sync-device-row, .data-table td, .data-table th {
   border-bottom-color: var(--hairline);
 }
@@ -1397,13 +1419,9 @@ h1, h2, h3 { letter-spacing: -.02em; }
 /* ---- 趋势卡的下拉选择 ---- */
 .trend-pickers {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  margin: 12px 0 4px;
+  margin: 10px 0 2px;
 }
 .trend-picker-field { min-width: 0; }
-.trend-picker-label {
-  display: block; font-size: 11px; color: var(--faint);
-  margin-bottom: 5px; letter-spacing: .02em;
-}
 .trend-select-wrap { position: relative; }
 /*
  * 原生 select 收起箭头自己画：各浏览器的默认箭头样式差得太远，
