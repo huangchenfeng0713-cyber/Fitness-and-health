@@ -105,6 +105,36 @@ export function infoTip(label, ...children) {
   return details;
 }
 
+/**
+ * 复制到剪贴板。
+ *
+ * navigator.clipboard 在非安全上下文（http 局域网自建、旧 WebView）里根本不存在，
+ * 直接调用会抛 TypeError 而不是返回失败。退回 execCommand 那条老路，
+ * 至少让用户还能把内容拿出去。
+ */
+export async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* 落到下面的兜底 */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 /** YYYY-MM-DD（本地时区） */
 export function todayKey(d = new Date()) {
   const y = d.getFullYear();

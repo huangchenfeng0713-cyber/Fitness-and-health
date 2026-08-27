@@ -130,21 +130,26 @@ try {
   const semantics = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('.metric-row')].map((r) => ({
       label: r.querySelector('.metric-row-label')?.textContent || '',
+      note: r.querySelector('.metric-row-note')?.textContent || '',
       level: /\b(met|near|over|plain)\b/.exec(r.className)?.[1] || '?',
-      bare: r.classList.contains('bare'),
+    }));
+    const chips = [...document.querySelectorAll('.micro-chip')].map((c) => ({
+      label: c.querySelector('.micro-label')?.textContent || '',
+      level: /\b(met|near|over|plain)\b/.exec(c.className)?.[1] || 'plain',
     }));
     const ring = document.querySelector('.ring circle:nth-of-type(2)');
     const foot = document.querySelector('.hero-ring-note')?.textContent || '';
-    return { rows, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
+    return { rows, chips, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
   });
   const carb = semantics.rows.find((r) => r.label.includes('碳水'));
-  const water = semantics.rows.find((r) => r.label.includes('饮水'));
-  const wrongRed = semantics.rows.filter((r) => r.level === 'over'
+  const all = [...semantics.rows, ...semantics.chips];
+  const wrongRed = all.filter((r) => r.level === 'over'
     && !['钠', '游离糖'].some((k) => r.label.includes(k)));
   const problems = [
     !carb && '碳水那行没渲染出来',
-    carb && !carb.bare && '碳水（余数）不该画进度条',
-    water && !water.bare && '饮水（记录）不该画进度条',
+    // 碳水是余数：条形可以有（一眼看出吃到哪儿了），但绝不能说「还差多少」
+    carb && /还差/.test(carb.note) && `碳水是余数，不该说「${carb.note}」`,
+    semantics.chips.length !== 3 && `门槛类指标应有三个方框，实际 ${semantics.chips.length}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
     !/多|超/.test(semantics.foot) && `没吃超，圆环颜色这条没测到（${semantics.foot}）`,

@@ -384,7 +384,12 @@ export function trendCharts(rerender) {
     // 选择器和图合成一张卡：它们本来就是一件事，分成两块只是多一道分隔线
     h('section.card.trend-card', null,
       h('div.card-head', null,
-        h('h3', null, spec.title),
+        /*
+         * 标题固定。原先它跟着下拉一起变（「每日热量摄入」→「体重」），
+         * 于是同一张卡的名字每切一次就换一个，找不到锚点；
+         * 而下拉第一项本来就写着当前看的是什么，标题再说一遍是重复。
+         */
+        h('h3', null, '健康趋势图'),
         h('div.card-head-actions', null,
           spec.tag ? h('span.card-tag', null, spec.tag) : null,
           infoTip('查看这张图的统计口径',

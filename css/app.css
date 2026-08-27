@@ -375,8 +375,6 @@ html, body { height: 100%; overflow: hidden; }
   display: flex; flex-direction: column; gap: 11px;
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline, var(--border));
 }
-/* 没有条的行（余数、记录）自己收窄一点，免得和有条的行留出一样大的空档 */
-.metric-row.bare .metric-row-top { margin-bottom: 0; }
 
 /* 能量收支：和圆环并排，一行一个键值对 */
 .energy-block { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
@@ -406,6 +404,30 @@ html, body { height: 100%; overflow: hidden; }
 .metric-row.near .metric-row-note { color: var(--warn); }
 .metric-row.over .metric-row-note { color: var(--danger); font-weight: 600; }
 .metric-row.over .metric-row-value { color: var(--danger); }
+
+/*
+ * 门槛类指标的方框：纤维（下限）、钠 / 游离糖（上限）。
+ * 只关心够没够、超没超，不需要一整行的条。
+ */
+.hero-micros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+.micro-chip {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center;
+  gap: 1px 3px;
+  background: var(--card-2); border: 1px solid var(--border); border-radius: 9px;
+  padding: 7px 4px; font-size: 11px; min-width: 0;
+}
+.micro-label { flex: 0 0 100%; text-align: center; white-space: nowrap; color: var(--faint); }
+.micro-val { font-weight: 650; font-size: 13px; font-variant-numeric: tabular-nums; }
+.micro-target { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.micro-chip.met { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.micro-chip.met .micro-val { color: var(--accent); }
+.micro-chip.near { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.micro-chip.near .micro-val { color: var(--warn); }
+.micro-chip.over {
+  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
+  background: color-mix(in srgb, var(--danger) 8%, var(--card-2));
+}
+.micro-chip.over .micro-val { color: var(--danger); }
 
 /* 区间落点条：中间浅色是目标区间，竖标记是现在落在哪 */
 .range-bar {
@@ -479,6 +501,10 @@ html, body { height: 100%; overflow: hidden; }
 .health-label { font-size: 11px; color: var(--faint); margin-top: 1px; }
 
 /* ============ 展开按钮 ============ */
+.feedback-link {
+  display: block; width: 100%; margin-top: 10px; padding: 6px;
+  font-size: 12.5px; text-align: center;
+}
 .more-btn {
   width: 100%; margin-top: 10px; padding: 9px; border: 1px solid var(--border);
   border-radius: var(--radius-sm); background: var(--card-2); color: var(--muted);
@@ -700,8 +726,15 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .search-item-main strong { display: block; font-size: 13.5px; }
 .search-item-meta { font-size: 11.5px; color: var(--faint); }
 
-.fav-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
-.fav-label { font-size: 11.5px; color: var(--faint); }
+.fav-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; margin-top: 10px; }
+.fav-label { font-size: 11.5px; color: var(--faint); padding-top: 8px; }
+/*
+ * 收起时只露两行。按高度截而不是按个数截：这些名字长短差得很远，
+ * 按个数截会时多时少，两行看起来像三行。
+ */
+.fav-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.fav-chips.collapsed { max-height: 70px; overflow: hidden; }
+.fav-toggle { flex: none; padding-top: 6px; font-size: 12px; }
 .category-browser { margin-top: 10px; }
 .category-label { display: block; margin-bottom: 6px; color: var(--faint); font-size: 11px; font-weight: 600; }
 .category-scroll {
@@ -712,9 +745,50 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .category-scroll .chip-btn { flex: none; }
 .result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: 11px; font-weight: 600; }
 
-.portion-panel {
-  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+/*
+ * 份量底部弹层。
+ *
+ * 面板本身不再挂在搜索结果下面 —— 选完一个食物要往下滚过整列结果才看得见，
+ * 手机上这一滚就是大半屏。现在从底部升起来，手指本来就在那儿。
+ */
+.sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+.sheet-wrap[hidden] { display: none; }
+.sheet-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
+  animation: sheet-fade .18s ease;
 }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: min(78vh, 640px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+  background: var(--card); border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
+  animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
+}
+/* 顶上那道小横杠：告诉人这层是能拖下去的 */
+.sheet::before {
+  content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
+  border-radius: 999px; background: var(--border);
+}
+@keyframes sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .sheet-backdrop { animation: none; }
+}
+body.sheet-open { overflow: hidden; }
+
+.portion-panel { margin-top: 2px; }
+/*
+ * 记录按钮钉在弹层底部。
+ * 弹层最高只有 78vh，营养明细和「记录后·今日进度」加起来常常撑满，
+ * 主操作被顶到折叠线以下——底部弹层最不该让人先滚一段才找得到确认键。
+ */
+.sheet-action {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 0 -16px; padding: 10px 16px calc(4px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--card) 18%);
+}
+.sheet-action .primary-btn { margin-top: 0; }
 .portion-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
 .portion-head-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .portion-head strong { font-size: 15px; margin-right: 6px; }

@@ -107,6 +107,51 @@ test('同一批数字不在两页各写一遍', () => {
   }
 });
 
+test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下', () => {
+  /*
+   * 原先它长在搜索结果下面：选完一个食物要往下滚过整列结果才看得见，
+   * 手机上这一滚就是大半屏。
+   */
+  const diet = read('js/views/diet.js');
+  const css = read('css/app.css');
+  assert.match(diet, /nodes\.sheetWrap = h\('div\.sheet-wrap'/, '份量面板没有做成弹层');
+  assert.match(diet, /nodes\.sheetWrap\.hidden = !food/, '弹层开合没有跟着选中状态走');
+  assert.match(diet, /classList\.toggle\('sheet-open'/, '弹层打开时没锁背景滚动');
+  assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
+  assert.match(css, /\.sheet-action \{[\s\S]*?position: sticky/, '记录按钮没有钉住');
+  // 背景点一下要能关，否则弹层只能靠那个小叉子退出
+  assert.match(diet, /sheet-backdrop', \{\s*onclick/, '点背景关不掉弹层');
+});
+
+test('搜索先出十条，换词收回展开；没找到时给反馈入口', () => {
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /const RESULT_PREVIEW = 10/);
+  // 换搜索词、换分类都要收回「显示更多」，否则搜下一个词还是一次铺满
+  const resets = diet.match(/ui\.moreResults = false/g) || [];
+  assert.ok(resets.length >= 2, `换词和换分类都要收回展开：只找到 ${resets.length} 处`);
+  assert.match(diet, /function feedbackLink\(query\)/, '没有反馈入口');
+  assert.match(diet, /【食物库缺条目】搜索词：/, '反馈模板没带上搜到的词');
+});
+
+test('历史搜索按高度折叠两行，没溢出就不出「展开」', () => {
+  // 名字长短差得远（「米饭（白米）」和「肯德基 乒乒乓乓冰球杯（柠檬味）」），
+  // 按个数截会时多时少，两行看起来像三行
+  const diet = read('js/views/diet.js');
+  const css = read('css/app.css');
+  assert.match(diet, /const HISTORY_LIMIT = 10/);
+  assert.match(diet, /'历史搜索'/, '标签没改成历史搜索');
+  assert.match(diet, /toggle\.hidden = !ui\.historyOpen && chips\.scrollHeight <= chips\.clientHeight/,
+    '没溢出时不该挂一个「展开」');
+  assert.match(css, /\.fav-chips\.collapsed \{[^}]*max-height/, '折叠不是按高度截的');
+});
+
+test('趋势卡标题固定，不跟着下拉变', () => {
+  // 同一张卡的名字每切一次就换一个，找不到锚点；下拉第一项本来就写着看的是什么
+  const charts = read('js/views/cards/trend-charts.js');
+  assert.match(charts, /h\('h3', null, '健康趋势图'\)/);
+  assert.ok(!/h\('h3', null, spec\.title\)/.test(charts), '标题仍在跟着下拉变');
+});
+
 test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
   /*
    * 界面上摆着一个能编辑的输入框、算目标时用的却是设备记录，改了没反应——
