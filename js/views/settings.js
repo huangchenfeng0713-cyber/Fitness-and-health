@@ -144,12 +144,16 @@ function signedOutAccount(account) {
   h('div.account-link-row', null, resetBtn));
 
   return h('div', null,
-    h('p.account-lead', null, '登录后，健康、饮食、身体设置和自定义食物会保存到这个账号的专属云端空间。'),
+    h('p.account-lead', null, '登录后数据会同步到账号的云端空间。'),
     form,
-    h('p.privacy-note', null,
-      'Google 与邮箱密码使用同一个已验证邮箱时会归入同一账号；首次登录若本机与云端都有数据，会先让你选择，不会静默覆盖。'),
-    h('p.privacy-note', null,
-      '如果最先用 Google 创建账号，请先用 Google 登录，再到“管理登录方式”添加密码；不要用“注册账号”补设密码。'),
+    /*
+     * 两条账号合并的说明收进感叹号：说的是「同一个邮箱用两种方式登录会怎样」，
+     * 真碰上的时候才需要，平时挂在表单下面每次都要跳过。
+     */
+    h('div.account-note-row', null,
+      infoTip('查看多种登录方式的说明',
+        h('p', null, 'Google 与邮箱密码使用同一个已验证邮箱时会归入同一账号；首次登录若本机与云端都有数据，会先让你选择，不会静默覆盖。'),
+        h('p', null, '如果最先用 Google 创建账号，请先用 Google 登录，再到“管理登录方式”添加密码；不要用“注册账号”补设密码。'))),
     account.error && h('p.account-error', { role: 'alert' }, accountError(account.error)));
 }
 
@@ -450,8 +454,6 @@ function feedbackCard({ about = null } = {}) {
         h('p', null, '提交时会附带应用版本、浏览器、语言和各类记录条数，便于排查。'),
         h('p', null, '不会附带体重、体脂、生日或具体饮食内容；打开 GitHub 后仍由你确认提交。'))),
     about,
-    h('p.form-hint', { style: { marginTop: about ? '12px' : '0' } },
-      '有问题或想法：选择类型，写清问题，然后打开 GitHub 提交。'),
     h('div.form-grid', null, field('反馈类型', kindSelect, null, 'span-all')),
     input,
     submitBtn,
@@ -489,7 +491,6 @@ export function renderSettings(root) {
       about: h('div.about-block', null,
         h('p', null, `版本 v${APP_VERSION}`),
         h('p', null, accountCopy),
-        h('p', null, '同步、补录、备份与恢复都在本页的“数据管理”里；“数据”栏目只看结果，不做维护操作。'),
         h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。')),
     }),
   );

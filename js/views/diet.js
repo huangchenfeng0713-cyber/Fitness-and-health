@@ -93,10 +93,8 @@ function buildShell(root) {
 
   nodes.searchCard = h('section.card', null,
     h('div.card-head.search-card-head', null,
-      h('div', null,
-        h('h3', null, '饮食记录'),
-        h('p.card-desc', null,
-          `搜索名称、拼音或品牌，也可以按分类浏览 ${allFoods().length} 种食物。`))),
+      h('h3', null, '饮食记录'),
+      h('span.card-tag', null, `${allFoods().length} 种`)),
     h('div.search-row', null, nodes.searchInput, nodes.customToggle),
     nodes.customBox,
     nodes.favRow,

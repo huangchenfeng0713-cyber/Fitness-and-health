@@ -701,7 +701,7 @@ test('身体信息不可用时，界面说清是哪一条不合格', () => {
 test('食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着', () => {
   // 写死必然漂移：库里已经 1080 项时，饮食页还写着「900+ 种」、README 写着 1010。
   const diet = read('js/views/diet.js');
-  assert.match(diet, /\$\{allFoods\(\)\.length\} 种食物/, '界面上的食物数仍是写死的');
+  assert.match(diet, /\$\{allFoods\(\)\.length\} 种/, '界面上的食物数仍是写死的');
   assert.ok(!diet.includes('900+'), '还残留写死的旧数字');
 
   const readme = read('README.md');
@@ -739,7 +739,8 @@ test('设置页不再把用户指向已经搬走的数据管理', () => {
   // 底下还有个 #health 链接——会把人送到一个没有数据管理的页面。
   const settings = read('js/views/settings.js');
   assert.ok(!settings.includes("href: '#health'"), '还留着指向数据页的死链');
-  assert.ok(settings.includes('都在本页的“数据管理”里'), '没有指向正确位置');
+  // 那句「维护操作都在本页」已删：数据管理卡就摆在同一页上方，不必再用一句话指路
+  assert.ok(!settings.includes('“数据”栏目只看结果'), '又加回了指路的说明文字');
 
   // 用户可见文案里不该再出现已经不存在的「趋势页」
   for (const file of ['js/core/advisor.js', 'js/core/health-insights.js', 'js/core/nutrition.js']) {

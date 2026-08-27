@@ -507,14 +507,11 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
    */
   if (targets.ageEstimated) {
     add('warn', '年龄按 30 岁估算',
-      '没填生日，基础代谢只能按 30 岁算。Mifflin-St Jeor 公式里年龄每差 10 岁就是 50 kcal，'
-      + '到「设置」里补上生日，热量目标会更贴合你。');
+      '到设置里补上生日会更准——年龄每差 10 岁就是 50 kcal。');
   }
   if (targets.carbBelowRda) {
-    add('info', `碳水目标 ${targets.carb}g，低于 130g 的推荐摄入量`,
-      '130 g/天 是美国 IOM 给出的碳水推荐摄入量，依据是大脑的葡萄糖利用量。'
-      + '当前配比里蛋白和脂肪占得较多，把碳水挤到了这个水平以下。'
-      + '是否适合长期采用取决于个人情况；可考虑提高总热量、调整宏量配比，或向专业人员咨询。');
+    add('info', `碳水目标 ${targets.carb}g，低于 IOM 推荐的 130g`,
+      '蛋白和脂肪占得较多，把碳水挤到了这个水平以下。长期是否合适因人而异。');
   }
 
   // 动态热量预算：把"今天比平时多动/少动"和"预算调整了多少"讲成同一件事
@@ -528,13 +525,14 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
         : '按 Apple 设备记录外推';
     if (Math.abs(budgetDelta) >= 80) {
       const up = budgetDelta > 0;
+      /*
+       * 目标现在按近期节奏算、一天之内不变，所以这条不必再解释「为什么又变了」，
+       * 只要说清今天这个数是按什么来的。原文四句话讲一件事。
+       */
       add(
         up ? 'up' : 'down',
-        `今日热量预算${up ? '上调' : '下调'} ${Math.abs(budgetDelta)} kcal`,
-        `${sourceText}，今天预计总消耗 ${round(targets.tdee)} kcal（完全按活动系数估算是 ${round(targets.staticTdee)} kcal），因此目标定为 ${targets.kcal} kcal。`
-        + (activeDelta != null
-          ? `当前活动能量 ${round(health.activeEnergy || 0)} kcal，近期平均 ${round(baseline.activeEnergy)} kcal。`
-          : ''),
+        `热量目标比公式估算${up ? '高' : '低'} ${Math.abs(budgetDelta)} kcal`,
+        `${sourceText}：${round(targets.tdee)} kcal，公式估算是 ${round(targets.staticTdee)} kcal。`,
       );
     }
   }
@@ -543,7 +541,7 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     add('info', '今天是训练日',
       `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
       + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
-      + '。在全天总量充足的前提下，可把约 20–40g 高质量蛋白安排在训练前后；训练量大或恢复时间紧时再搭配碳水。');
+      + '。全天总量够的前提下，可把 20–40g 蛋白安排在训练前后。');
   }
 
   // 蛋白
@@ -551,22 +549,22 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
     const eq = proteinEquivalent(gaps.protein.remaining);
     add('protein', `蛋白还差 ${round(gaps.protein.remaining)}g`, `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。目标依据：${targets.proteinBasis}。`);
   } else if (gaps.protein.pct >= 100) {
-    add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。充足蛋白是维持瘦体重的重要因素之一。`);
+    add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);
   }
 
   // 纤维
   if (gaps.fiber.remaining > gaps.fiber.target * 0.5 && now.getHours() >= 14) {
-    add('fiber', `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`, '可再加一份蔬菜、完整水果或全谷物；这通常有助于饱腹，但实际感受因人而异。');
+    add('fiber', `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`, '加一份蔬菜、完整水果或全谷物。');
   }
 
   // 糖
   if (gaps.sugar.pct > 100) {
-    add('warn', `游离糖已超出建议上限（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`, '可先检查含糖饮料、果汁、糖浆和甜点；换成不加糖的饮品能减少对应的糖和热量。');
+    add('warn', `游离糖已超出建议上限（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`, '先看含糖饮料、果汁和甜点。');
   }
 
   // 钠
   if (gaps.sodium.pct > 100) {
-    add('warn', `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '高钠可能带来短期水分与体重波动，幅度因人而异。余下餐次尽量少选腌制品、加工肉和重口味汤汁；如有医生规定的限水或限盐方案，以医嘱为准。');
+    add('warn', `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '余下餐次少选腌制品、加工肉和重口味汤汁。');
   }
 
   /*

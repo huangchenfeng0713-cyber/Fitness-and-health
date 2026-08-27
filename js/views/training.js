@@ -8,7 +8,7 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, infoTip } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import {
@@ -137,8 +137,6 @@ function pickerCard(rerender) {
       h('span.card-tag', null, `${group.label} · ${list.length} 个`)),
     groupTabs(rerender),
     equipTabs(rerender, all),
-    h('p.form-hint', { style: { margin: '10px 0 4px' } },
-      `${group.label}主要覆盖：${group.muscles.map((m) => MUSCLES[m]).join('、')}。点一下加入今日训练，再点一下取消。`),
     list.length
       ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
       : h('p.empty-hint', null, `${group.label}下没有${filter.label}动作，换个器械档位看看。`),
@@ -303,9 +301,10 @@ function starterCard(rerender) {
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '动作推荐'),
-      h('span.card-tag', null, `${group.label} · 起手组合`)),
-    h('p.form-hint', { style: { marginBottom: '10px' } },
-      '三个不同的动作模式，各自补上另外两个练不到的地方，之间没有重复。'),
+      h('div.card-head-actions', null,
+        h('span.card-tag', null, `${group.label} · 起手组合`),
+        infoTip('查看这套怎么来的',
+          h('p', null, '三个不同的动作模式，各自补上另外两个练不到的地方，之间没有重复。')))),
     h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,
       h('span.plan-index', null, String(i + 1)),
       h('div.plan-main', null,
