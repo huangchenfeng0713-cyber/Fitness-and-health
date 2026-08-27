@@ -345,7 +345,7 @@ test('连锁快餐的份量就是品牌的标准份，不是 100g', () => {
   assert.ok(chain.length >= 50, `只有 ${chain.length} 条连锁快餐`);
   for (const f of chain) {
     const [name, g] = f.s[0];
-    assert.ok(/个|块|只|份|杯|罐|中份|大杯|中碗|五块/.test(name),
+    assert.ok(/个|块|只|份|杯|罐|支|中份|大杯|中碗|五块/.test(name),
       `${f.name} 的份量名「${name}」不像品牌标准份`);
     assert.ok(g >= 40 && g <= 600, `${f.name} 的份量 ${g}g 不合理`);
   }
@@ -358,6 +358,39 @@ test('搜索同分时按录入顺序，不按名称笔画', () => {
   const soupAt = kfc.findIndex((n) => n.includes('芙蓉鲜蔬汤'));
   assert.ok(burgerAt >= 0 && soupAt >= 0);
   assert.ok(burgerAt < soupAt, `主力单品应排在配菜前：${kfc.slice(0, 4).join(' / ')}`);
+});
+
+test('肯德基点名单品、现行别名与限时食品估算边界完整', () => {
+  const required = [
+    'kfc_hot_bone_chicken', 'kfc_hot_drumette_xl', 'kfc_spa_chicken_burger',
+    'kfc_popcorn_chicken', 'kfc_sweet_corn', 'kfc_cone', 'kfc_9fruit_juice',
+    'kfc_pingpong_lemon_ice', 'kfc_drumstick_icecream',
+  ];
+  for (const id of required) assert.ok(FOOD_BY_ID.has(id), `缺少 ${id}`);
+
+  const firstHit = (term) => searchFoods(term)[0]?.id;
+  assert.equal(firstHit('热辣香骨鸡'), 'kfc_hot_bone_chicken');
+  assert.equal(firstHit('翅根'), 'kfc_hot_drumette_xl');
+  assert.equal(firstHit('黄金SPA鸡排堡'), 'kfc_spa_chicken_burger');
+  assert.equal(firstHit('冰球'), 'kfc_pingpong_lemon_ice');
+  assert.equal(firstHit('黄金鸡块'), 'kfc_nuggets', '黄金鸡块与上校鸡块不应造两条重复数据');
+  assert.equal(firstHit('上校鸡块'), 'kfc_nuggets');
+
+  const bone = FOOD_BY_ID.get('kfc_hot_bone_chicken');
+  const portion = nutrientsFor(bone, bone.s[0][1]);
+  assert.equal(portion.kcal, 226, '热辣香骨鸡三块预设应对应公开的 226 kcal');
+  assert.ok(Math.abs(portion.protein - 16.4) < 0.1);
+
+  for (const id of required) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(isEstimated(food), `${food.name} 未公开完整官方营养表，应显示估算`);
+    assert.equal(food.source?.accessed, '2026-08-27', `${food.name} 缺少核对日期`);
+  }
+  const ice = FOOD_BY_ID.get('kfc_pingpong_lemon_ice');
+  assert.match(ice.note, /只计杯内冰球/);
+  assert.match(ice.note, /牛奶、汽水.*单独记录/);
+  assert.equal(FOOD_BY_ID.get('kfc_9fruit_juice').basis, '100ml');
+  assert.equal(FOOD_BY_ID.get('kfc_9fruit_juice').nfs, 0, '果汁糖应计入游离糖');
 });
 
 test('茶饮连锁品牌与主力品类都收录了', () => {

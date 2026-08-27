@@ -121,6 +121,11 @@ const SOURCE_FEIHA_BBQ = Object.freeze({
   ref: '破店肥哈东北烧烤携程门店菜单核对品名；营养按同类东北烧烤配方估算',
   accessed: '2026-08-26',
 });
+const SOURCE_KFC_CN_EST = Object.freeze({
+  type: 'recipe',
+  ref: '肯德基中国官方产品宣传核对品名；中国食物成分表肯德基条目、FatSecret 品牌条目及公开称重拆解交叉核对营养',
+  accessed: '2026-08-27',
+});
 const META_RECIPE_READY = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
@@ -153,6 +158,12 @@ const META_USDA_READY = Object.freeze({
 });
 const META_USDA_DRINK = Object.freeze({
   source: SOURCE_USDA, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+});
+const META_KFC_EST = Object.freeze({
+  source: SOURCE_KFC_CN_EST, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+});
+const META_KFC_DRINK_EST = Object.freeze({
+  source: SOURCE_KFC_CN_EST, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
 
 function brandedBbqFood({
@@ -677,12 +688,21 @@ export const FOODS = [
   { id: 'kfc_spicy_burger', name: '肯德基 香辣鸡腿堡', alias: 'kfc kendeji xianglajitui', cat: 'chain', n: [270, 13.5, 13.0, 24.9, 1.4, 3.8, 595], s: [['一个', 185]], f: ['quick', 'processed'] },
   { id: 'kfc_crispy_burger', name: '肯德基 劲脆鸡腿堡', alias: 'kfc jincui', cat: 'chain', n: [284, 13.7, 14.2, 24.7, 1.3, 3.7, 605], s: [['一个', 190]], f: ['quick', 'processed'] },
   { id: 'kfc_no_burger', name: '肯德基 新奥尔良烤鸡腿堡', alias: 'kfc xinaoerliang kaojituibao', cat: 'chain', n: [221, 13.8, 7.2, 24.6, 1.3, 4.6, 513], s: [['一个', 195]], f: ['quick', 'processed'] },
+  { id: 'kfc_spa_chicken_burger', name: '肯德基 黄金SPA鸡排堡', alias: 'kfc kendeji huangjin spa jipai chicken burger 黄金spa堡 鸡排堡', cat: 'chain', n: [303, 13.0, 17.1, 24.4, 1.2, 3.8, 620], s: [['一个', 153]], ...META_KFC_EST, note: '按公开称重拆解约 153g、465 kcal 的整堡倒算；门店鸡排、沙拉酱和面包实际份量会有差异', f: ['quick', 'fried', 'processed', 'est'] },
   { id: 'kfc_og_chicken', name: '肯德基 吮指原味鸡', alias: 'kfc shunzhiyuanweiji yuanweiji', cat: 'chain', n: [283, 22.2, 18.9, 7.8, 0.6, 0.6, 778], s: [['一块', 90]], f: ['quick', 'processed'] },
-  { id: 'kfc_no_wing', name: '肯德基 新奥尔良烤翅', alias: 'kfc kaochi', cat: 'chain', n: [244, 22.2, 14.4, 6.7, 0.0, 4.4, 733], s: [['一只', 45]], f: ['quick', 'processed'] },
-  { id: 'kfc_hot_wing', name: '肯德基 香辣鸡翅', alias: 'kfc xianglajichi', cat: 'chain', n: [333, 20.0, 22.2, 13.3, 0.7, 1.1, 778], s: [['一只', 45]], f: ['quick', 'processed'] },
-  { id: 'kfc_nuggets', name: '肯德基 上校鸡块', alias: 'kfc shangxiaojikuai', cat: 'chain', n: [307, 17.3, 17.3, 20.0, 0.8, 0.7, 733], s: [['五块', 75]], f: ['quick', 'processed'] },
+  { id: 'kfc_hot_bone_chicken', name: '肯德基 热辣香骨鸡', alias: 'kfc kendeji rela xiangguji 香骨鸡 热辣香鸡骨', cat: 'chain', n: [260, 18.9, 16.1, 9.8, 0.5, 0.8, 700], s: [['三块', 87], ['一块', 29], ['十五块', 435]], ...META_KFC_EST, note: '公开整份数据为 3 块约 87g、226 kcal；本条按整份营养倒算，带骨大小、裹粉和吸油量会造成波动', f: ['quick', 'fried', 'processed', 'est'] },
+  { id: 'kfc_hot_drumette_xl', name: '肯德基 特大号热辣翅根', alias: 'kfc kendeji teda rela chigen 香辣翅根 热辣翅根 翅根 大翅根', cat: 'chain', n: [337, 19.4, 23.6, 12.8, 0.5, 1.0, 780], s: [['一只', 45], ['八只', 360]], ...META_KFC_EST, note: '限时商品未公开完整营养表；单只按约 45g 成品及同类香辣鸡翅代表值估算，骨重与实际大小会影响结果', f: ['quick', 'fried', 'processed', 'est'] },
+  { id: 'kfc_no_wing', name: '肯德基 新奥尔良烤翅', alias: 'kfc kaochi 奥尔良烤翅 奥尔良翅根 奥尔良翅中', cat: 'chain', n: [244, 22.2, 14.4, 6.7, 0.0, 4.4, 733], s: [['一只', 45]], f: ['quick', 'processed'] },
+  { id: 'kfc_hot_wing', name: '肯德基 香辣鸡翅', alias: 'kfc xianglajichi 香辣翅根 香辣翅中 普通翅根', cat: 'chain', n: [333, 20.0, 22.2, 13.3, 0.7, 1.1, 778], s: [['一只', 45]], f: ['quick', 'processed'] },
+  { id: 'kfc_nuggets', name: '肯德基 黄金鸡块（原上校鸡块）', alias: 'kfc huangjinjikuai shangxiaojikuai 黄金鸡块 上校鸡块 chicken nuggets', cat: 'chain', n: [307, 17.3, 17.3, 20.0, 0.8, 0.7, 733], s: [['五块', 75]], f: ['quick', 'processed'] },
+  { id: 'kfc_popcorn_chicken', name: '肯德基 劲爆鸡米花', alias: 'kfc kendeji jinbao jimihua popcorn chicken 鸡米花', cat: 'chain', n: [304, 18.4, 18.9, 16.2, 0.5, 0.8, 895], s: [['一份', 100]], ...META_KFC_EST, note: '每 100g 宏量营养参考《中国食物成分表》的肯德基条目；包装份量、裹粉和吸油量可能变化', f: ['quick', 'fried', 'processed', 'est'] },
   { id: 'kfc_fries', name: '肯德基 薯条（中）', alias: 'kfc shutiao', cat: 'chain', n: [322, 4.3, 14.8, 42.6, 3.5, 0.4, 261], s: [['中份', 115]], f: ['quick', 'processed'] },
+  { id: 'kfc_sweet_corn', name: '肯德基 香甜粟米棒', alias: 'kfc kendeji xiangtian sumibang 玉米棒 甜玉米 粟米', cat: 'chain', n: [126, 3.2, 0.2, 28.6, 2.5, 6.0, 12], s: [['一份', 90]], nfs: 6.0, ...META_KFC_EST, note: '营养参考《中国食物成分表》的肯德基甜玉米籽粒代表值；总糖主要来自完整玉米，不计入游离糖', f: ['quick', 'est'] },
   { id: 'kfc_egg_tart', name: '肯德基 葡式蛋挞', alias: 'kfc danta putashidanta', cat: 'chain', n: [350, 5.8, 20.0, 36.7, 0.7, 20.0, 167], s: [['一个', 60]], f: ['quick', 'processed'] },
+  { id: 'kfc_cone', name: '肯德基 脆皮甜筒', alias: 'kfc kendeji cuipi tiantong 甜筒 冰淇淋', cat: 'chain', n: [134, 5.1, 3.3, 20.9, 0.5, 17.0, 80], s: [['一个', 112]], ...META_KFC_EST, note: '按公开品牌条目约 150 kcal/个倒算；门店挤出的冰淇淋重量会有差异', f: ['quick', 'processed', 'est'] },
+  { id: 'kfc_9fruit_juice', name: '肯德基 九珍果汁', alias: 'kfc kendeji jiuzhen guozhi 9珍果汁 九珍果汁饮料', cat: 'chain', n: [31, 0.1, 0.3, 6.9, 0.0, 6.5, 5], s: [['一杯 500ml', 500]], nfs: 0, ...META_KFC_DRINK_EST, note: '公开品牌条目为 500ml 约 156 kcal；属于复合果汁饮料，果汁和浓缩果汁中的糖按游离糖计算', f: ['quick', 'sweetdrink', 'processed', 'est'] },
+  { id: 'kfc_pingpong_lemon_ice', name: '肯德基 乒乒乓乓冰球杯（柠檬味）', alias: 'kfc kendeji pingpingpangpang bingqiu bei lemon 冰球 冰球杯 柠檬冰球 孙颖莎冰球杯', cat: 'chain', n: [36, 0.0, 0.0, 9.0, 0.0, 8.5, 5], s: [['一杯（约）', 300]], nfs: 0, ...META_KFC_EST, note: '官方未公开完整营养表和净含量，按 300g 柠檬味甜冰约 108 kcal 估算；本条只计杯内冰球，另加牛奶、汽水或其他饮料必须单独记录', f: ['quick', 'sweetdrink', 'processed', 'est'] },
+  { id: 'kfc_drumstick_icecream', name: '肯德基 黄金大鸡腿形雪糕', alias: 'kfc kendeji huangjin dajitui xuegao 鸡腿雪糕 大鸡腿冰淇淋', cat: 'chain', n: [300, 3.5, 15.0, 37.0, 1.0, 25.0, 70], s: [['一支', 75]], ...META_KFC_EST, note: '限时商品未公开完整营养表；按公开约 225 kcal/支及巧克力脆皮香草雪糕同类配方估算', f: ['quick', 'processed', 'est'] },
   { id: 'kfc_twister', name: '肯德基 老北京鸡肉卷', alias: 'kfc laobeijingjirouzhuan', cat: 'chain', n: [245, 11.0, 11.0, 25.5, 1.2, 3.0, 550], s: [['一个', 200]], f: ['quick', 'processed'] },
   { id: 'kfc_mash', name: '肯德基 醇香土豆泥', alias: 'kfc tudouni', cat: 'chain', n: [83, 1.7, 2.5, 13.3, 1.0, 0.8, 417], s: [['一份', 120]], f: ['quick', 'processed'] },
   { id: 'kfc_veg_soup', name: '肯德基 芙蓉鲜蔬汤', alias: 'kfc furongtang', cat: 'chain', n: [15, 0.8, 0.5, 2.0, 0.3, 0.5, 300], s: [['一份', 200]], f: ['quick', 'processed'] },
