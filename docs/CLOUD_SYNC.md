@@ -47,6 +47,10 @@ supabase functions deploy health-sync --no-verify-jwt
 会在 `supabase/functions/**` 有改动并合进 `main` 时自动部署。只需配一次：
 
 1. Supabase 后台 → 右上角头像 → **Account Settings → Access Tokens** → 生成一个 token 并复制。
+   - **Resource access** 选 Project，指到本项目（ref `kdkykrshqiamwecohxgw`）。
+   - **Permissions** 至少给 Edge Functions 的写入权限，其余保持 None。
+   - **Expires in 别用默认的 7 天**：过期后自动部署会开始失败，而网页照常更新，
+     又会回到「前端是新的、服务端是旧的」这种最难查的状态。
 2. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，
    名字填 `SUPABASE_ACCESS_TOKEN`，值粘贴刚才的 token。
 3. 之后合并 PR 即可；也可以在 **Actions → 部署 health-sync → Run workflow** 手动触发。
