@@ -445,6 +445,18 @@ test('启动卡住时提供只清程序缓存的自救入口，不会删除 Inde
   assert.ok(html.includes('setTimeout(() => showRecovery(), 12_000)'));
   assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.ready?.()'));
   assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.fail?.(error)'));
+
+  // initStore 失败时也要走 fail()：ready() 会把「修复缓存并重新打开」一并收掉，
+  // 用户就只剩一条指错方向的提示，没有任何出路
+  const bootCatch = app.slice(app.indexOf('await initStore();'), app.indexOf('void registerServiceWorker'));
+  assert.ok(bootCatch.includes('window.__HEALTH_DIET_BOOT__?.fail?.('), '启动失败没有留下自救入口');
+  assert.ok(!bootCatch.includes('?.ready?.()'), '启动失败仍在收掉启动页');
+  // 不能先 clearEl(viewRoot)：启动页在 #view 里，摘掉之后
+  // showRecovery() 会因为 screen.isConnected 为 false 直接返回，自救按钮永远不出现
+  // 按行首匹配，别把解释这段历史的注释也算进去
+  assert.ok(!/^\s*clearEl\(viewRoot\)/m.test(bootCatch), '启动失败时把自救界面一起清掉了');
+  // 也不能一律甩锅给 IndexedDB —— 数据迁移和身体信息校验也在 initStore 里
+  assert.ok(bootCatch.includes('storageLike'), '所有启动失败仍被说成存储不可用');
 });
 
 test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', () => {
