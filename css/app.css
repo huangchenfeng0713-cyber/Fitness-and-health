@@ -596,24 +596,16 @@ html, body { height: 100%; overflow: hidden; }
 .ex-last { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 
 /* 喝水进度：细一条就够，别喧宾夺主 */
-.water-body { display: flex; align-items: center; gap: 16px; margin-top: 2px; }
-.water-ring { flex: none; color: var(--water); }
-.water-actions { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+/* 喝水：卡面上只剩四个杯量按钮，两行两列 */
+.water-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 /*
- * 快捷加水用中性底，不用强调色淡底。
- * iOS 的 tinted 按钮是留给「这一屏的主要动作」的，一次出现一个；
- * 这里四个并排，全染成绿的就成了一整块色斑。文字保留强调色，够看出可点。
+ * 用中性底，不用强调色淡底。iOS 的 tinted 按钮是留给「这一屏的主要动作」的，
+ * 一次出现一个；四个并排全染绿就成了一整块色斑。文字保留强调色，够看出可点。
  */
-.water-actions .secondary-btn {
-  flex: none; min-height: 38px; padding: 8px 6px;
-  background: var(--card-2);
-}
-.water-actions .secondary-btn.active {
-  border-color: var(--accent); color: #fff; background: var(--accent); font-weight: 600;
-}
-.water-custom { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
-.water-custom .set-input { flex: 1; min-width: 0; text-align: left; }
-.water-custom-ok { flex: none; min-height: 38px; padding: 8px 18px; }
+.water-actions .secondary-btn { min-height: 42px; padding: 9px 6px; background: var(--card-2); }
+.water-ring { flex: none; color: var(--water); }
+.water-custom { display: flex; align-items: center; gap: 8px; }
+.water-custom .set-input { flex: 1; min-width: 0; text-align: center; }
 
 /* 「关于」并进反馈卡后，两段内容之间要有明确的分界 */
 .about-block {
@@ -801,26 +793,31 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
 
 /*
- * 份量底部弹层。
+ * 底部弹层（lib/sheet.js）。
  *
- * 面板本身不再挂在搜索结果下面 —— 选完一个食物要往下滚过整列结果才看得见，
- * 手机上这一滚就是大半屏。现在从底部升起来，手指本来就在那儿。
+ * 两处必须写对，否则「点不中弹层里的东西」：
+ *  - overscroll-behavior: contain —— 弹层内部滚到头之后不把背后的页面带着跑；
+ *  - body 钉成 fixed —— iOS 上只给 overflow:hidden 拦不住手指拖动。
  */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; }
 .sheet-wrap[hidden] { display: none; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
   animation: sheet-fade .18s ease;
+  /* 背景上不该能拖动页面 */
+  touch-action: none;
 }
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0;
-  max-height: min(78vh, 640px); overflow-y: auto; -webkit-overflow-scrolling: touch;
+  max-height: min(80vh, 660px);
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
-  background: var(--card); border-radius: 18px 20px 0 0;
+  background: var(--card); border-radius: 18px 18px 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
 }
-/* 顶上那道小横杠：告诉人这层是能拖下去的 */
+/* 顶上那道小横杠：告诉人这层是能关掉的 */
 .sheet::before {
   content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
   border-radius: 999px; background: var(--border);
@@ -830,7 +827,21 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 @media (prefers-reduced-motion: reduce) {
   .sheet, .sheet-backdrop { animation: none; }
 }
-body.sheet-open { overflow: hidden; }
+/*
+ * 打开弹层时把 body 钉住。position:fixed 会让页面回到顶部，
+ * 所以 sheet.js 会把当时的滚动位置写进 top，关掉时再滚回去。
+ */
+body.sheet-open {
+  position: fixed; left: 0; right: 0; width: 100%;
+  overflow: hidden;
+}
+
+.sheet-title { margin: 2px 0 12px; font-size: var(--fs-headline); font-weight: 650; text-align: center; }
+.sheet-summary { margin: 12px 0 0; text-align: center; font-size: var(--fs-body); color: var(--muted); }
+.water-sheet { display: flex; flex-direction: column; align-items: center; }
+.water-sheet .water-ring { margin-top: 4px; }
+.water-sheet .water-custom { width: 100%; max-width: 220px; margin-top: 14px; }
+.water-sheet .sheet-action { width: 100%; }
 
 .portion-panel { margin-top: 2px; }
 /*

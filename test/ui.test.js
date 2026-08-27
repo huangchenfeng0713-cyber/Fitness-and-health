@@ -111,14 +111,38 @@ test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下',
    * 手机上这一滚就是大半屏。
    */
   const diet = read('js/views/diet.js');
+  const sheet = read('js/lib/sheet.js');
   const css = read('css/app.css');
-  assert.match(diet, /nodes\.sheetWrap = h\('div\.sheet-wrap'/, '份量面板没有做成弹层');
-  assert.match(diet, /nodes\.sheetWrap\.hidden = !food/, '弹层开合没有跟着选中状态走');
-  assert.match(diet, /classList\.toggle\('sheet-open'/, '弹层打开时没锁背景滚动');
+  assert.match(diet, /openSheet\(nodes\.portion/, '份量面板没有走公共弹层');
+  assert.match(diet, /if \(!food\) \{ closeSheet\(\); return; \}/, '取消选中时没有关掉弹层');
   assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
   assert.match(css, /\.sheet-action \{[\s\S]*?position: sticky/, '记录按钮没有钉住');
-  // 背景点一下要能关，否则弹层只能靠那个小叉子退出
-  assert.match(diet, /sheet-backdrop', \{\s*onclick/, '点背景关不掉弹层');
+
+  /*
+   * 滚动穿透：弹层内部滚到头之后手指继续滑，会带着背后的页面跑，
+   * 表现就是「点不中弹层里的东西」。两道都要有，缺一道 iOS 上都会漏。
+   */
+  assert.match(css, /\.sheet \{[\s\S]*?overscroll-behavior: contain/, '弹层没有拦住滚动链');
+  assert.match(css, /body\.sheet-open \{[\s\S]*?position: fixed/, 'iOS 上只有 overflow:hidden 拦不住拖动');
+  assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
+  assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
+  // 背景点一下、Esc 都要能关
+  assert.match(sheet, /sheet-backdrop', \{ onclick: \(\) => closeSheet\(\) \}/, '点背景关不掉弹层');
+  assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
+});
+
+test('喝水要先确认再落库，卡面上只留杯量按钮', () => {
+  // 原先点一下直接就记，口袋里误触一次就多出 250ml，
+  // 而且这个数会连着覆盖 Apple 健康那边的饮水
+  const card = read('js/views/cards/meal-advice.js');
+  assert.match(card, /\{ label: '一小杯', ml: 125 \}/);
+  assert.match(card, /\{ label: '中杯', ml: 250 \}/);
+  assert.match(card, /\{ label: '大杯', ml: 550 \}/);
+  assert.match(card, /openSheet\(waterSheet\(step/, '点杯量没有弹确认层');
+  assert.match(card, /okBtn\.onclick = async \(\) => \{[\s\S]*?saveHealthDay/, '确认按钮不落库');
+  // 落库只能发生在确认按钮里：卡面按钮直接写库就等于没有确认这一步
+  const saves = card.match(/saveHealthDay\(/g) || [];   // 只数调用点，import 那行不算
+  assert.equal(saves.length, 1, `喝水只该有一处落库，实际 ${saves.length} 处`);
 });
 
 test('搜索先出十条，换词收回展开；没找到时给反馈入口', () => {

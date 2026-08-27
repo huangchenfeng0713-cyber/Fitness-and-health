@@ -10,6 +10,7 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText,
 } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
+import { openSheet, closeSheet, sheetIsOpen } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood,
@@ -102,28 +103,10 @@ function buildShell(root) {
     nodes.categories,
     nodes.results);
 
-  /*
-   * 份量面板改成底部弹层。
-   *
-   * 原先它长在搜索结果下面，选完一个食物要往下滚过整列结果才看得见 ——
-   * 手机上这一滚就是大半屏。弹层从底部升起来，手指本来就在那儿，
-   * 而且不管页面滚到哪都在同一个位置。
-   *
-   * 背景那层点一下就关；面板本身吃掉点击，免得点面板内部也把它关了。
-   */
-  nodes.sheetBackdrop = h('div.sheet-backdrop', {
-    onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
-  });
-  nodes.sheet = h('div.sheet', {
-    role: 'dialog', 'aria-modal': 'true', 'aria-label': '选择份量',
-    onclick: (ev) => ev.stopPropagation(),
-  }, nodes.portion);
-  nodes.sheetWrap = h('div.sheet-wrap', { hidden: true }, nodes.sheetBackdrop, nodes.sheet);
-
   nodes.root = h('div.view-stack', null,
     // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
     nodes.quick, nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
-  mount(root, nodes.root, nodes.sheetWrap);
+  mount(root, nodes.root);
 }
 
 /* ---------------------------------------------------------------- 各区块 */
@@ -452,10 +435,18 @@ function refreshMixedPortion(food) {
 function refreshPortion() {
   clearEl(nodes.portion);
   const food = ui.selected;
-  // 弹层开着的时候锁住背景滚动，否则手指在面板上滑会带着整页跑
-  nodes.sheetWrap.hidden = !food;
-  document.body.classList.toggle('sheet-open', !!food);
-  if (!food) return;
+  /*
+   * 份量面板住在公共弹层里（lib/sheet.js）。滚动穿透、背景锁定、Esc 关闭
+   * 那几件事在那边统一处理过一次，这里只管往里填内容。
+   */
+  if (!food) { closeSheet(); return; }
+  if (!sheetIsOpen()) {
+    openSheet(nodes.portion, {
+      label: '选择份量',
+      // 点背景或按 Esc 关掉时，选中状态也要跟着清掉，否则再点同一个食物打不开
+      onClose: () => { ui.selected = null; refreshAdvice(); },
+    });
+  }
   if (hasFoodMix(food)) {
     refreshMixedPortion(food);
     return;

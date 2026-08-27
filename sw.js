@@ -15,6 +15,7 @@ const SHELL = [
   './css/app.css',
   './js/app.js',
   './js/lib/db.js',
+  './js/lib/sheet.js',
   './js/lib/store.js',
   './js/lib/account.js',
   './js/lib/cloud-auth.js',
