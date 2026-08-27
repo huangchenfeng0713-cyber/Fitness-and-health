@@ -316,7 +316,7 @@ export function trendCharts(rerender) {
       title: '锻炼时间',
       tag: avgExercise != null ? `已结束日平均 ${formatMinutes(avgExercise)}` : null,
       chart: lineChart({
-        data: exerciseSeries, color: 'var(--fiber)', unit: '分钟', domain: axisDomain, ...pick,
+        data: exerciseSeries, color: 'var(--accent)', unit: '分钟', domain: axisDomain, ...pick,
         target: 150 / 7, targetLabel: '建议 每周 150 分钟',
         emptyText: '还没有锻炼记录',
       }),
@@ -339,7 +339,7 @@ export function trendCharts(rerender) {
       title: '睡眠',
       tag: avgSleep != null ? `已结束日平均 ${formatHours(avgSleep * 60)}` : null,
       chart: lineChart({
-        data: sleepSeries, color: 'var(--fiber)', target: 7, targetLabel: '建议 7 小时',
+        data: sleepSeries, color: 'var(--protein)', target: 7, targetLabel: '建议 7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
       note: trendReading('sleep', sleepSeries, {}),

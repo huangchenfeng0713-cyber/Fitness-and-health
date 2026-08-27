@@ -655,7 +655,7 @@ function impactBlock(n) {
     ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1, false],
     ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1, false],
     ['脂肪上限', 'g', { ...gaps.fat, target: gaps.fat.upper || gaps.fat.target },
-      n.fat, 'var(--fat)', 1, true],
+      n.fat, 'var(--accent)', 1, true],
   ];
 
   const kcalAfter = gaps.kcal.eaten + n.kcal;
