@@ -109,7 +109,7 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
   if (!s) return '这段时间还没有体重记录。每周固定同一时间称一次，趋势才看得出来。';
   if (kgPerWeek == null) {
     return join([
-      `所选区间有 ${records} 次记录，最新 ${round(Number(points[points.length - 1].y), 1)} kg。`,
+      `所选区间有 ${records} 次记录，最新 ${Number(points[points.length - 1].y).toFixed(1)} kg。`,
       '至少需要 4 次、且首末相隔 7 天才能估算每周趋势——固定早晨空腹称，两周就能看出方向。',
     ]);
   }

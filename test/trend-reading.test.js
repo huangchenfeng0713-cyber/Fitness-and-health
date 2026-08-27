@@ -82,7 +82,8 @@ test('体重记录不够时说明门槛，而不是给一个假的每周变化',
   const text = trendReading('weight', pts(60.02, 59.98), {
     kgPerWeek: null, goalRate: -0.5, records: 2, spanDays: 2,
   });
-  assert.match(text, /所选区间有 2 次记录，最新 60 kg/);
+  // 卡片右上角写「最新 60.0 kg」，图下面这句得是同一个写法
+  assert.match(text, /所选区间有 2 次记录，最新 60\.0 kg/);
   assert.match(text, /至少需要 4 次、且首末相隔 7 天/);
   assert.ok(!/kg\/周/.test(text.replace('kg/周趋势', '')) || !/拟合趋势/.test(text));
 });

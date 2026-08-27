@@ -1,9 +1,10 @@
 /**
- * 数据页：每日目标 + 趋势图。
+ * 数据页：今天同步上来了什么 + 这些天在往哪走。
  *
- * 原先还有「近 14 天概览」「健康数据解读」和「最近记录」三张卡，
- * 一页四五屏、三处在说同一批数字。现在解读统一收到每张图下面——
- * 看着那条曲线读那段话，比先看一堆汇总数字再往下翻要直接。
+ * 健康数据摆在最上面，下面那张趋势卡画的就是同一批指标的走势，
+ * 「今天多少」和「在往哪走」放同一页才不用来回切。
+ * 每日目标不在这里——它是今天该吃多少，长在今日页的主卡上。
+ * 解读收在每张图下面：看着那条曲线读那段话，比先看一堆汇总数字要直接。
  * 数据的维护性操作（导入 / 备份 / 补录）在设置页。
  */
 
@@ -12,8 +13,8 @@ import {
   countMisscaledDays, repairHealthEnergy,
   listImplausibleDays, clearImplausibleHealth,
 } from '../lib/store.js';
-import { targetCard } from './cards/targets.js';
 import { trendCharts } from './cards/trend-charts.js';
+import { healthMetricsCard } from './cards/health-metrics.js';
 
 /**
  * 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000，
@@ -90,7 +91,7 @@ export function renderHealth(root) {
   mount(root,
     repairCard(rerender),
     implausibleCard(rerender),
-    targetCard(rerender),
+    healthMetricsCard(),
     ...(trendCharts(rerender) || []),
   );
 }

@@ -311,75 +311,6 @@ function scoreFood(food, ctx) {
   };
 }
 
-/** 生成"应避免"清单：按当前最紧的约束找出最不划算的选项 */
-function buildAvoidList(ctx, limit = 5) {
-  const { gaps, kcalLeft, proteinLeft, goal, hour } = ctx;
-  const out = [];
-  const seen = new Set();
-
-  const push = (food, kind, reason, severity) => {
-    if (seen.has(food.id)) return;
-    seen.add(food.id);
-    out.push({ food, kind, reason, severity, per100: per100(food) });
-  };
-
-  const kcalTight = kcalLeft < gaps.kcal.target * 0.2;
-  const proteinShort = proteinLeft > gaps.protein.target * 0.25;
-  const sodiumOver = gaps.sodium.remaining < gaps.sodium.target * 0.2;
-  const sugarOver = gaps.sugar.remaining < 5;
-  const fatOver = gaps.fat.upperRemaining < gaps.fat.upper * 0.1;
-  const lateNight = hour >= 21;
-  const afterCaffeineCutoff = hour >= CAFFEINE_CUTOFF_HOUR;
-
-  for (const food of FOODS) {
-    if (food.cat === 'other') continue;
-    const p = per100(food);
-    const tags = tagsOf(food);
-    const basis = food.basis === '100ml' ? '100ml' : '100g';
-    const proteinPer100kcal = p.kcal > 0 ? (p.protein / p.kcal) * 100 : 0;
-
-    if (afterCaffeineCutoff && tags.has('caffeinated')) {
-      const amount = Number(food.caffeineMg) > 0
-        ? `；每 100ml 约含 ${round(food.caffeineMg, 1)} mg 咖啡因`
-        : '';
-      push(food, 'caffeine', `已过 ${CAFFEINE_CUTOFF_HOUR}:00，含咖啡因可能影响今晚入睡或睡眠${amount}，今晚不再推荐`, 4);
-    } else if (sodiumOver && tags.has('high-sodium')) {
-      push(food, 'sodium', `钠已达 ${gaps.sodium.eaten} mg（上限 ${gaps.sodium.target} mg），它每 ${basis} 还要再加 ${p.sodium} mg`, 3);
-    } else if (sugarOver && (tags.has('sweetdrink') || tags.has('high-sugar'))) {
-      push(food, 'sugar', `今日游离糖已到 ${gaps.sugar.eaten}g / ${gaps.sugar.target}g，它每 ${basis} 还含 ${round(freeSugarPer100(food), 1)}g 游离糖`, 3);
-    } else if (kcalTight && proteinShort && p.kcal >= 250 && proteinPer100kcal < 6) {
-      push(food, 'empty', `只剩 ${Math.max(kcalLeft, 0)} kcal 却还差 ${round(proteinLeft)}g 蛋白，它每 ${basis} ${p.kcal} kcal 却几乎不含蛋白`, 3);
-    } else if (kcalTight && p.kcal >= 300) {
-      push(food, 'kcal', `热量预算只剩 ${Math.max(kcalLeft, 0)} kcal，一份就会吃超`, 2);
-    } else if (lateNight && (tags.has('fried') || tags.has('high-fat') || tags.has('high-sugar'))) {
-      push(food, 'late', `${p.kcal} kcal/${basis}，临睡前吃大份高脂食物可能增加消化负担，今晚更适合轻一点的份量`, 2);
-    } else if (fatOver && p.fat >= 25) {
-      push(food, 'fat', `脂肪已接近参考上限（${gaps.fat.eaten}g / ${gaps.fat.upper}g），它每 ${basis} 含 ${p.fat}g 脂肪`, 2);
-    } else if (goal === 'cut' && tags.has('fried') && p.kcal >= 300) {
-      push(food, 'fried', `减脂期油炸物能量密度过高（${p.kcal} kcal/${basis}），同样饱腹感的代价太大`, 1);
-    } else if (goal === 'cut' && tags.has('sweetdrink')) {
-      push(food, 'drink', '液体糖几乎不带来饱腹感，最容易在不知不觉中吃超', 1);
-    } else if (proteinShort && tags.has('high-density') && proteinPer100kcal < 5 && food.cat !== 'nut') {
-      push(food, 'empty', `蛋白还差 ${round(proteinLeft)}g，它每 ${basis} ${p.kcal} kcal 却只有 ${p.protein}g 蛋白`, 1);
-    }
-  }
-
-  // 先按严重度排序，再按"约束类型"和分类做多样性限流，避免整屏都是同一个原因
-  out.sort((a, b) => b.severity - a.severity || b.per100.kcal - a.per100.kcal);
-  const kindCount = {};
-  const catCount = {};
-  const final = [];
-  for (const item of out) {
-    if ((kindCount[item.kind] || 0) >= 2) continue;
-    if ((catCount[item.food.cat] || 0) >= 2) continue;
-    kindCount[item.kind] = (kindCount[item.kind] || 0) + 1;
-    catCount[item.food.cat] = (catCount[item.food.cat] || 0) + 1;
-    final.push(item);
-    if (final.length >= limit) break;
-  }
-  return final;
-}
-
 /** 把蛋白缺口翻译成"相当于多少食物"，让数字更有体感 */
 function proteinEquivalent(grams) {
   if (grams <= 0) return null;
@@ -466,8 +397,6 @@ export function buildAdvice(input) {
   }
 
   // ---- 避免 ----
-  const avoid = buildAvoidList(ctx, 5);
-
   // ---- 状态判定 ----
   const status = judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget });
 
@@ -482,7 +411,6 @@ export function buildAdvice(input) {
     status,
     insights,
     recommend,
-    avoid,
     proteinEquivalent: proteinEquivalent(proteinLeft),
   };
 }

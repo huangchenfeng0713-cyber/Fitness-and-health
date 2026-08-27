@@ -1,16 +1,20 @@
 /**
- * 今日：我今天怎么样。状态、提示、Apple 健康快照。
+ * 今日：我今天怎么样。状态 + 提示，两张卡。
  *
- * 这一页只回答「现在什么情况」。吃什么去饮食页，走势去数据页——
- * 原先这里还挂着一张只读的「今日记录」，和饮食页那张可编辑的是同一批数据，
- * 看到了也改不了，反而得再翻一页。
+ * 这一页只回答「现在什么情况」。吃什么去饮食页，今天同步了什么、
+ * 这些天在往哪走去数据页。
+ *
+ * 主卡本身就是一张完整的每日目标表：热量、三大营养素、纤维、钠、糖、饮水
+ * 八项全在，而且每项都带着「已吃 / 目标」。所以数据页那张只列目标的表撤了——
+ * 同一批数字，这里的版本还多告诉你离目标还差多少。
  */
 
 import {
-  h, clearEl, num, formatMinutes, formatHours, mount, todayKey,
+  h, clearEl, num, mount, infoTip,
 } from '../lib/utils.js';
 import { ring, macroBar } from '../lib/charts.js';
 import { state } from '../lib/store.js';
+import { GOALS } from '../core/nutrition.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
 
@@ -44,8 +48,10 @@ function heroCard(advice, targets, derived) {
 
   return h(`section.card.hero.${status.level}`, null,
     h('div.hero-head', null,
-      h('span.status-pill', null, LEVEL_TEXT[status.level]),
-      h('h2', null, status.headline)),
+      h('div.hero-head-main', null,
+        h('span.status-pill', null, LEVEL_TEXT[status.level]),
+        h('h2', null, status.headline)),
+      heroInfo(derived, targets)),
     h('p.hero-detail', null, status.detail),
 
     h('div.hero-body', null,
@@ -79,10 +85,62 @@ function heroCard(advice, targets, derived) {
     h('div.hero-micros', null,
       microChip('纤维', gaps.fiber, 'g'),
       microChip('钠上限', gaps.sodium, 'mg', true),
-      microChip('游离糖上限', gaps.sugar, 'g', true)),
+      microChip('游离糖上限', gaps.sugar, 'g', true),
+      microChip('饮水', waterGap(derived), 'ml')),
   );
 }
 
+/*
+ * 目标依据和能量数据的时效收进右上角那个圈里的感叹号。
+ *
+ * 「Apple 能量数据截至 21:00，距今 7 分钟」这种话每天都对、每天都一样，
+ * 常驻在主卡中间等于每次打开都要跳过一遍。要查的时候点开就有。
+ *
+ * 但真正出了问题的那几条（身体信息不合格、演示数据、数据过期）不收——
+ * 那些是「你现在看到的数字不对」，藏起来就没人会发现。
+ */
+function heroInfo(derived, targets) {
+  const meta = derived.energyData;
+  const basis = [
+    ['热量', targets.tdeeSource !== 'apple'
+      ? '按活动系数估算'
+      : targets.activeSource === 'formula-fallback'
+        ? '静息采用设备记录，缺失活动按活动系数补足'
+        : targets.activeSource === 'device-baseline'
+          ? '活动采用近期设备记录基线估算'
+          : '按今日 Apple 能量记录动态估算'],
+    ['蛋白质', targets.proteinBasis],
+    ['脂肪', `计划 ${num(targets.fat)}g 用于分配三大营养素；参考上限 ${num(targets.fatUpper || targets.fat)}g 按总热量 35% 计算`],
+    ['碳水', '总热量减去蛋白与脂肪后的剩余'],
+    ['膳食纤维', '中国成人参考 25–30g'],
+    ['钠上限', '约等于 5g 食盐'],
+    ['游离糖上限', '含糖浆、蜂蜜和果汁中的糖；低于总热量 10%'],
+    ['饮水参考', '温和气候、低活动；运动或炎热天气需额外补充'],
+  ];
+  let freshness = null;
+  if (meta?.observedAt && derived.dynamic && !meta.stale) {
+    const observed = new Date(meta.observedAt);
+    const clock = observed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const age = meta.ageMinutes >= 120
+      ? `，距今约 ${Math.max(2, Math.round(meta.ageMinutes / 60))} 小时`
+      : meta.ageMinutes > 5 ? `，距今 ${meta.ageMinutes} 分钟` : '';
+    freshness = `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`;
+  }
+  return infoTip('查看目标计算依据',
+    h('p', null, h('strong', null,
+      `${GOALS[targets.goal].label} · ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`)),
+    freshness && h('p', null, freshness),
+    h('ul', null, basis.map(([name, note]) => h('li', null,
+      h('strong', null, `${name}：`), note))),
+    targets.clampedByFloor && h('p', null,
+      '按目标速率算出的热量低于成人常用饮食计划下限（女 1200 / 男 1500 kcal），已自动上调；'
+      + '如有疾病、孕哺或特殊训练需求，请由专业人员个体化评估。'),
+    targets.rateWasClamped && h('p', null,
+      `你填写的 ${targets.requestedRateKgPerWeek > 0 ? '+' : ''}${targets.requestedRateKgPerWeek} kg/周过快，`
+      + `已按体重比例和每日热量调整上限改为 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周。`));
+}
+
+/** 只有「你看到的数字不对」才留在卡面上 */
 function energyFreshness(derived) {
   const meta = derived.energyData;
   /*
@@ -101,14 +159,17 @@ function energyFreshness(derived) {
   if (meta?.missingObservationTime) {
     return h('p.data-freshness.warn', null, '这份能量数据缺少覆盖时间，已停止动态外推并改用公式估算。重新导入即可修复。');
   }
-  if (!meta?.observedAt || !derived.dynamic) return null;
-  const observed = new Date(meta.observedAt);
-  const clock = observed.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const age = meta.ageMinutes >= 120
-    ? `，距今约 ${Math.max(2, Math.round(meta.ageMinutes / 60))} 小时`
-    : meta.ageMinutes > 5 ? `，距今 ${meta.ageMinutes} 分钟` : '';
-  return h(`p.data-freshness${meta.stale ? '.warn' : ''}`, null,
-    `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`);
+  if (meta?.stale && derived.dynamic) {
+    return h('p.data-freshness.warn', null, 'Apple 能量数据已经有一段时间没更新了，热量目标暂时保持不变。重新同步一次即可。');
+  }
+  return null;
+}
+
+/** 饮水记在健康数据里，不走饮食条目，所以 gaps 里没有它 */
+function waterGap(derived) {
+  const target = Number(derived.targets?.waterMl) || 0;
+  const eaten = Number(derived.health?.waterMl) || 0;
+  return { target, eaten, remaining: target - eaten, pct: target > 0 ? Math.round((eaten / target) * 100) : 0 };
 }
 
 function microChip(label, g, unit, upperLimit = false) {
@@ -117,7 +178,7 @@ function microChip(label, g, unit, upperLimit = false) {
     : g.pct >= 100 ? 'met' : '';
   return h(`div.micro-chip.${level}`, null,
     h('span.micro-label', null, label),
-    h('span.micro-val', null, `${num(g.eaten, unit === 'mg' ? 0 : 1)}`),
+    h('span.micro-val', null, `${num(g.eaten, unit === 'g' ? 1 : 0)}`),
     h('span.micro-target', null, `/${num(g.target)}${unit}`));
 }
 
@@ -141,65 +202,14 @@ function insightsCard(advice, rerender) {
 
 /* ---------------------------------------------------------------- 健康 */
 
-/** 同步入口已经收进设置抽屉里的「数据管理」，这里直接把抽屉打开 */
-function dataCenterBtn() {
-  return h('button.secondary-btn.full', {
-    onclick: () => document.querySelector('.topbar-settings-btn')?.click(),
-  }, '去同步健康数据');
-}
-
-function healthCard(health) {
-  const metricKeys = [
-    'steps', 'activeEnergy', 'restingEnergy', 'exerciseMinutes', 'sleepMinutes',
-    'weightKg', 'bodyFatPct', 'restingHR', 'waterMl',
-  ];
-  const has = metricKeys.some((key) => health[key] != null && Number.isFinite(Number(health[key])));
-  const isToday = state.day === todayKey();
-  // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
-  const needsImport = isToday && (!has || health.activeEnergy == null);
-  /*
-   * 一行摘要，不是六宫格。
-   * 这六项在数据页各有一张趋势图，那边才是看走势的地方；
-   * 今日页只需要回答「今天同步上来了没有、大概多少」，占掉三行网格不值。
-   * 没有值的项直接不出现——一排「—」既占地方又什么都没说。
-   */
-  const bits = [
-    ['步数', health.steps != null ? num(health.steps) : null],
-    ['活动', health.activeEnergy != null ? `${num(health.activeEnergy)} kcal` : null],
-    ['锻炼', health.exerciseMinutes != null ? formatMinutes(health.exerciseMinutes) : null],
-    ['睡眠', health.sleepMinutes != null ? `${formatHours(health.sleepMinutes, { unit: false })} 小时` : null],
-    // 这张卡只展示所选日期的健康记录；档案体重不能冒充当天 Apple 数据。
-    ['体重', health.weightKg != null ? `${num(health.weightKg, 1)} kg` : null],
-    ['体脂', health.bodyFatPct != null ? `${num(health.bodyFatPct, 1)}%` : null],
-  ].filter(([, v]) => v != null);
-  const sourceLabel = health.source === 'manual'
-    ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('h3', null, 'Apple 健康'),
-      h('span.card-tag', null, has ? sourceLabel : '未同步')),
-    bits.length
-      ? h('div.stat-line', null, bits.map(([k, v]) => h('span.stat-bit', null,
-        h('span.stat-key', null, k),
-        h('strong', null, v))))
-      : h('p.empty-hint', null, isToday
-        ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
-        : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
-    needsImport && dataCenterBtn(),
-    needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
-      '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
-  );
-}
-
 export function renderDashboard(root) {
   const rerender = () => renderDashboard(root);
   const d = state.derived;
   clearEl(root);
   if (!d) return;
-  const { advice, targets, health } = d;
+  const { advice, targets } = d;
   mount(root,
     heroCard(advice, targets, d),
     insightsCard(advice, rerender),
-    healthCard(health),
   );
 }

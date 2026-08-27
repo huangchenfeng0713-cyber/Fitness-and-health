@@ -181,7 +181,15 @@ export function lineChart({
 
   // 刻度小数位随量程自适应：量程只有 1 时固定 0 位会出现「1 / 1 / 0」这种重复刻度
   const range = max - min;
-  const dec = decimals != null ? decimals : (range >= 20 ? 0 : range >= 2 ? 1 : 2);
+  let dec = decimals != null ? decimals : (range >= 20 ? 0 : range >= 2 ? 1 : 2);
+  /*
+   * 量程比刻度精度还细时，四条刻度会印成「62.0 / 62.0 / 61.9 / 61.9」——
+   * 一条横线上两个一样的数，等于没有刻度。体重最容易碰上：一周之内波动
+   * 常常不到 0.1 kg，而它又显式要了 1 位小数，自适应那条规则被绕过去了。
+   * 所以调用方给的位数只当下限，撞车了继续往上加。
+   */
+  const tickAt = (i, d) => (min + ((max - min) * i) / 3).toFixed(d);
+  while (dec < 4 && new Set([0, 1, 2, 3].map((i) => tickAt(i, dec))).size < 4) dec += 1;
   const fmt = (v) => {
     const t = v.toFixed(dec);
     return t === `-${(0).toFixed(dec)}` ? (0).toFixed(dec) : t;   // 别显示 "-0"

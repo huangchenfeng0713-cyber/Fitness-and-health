@@ -17,7 +17,15 @@ function axisTicks(values, { target = null, decimals = null } = {}) {
   max += span * 0.12;
   if (ys.every((v) => v >= 0)) min = Math.max(0, min);
   const range = max - min;
-  const dec = decimals != null ? decimals : (range >= 20 ? 0 : range >= 2 ? 1 : 2);
+  let dec = decimals != null ? decimals : (range >= 20 ? 0 : range >= 2 ? 1 : 2);
+  /*
+   * 量程比刻度精度还细时，四条刻度会印成「62.0 / 62.0 / 61.9 / 61.9」——
+   * 一条横线上两个一样的数，等于没有刻度。体重最容易碰上：一周之内波动
+   * 常常不到 0.1 kg，而它又显式要了 1 位小数，自适应那条规则被绕过去了。
+   * 所以调用方给的位数只当下限，撞车了继续往上加。
+   */
+  const tickAt = (i, d) => (min + ((max - min) * i) / 3).toFixed(d);
+  while (dec < 4 && new Set([0, 1, 2, 3].map((i) => tickAt(i, dec))).size < 4) dec += 1;
   const fmt = (v) => {
     const t = v.toFixed(dec);
     return t === `-${(0).toFixed(dec)}` ? (0).toFixed(dec) : t;
@@ -53,6 +61,12 @@ test('大量程用整数刻度，小量程自动加小数位', () => {
 
 test('显式指定小数位时以调用方为准', () => {
   assert.ok(axisTicks([70.1, 71.8], { decimals: 1 }).every((t) => t.split('.')[1]?.length === 1));
+});
+
+test('调用方给的小数位只是下限，量程太细时继续加位', () => {
+  // 实测：一周体重 61.92~62.00，decimals: 1 画出「62.0 / 62.0 / 61.9 / 61.9」
+  const ticks = axisTicks([61.92, 61.94, 62.0, 61.96], { decimals: 1 });
+  assert.equal(new Set(ticks).size, ticks.length, `刻度有重复：${ticks.join(' / ')}`);
 });
 
 

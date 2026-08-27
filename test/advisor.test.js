@@ -132,25 +132,6 @@ test('热量超标时给出 bad 状态，只剩零热量的选择', () => {
   for (const r of a.recommend) {
     assert.ok(r.nutrients.kcal <= 5, `预算吃光后仍推荐了 ${r.food.name}（${r.nutrients.kcal} kcal）`);
   }
-  assert.ok(a.avoid.length > 0, '超标时必须给出避免清单');
-});
-
-test('钠超标时避免清单指向高钠食物并说明数字', () => {
-  const a = advise({ kcal: 800, protein: 40, sodium: 1950 });
-  const names = a.avoid.map((x) => x.food.name);
-  assert.ok(a.avoid.some((x) => x.kind === 'sodium'), '应给出钠相关的避免项');
-  assert.ok(a.avoid.some((x) => /钠已达/.test(x.reason)));
-  assert.ok(names.length === new Set(names).size, '避免清单不应重复');
-});
-
-test('避免清单有多样性：不会整屏都是同一个原因', () => {
-  const a = advise({ kcal: 800, protein: 40, sodium: 1950, sugar: 45 });
-  const kinds = new Set(a.avoid.map((x) => x.kind));
-  assert.ok(kinds.size >= 2, `理由类型只有 ${[...kinds]}`);
-  const cats = a.avoid.map((x) => x.food.cat);
-  for (const c of new Set(cats)) {
-    assert.ok(cats.filter((x) => x === c).length <= 2, `分类 ${c} 出现超过 2 次`);
-  }
 });
 
 test('深夜不推荐需要现做的生鲜与高油食物', () => {
@@ -162,7 +143,7 @@ test('深夜不推荐需要现做的生鲜与高油食物', () => {
   }
 });
 
-test('18:00 起排除含咖啡因推荐，并在避免清单解释睡眠原因', () => {
+test('18:00 起排除含咖啡因推荐', () => {
   const nearTarget = {
     kcal: targets.kcal - 10,
     protein: targets.protein,
@@ -180,9 +161,6 @@ test('18:00 起排除含咖啡因推荐，并在避免清单解释睡眠原因',
     const a = advise(nearTarget, { now: at(time) });
     assert.ok(a.recommend.every((item) => !item.tags.includes('caffeinated')),
       `${time} 仍推荐了含咖啡因食品：${a.recommend.map((item) => item.food.name).join('、')}`);
-    assert.ok(a.avoid.some((item) => item.kind === 'caffeine'
-      && /18:00/.test(item.reason) && /入睡|睡眠/.test(item.reason)),
-    `${time} 的避免清单没有说明咖啡因与睡眠原因`);
   }
 
   const atNight = advise(nearTarget, { now: at('22:30') });
