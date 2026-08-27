@@ -185,7 +185,7 @@ export const FOODS = [
   { id: 'youtiao', name: '油条', alias: 'youtiao fried dough', cat: 'staple', n: [388, 6.9, 17.6, 51.0, 0.9, 1.0, 585], s: [['一根', 60]], f: ['fried', 'refined', 'breakfast'] },
   { id: 'quinoa', name: '藜麦（熟）', alias: 'limai quinoa', cat: 'staple', n: [120, 4.4, 1.9, 21.3, 2.8, 0.9, 7], s: [['一份', 150]], f: ['whole'] },
   { id: 'rice_noodle', name: '米粉（煮熟）', alias: 'mifen rice noodle', cat: 'staple', n: [109, 2.0, 0.2, 24.9, 0.5, 0.1, 90], s: [['一碗', 250]], f: ['refined'] },
-  { id: 'zongzi', name: '肉粽', alias: 'zongzi', cat: 'staple', n: [195, 5.5, 6.5, 29.0, 1.0, 2.0, 420], s: [['一个', 180]], f: [] },
+  { id: 'zongzi', name: '肉粽', alias: 'zongzi', cat: 'staple', n: [195, 5.5, 6.5, 29.0, 1.0, 2.0, 420], s: [['一个', 180]], f: ['natsugar'] },
   { id: 'shaobing', name: '烧饼', alias: 'shaobing', cat: 'staple', n: [326, 8.0, 12.0, 47.0, 1.6, 2.0, 520], s: [['一个', 80]], f: ['refined', 'breakfast'] },
   { id: 'buckwheat_noodle', name: '荞麦面（煮熟）', alias: 'qiaomai soba', cat: 'staple', n: [99, 5.1, 0.4, 20.0, 1.8, 0.5, 60], s: [['一碗', 250]], f: ['whole'] },
 
@@ -229,7 +229,7 @@ export const FOODS = [
   { id: 'yogurt_greek', name: '希腊酸奶（0脂）', alias: 'xila greek yogurt', cat: 'dairy', n: [59, 10.0, 0.4, 3.6, 0, 3.6, 36], s: [['一盒', 150]], f: ['quick', 'late', 'natsugar'] },
   { id: 'yogurt_sweet', name: '风味酸奶（含糖）', alias: 'fengwei suannai', cat: 'dairy', n: [92, 3.0, 2.7, 13.5, 0, 13.0, 60], s: [['一盒', 180]], nfs: 4.7, f: ['quick', 'est'] },
   { id: 'cheese', name: '原制奶酪', alias: 'nailao yuanzhinailao cheese', cat: 'dairy', n: [328, 25.7, 23.5, 3.5, 0, 2.0, 580], s: [['一片', 20]], f: ['quick', 'natsugar'] },
-  { id: 'whey', name: '乳清蛋白粉', alias: 'ruqing whey protein', cat: 'dairy', n: [380, 78.0, 5.0, 8.0, 0, 3.0, 300], s: [['一勺', 30]], f: ['quick'] },
+  { id: 'whey', name: '乳清蛋白粉', alias: 'ruqing whey protein', cat: 'dairy', n: [380, 78.0, 5.0, 8.0, 0, 3.0, 300], s: [['一勺', 30]], f: ['quick', 'natsugar'] },
 
   // ---------- 豆制品 ----------
   { id: 'tofu_firm', name: '北豆腐（老豆腐）', alias: 'doufu tofu', cat: 'soy', n: [116, 12.2, 4.8, 4.2, 0.5, 0.5, 8], s: [['一块', 150]], f: ['cook'] },
@@ -283,7 +283,7 @@ export const FOODS = [
   // ---------- 饮品 ----------
   { id: 'water', name: '白水', alias: 'shui water', cat: 'drink', n: [0, 0, 0, 0, 0, 0, 0], s: [['一杯', 250]], f: ['quick', 'late'] },
   { id: 'black_coffee', name: '美式咖啡（无糖）', alias: 'kafei coffee 咖啡 美式 黑咖啡', cat: 'drink', n: [2, 0.2, 0, 0.3, 0, 0, 3], s: [['一杯', 350]], f: ['quick', 'caffeinated'] },
-  { id: 'latte', name: '拿铁（全脂）', alias: 'natie latte', cat: 'drink', n: [55, 3.0, 3.0, 4.3, 0, 4.3, 45], s: [['中杯', 350]], f: ['quick', 'caffeinated'] },
+  { id: 'latte', name: '拿铁（全脂）', alias: 'natie latte', cat: 'drink', n: [55, 3.0, 3.0, 4.3, 0, 4.3, 45], s: [['中杯', 350]], f: ['quick', 'caffeinated', 'natsugar'] },
   { id: 'cola', name: '可乐', alias: 'kele cola', cat: 'drink', n: [43, 0, 0, 10.8, 0, 10.8, 12], s: [['一罐', 330]], f: ['sweetdrink', 'quick', 'caffeinated'] },
   { id: 'cola_zero', name: '无糖可乐', alias: 'wutang kele zero cola', cat: 'drink', n: [0.4, 0, 0, 0.1, 0, 0, 12], s: [['一罐', 330]], f: ['quick', 'caffeinated'] },
   { id: 'juice_orange', name: '橙汁（100%）', alias: 'chengzhi juice', cat: 'drink', n: [45, 0.7, 0.2, 10.4, 0.2, 8.8, 3], s: [['一杯', 250]], f: ['sweetdrink', 'quick'] },
@@ -331,7 +331,7 @@ export const FOODS = [
   { id: 'rice_congee_meat', name: '皮蛋瘦肉粥', alias: 'pidanshouroukzhou', cat: 'staple', n: [72, 3.5, 2.2, 9.6, 0.3, 0.5, 350], s: [['一碗', 400]], f: ['breakfast'] },
   { id: 'flatbread', name: '手抓饼', alias: 'shouzhuabing', cat: 'staple', n: [326, 6.5, 18.0, 34.0, 1.0, 2.0, 500], s: [['一张', 90]], f: ['fried', 'refined', 'breakfast'] },
   { id: 'jianbing', name: '煎饼果子', alias: 'jianbingguozi', cat: 'staple', n: [232, 8.0, 10.5, 26.0, 1.2, 2.0, 620], s: [['一个', 220]], f: ['breakfast'] },
-  { id: 'wotou', name: '窝头（玉米面）', alias: 'wotou', cat: 'staple', n: [227, 6.0, 1.6, 47.0, 3.5, 2.0, 5], s: [['一个', 80]], f: ['whole', 'breakfast'] },
+  { id: 'wotou', name: '窝头（玉米面）', alias: 'wotou', cat: 'staple', n: [227, 6.0, 1.6, 47.0, 3.5, 2.0, 5], s: [['一个', 80]], f: ['whole', 'breakfast', 'natsugar'] },
   { id: 'purple_potato', name: '紫薯（蒸）', alias: 'zishu', cat: 'staple', n: [106, 1.9, 0.3, 24.0, 2.5, 6.0, 20], s: [['一个', 150]], f: ['whole', 'breakfast'] },
   { id: 'yam', name: '山药（蒸）', alias: 'shanyao', cat: 'staple', n: [57, 1.9, 0.2, 12.4, 0.8, 1.0, 18], s: [['一段', 150]], f: ['whole'] },
   { id: 'taro', name: '芋头（蒸）', alias: 'yutou', cat: 'staple', n: [81, 2.2, 0.2, 18.1, 1.0, 0.8, 33], s: [['一个', 120]], f: ['whole'] },
@@ -387,7 +387,7 @@ export const FOODS = [
   { id: 'cheese_cottage', name: '茅屋芝士 / 白软干酪', alias: 'maowu cottage cheese', cat: 'dairy', n: [98, 11.1, 4.3, 3.4, 0, 2.7, 364], s: [['一份', 100]], f: ['quick', 'natsugar'] },
   { id: 'cream', name: '淡奶油', alias: 'danainai cream', cat: 'dairy', n: [345, 2.1, 36.1, 3.1, 0, 3.0, 30], s: [['一勺', 15]], f: ['natsugar'] },
   { id: 'butter', name: '黄油', alias: 'huangyou butter', cat: 'dairy', n: [717, 0.9, 81.1, 0.1, 0, 0.1, 11], s: [['一小块', 10]], f: [] },
-  { id: 'condensed_milk', name: '炼乳', alias: 'lianru', cat: 'dairy', n: [321, 7.9, 8.7, 54.4, 0, 54.0, 127], s: [['一勺', 20]], f: [] },
+  { id: 'condensed_milk', name: '炼乳', alias: 'lianru', cat: 'dairy', n: [321, 7.9, 8.7, 54.4, 0, 54.0, 127], s: [['一勺', 20]], f: [] , nfs: 12.0},
   { id: 'cheese_stick', name: '奶酪棒', alias: 'nailaobang', cat: 'dairy', n: [200, 6.5, 10.0, 21.0, 0, 15.0, 200], s: [['一根', 25]], f: ['quick', 'processed'] },
 
   // ---------- 豆制品（补充） ----------
@@ -395,7 +395,7 @@ export const FOODS = [
   { id: 'tofu_skin', name: '豆皮 / 千张', alias: 'doupi qianzhang', cat: 'soy', n: [201, 24.5, 11.5, 1.0, 1.0, 0.5, 20], s: [['一份', 80]], f: [] },
   { id: 'tofu_fried', name: '油豆腐 / 豆泡', alias: 'youdoufu', cat: 'soy', n: [244, 17.0, 17.6, 6.0, 0.6, 0.5, 12], s: [['一个', 15]], f: ['fried'] },
   { id: 'douhua', name: '豆腐脑（咸口）', alias: 'douhua doufunao xiandouhua 咸豆花', cat: 'soy', n: [47, 4.5, 1.9, 3.2, 0.3, 0.3, 380], s: [['一碗', 300]], note: '含咸卤或酱油的代表值；甜豆花请使用独立条目', f: ['breakfast'] },
-  { id: 'natto', name: '纳豆', alias: 'nadou natto', cat: 'soy', n: [200, 18.0, 10.0, 12.0, 5.4, 4.0, 7], s: [['一盒', 50]], f: ['quick'] },
+  { id: 'natto', name: '纳豆', alias: 'nadou natto', cat: 'soy', n: [200, 18.0, 10.0, 12.0, 5.4, 4.0, 7], s: [['一盒', 50]], f: ['quick', 'natsugar'] },
   { id: 'mung_bean', name: '绿豆（干）', alias: 'lvdou', cat: 'soy', n: [329, 21.6, 0.8, 62.0, 6.4, 3.0, 3], s: [['一份', 40]], f: [] },
   { id: 'red_bean', name: '红豆（干）', alias: 'hongdou', cat: 'soy', n: [324, 20.2, 0.6, 63.4, 7.7, 3.0, 2], s: [['一份', 40]], f: [] },
   { id: 'chickpea', name: '鹰嘴豆（熟）', alias: 'yingzuidou chickpea', cat: 'soy', n: [164, 8.9, 2.6, 27.4, 7.6, 4.8, 7], s: [['一份', 100]], f: [] },
@@ -452,7 +452,7 @@ export const FOODS = [
   { id: 'energy_drink', name: '功能饮料', alias: 'gongneng yinliao', cat: 'drink', n: [45, 0, 0, 11.0, 0, 11.0, 100], s: [['一罐', 250]], f: ['sweetdrink', 'quick', 'caffeinated'] },
   { id: 'wine_red', name: '红酒', alias: 'hongjiu', cat: 'drink', n: [85, 0.1, 0, 2.6, 0, 0.6, 4], s: [['一杯', 150]], f: ['alcohol'] },
   { id: 'sake', name: '清酒', alias: 'qingjiu sake', cat: 'drink', n: [134, 0.5, 0, 5.0, 0, 0, 2], s: [['一小杯', 100]], f: ['alcohol'] },
-  { id: 'protein_shake', name: '蛋白奶昔（即饮）', alias: 'danbai naixi', cat: 'drink', n: [50, 8.0, 1.0, 2.5, 0, 2.0, 90], s: [['一瓶', 330]], f: ['quick'] },
+  { id: 'protein_shake', name: '蛋白奶昔（即饮）', alias: 'danbai naixi', cat: 'drink', n: [50, 8.0, 1.0, 2.5, 0, 2.0, 90], s: [['一瓶', 330]], f: ['quick', 'natsugar'] },
   { id: 'coconut_milk_drink', name: '椰汁饮料（含糖）', alias: 'yezhi yenai coconut drink', cat: 'drink', n: [104, 1.0, 7.0, 9.5, 0, 8.0, 30], s: [['一盒', 245]], f: ['sweetdrink', 'quick', 'est'] },
   { id: 'soup_broth', name: '清汤 / 蔬菜汤', alias: 'qingtang', cat: 'drink', n: [18, 1.0, 0.8, 1.8, 0.3, 0.5, 380], s: [['一碗', 300]], f: [] },
 
@@ -468,7 +468,7 @@ export const FOODS = [
   { id: 'rice_cracker', name: '米饼 / 仙贝', alias: 'mibing xianbei', cat: 'snack', n: [400, 6.0, 8.0, 76.0, 1.0, 12.0, 600], s: [['一小包', 30]], f: ['refined', 'processed', 'quick'] },
   { id: 'seaweed_snack', name: '海苔脆片', alias: 'haitai cuipian', cat: 'snack', n: [420, 20.0, 25.0, 30.0, 12.0, 4.0, 900], s: [['一小包', 20]], f: ['processed', 'quick'] },
   { id: 'spicy_strip', name: '辣条', alias: 'latiao', cat: 'snack', n: [480, 12.0, 30.0, 40.0, 2.0, 8.0, 2000], s: [['一小包', 50]], f: ['processed', 'quick'] },
-  { id: 'yogurt_drink', name: '常温酸奶饮品', alias: 'suannai yinpin', cat: 'snack', n: [85, 2.5, 2.0, 14.0, 0, 12.0, 55], s: [['一瓶', 200]], f: ['quick'] },
+  { id: 'yogurt_drink', name: '常温酸奶饮品', alias: 'suannai yinpin', cat: 'snack', n: [85, 2.5, 2.0, 14.0, 0, 12.0, 55], s: [['一瓶', 200]], f: ['quick'] , nfs: 3.5},
 
   // ---------- 菜肴外卖（补充） ----------
   { id: 'kungpao_shrimp', name: '宫保虾球', alias: 'gongbaoxia gongbaoxiaqiu', cat: 'dish', n: [170, 13.0, 11.0, 8.0, 1.0, 4.0, 750], s: [['一份可食部', 200]], source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total', f: ['est'] },
@@ -668,7 +668,7 @@ export const FOODS = [
   { id: 'tofu_snack', name: '豆干（零食装）', alias: 'dougan lingshi', cat: 'snack', n: [230, 22.0, 11.0, 12.0, 1.5, 4.0, 1300], s: [['一小包', 40]], f: ['processed', 'quick'] },
   { id: 'chicken_breast_snack', name: '即食鸡胸肉', alias: 'jishijixiong', cat: 'snack', n: [115, 22.0, 2.0, 2.0, 0, 1.0, 700], s: [['一袋', 100]], f: ['quick', 'processed'] },
   { id: 'konjac_jelly', name: '蒟蒻果冻', alias: 'jurao guodong konjac', cat: 'snack', n: [45, 0, 0, 11.0, 1.0, 9.0, 30], s: [['一个', 60]], f: ['processed', 'quick'] },
-  { id: 'chestnut', name: '板栗（熟）', alias: 'banli', cat: 'snack', n: [214, 4.8, 1.5, 46.0, 1.7, 8.0, 5], s: [['一小把', 60]], f: ['quick'] },
+  { id: 'chestnut', name: '板栗（熟）', alias: 'banli', cat: 'snack', n: [214, 4.8, 1.5, 46.0, 1.7, 8.0, 5], s: [['一小把', 60]], f: ['quick', 'natsugar'] },
   { id: 'dried_tofu_skin_snack', name: '素毛肚 / 辣味素食', alias: 'sumaodu', cat: 'snack', n: [400, 15.0, 25.0, 30.0, 3.0, 5.0, 1600], s: [['一小包', 50]], f: ['processed', 'quick'] },
   { id: 'wafer', name: '威化饼', alias: 'weihuabing wafer', cat: 'snack', n: [510, 5.0, 27.0, 62.0, 1.0, 32.0, 200], s: [['一块', 20]], f: ['refined', 'processed', 'quick'] },
   { id: 'red_bean_bun', name: '豆沙包', alias: 'doushabao', cat: 'snack', n: [250, 6.0, 3.0, 50.0, 2.0, 20.0, 180], s: [['一个', 80]], f: ['breakfast'] },
@@ -1415,6 +1415,59 @@ export const FOODS = [
   { id: 'minced_pork_eggplant', name: '肉末茄子', alias: 'roumoqiezi minced pork eggplant', cat: 'dish', n: [165, 6.5, 12.5, 7.0, 2.2, 3.0, 700], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
 ];
 
+/*
+ * 菜肴的游离糖：按 WHO 定义，只有做菜时「加进去的糖」和果汁糖算游离糖，
+ * 蔬菜、肉、乳里自带的糖不算。
+ *
+ * 之前所有菜肴都没写 nfs，等于把炒青菜里青菜自带的糖也计进了游离糖上限——
+ * 一天三盘菜能凭空多出十几克，占 50g 上限的两三成。
+ * 总糖是一回事，游离糖是另一回事，界面上的「游离糖上限」说的是后者。
+ *
+ * 下面是每 100g 成品里「加进去的那部分糖」的估计。没列出的菜按 0 处理：
+ * 清蒸、白灼、汆汤、清炒、水煮、炖菜、汤面和粥本来就不放糖，糖全部来自食材。
+ *
+ * 精度与营养数据本身一致（都是 est）：只区分「不加糖 / 提鲜一撮 /
+ * 明显用糖调味 / 糖是主味」四个量级，不追求小数位上的准确。
+ */
+const DISH_ADDED_SUGAR = Object.freeze({
+  // 糖是主味：糖醋、锅包肉、咕咾肉、可乐鸡翅、京酱（甜面酱）
+  sweet_sour_rib: 12.5, guobaorou: 12.0, sweet_sour_pork: 11.0, sweet_sour_pork_canton: 8.5,
+  beijing_sauce_pork: 6.5, cola_chicken_wing: 6.5,
+  // 明显用糖调味：红烧糖色、照烧、卤汁、鱼香、寿司醋，以及面包、沙拉酱、番茄酱、咖喱块等含糖调料
+  braised_pork: 5.0, dongpo_pork: 5.0, eel_rice: 4.0, teriyaki_chicken_rice: 4.0,
+  yuxiang_eggplant: 4.0, burger: 3.5, fried_chicken_burger: 3.5, yuxiang: 3.5,
+  buldak_noodle_ready: 3.0, char_siu_rice: 3.0, gyudon: 3.0, liu_rou_duan: 3.0, pad_thai: 3.0,
+  braised_chicken_wing: 2.5, braised_eggplant: 2.5, meigan_pork: 2.5, sanbei_chicken: 2.5,
+  sandwich_egg: 2.5, sushi: 2.5, sushi_hand_roll: 2.2, takoyaki: 2.2, gongbao: 2.0,
+  kungpao_shrimp: 2.0, oyakodon: 2.0, pork_rice: 2.0, rice_burger: 2.0, stirfried_niangao: 2.0,
+  tuna_sandwich: 2.0, vinegar_lotus_root: 2.0, chicken_wrap: 1.8, omelette_rice: 1.8,
+  braised_tofu: 1.5, chestnut_chicken: 1.5, curry_rice: 1.5, disanxian: 1.5, onion_ring: 1.5,
+  pizza: 1.5, roast_duck_rice: 1.5, street_egg_burger: 1.5, twice_pork: 1.5,
+  vinegar_cabbage: 1.5, bibimbap: 1.2, cold_wood_ear: 1.2, curry_chicken_rice: 1.2,
+  kelp_salad: 1.2, lo_mei: 1.2, pork_trotter_rice: 1.2, claypot_rice: 1.0, cold_noodle: 1.0,
+  corn_soup: 1.0, kimchi_stew: 1.0, minced_pork_eggplant: 1.0, roast_goose_rice: 1.0,
+  self_heating_rice_meal: 1.0, tomato_egg: 1.0,
+  // 只是提鲜的一撮糖，或蚝油、豉汁、辣酱带进来的少量糖
+  braised_chicken: 0.8, braised_chicken_rice: 0.8, chicken_cutlet_rice: 0.8,
+  chicken_salad_wrap: 0.8, dapanji: 0.8, eggplant_rice: 0.8, fried_skewers: 0.8,
+  garlic_ribs: 0.8, home_style_tofu: 0.8, liangpi_spicy: 0.8, lion_head: 0.8,
+  nanchang_rice_noodle: 0.8, pork_rib_rice: 0.8, salad_chicken: 0.8, salad_veg: 0.8,
+  saliva_chicken: 0.8, sliced_beef_offal: 0.8, smashed_cucumber: 0.8, tom_yum: 0.8,
+  bbq_corn: 0.5, bbq_eggplant: 0.5, bbq_pork_belly: 0.5, bobo_chicken: 0.5,
+  fried_rice_vermicelli_cn: 0.5, guokui: 0.5, kaobing_meat: 0.5, laziji: 0.5, lotus_stirfry: 0.5,
+  luosifen: 0.5, malatang: 0.5, maocai: 0.5, mushu_pork: 0.5, northeast_rice_wrap: 0.5,
+  oden: 0.5, oyster_lettuce: 0.5, poke_bowl: 0.5, pork_onion: 0.5, scallion_beef: 0.5,
+  scallion_lamb: 0.5, scrambled_egg_tomato_rice: 0.5, sizzling_beef: 0.5, spicy_hotpot: 0.5,
+  spring_roll: 0.5, steamed_pork_rib_rice: 0.5, steamed_rib: 0.5, stir_pumpkin: 0.5,
+  suanla_fen: 0.5, tomato_beef_brisket: 0.5, wolf_tooth_potato: 0.5, bbq_skewer_veg: 0.3,
+  chicken_leg_rice: 0.3, dry_fried_bean: 0.3, dry_pot_cauliflower: 0.3, duck_leg_rice: 0.3,
+  egg_onion: 0.3, farm_pork_stirfry: 0.3, garlic_sprout_pork: 0.3, luobo_niunanbao: 0.3,
+  pork_edamame: 0.3, pork_green_bean: 0.3, pork_pepper_shred: 0.3, pork_snow_pea: 0.3,
+  pork_water_bamboo: 0.3, sour_beef_hotpot: 0.3, soy_sauce_fried_rice: 0.3,
+  stir_pork_cabbage: 0.3, tomato_beef_noodle: 0.3, tomato_cauliflower: 0.3, tomato_fish: 0.3,
+  broccoli_shrimp: 0.2, hotpot_clear: 0.2, hotpot_spicy: 0.2, zucchini_egg: 0.2,
+});
+
 // 旧库兼容迁移：不改营养数字，只把已能确定的来源、估算边界和糖口径显式化。
 // 这样导出数据或其它消费者不必依赖 isEstimated() 的 UI 兜底才能知道复合菜是估算值。
 const LEGACY_BROTH_NOTES = Object.freeze({
@@ -1477,6 +1530,12 @@ for (const food of FOODS) {
     if (!food.f.includes('est')) food.f = [...food.f, 'est'];
     food.note ||= LEGACY_BROTH_NOTES[food.id]
       || '通用成品配方估算；用油、调味和原料比例会随家庭或餐馆做法变化';
+    // nfs = 不属于 WHO 游离糖的那部分，也就是食材自带的糖
+    if (food.nfs === undefined) {
+      const totalSugar = Number(food.n[5]) || 0;
+      const added = Math.min(DISH_ADDED_SUGAR[food.id] || 0, totalSugar);
+      food.nfs = Math.round((totalSugar - added) * 10) / 10;
+    }
   }
 
   if (food.id === 'mcd_bigmac') {
