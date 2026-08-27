@@ -106,9 +106,38 @@ export function replacementsFor(target, selection = [], limit = 3) {
       exercise: e,
       // 与「留下的那些动作」重合越低越好；和被换掉的那个也不能太像
       worst: Math.max(overlapScore(e, goal), ...rest.map((r) => overlapScore(e, r)), 0),
+      // 只按重合度排，替换卧推时最先冒出来的是绳索夹胸——重合确实最低，
+      // 但拿孤立动作换掉复合动作是把这次训练的主项拆了。同类优先。
+      sameClass: !!e.compound === !!goal.compound,
     }))
     .filter((c) => overlapLevel(c.worst) !== 'high')
-    .sort((x, y) => x.worst - y.worst)
+    .sort((x, y) => (Number(y.sameClass) - Number(x.sameClass)) || (x.worst - y.worst))
+    .slice(0, limit)
+    .map((c) => c.exercise);
+}
+
+/**
+ * 针对某几块「还没练到」的肌肉，能补什么动作。
+ *
+ * 排序有两层：先看这个动作把多少块缺失肌肉当主动肌（补得准），
+ * 再看它与已选动作的最高重合度（补进去不会变成又一次重复）。
+ * 只说「还没练到三角肌后束」而不给动作名，等于把问题原样退回给用户。
+ */
+export function exercisesForMuscles(muscles = [], options = {}) {
+  const { exclude = [], group = null, limit = 3 } = options;
+  const want = new Set(muscles);
+  if (!want.size) return [];
+  const chosen = toExercises(exclude);
+  const taken = new Set(chosen.map((e) => e.id));
+  return EXERCISES
+    .filter((e) => !taken.has(e.id) && (!group || e.group === group))
+    .map((e) => ({
+      exercise: e,
+      hits: e.primary.filter((m) => want.has(m)).length,
+      worst: chosen.length ? Math.max(...chosen.map((r) => overlapScore(e, r))) : 0,
+    }))
+    .filter((c) => c.hits > 0 && overlapLevel(c.worst) !== 'high')
+    .sort((a, b) => (b.hits - a.hits) || (a.worst - b.worst))
     .slice(0, limit)
     .map((c) => c.exercise);
 }
@@ -118,6 +147,49 @@ export function exercisesForGroup(groupKey) {
   return EXERCISES
     .filter((e) => e.group === groupKey)
     .sort((a, b) => (b.compound ? 1 : 0) - (a.compound ? 1 : 0));
+}
+
+/**
+ * 某个部位的起手组合。
+ *
+ * 早先只是「挑一个复合动作，再配两个和它重合最低的」。动作库补到 100 多个之后，
+ * 重合最低的永远是孤立动作——胸日会被搭成「一个卧推 + 两个飞鸟」，
+ * 三个动作全压在胸大肌中部，上胸下胸一个没练到。
+ *
+ * 现在的规则：三个动作必须是三个不同的动作模式（推 / 拉 / 铰链…），
+ * 每一步只收「至少练到一块还没练到的肌肉」的，其中复合动作优先，
+ * 再按库里的录入顺序（主流动作排在前面）。
+ *
+ * 换模式这条比「多覆盖几块肌肉」更管用：只按覆盖面排会搭出
+ * 「杠铃划船 + 俯卧撑胸划船」这种两个水平拉，或者把早安式体前屈顶进新手方案。
+ */
+export function starterCombo(groupKey, size = 3) {
+  const list = exercisesForGroup(groupKey);
+  if (!list.length) return [];
+  const anchor = list.find((e) => e.compound) || list[0];
+  const combo = [anchor];
+  const covered = new Set(anchor.primary);
+  while (combo.length < size) {
+    const patterns = new Set(combo.map((e) => e.pattern));
+    const pool = list.filter((e) => !combo.some((c) => c.id === e.id));
+    // 模式不重样是硬要求；实在挑不出来（动作少的部位）才放宽
+    const fresh = pool.filter((e) => !patterns.has(e.pattern));
+    const next = (fresh.length ? fresh : pool)
+      .map((e, order) => ({
+        exercise: e,
+        order,
+        fillsGap: e.primary.some((m) => !covered.has(m)),
+        worst: Math.max(...combo.map((c) => overlapScore(e, c)), 0),
+      }))
+      .filter((c) => overlapLevel(c.worst) !== 'high')
+      .sort((a, b) => (Number(b.fillsGap) - Number(a.fillsGap))
+        || (Number(b.exercise.compound) - Number(a.exercise.compound))
+        || (a.order - b.order))[0];
+    if (!next) break;
+    combo.push(next.exercise);
+    for (const m of next.exercise.primary) covered.add(m);
+  }
+  return combo;
 }
 
 /**
@@ -138,9 +210,16 @@ export function planAdvice(selection = []) {
       level: 'warn',
       key: `dup-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 和 ${o.b.name} 练的是同一件事`,
+      // 建议要能直接点，光念一串动作名等于让人回到列表里自己找。
+      // 动作名只出现在按钮上，正文不再重复念一遍。
+      actions: alts.map((e) => ({ id: e.id, label: e.name, replaces: o.b.id })),
+      // 现在库里同一个模式往往有好几台器械，两边都是 machine 时不能再说「只差器械」
       text: `两者都是${PATTERNS[o.a.pattern]}、主要练${o.sharedPrimary.map((m) => MUSCLES[m]).join('、') || MUSCLES[o.a.primary[0]]}，`
-        + `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。同一次训练里放两个，多出来的量没有换来新的刺激。`
-        + (alts.length ? `把其中一个换成 ${alts.map((e) => e.name).join(' / ')} 更划算。` : ''),
+        + (o.a.equipment === o.b.equipment
+          ? `器械也一样（${EQUIPMENT[o.a.equipment]}），只是换了台机子。`
+          : `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。`)
+        + '同一次训练里放两个，多出来的量没有换来新的刺激。'
+        + (alts.length ? `换掉 ${o.b.name}、改成下面任意一个更划算，它们和这套都不重复。` : ''),
     });
   }
   for (const o of overlaps.filter((x) => x.level === 'some')) {
@@ -191,14 +270,18 @@ export function planAdvice(selection = []) {
   // 覆盖情况
   const cov = coverage(list).filter((c) => c.exercises > 0);
   for (const c of cov) {
-    if (c.missing.length && c.exercises >= 2) {
-      tips.push({
-        level: 'info',
-        key: `gap-${c.key}`,
-        title: `${c.label}：还没练到 ${c.missing.map((m) => MUSCLES[m]).join('、')}`,
-        text: `这次${c.label}安排了 ${c.exercises} 个动作，但都集中在 ${c.covered.map((m) => MUSCLES[m]).join('、')}。想练全的话补一个针对性动作。`,
-      });
-    }
+    if (!c.missing.length || c.exercises < 2) continue;
+    const fills = exercisesForMuscles(c.missing, { exclude: list, group: c.key, limit: 3 });
+    // note 是「这个动作补的是哪块」，交给界面贴在按钮上；正文不再把动作名重复一遍
+    const fillsFor = (e) => MUSCLES[e.primary.find((x) => c.missing.includes(x))] || '';
+    tips.push({
+      level: 'info',
+      key: `gap-${c.key}`,
+      title: `${c.label}：还没练到 ${c.missing.map((m) => MUSCLES[m]).join('、')}`,
+      text: `这次${c.label}安排了 ${c.exercises} 个动作，但都集中在 ${c.covered.map((m) => MUSCLES[m]).join('、')}。`
+        + (fills.length ? '想练全的话，从下面挑一个补上。' : '想练全的话补一个针对性动作。'),
+      actions: fills.map((e) => ({ id: e.id, label: e.name, note: fillsFor(e) })),
+    });
   }
   return tips;
 }

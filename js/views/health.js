@@ -1,4 +1,10 @@
-/** 数据页：身体信息、健康数据解读与逐日记录。数据的维护性操作在设置页。 */
+/**
+ * 数据页：近期概览、健康数据解读、每日目标、趋势图与逐日记录。
+ *
+ * 原先「数据」和「趋势」是两个栏目，但「我最近怎么样」和「我在往哪走」是同一个问题，
+ * 分开放要来回切才对得上，所以合成一页：先给汇总与解读，再给目标，最后是走势与明细。
+ * 数据的维护性操作（导入 / 备份 / 补录）在设置页。
+ */
 
 import {
   h, clearEl, num, toast, formatMinutes, formatHours, mount, infoTip,
@@ -8,7 +14,8 @@ import {
   listImplausibleDays, clearImplausibleHealth,
 } from '../lib/store.js';
 import { healthInsights, healthSummary, weightTrendStats } from '../core/health-insights.js';
-import { profileCard } from './cards/profile.js';
+import { targetCard } from './cards/targets.js';
+import { trendCharts } from './cards/trend-charts.js';
 
 /**
  * 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000，
@@ -74,12 +81,10 @@ function implausibleCard(rerender) {
     h('p.form-hint', null, '只抹掉超出生理上限的那几项，同一天里其余字段（体重、睡眠等）原样保留。'));
 }
 
-/** 把同步来的数字翻译成「这意味着什么、该怎么做」 */
 /*
- * 近 14 天概览。原先摊在趋势页顶部，但它是「我最近怎么样」的汇总，
- * 不是走势本身——和健康记录、身体信息放在同一页才是一件事。
- *
- * 窗口固定 14 天，与下方「最近记录」表一致；趋势页那个区间选择器留给图表。
+ * 近 14 天概览。它是「我最近怎么样」的汇总，不是走势本身，所以固定 14 天窗口、
+ * 排在图表之前；下方趋势图那个区间选择器只管图表，不影响这里。
+ * 窗口与页尾「最近记录」表一致。
  */
 const OVERVIEW_DAYS = 14;
 
@@ -201,11 +206,12 @@ export function renderHealth(root) {
   const rerender = () => renderHealth(root);
   clearEl(root);
   mount(root,
-    profileCard(rerender),
     repairCard(rerender),
     implausibleCard(rerender),
     overviewCard(),
     insightCard(),
+    targetCard(),
+    ...(trendCharts(rerender) || []),
     dataTable(),
   );
 }

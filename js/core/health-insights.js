@@ -391,8 +391,13 @@ export function healthSummary(healthDays = [], windowDays = 14, asOfDate = null)
       return round(total / span);
     })(),
     sleepHours: (() => {
-      const v = pick('sleepMinutes');
-      return v != null ? round(v / 60, 1) : null;
+      /*
+       * 从原始分钟数直接换算，不能拿 pick 的结果再除 60。
+       * pick 会先把分钟四舍五入成整数，再除 60 又round 一次，两次取整能差出 0.1 小时——
+       * 概览写 6.8 小时、下面的解读写 6.7 小时，同一页两个数对不上。
+       */
+      const vals = series(days, 'sleepMinutes').map((p) => p.value);
+      return vals.length ? round(avg(vals) / 60, 1) : null;
     })(),
     restingHR: pick('restingHR'),
     weightKg: pick('weightKg'),

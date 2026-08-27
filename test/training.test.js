@@ -5,7 +5,7 @@ import {
 } from '../js/data/exercises.js';
 import {
   overlapScore, overlapLevel, findOverlaps, coverage,
-  replacementsFor, exercisesForGroup, planAdvice,
+  replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice, starterCombo,
 } from '../js/core/training.js';
 
 test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
@@ -98,7 +98,10 @@ test('按部位取动作，复合动作排在前面', () => {
 test('组合建议：重复、推拉失衡、全孤立动作都能指出来', () => {
   const dup = planAdvice(['bench_press_bb', 'bench_press_db']);
   assert.ok(dup.some((t) => t.level === 'warn' && /同一件事/.test(t.title)));
-  assert.ok(dup.some((t) => /换成/.test(t.text)), '没给出替换方案');
+  // 动作名只出现在按钮上，正文不再重复念一遍
+  const dupTip = dup.find((t) => t.key.startsWith('dup-'));
+  assert.ok(/换掉 哑铃卧推/.test(dupTip.text), '没指明该换掉哪一个');
+  assert.ok(dupTip.actions.length, '没给出替换方案');
 
   const allPush = planAdvice(['bench_press_bb', 'ohp_db', 'incline_bench_db', 'cable_fly']);
   assert.ok(allPush.some((t) => /拉只有 0 个/.test(t.title)), JSON.stringify(allPush.map((t) => t.title)));
@@ -122,4 +125,126 @@ test('动作可以按中文名、拼音和肌肉搜到', () => {
   assert.ok(searchExercises('squat').some((e) => e.id === 'squat_bb'));
   assert.ok(searchExercises('背阔肌').some((e) => e.group === 'back'));
   assert.deepEqual(searchExercises(''), []);
+});
+
+test('固定器械动作足够多，每个部位都能只用器械凑出一套', () => {
+  // 用户要求补大量固定器械动作：健身房里最常见的约束是「只有器械可用」
+  const isMachine = (e) => e.equipment === 'machine' || e.equipment === 'cable';
+  for (const g of GROUPS) {
+    const machines = EXERCISES.filter((e) => e.group === g.key && isMachine(e));
+    assert.ok(machines.length >= 5,
+      `${g.label} 只有 ${machines.length} 个固定器械动作，凑不出一套`);
+  }
+  assert.ok(EXERCISES.filter(isMachine).length >= 55,
+    '固定器械动作总量偏少');
+});
+
+test('还没练到某块肌肉时，给得出具体补什么动作', () => {
+  // 用户反馈：只说「很多地方没练到」，不给动作名，等于把问题原样退回来
+  const alts = exercisesForMuscles(['delt_rear'], { group: 'shoulder', limit: 3 });
+  assert.ok(alts.length >= 2, '后束缺口给不出动作');
+  for (const e of alts) {
+    assert.ok(e.primary.includes('delt_rear'), `${e.name} 并不主要练后束`);
+  }
+});
+
+test('补缺口的动作不会和已选动作再重复一遍', () => {
+  // 已经在练绳索面拉，补后束时不该又推荐一个同模式同主动肌的
+  const selection = ['ohp_db', 'lateral_raise_db', 'face_pull'];
+  const alts = exercisesForMuscles(['delt_rear'], { exclude: selection, group: 'shoulder' });
+  for (const e of alts) {
+    assert.ok(!selection.includes(e.id), '推荐了已经选过的动作');
+    assert.notEqual(overlapLevel(overlapScore(e, EXERCISE_BY_ID.get('face_pull'))), 'high',
+      `${e.name} 与已选的绳索面拉高度重复`);
+  }
+});
+
+test('缺口提示带上可以直接点的动作', () => {
+  // 两个动作都压中胸，上胸和下胸没练到
+  const tips = planAdvice(['bench_press_bb', 'pec_deck']);
+  const gap = tips.find((t) => t.key === 'gap-chest');
+  assert.ok(gap, '没给出胸部缺口提示');
+  assert.match(gap.title, /还没练到 上胸、下胸/);
+  assert.ok(gap.actions.length, '缺口提示没有可点的动作');
+  for (const a of gap.actions) {
+    const e = EXERCISE_BY_ID.get(a.id);
+    assert.ok(e, `动作 ${a.id} 不在库里`);
+    assert.ok(e.primary.some((m) => ['pec_upper', 'pec_lower'].includes(m)),
+      `${e.name} 补不上这个缺口`);
+  }
+  assert.match(gap.text, /想练全的话，从下面挑一个补上。/);
+  // 补的是哪块肌肉交给按钮上的注解，正文不重复动作名
+  for (const a of gap.actions) {
+    assert.ok(['上胸', '下胸'].includes(a.note), `按钮没标出补的是哪块：${JSON.stringify(a)}`);
+    assert.ok(!gap.text.includes(a.label), `正文重复了动作名 ${a.label}`);
+  }
+});
+
+test('重复提示里的替换动作可以一键换掉原来那个', () => {
+  const tips = planAdvice(['bench_press_bb', 'bench_press_db']);
+  const dup = tips.find((t) => t.key.startsWith('dup-'));
+  assert.ok(dup.actions.length, '重复提示没给替换动作');
+  for (const a of dup.actions) {
+    assert.equal(a.replaces, 'bench_press_db', '替换动作没标明换掉的是哪个');
+    assert.notEqual(a.id, 'bench_press_db');
+  }
+});
+
+test('两个动作器械相同时不说「只差器械」', () => {
+  // 库里现在同一个模式有好几台器械，「只差器械（器械 / 器械）」读起来像 bug
+  const same = planAdvice(['chest_press_machine', 'bench_press_smith'])
+    .find((t) => t.key.startsWith('dup-'));
+  assert.ok(same, '两台器械推胸没被判成重复');
+  assert.ok(!same.text.includes('只差器械'), same.text);
+  assert.match(same.text, /器械也一样（器械），只是换了台机子/);
+
+  const diff = planAdvice(['bench_press_bb', 'bench_press_db'])
+    .find((t) => t.key.startsWith('dup-'));
+  assert.match(diff.text, /只差器械（杠铃 \/ 哑铃）/);
+});
+
+test('替换建议优先同类：不拿孤立动作换掉复合动作', () => {
+  // 只按重合度排，替换卧推时最先冒出来的是绳索夹胸——重合确实最低，
+  // 但那等于把这次训练的主项拆了。
+  const forCompound = replacementsFor('bench_press_db', ['bench_press_bb', 'bench_press_db']);
+  assert.ok(forCompound.length, '没给出替换动作');
+  assert.ok(forCompound[0].compound, `复合动作被换成了孤立动作：${forCompound[0].name}`);
+
+  const forIsolation = replacementsFor('db_fly', ['cable_fly', 'db_fly']);
+  assert.ok(forIsolation.length && !forIsolation[0].compound,
+    `孤立动作的首选替换不该是复合动作：${forIsolation[0]?.name}`);
+});
+
+test('起手组合是三个不同的动作模式，不会搭成「一个卧推 + 两个飞鸟」', () => {
+  // 动作库补大之后，「挑重合最低的两个」永远挑到孤立动作：
+  // 胸日会变成三个动作全压在胸大肌中部，上胸下胸一个没练到。
+  for (const g of GROUPS) {
+    const combo = starterCombo(g.key);
+    assert.equal(combo.length, 3, `${g.label} 的起手组合凑不齐三个`);
+    assert.equal(new Set(combo.map((e) => e.pattern)).size, 3,
+      `${g.label} 起手组合里有重样的动作模式：${combo.map((e) => e.name).join('、')}`);
+    assert.equal(findOverlaps(combo).filter((o) => o.level === 'high').length, 0,
+      `${g.label} 起手组合里有高度重复`);
+    // 每个动作都要补上前面练不到的地方
+    const seen = new Set();
+    combo.forEach((e, i) => {
+      if (i > 0) {
+        assert.ok(e.primary.some((m) => !seen.has(m)),
+          `${e.name} 没有补上任何新肌肉`);
+      }
+      for (const m of e.primary) seen.add(m);
+    });
+  }
+});
+
+test('起手组合从复合动作打底', () => {
+  for (const key of ['chest', 'shoulder', 'back', 'leg']) {
+    assert.ok(starterCombo(key)[0].compound,
+      `${key} 的起手第一个动作不是复合动作`);
+  }
+  // 胸日三个动作要能覆盖上中下胸
+  const chest = starterCombo('chest').flatMap((e) => e.primary);
+  for (const m of ['pec_upper', 'pec_mid', 'pec_lower']) {
+    assert.ok(chest.includes(m), `胸日起手组合没练到 ${MUSCLES[m]}`);
+  }
 });

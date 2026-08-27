@@ -285,13 +285,18 @@ export function lineChart({
     } else {
       points.forEach((pt, i) => labelDays.push({ ms: dayXs[i], x: px(i) }));
     }
-    for (const day of labelDays) {
+    labelDays.forEach((day, i) => {
+      /*
+       * 首末两个日期改成靠边对齐。居中的话有一半会落到绘图区外，
+       * 而右边距只有 12px —— 最后一天的「20」会被 SVG 边界切掉半个字。
+       */
+      const anchor = i === 0 ? 'start' : i === labelDays.length - 1 ? 'end' : 'middle';
       const t = el('text', {
-        x: day.x, y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': 9.5,
+        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': 9.5,
       });
       t.textContent = new Date(day.ms).toISOString().slice(5, 10);
       svg.append(t);
-    }
+    });
   } else {
     // 给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
     const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });

@@ -22,11 +22,24 @@ npm run serve                                         # python3 -m http.server 8
 
 | 层 | 能碰什么 | 谁能测 |
 | --- | --- | --- |
-| `js/core/*`、`js/data/foods.js` | 纯函数，无 DOM、无浏览器 API | 测试只 import 这两处 |
+| `js/core/*`、`js/data/*` | 纯函数，无 DOM、无浏览器 API | 测试只 import 这两处 |
 | `js/lib/*` | IndexedDB / Worker / DOM 工具 / SVG | 否 |
 | `js/views/*` | 只做 DOM 渲染 | 否 |
 
 新增的计算逻辑一律放 `core/`，否则写不了测试。视图里不要出现营养计算。
+「该显示哪几个动作」「这条曲线该怎么解读」这类挑选与措辞逻辑也算计算，
+同样放 `core/`（见 `training.js`、`trend-reading.js`）。
+
+### 栏目与卡片
+
+底部四栏：**今日 / 饮食 / 数据 / 健身**，设置在右上角的侧边抽屉里。
+「数据」页把概览、解读、每日目标、趋势图和逐日明细放在一起——
+「我最近怎么样」和「我在往哪走」是同一个问题，分成两栏要来回切才对得上。
+
+会换页的卡片抽成 `js/views/cards/*`，导出一个挂载函数（`profileCard`、`targetCard`、
+`dataManagerCard`、`trendCharts`），搬家只改一行 import。
+`test/ui.test.js` 的断言跟着「页面挂了哪些卡片」走，不跟着文件走。
+**视图不许 import 兄弟视图**（`test/module-refs.test.js` 会拦），要复用就抽成卡片。
 
 ### store.js 是唯一枢纽，`recompute()` 是整条流水线
 
@@ -122,7 +135,12 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
 - 建 DOM 用 `utils.js` 的 `h()` / `mount()`，别用原生 `append()` —— 原生不展开数组
   （得到 `[object HTMLButtonElement]`），也不忽略 `null`/`false`（渲染出字面量 "null"）。
 - `lineChart` 的纵轴刻度逻辑在 `test/charts-axis.test.js` 里抄了一份（charts.js 依赖 DOM）。改一处要改两处。
-- 新增 js 模块要加进 `sw.js` 的 `SHELL`（目前 `core/health-insights.js` 和 `lib/importer.js` 漏了）。
+- 新增 js 模块要加进 `sw.js` 的 `SHELL`，并同步 `package.json` / `js/core/feedback.js` 里的版本号
+  （`test/ui.test.js` 和 `test/feedback.test.js` 会一起卡）。漏一个模块，离线时整个应用就打不开。
+- 跨模块调用忘了 import 只会在浏览器里炸（设置抽屉整页白屏就是这么来的），
+  `test/module-refs.test.js` 是手搓的 `no-undef`，替代不了 eslint 但能拦住这一类。
+- 中文默认允许在任意两个字之间断行：短标签（`游离糖上限`、`1g 蛋白`）会被断成两截，
+  要么 `white-space: nowrap`，要么 `word-break: keep-all`。
 
 ## 约定
 
