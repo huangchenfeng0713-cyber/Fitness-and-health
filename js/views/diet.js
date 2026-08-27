@@ -7,7 +7,7 @@
  */
 
 import {
-  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction,
+  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText,
 } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
 import {
@@ -20,6 +20,7 @@ import {
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 
 const ui = {
@@ -33,12 +34,17 @@ const ui = {
   sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
   mix: {},        // 清补凉等复合食物的 { foodId: g/ml }
   showCustomForm: false,
+  historyOpen: false,   // 历史搜索是否展开
+  moreResults: false,   // 搜索结果是否已展开全部
 };
 
 /** 常驻 DOM 节点引用 */
 const nodes = {};
 
 const guessMeal = () => ui.meal || currentMeal().key;
+
+/** 搜索先出几条。剩下的点「显示更多」 */
+const RESULT_PREVIEW = 10;
 
 /* ---------------------------------------------------------------- 外壳 */
 
@@ -66,6 +72,8 @@ function buildShell(root) {
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
       ui.query = e.target.value;
+      // 换了搜索词就收回「显示更多」，否则搜下一个词还是一次铺满
+      ui.moreResults = false;
       if (ui.category) {
         ui.category = null;
         refreshCategories();
@@ -92,13 +100,30 @@ function buildShell(root) {
     nodes.customBox,
     nodes.favRow,
     nodes.categories,
-    nodes.results,
-    nodes.portion);
+    nodes.results);
+
+  /*
+   * 份量面板改成底部弹层。
+   *
+   * 原先它长在搜索结果下面，选完一个食物要往下滚过整列结果才看得见 ——
+   * 手机上这一滚就是大半屏。弹层从底部升起来，手指本来就在那儿，
+   * 而且不管页面滚到哪都在同一个位置。
+   *
+   * 背景那层点一下就关；面板本身吃掉点击，免得点面板内部也把它关了。
+   */
+  nodes.sheetBackdrop = h('div.sheet-backdrop', {
+    onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
+  });
+  nodes.sheet = h('div.sheet', {
+    role: 'dialog', 'aria-modal': 'true', 'aria-label': '选择份量',
+    onclick: (ev) => ev.stopPropagation(),
+  }, nodes.portion);
+  nodes.sheetWrap = h('div.sheet-wrap', { hidden: true }, nodes.sheetBackdrop, nodes.sheet);
 
   nodes.root = h('div.view-stack', null,
     // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
-    nodes.quick, nodes.searchCard, nodes.entries, nodes.water, nodes.advice);
-  mount(root, nodes.root);
+    nodes.quick, nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
+  mount(root, nodes.root, nodes.sheetWrap);
 }
 
 /* ---------------------------------------------------------------- 各区块 */
@@ -119,14 +144,32 @@ function refreshQuick() {
   ));
 }
 
+/*
+ * 历史搜索：记过的食物，点一下直接回到份量面板。
+ *
+ * 默认只露两行。这些名字长短差得很远（「米饭（白米）」和
+ * 「肯德基 乒乒乓乓冰球杯（柠檬味）」不是一个量级），按个数截断会时多时少，
+ * 所以用高度截断，再按实际有没有溢出决定要不要出「展开」。
+ */
+const HISTORY_LIMIT = 10;
+
 function refreshFav() {
   clearEl(nodes.favRow);
   if (ui.query || ui.category) return;
-  const favorites = state.favorites.map(findFood).filter(Boolean).slice(0, 10);
-  if (!favorites.length) return;
+  const history = state.favorites.map(findFood).filter(Boolean).slice(0, HISTORY_LIMIT);
+  if (!history.length) return;
+  const chips = h('div.fav-chips', { class: `fav-chips${ui.historyOpen ? '' : ' collapsed'}` },
+    history.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name)));
+  const toggle = h('button.text-btn.fav-toggle', {
+    hidden: true,
+    onclick: () => { ui.historyOpen = !ui.historyOpen; refreshFav(); },
+  }, ui.historyOpen ? '收起' : '展开');
   mount(nodes.favRow, h('div.fav-row', null,
-    h('span.fav-label', null, '常吃'),
-    favorites.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name))));
+    h('span.fav-label', null, '历史搜索'),
+    chips,
+    toggle));
+  // 折叠按钮只在真的放不下时出现——没溢出还挂个「展开」是骗人的
+  toggle.hidden = !ui.historyOpen && chips.scrollHeight <= chips.clientHeight + 2;
 }
 
 function refreshCategories() {
@@ -139,6 +182,7 @@ function refreshCategories() {
         onclick: () => {
           ui.category = ui.category === key ? null : key;
           ui.query = '';
+          ui.moreResults = false;
           nodes.searchInput.value = '';
           refreshCategories();
           refreshResults();
@@ -158,15 +202,23 @@ function refreshResults() {
   if (!ui.query && !ui.category) { refreshAdvice(); return; }
   refreshAdvice();
 
-  const results = ui.query
-    ? searchFoods(ui.query, allFoods(), 24)
-    : allFoods().filter((food) => food.cat === ui.category).slice(0, 36);
-  if (!results.length) {
-    mount(nodes.results, h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'));
+  /*
+   * 先出十条。搜索是「我知道自己要什么」的场景：想找的那个基本落在前几条，
+   * 一次铺二十几条只会把份量面板顶到屏幕外面，还得往回滚。
+   * 剩下的点「显示更多」再出。
+   */
+  const all = ui.query
+    ? searchFoods(ui.query, allFoods(), 60)
+    : allFoods().filter((food) => food.cat === ui.category);
+  const results = ui.moreResults ? all.slice(0, 60) : all.slice(0, RESULT_PREVIEW);
+  if (!all.length) {
+    mount(nodes.results,
+      h('p.empty-hint', null, '没找到。可以点「+ 自定义」按包装上的营养成分表新建一个。'),
+      feedbackLink(ui.query));
     return;
   }
   mount(nodes.results,
-    ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${results.length} 项`),
+    ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`),
     h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     const basis = f.basis === '100ml' ? '100ml' : '100g';
@@ -179,7 +231,28 @@ function refreshResults() {
           title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
         }, '估算'),
         h('span.chip', null, CATEGORIES[f.cat] || '自定义')));
-    })));
+    })),
+    all.length > results.length ? h('button.more-btn', {
+      onclick: () => { ui.moreResults = true; refreshResults(); },
+    }, `显示更多（还有 ${all.length - results.length} 项）`) : null,
+    ui.query ? feedbackLink(ui.query) : null);
+}
+
+/*
+ * 「没找到？告诉我」。
+ *
+ * 食物库缺条目是这类应用最常见的挫败点，而用户当下就在搜索框前面 ——
+ * 让他翻到设置页去写反馈，多半就算了。这里把当时搜的词一起带过去。
+ */
+function feedbackLink(query) {
+  return h('button.text-btn.feedback-link', {
+    onclick: async () => {
+      const text = `【食物库缺条目】搜索词：${query || '（未填写）'}\n`
+        + `应用版本：${APP_VERSION}\n请补充这个食物的名称、品牌和包装上的营养成分表。`;
+      const ok = await copyText(text);
+      toast(ok ? '已复制反馈模板，可粘贴发给作者' : '复制失败，请到设置页的「关于与反馈」提交', ok ? 'ok' : 'warn');
+    },
+  }, '没找到想要的？告诉我');
 }
 
 function selectFood(food) {
@@ -191,7 +264,6 @@ function selectFood(food) {
   ui.mix = hasFoodMix(food) ? defaultFoodMix(food) : {};
   ui.grams = food.s?.[0]?.[1] || 100;
   refreshPortion();
-  nodes.portion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /**
@@ -365,7 +437,7 @@ function refreshMixedPortion(food) {
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
     nodes.mealRow,
-    addBtn));
+    h('div.sheet-action', null, addBtn)));
 
   syncTotals();
 }
@@ -380,6 +452,9 @@ function refreshMixedPortion(food) {
 function refreshPortion() {
   clearEl(nodes.portion);
   const food = ui.selected;
+  // 弹层开着的时候锁住背景滚动，否则手指在面板上滑会带着整页跑
+  nodes.sheetWrap.hidden = !food;
+  document.body.classList.toggle('sheet-open', !!food);
   if (!food) return;
   if (hasFoodMix(food)) {
     refreshMixedPortion(food);
@@ -570,7 +645,7 @@ function refreshPortion() {
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
     nodes.mealRow,
-    addBtn));
+    h('div.sheet-action', null, addBtn)));
 
   syncReadouts();
 }

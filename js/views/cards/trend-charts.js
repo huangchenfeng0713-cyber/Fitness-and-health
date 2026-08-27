@@ -384,7 +384,12 @@ export function trendCharts(rerender) {
     // 选择器和图合成一张卡：它们本来就是一件事，分成两块只是多一道分隔线
     h('section.card.trend-card', null,
       h('div.card-head', null,
-        h('h3', null, spec.title),
+        /*
+         * 标题固定。原先它跟着下拉一起变（「每日热量摄入」→「体重」），
+         * 于是同一张卡的名字每切一次就换一个，找不到锚点；
+         * 而下拉第一项本来就写着当前看的是什么，标题再说一遍是重复。
+         */
+        h('h3', null, '健康趋势图'),
         h('div.card-head-actions', null,
           spec.tag ? h('span.card-tag', null, spec.tag) : null,
           infoTip('查看这张图的统计口径',
@@ -398,7 +403,8 @@ export function trendCharts(rerender) {
           options: CHARTS.map((c) => ({
             key: c.key,
             // 没数据的仍然能选：点进去会说明缺什么，比直接藏起来好找
-            label: availability[c.key] ? c.label : `${c.label}（暂无数据）`,
+            // 后缀要短：下拉宽度只有半屏，「（暂无数据）」会把名字挤没
+            label: availability[c.key] ? c.label : `${c.label} · 无数据`,
           })),
           onPick: (key) => { activeChart = key; chartPicked = true; rerender(); },
         }),

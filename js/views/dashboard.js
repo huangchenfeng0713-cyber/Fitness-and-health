@@ -46,37 +46,50 @@ const KIND_COLOR = {
 };
 
 /*
- * 余数和记录不画条。
+ * 分两组画。
  *
- * 条形天然在说「离满还有多远」。碳水是余数、饮水是记录，两者都没有"满"这回事，
- * 给它们画一根填了 92% 的条，等于用图形推翻了旁边那句「不必吃满」。
- * 没有进度可言的指标，就只报数字。
+ * 上面四项（蛋白、碳水、脂肪、饮水）是「吃进去多少」，一行一条，看得出进度；
+ * 下面三项（纤维、钠、游离糖）是门槛，只关心够没够 / 超没超，压成三个方框
+ * 一行排开——它们不需要一整行的条，摊开只会把卡片拉长。
+ *
+ * 措辞仍由 core/metrics.js 决定：碳水那条写的是「不必吃满」，
+ * 条形只报「到这儿了」，不再写「还差多少」。
  */
-const HAS_BAR = new Set([KIND.floor, KIND.ceiling, KIND.range]);
+const BAR_KEYS = ['protein', 'carb', 'fat', 'water'];
+const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
   const { state: st } = m;
   const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
-  return h('div', { class: `metric-row ${st.level}${HAS_BAR.has(m.kind) ? '' : ' bare'}` },
+  return h('div', { class: `metric-row ${st.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, m.label),
       h('strong.metric-row-value', null, `${value}${m.unit}`),
       h('span.metric-row-note', null, st.note)),
-    !HAS_BAR.has(m.kind) ? null
-      : st.markerPct != null
-        ? rangeBar({ markerPct: st.markerPct, color: KIND_COLOR[m.key], level: st.level })
-        : macroBar({
-          value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
-          // 只有真上限会画成红色，下限和余数不会
-          overIsBad: m.kind === KIND.ceiling,
-        }));
+    st.markerPct != null
+      ? rangeBar({ markerPct: st.markerPct, color: KIND_COLOR[m.key], level: st.level })
+      : macroBar({
+        value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
+        // 只有真上限会画成红色，下限和余数不会
+        overIsBad: m.kind === KIND.ceiling,
+      }));
+}
+
+/** 门槛类指标：方框里两个数，够不够 / 超没超一眼看完 */
+function metricChip(m) {
+  const { state: st } = m;
+  const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
+  return h('div', { class: `micro-chip ${st.level}` },
+    h('span.micro-label', null, m.label),
+    h('span.micro-val', null, value),
+    h('span.micro-target', null, `/${num(m.target)}${m.unit.trim()}`));
 }
 
 function heroCard(advice, targets, derived) {
   const { status, gaps } = advice;
   const metrics = dailyMetrics(targets, gaps, derived.health?.waterMl);
   const kcal = metrics.find((m) => m.key === 'kcal');
-  const rest = metrics.filter((m) => m.key !== 'kcal');
+  const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
   /*
    * 圆环画的是「落在计划区间的哪里」，不是「占目标的百分之几」。
@@ -117,7 +130,8 @@ function heroCard(advice, targets, derived) {
             : diff > 0 ? `比计划多 ${num(diff)} kcal` : `比计划少 ${num(-diff)} kcal`)),
       energyBalance(derived, targets)),
 
-    h('div.metric-list', null, rest.map(metricRow)),
+    h('div.metric-list', null, BAR_KEYS.map((k) => metricRow(by[k]))),
+    h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
 }

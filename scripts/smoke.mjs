@@ -130,21 +130,26 @@ try {
   const semantics = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('.metric-row')].map((r) => ({
       label: r.querySelector('.metric-row-label')?.textContent || '',
+      note: r.querySelector('.metric-row-note')?.textContent || '',
       level: /\b(met|near|over|plain)\b/.exec(r.className)?.[1] || '?',
-      bare: r.classList.contains('bare'),
+    }));
+    const chips = [...document.querySelectorAll('.micro-chip')].map((c) => ({
+      label: c.querySelector('.micro-label')?.textContent || '',
+      level: /\b(met|near|over|plain)\b/.exec(c.className)?.[1] || 'plain',
     }));
     const ring = document.querySelector('.ring circle:nth-of-type(2)');
     const foot = document.querySelector('.hero-ring-note')?.textContent || '';
-    return { rows, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
+    return { rows, chips, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
   });
   const carb = semantics.rows.find((r) => r.label.includes('碳水'));
-  const water = semantics.rows.find((r) => r.label.includes('饮水'));
-  const wrongRed = semantics.rows.filter((r) => r.level === 'over'
+  const all = [...semantics.rows, ...semantics.chips];
+  const wrongRed = all.filter((r) => r.level === 'over'
     && !['钠', '游离糖'].some((k) => r.label.includes(k)));
   const problems = [
     !carb && '碳水那行没渲染出来',
-    carb && !carb.bare && '碳水（余数）不该画进度条',
-    water && !water.bare && '饮水（记录）不该画进度条',
+    // 碳水是余数：条形可以有（一眼看出吃到哪儿了），但绝不能说「还差多少」
+    carb && /还差/.test(carb.note) && `碳水是余数，不该说「${carb.note}」`,
+    semantics.chips.length !== 3 && `门槛类指标应有三个方框，实际 ${semantics.chips.length}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
     !/多|超/.test(semantics.foot) && `没吃超，圆环颜色这条没测到（${semantics.foot}）`,
@@ -152,6 +157,86 @@ try {
     /rgb\(2[0-9]{2},\s*6[0-9],/.test(semantics.ringStroke || '') && `热量圆环画成了红色 ${semantics.ringStroke}`,
   ].filter(Boolean);
   check('指标颜色语义：红色只给真上限', problems.length === 0, problems.join('；'));
+
+  /*
+   * 「你现在看到的数字不对」这几条必须一眼认得出是警告。
+   * 一次样式重构里 .data-freshness 被连带删掉，文案还在、颜色和正文一样，
+   * 单元测试全绿——这类退化只有量渲染结果才拦得住。
+   */
+  // 前面那条检查存过一份真实档案，警告就不显示了——这里先把它切回演示态
+  await page.evaluate(async () => {
+    const { saveProfile } = await import('./js/lib/store.js');
+    await saveProfile({ demoMode: true });
+  });
+  await page.evaluate(() => document.querySelectorAll('.tab')[0]?.click());
+  await page.waitForTimeout(600);
+  const warnLook = await page.evaluate(() => {
+    const el = document.querySelector('.data-freshness.warn');
+    if (!el) return { missing: true };
+    const cs = getComputedStyle(el);
+    const bg = cs.backgroundColor;
+    const transparent = /rgba\(0,\s*0,\s*0,\s*0\)|^transparent$/.test(bg);
+    const body = getComputedStyle(document.querySelector('.hero-detail') || document.body).color;
+    return { bg, transparent, sameAsBody: cs.color === body, pad: cs.padding };
+  });
+  check('演示/过期这类警告看得出是警告',
+    !warnLook.missing && !warnLook.transparent && !warnLook.sameAsBody,
+    warnLook.missing ? '页面上没有这条警告（演示档案下应当有）'
+      : `底色 ${warnLook.bg}${warnLook.sameAsBody ? '，文字颜色和正文一样' : ''}`);
+  await page.evaluate(async () => {
+    const { saveProfile } = await import('./js/lib/store.js');
+    await saveProfile({ demoMode: false });
+  });
+
+  /*
+   * 没有记录时不画一条全零的线。
+   *
+   * Number(null) 是 0 而 Number.isFinite(0) 是 true，漏记的那天曾经就这么
+   * 混成实点：图上一串贴着地板的点把折线拽下去，而图下面那段解读
+   * （analyzeSeries 剔了 null）写的是「有记录的 6 天日均 2212」——
+   * 同一张卡里两句话互相打脸。这类只在渲染层显形，单元测试拦不住。
+   */
+  // 跳到一个肯定没有记录的日期（前面那些检查刚记过东西）
+  await page.evaluate(async () => {
+    const { setDay } = await import('./js/lib/store.js');
+    await setDay('2024-01-15');
+  });
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('数据'))?.click());
+  await page.waitForTimeout(600);
+  const zeroLine = await page.evaluate(() => {
+    const sel = document.querySelector('.trend-select');
+    if (!sel) return { noChart: true };
+    sel.value = 'kcal';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return null;
+  });
+  await page.waitForTimeout(500);
+  const chartState = zeroLine?.noChart ? zeroLine : await page.evaluate(() => {
+    const wrap = document.querySelector('.chart-wrap');
+    const dots = [...wrap.querySelectorAll('circle')];
+    const svg = wrap.querySelector('svg');
+    const h = svg ? Number(svg.getAttribute('viewBox').split(' ')[3]) : 0;
+    return {
+      dots: dots.length,
+      empty: !!wrap.querySelector('.chart-empty'),
+      // 贴着底边的点：全零线的特征
+      onFloor: dots.filter((c) => Number(c.getAttribute('cy')) > h - 12).length,
+    };
+  });
+  /*
+   * 判据是「画没画线」，不是「点在不在底边」。
+   * 一开始写成后者，结果旧代码也能过：那天连健康数据都没有，纵轴量程塌下来，
+   * 那串零点并不贴着底边——检查看着绿，bug 原样还在。
+   */
+  check('一条记录都没有时给空状态，不画线',
+    chartState.noChart || (chartState.empty && chartState.dots === 0),
+    chartState.noChart ? '数据页没有图'
+      : `本该是空状态，实际画了 ${chartState.dots} 个点（空状态文字：${chartState.empty ? '有' : '无'}）`);
+  await page.evaluate(async () => {
+    const { setDay } = await import('./js/lib/store.js');
+    await setDay(new Date().toLocaleDateString('sv-SE'));
+  });
 
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());

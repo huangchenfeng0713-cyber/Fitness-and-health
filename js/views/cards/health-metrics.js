@@ -31,6 +31,9 @@ const svg = (path, { fill = false } = {}) => {
 };
 
 /* 一笔画得出来的形，不用图标库——外部依赖一个都不引 */
+/** 缺数据时占位的那道杠。用长破折号，不用连字符——后者太短，像个减号 */
+const DASH = '—';
+
 const ICONS = {
   steps: 'M9 4.5c1.6 0 2.4 1.2 2.4 3 0 1.4-.4 2.6-.4 4 0 1.2.6 2 .6 3.2 0 1.5-.9 2.3-2.3 2.3s-2.3-.9-2.3-2.4c0-1.4.5-2.4.5-3.6 0-1.5-.6-2.3-.6-3.6 0-1.7.8-2.9 2.1-2.9ZM7.6 19.5h3.4M16.5 8c1.3 0 2 1 2 2.5 0 1.2-.4 2.2-.4 3.3 0 1 .5 1.7.5 2.7 0 1.2-.7 1.9-1.9 1.9s-1.9-.8-1.9-2c0-1.2.4-2 .4-3 0-1.2-.5-1.9-.5-3 0-1.4.6-2.4 1.8-2.4Z',
   activeEnergy: 'M12 3s1 3.2 3 5.2 3.3 3.2 3.3 5.8A6.3 6.3 0 0 1 12 20.5a6.3 6.3 0 0 1-6.3-6.5c0-2.2 1.4-3.6 2.4-5.3M12 20.5c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.4 2.4-4.2.9 1.5 3.2 2.5 3.2 4.2 0 1.6-1.2 2.8-2.8 2.8Z',
@@ -89,16 +92,27 @@ export function healthMetricsCard() {
   };
   const weight = carried('weightKg');
   const bodyFat = carried('bodyFatPct');
-  // 没有值的项直接不出现——一排「—」既占地方又什么都没说
+  /*
+   * 缺的那项画一道杠，不要整格消失。
+   *
+   * 原先是「没有值就不出现」，于是手表哪天没记静息心率，这一格就凭空少一个，
+   * 格子重新排布、每天长得都不一样；而且「没测到」和「这个应用不显示心率」
+   * 从界面上分不出来。一道杠说的是「这项应该有，今天没有」——
+   * 这跟一整张卡都空着（下面那个空状态）不是一回事。
+   *
+   * 体脂例外：多数人根本没有体脂秤，常年挂一道杠只是噪音。
+   * 它只在真的记到过的时候才出现。
+   */
+  const cell = (key, label, value, unit) => [key, label, value ?? DASH, value == null ? '' : unit];
   const cells = [
-    ['steps', '步数', health.steps != null ? num(health.steps) : null, ''],
-    ['activeEnergy', '活动', health.activeEnergy != null ? num(health.activeEnergy) : null, 'kcal'],
-    ['exerciseMinutes', '锻炼', health.exerciseMinutes != null ? num(health.exerciseMinutes) : null, '分钟'],
-    ['sleepMinutes', '睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : null, '小时'],
-    ['restingHR', '静息心率', health.restingHR != null ? num(health.restingHR) : null, 'bpm'],
-    ['weightKg', weight?.date ? `体重 ${weight.date}` : '体重', weight ? num(weight.value, 1) : null, 'kg'],
-    ['bodyFatPct', bodyFat?.date ? `体脂 ${bodyFat.date}` : '体脂', bodyFat ? num(bodyFat.value, 1) : null, '%'],
-  ].filter(([, , v]) => v != null);
+    cell('steps', '步数', health.steps != null ? num(health.steps) : null, ''),
+    cell('activeEnergy', '活动', health.activeEnergy != null ? num(health.activeEnergy) : null, 'kcal'),
+    cell('exerciseMinutes', '锻炼', health.exerciseMinutes != null ? num(health.exerciseMinutes) : null, '分钟'),
+    cell('sleepMinutes', '睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : null, '小时'),
+    cell('restingHR', '静息心率', health.restingHR != null ? num(health.restingHR) : null, 'bpm'),
+    cell('weightKg', weight?.date ? `体重 ${weight.date}` : '体重', weight ? num(weight.value, 1) : null, 'kg'),
+    ...(bodyFat ? [cell('bodyFatPct', bodyFat.date ? `体脂 ${bodyFat.date}` : '体脂', num(bodyFat.value, 1), '%')] : []),
+  ];
   const sourceLabel = health.source === 'manual'
     ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
   const cols = metricColumns(cells.length);
@@ -106,18 +120,16 @@ export function healthMetricsCard() {
     h('div.card-head', null,
       h('h3', null, '健康数据'),
       h('span.card-tag', null, has ? sourceLabel : '未同步')),
-    cells.length
-      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } }, cells.map(([key, label, value, unit]) => h('div.metric-cell', null,
+    has
+      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } }, cells.map(([key, label, value, unit]) => h('div.metric-cell', { class: `metric-cell${value === DASH ? ' empty' : ''}` },
         svg(ICONS[key] || ICONS.steps),
         h('div.metric-body', null,
           h('div.metric-value', null, value, unit && h('span.metric-unit', null, unit)),
           h('div.metric-label', null, label)))))
-      : h('p.empty-hint', null, has
-        // 同步上来了别的字段（比如只有饮水），但这几项一个都没有
-        ? '这一天同步上来的数据里没有可展示的指标。'
-        : isToday
-          ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
-          : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
+      // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
+      : h('p.empty-hint', null, isToday
+        ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
+        : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
     needsImport && dataCenterBtn(),
     needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
       '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
