@@ -279,18 +279,43 @@ Deno.serve(async (req) => {
   }
 
   const payload: Record<string, unknown> = {};
+  const skipped: string[] = [];
+  const rejected: string[] = [];
   let metricCount = 0;
   for (const [key, [min, max]] of Object.entries(numericRanges)) {
     let value = body[key];
     if (value == null || value === "") continue;
     if (typeof value === "string" && value.trim()) value = Number(value.trim());
+    /*
+     * 下限大于 0 的指标（静息心率、体重、体脂率、VO2max）读到 0 表示「今天没有样本」，
+     * 不是「测得 0」——活人这几项不可能是 0。
+     *
+     * 快捷指令里「查找健康样本」找不到样本时，后面的「获取数字」只会产出 0，
+     * 这是它唯一能表达的空值。静息心率尤其常见：Apple Watch 通常要等夜间睡眠之后
+     * 才算得出当天的值，白天跑一次同步基本都是空的。
+     */
+    if (value === 0 && min > 0) {
+      skipped.push(key);
+      continue;
+    }
     if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) {
-      return response(400, { ok: false, code: "invalid_metric", field: key });
+      /*
+       * 一个指标不合法不该毁掉整次上传。
+       * 原先这里直接 400，结果白天同步时静息心率是 0，步数、活动能量、静息能量
+       * 全都跟着丢掉——用户看到的现象是「步数没读到」，实际是整包被否了。
+       * 现在把这一项挑出来，其余照常入库，并在响应里报出来。
+       */
+      rejected.push(key);
+      continue;
     }
     payload[key] = value;
     metricCount += 1;
   }
-  if (!metricCount) return response(400, { ok: false, code: "no_metrics" });
+  if (!metricCount) {
+    return response(400, rejected.length
+      ? { ok: false, code: "invalid_metric", field: rejected[0], rejected }
+      : { ok: false, code: "no_metrics", skipped });
+  }
 
   const missingMeasurementTime = missingMeasurementTimeField(payload, body);
   if (missingMeasurementTime) {
@@ -393,6 +418,11 @@ Deno.serve(async (req) => {
     duplicate: accepted.length > 0 && accepted.every((item) => item.duplicate === true),
     date,
     updatedAt,
+    // 让快捷指令的运行结果直接看得到哪几项没进去、为什么：
+    // skipped = 今天没有样本（传上来是 0），rejected = 数值超出生理范围
+    stored: Object.keys(payload).filter((key) => key in numericRanges),
+    skipped,
+    rejected,
     measurements: accepted.filter((item) => item.kind !== "daily")
       .map((item) => ({ metric: item.kind, date: item.date, applied: item.applied })),
   });

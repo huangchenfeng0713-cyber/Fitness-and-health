@@ -158,3 +158,77 @@ test('Pages 先于数据库迁移发布时自动回退旧健康列，不中断�
   assert.match(healthClient, /fetchHealthRowsWithSelect\(client, CLOUD_HEALTH_LEGACY_SELECT/);
   assert.match(healthClient, /error\?\.code === '42703'/);
 });
+
+/*
+ * 直接跑指标校验那段循环。
+ * 用户实测：中午 12:46 跑快捷指令，返回
+ *   { "field": "restingHR", "code": "invalid_metric", "ok": false }
+ * 当天的静息心率 Apple Watch 还没算出来，「查找健康样本」返回空，
+ * 后面的「获取数字」产出 0，0 < 20 于是整次上传被 400 否掉——
+ * 步数、活动能量、静息能量一条都没写进去。
+ */
+const metricLoop = (() => {
+  const ranges = edge.slice(edge.indexOf('const numericRanges'), edge.indexOf('const aliases'));
+  const loop = edge.slice(
+    edge.indexOf('  const payload: Record<string, unknown> = {};'),
+    edge.indexOf('  const missingMeasurementTime ='),
+  );
+  // 先包成函数再脱类型：stripTypeScriptTypes 不接受顶层 return
+  const src = `function run(body) {
+    ${ranges}
+    const response = (status, payload) => ({ status, payload });
+    ${loop}
+    return { status: 200, payload: { ok: true, stored: Object.keys(payload), skipped, rejected } };
+  }
+  return run;`;
+  return new Function(stripTypeScriptTypes(`(function () { ${src} })()`).replace(/^\(function \(\) \{|\}\)\(\)$/g, ''))();
+})();
+
+test('静息心率没有样本时不会毁掉整次上传', () => {
+  const out = metricLoop({
+    steps: 8419, activeEnergy: 203.6, restingEnergy: 912.4, restingHR: 0,
+  });
+  assert.equal(out.status, 200, `整包被否了：${JSON.stringify(out.payload)}`);
+  assert.deepEqual(out.payload.stored.sort(), ['activeEnergy', 'restingEnergy', 'steps']);
+  assert.deepEqual(out.payload.skipped, ['restingHR'], '静息心率应记为「今天没有样本」');
+  assert.deepEqual(out.payload.rejected, []);
+});
+
+test('下限大于 0 的指标读到 0 一律当成没有样本', () => {
+  // 活人的静息心率、体重、体脂率、VO2max 不可能是 0；
+  // 快捷指令空数值链只会产出 0，这是它唯一能表达的空值
+  for (const key of ['restingHR', 'weightKg', 'bodyFatPct', 'vo2max']) {
+    const out = metricLoop({ steps: 5000, [key]: 0 });
+    assert.equal(out.status, 200, `${key} = 0 把上传否了`);
+    assert.deepEqual(out.payload.skipped, [key]);
+    assert.ok(!out.payload.stored.includes(key), `${key} 不该以 0 入库`);
+  }
+});
+
+test('下限为 0 的指标，0 是真值不是缺失', () => {
+  // 「今天真的一步没走」和「今天没有步数样本」是两回事
+  const out = metricLoop({ steps: 0, activeEnergy: 0, sleepMinutes: 0 });
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.payload.stored.sort(), ['activeEnergy', 'sleepMinutes', 'steps']);
+  assert.deepEqual(out.payload.skipped, []);
+});
+
+test('超出生理范围的值被挑出来，其余照常入库', () => {
+  const out = metricLoop({ steps: 8419, restingEnergy: 999999, restingHR: 61 });
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.payload.stored.sort(), ['restingHR', 'steps']);
+  assert.deepEqual(out.payload.rejected, ['restingEnergy'], '不合理的值要报出来，不能悄悄收下');
+  assert.ok(!out.payload.stored.includes('restingEnergy'));
+});
+
+test('一个合法指标都不剩时才失败，并说明是哪一项', () => {
+  const allBad = metricLoop({ restingEnergy: 999999 });
+  assert.equal(allBad.status, 400);
+  assert.equal(allBad.payload.code, 'invalid_metric');
+  assert.equal(allBad.payload.field, 'restingEnergy');
+
+  const allEmpty = metricLoop({ restingHR: 0, weightKg: 0 });
+  assert.equal(allEmpty.status, 400);
+  assert.equal(allEmpty.payload.code, 'no_metrics');
+  assert.deepEqual(allEmpty.payload.skipped.slice().sort(), ['restingHR', 'weightKg']);
+});

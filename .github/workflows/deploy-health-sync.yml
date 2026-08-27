@@ -1,0 +1,65 @@
+# 部署 health-sync Edge Function。
+#
+# 网页走 GitHub Pages 自动更新，但 Supabase 的 Edge Function 是另一套，
+# 合并代码不会让它上线，必须单独部署——上线过一次事故就是这么来的：
+# 服务端还是旧版，白天同步时静息心率为 0 会让整次上传 400，
+# 步数和能量一起丢，而网页那边看起来一切正常。
+#
+# 需要在仓库 Settings → Secrets and variables → Actions 里配一个 secret：
+#   SUPABASE_ACCESS_TOKEN  —— Supabase 后台 Account → Access Tokens 生成
+#     · 权限至少要有 Edge Functions 的写入
+#     · 有效期最长只能设 90 天。到期后这个流程会失败，而网页照常更新，
+#       如果没注意到就会变成「前端是新的、服务端是旧的」那种最难查的状态，
+#       所以下面失败时会明确打出「多半是令牌过期」并给出换发地址
+# 项目 ref 不是机密（它出现在公开的 API 地址里），直接写在下面。
+name: 部署 health-sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/deploy-health-sync.yml'
+  # 也可以在 Actions 页面手动点一次（改 secret 后重跑用得上）
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # --no-verify-jwt 不能漏：快捷指令用的是设备令牌，不是 Supabase 用户 JWT，
+      # 漏了会让所有上传被网关挡在函数之外，函数里的令牌校验根本没机会跑。
+      - name: 检查是否配了令牌
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::仓库没有配 SUPABASE_ACCESS_TOKEN。"
+            echo "::error::Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+
+      - name: 部署
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy health-sync \
+            --project-ref kdkykrshqiamwecohxgw \
+            --no-verify-jwt
+
+      # 失败最常见的原因就是令牌过期（最长只能签 90 天）。
+      # 不写清楚的话，只会看到一句 CLI 的 401，下次遇到还得重新查一遍。
+      - name: 失败原因提示
+        if: failure()
+        run: |
+          echo "::error::部署失败。最常见的两个原因："
+          echo "::error::1) 令牌过期 —— Supabase 令牌最长 90 天。到 https://supabase.com/dashboard/account/tokens 重新生成，再更新仓库的 SUPABASE_ACCESS_TOKEN。"
+          echo "::error::2) 权限不足 —— 令牌至少需要 Edge Functions 的 Read-write；若报 403 再补一个 Project Settings 的 Read。"
+          echo "::error::在修好之前，网页是新版而服务端仍是旧版，快捷指令同步的行为不会改变。"

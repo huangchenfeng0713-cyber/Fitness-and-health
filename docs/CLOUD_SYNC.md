@@ -33,6 +33,41 @@ supabase functions deploy health-sync --no-verify-jwt
 `health-sync`。迁移是幂等的：它会为步数、能量等累计指标补上各自的采集时间，
 避免一次只上传部分指标时把同一行中保留的旧值再次下发；不会删除现有健康记录。
 
+**升级到 v1.7.0 必须重新部署 `health-sync`**，否则白天跑快捷指令时静息心率为 0 会让
+整次上传返回 400，同一次的步数与能量一并丢失。这一版**只改了 Edge Function，
+没有改 `schema.sql`**，不需要重跑 SQL：
+
+```bash
+supabase functions deploy health-sync --no-verify-jwt
+```
+
+### 自动部署（推荐，配一次就不用再管）
+
+仓库里的 [`.github/workflows/deploy-health-sync.yml`](../.github/workflows/deploy-health-sync.yml)
+会在 `supabase/functions/**` 有改动并合进 `main` 时自动部署。只需配一次：
+
+1. Supabase 后台 → 右上角头像 → **Account Settings → Access Tokens** → 生成一个 token 并复制。
+   - **Resource access** 选 Project，指到本项目（ref `kdkykrshqiamwecohxgw`）。
+   - **Permissions** 至少给 Edge Functions 的写入权限，其余保持 None。
+   - **Expires in 别用默认的 7 天**，选上限（目前最长 90 天）。到期后自动部署会失败，
+     而网页照常更新，如果没注意到就会回到「前端是新的、服务端是旧的」这种最难查的状态。
+     流程失败时会明确打出「多半是令牌过期」并给出换发地址，GitHub 也会发邮件通知。
+     换发只需重新生成令牌并更新同名 secret，workflow 不用改。
+2. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，
+   名字填 `SUPABASE_ACCESS_TOKEN`，值粘贴刚才的 token。
+3. 之后合并 PR 即可；也可以在 **Actions → 部署 health-sync → Run workflow** 手动触发。
+
+这条路全程在浏览器里完成，手机上也能配。
+
+### 手动部署
+
+后台 → Edge Functions → `health-sync` 的在线编辑器里，用仓库中
+[`supabase/functions/health-sync/index.ts`](../supabase/functions/health-sync/index.ts)
+的全文覆盖后点 Deploy。**注意 iPhone 上 Safari 在这个代码编辑器里没有「全选」，
+只能逐行删，实际不可用**——手机上请走上面的自动部署。
+
+部署完成后重新跑一次快捷指令，返回里应出现 `stored` / `skipped` / `rejected` 三个字段。
+
 v1.6.5 增加了部署顺序保护：如果 Pages 已更新而数据库迁移尚未执行，网页会临时回退到
 v1.6.3 的旧列读取，不会中断账号健康页；但只有完成上述迁移后，部分指标隔离才真正生效。
 
