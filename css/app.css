@@ -355,11 +355,18 @@ html, body { height: 100%; overflow: hidden; }
 }
 .macro-bar-over { height: 100%; background: var(--danger); opacity: .55; }
 
+/*
+ * 四项排两行两列，不用 flex 换行。
+ * 「已摄入 / 目标摄入 / 预计总消耗 / 计划平衡」四条长短不一，让它自己折的话
+ * 前三条挤在一行、第四条孤零零掉到下一行，左右对不齐。
+ */
 .hero-foot {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 14px; padding-top: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px;
+  margin-top: 14px; padding-top: 12px;
   border-top: 1px solid var(--border); font-size: 11.5px; color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+.hero-foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 四项挤成一行时「饮水 550 /1700ml」会折成两截，两行两列反而更矮也更好读 */
 .hero-micros { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 10px; }
@@ -516,18 +523,29 @@ html, body { height: 100%; overflow: hidden; }
 .chip-btn.active .tip-action-note { color: color-mix(in srgb, #fff 75%, transparent); }
 
 /* ============ 健康数据（带图标的指标格） ============ */
-.metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 10px; }
-.metric-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.metric-icon { width: 21px; height: 21px; flex: none; color: var(--muted); opacity: .85; }
+/*
+ * 一行三个、每格自己居中。
+ *
+ * 原先是两列、图标在左文字在右：左格的字结束在半屏处，右格的图标又从半屏开始，
+ * 中间那道参差的缝把整块拉歪了；而且指标数是奇数（有几项就显示几项），
+ * 最后总剩一个孤零零贴在左边。改成居中的格子后，凑不满的那行自己居中，
+ * 剩一个剩两个都还是对称的。
+ */
+.metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 6px; --metric-cols: 3; }
+.metric-cell {
+  flex: 0 0 calc((100% - (var(--metric-cols) - 1) * 6px) / var(--metric-cols));
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 0; text-align: center;
+}
+.metric-icon { width: 22px; height: 22px; flex: none; color: var(--muted); opacity: .8; }
 .metric-body { min-width: 0; }
 /* 中文默认可在任意两字之间断行，「静息心率」会被拆成两截 */
 .metric-value {
-  font-size: 16px; font-weight: 600; line-height: 1.2;
+  font-size: 17px; font-weight: 600; line-height: 1.15;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.metric-unit { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 3px; }
-.metric-label { font-size: 11.5px; color: var(--faint); margin-top: 1px; white-space: nowrap; }
-@media (min-width: 420px) { .metric-grid { grid-template-columns: repeat(3, 1fr); } }
+.metric-unit { font-size: 11px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.metric-label { font-size: 11.5px; color: var(--faint); margin-top: 3px; white-space: nowrap; }
 
 /* ============ 按钮 / 表单 ============ */
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
@@ -1401,13 +1419,9 @@ h1, h2, h3 { letter-spacing: -.02em; }
 /* ---- 趋势卡的下拉选择 ---- */
 .trend-pickers {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  margin: 12px 0 4px;
+  margin: 10px 0 2px;
 }
 .trend-picker-field { min-width: 0; }
-.trend-picker-label {
-  display: block; font-size: 11px; color: var(--faint);
-  margin-bottom: 5px; letter-spacing: .02em;
-}
 .trend-select-wrap { position: relative; }
 /*
  * 原生 select 收起箭头自己画：各浏览器的默认箭头样式差得太远，

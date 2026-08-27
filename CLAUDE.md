@@ -167,6 +167,9 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
 - `addEntry` 的字段叫 `sugarLevel` 不是 `sugar`：后者是展开的 nutrients 里糖的克数，会互相覆盖。
 - 建 DOM 用 `utils.js` 的 `h()` / `mount()`，别用原生 `append()` —— 原生不展开数组
   （得到 `[object HTMLButtonElement]`），也不忽略 `null`/`false`（渲染出字面量 "null"）。
+- **CSS 自定义属性只能用 `setProperty` 写**（`h()` 里的 `applyStyle` 已经代劳）。
+  `Object.assign(el.style, { '--foo': '4' })` 不报错也不生效，排版看着「没变」而已 ——
+  健康数据的列数就是这么静默失灵的，`scripts/smoke.mjs` 里那条格子排布检查专门拦它。
 - `lineChart` 的纵轴刻度逻辑在 `test/charts-axis.test.js` 里抄了一份（charts.js 依赖 DOM）。改一处要改两处。
   调用方传的 `decimals` 只是**下限**：量程比它还细时（一周体重只差 0.08kg）
   四条刻度会印成「62.0 / 62.0 / 61.9 / 61.9」，所以撞车了会自动往上加位。

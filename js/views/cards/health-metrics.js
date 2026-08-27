@@ -42,6 +42,20 @@ const ICONS = {
   waterMl: 'M12 3.5c3.4 3.3 5.5 5.9 5.5 8.7a5.5 5.5 0 0 1-11 0c0-2.8 2.1-5.4 5.5-8.7Z',
 };
 
+/*
+ * 列数按项数挑，别让末行只剩一个。
+ *
+ * 显示几项完全看当天同步上来了什么，从 1 项到 8 项都可能。
+ * 固定三列的话 7 项就排成 3+3+1，最后那个吊在中间，怎么摆都是歪的。
+ * 先找能整除的（8 → 4+4，6 → 3+3），实在整除不了就挑一个末行至少剩两个的。
+ */
+export function metricColumns(n) {
+  if (n <= 4) return Math.max(n, 1);
+  for (const c of [4, 3]) if (n % c === 0) return c;
+  for (const c of [3, 4]) if (n % c !== 1) return c;
+  return 3;
+}
+
 /** 同步入口收在设置抽屉的「数据管理」里，这里直接把抽屉打开 */
 function dataCenterBtn() {
   return h('button.secondary-btn.full', {
@@ -75,12 +89,13 @@ export function healthMetricsCard() {
   ].filter(([, , v]) => v != null);
   const sourceLabel = health.source === 'manual'
     ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
+  const cols = metricColumns(cells.length);
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '健康数据'),
       h('span.card-tag', null, has ? sourceLabel : '未同步')),
     cells.length
-      ? h('div.metric-grid', null, cells.map(([key, label, value, unit]) => h('div.metric-cell', null,
+      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } }, cells.map(([key, label, value, unit]) => h('div.metric-cell', null,
         svg(ICONS[key] || ICONS.steps),
         h('div.metric-body', null,
           h('div.metric-value', null, value, unit && h('span.metric-unit', null, unit)),

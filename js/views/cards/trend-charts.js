@@ -95,8 +95,11 @@ function picker({ label, value, options, onPick }) {
    * select 会默默落到第一项——下拉显示「热量摄入」而图画的是体重。
    */
   select.value = String(value);
+  /*
+   * 「看什么」「时间段」这两行字不写在界面上：下拉里第一项就写着「热量摄入」
+   * 和「7 天」，标签只是把同一件事再说一遍。aria-label 保留，读屏仍念得出来。
+   */
   return h('div.trend-picker-field', null,
-    h('span.trend-picker-label', null, label),
     h('div.trend-select-wrap', null, select, h('span.trend-select-caret', { 'aria-hidden': 'true' }, '⌄')));
 }
 

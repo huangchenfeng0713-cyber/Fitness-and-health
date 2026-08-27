@@ -5,7 +5,7 @@
  * 这些天在往哪走去数据页。
  *
  * 主卡本身就是一张完整的每日目标表：热量、三大营养素、纤维、钠、糖、饮水
- * 八项全在，而且每项都带着「已吃 / 目标」。所以数据页那张只列目标的表撤了——
+ * 八项全在，而且每项都带着「已摄入 / 目标摄入」。所以数据页那张只列目标的表撤了——
  * 同一批数字，这里的版本还多告诉你离目标还差多少。
  */
 
@@ -73,8 +73,8 @@ function heroCard(advice, targets, derived) {
         }))),
 
     h('div.hero-foot', null,
-      h('span', null, `已吃 ${num(gaps.kcal.eaten)}`),
-      h('span', null, `目标 ${num(targets.kcal)}`),
+      h('span', null, `已摄入 ${num(gaps.kcal.eaten)}`),
+      h('span', null, `目标摄入 ${num(targets.kcal)}`),
       h('span', null, derived.dynamic
         ? `预计总消耗 ${num(targets.tdee)}`
         : `基础代谢 ${num(targets.bmr)}`),
