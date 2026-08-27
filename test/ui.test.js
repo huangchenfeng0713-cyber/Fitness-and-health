@@ -193,6 +193,21 @@ test('漏记的那天不能被当成 0 画进折线', () => {
   assert.match(charts, /if \(hasValue\(point\)\)/, '分段逻辑也要用同一个判断');
 });
 
+test('图表 key 认不出来时退回第一张，不让整张卡消失', () => {
+  /*
+   * activeChart 是模块级状态，活得比一次渲染长。删掉某个图、改了 key，
+   * 或者别处误写一个值进来，SPEC[activeChart] 就是 undefined ——
+   * 直接调用会抛在渲染中途，结果是数据页少了一整张卡，控制台里什么都没有。
+   * 排查时实测过：把 activeChart 设成一个不存在的值，趋势卡整个不见了。
+   */
+  const charts = read('js/views/cards/trend-charts.js');
+  assert.match(charts, /if \(typeof SPEC\[activeChart\] !== 'function'\) activeChart = CHARTS\[0\]\.key;/,
+    '没有兜底：认不出来的 key 会让整张卡渲染失败');
+  // 兜底必须在取 spec 之前
+  assert.ok(charts.indexOf("typeof SPEC[activeChart] !== 'function'") < charts.indexOf('const spec = SPEC[activeChart]()'),
+    '兜底写在了取 spec 之后，等于没有');
+});
+
 test('趋势卡标题固定，不跟着下拉变', () => {
   // 同一张卡的名字每切一次就换一个，找不到锚点；下拉第一项本来就写着看的是什么
   const charts = read('js/views/cards/trend-charts.js');

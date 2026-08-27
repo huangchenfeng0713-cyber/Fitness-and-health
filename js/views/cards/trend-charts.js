@@ -377,6 +377,14 @@ export function trendCharts(rerender) {
     const firstReady = CHARTS.find((c) => availability[c.key]);
     if (firstReady) activeChart = firstReady.key;
   }
+  /*
+   * activeChart 认不出来时退回第一张，别让整张卡凭空消失。
+   *
+   * 它是模块级状态，活得比一次渲染长：删掉某个图、改了 key、或者别处误写一个值
+   * 进来，SPEC[activeChart] 就是 undefined —— 直接调用会抛在渲染中途，
+   * 结果是数据页少了一整张卡，控制台里什么都没有，最难查的那种。
+   */
+  if (typeof SPEC[activeChart] !== 'function') activeChart = CHARTS[0].key;
   const spec = SPEC[activeChart]();
   const todayNote = state.day === todayKey() ? '当天数据要等这一天过完才会出现。' : '';
 
