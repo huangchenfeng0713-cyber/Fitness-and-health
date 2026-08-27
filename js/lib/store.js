@@ -169,15 +169,22 @@ export function recompute(now = new Date()) {
   const health = state.healthByDate.get(state.day) || {};
   const isToday = state.day === todayKey(now);
 
-  // 体重优先用 Apple 健康当天（或最近一次）的记录
+  /*
+   * 身高、体重、体脂只认 Apple 健康，而且是「所选日期之前最近一次」——
+   * 称重不是每天都有，取不到当天的就一直沿用上一次读到的，直到出现新记录。
+   *
+   * 原先身高那条写的是 `hcm > 0 && !p.heightCm`：手填过一次之后设备记录就再也
+   * 进不来了，换算 BMI 和静息能量用的还是几年前那个数。现在设备记录一律优先。
+   *
+   * 档案里存的那份手填值没有删，它只在设备从来没给过这一项时才顶上——
+   * 新用户第一次打开、或者把健康数据清空重来时，至少还算得出目标。
+   */
   const effectiveProfile = { ...p };
-  if (p.syncWeightFromApple) {
-    const w = latestHealthValue('weightKg', state.day);
-    if (w > 0) effectiveProfile.weightKg = w;
-    const bf = latestHealthValue('bodyFatPct', state.day);
-    if (bf > 0) effectiveProfile.bodyFatPct = bf;
-    const hcm = latestHealthValue('heightCm', state.day);
-    if (hcm > 0 && !p.heightCm) effectiveProfile.heightCm = hcm;
+  const bodySource = {};
+  for (const key of ['weightKg', 'bodyFatPct', 'heightCm']) {
+    const hit = latestHealthEntry(key, state.day);
+    bodySource[key] = hit;
+    if (hit) effectiveProfile[key] = hit.value;
   }
 
   /*
@@ -244,7 +251,7 @@ export function recompute(now = new Date()) {
 
   state.derived = {
     effectiveProfile, health, baseline, dynamic, targets, intake, advice, isToday, bmr,
-    staticTdee: stat.tdee, energyData, profileError,
+    staticTdee: stat.tdee, energyData, profileError, bodySource,
     demoMode: p.demoMode === true || p.onboarded !== true || profileError != null,
   };
   return state.derived;
@@ -285,14 +292,18 @@ export function resolveEnergyObservation(health, lastImport, day, now = new Date
 }
 
 /** 取指定日期当天或之前最近一次的健康指标 */
-export function latestHealthValue(key, upToDate = state.day) {
+export function latestHealthEntry(key, upToDate = state.day) {
   for (let i = state.healthDays.length - 1; i >= 0; i -= 1) {
     const d = state.healthDays[i];
     if (d.date > upToDate) continue;
     const v = Number(d[key]);
-    if (Number.isFinite(v) && v > 0) return v;
+    if (Number.isFinite(v) && v > 0) return { value: v, date: d.date };
   }
   return null;
+}
+
+export function latestHealthValue(key, upToDate = state.day) {
+  return latestHealthEntry(key, upToDate)?.value ?? null;
 }
 
 function countProteinHitDays(target, windowDays = 7) {

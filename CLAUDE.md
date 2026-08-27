@@ -70,7 +70,8 @@ node scripts/smoke.mjs http://127.0.0.1:8080
 
 顺序有依赖，改动时别打乱：
 
-1. `effectiveProfile` = 用户填的 profile，叠加 Apple 健康的体重 / 体脂 / 身高（`syncWeightFromApple`）
+1. `effectiveProfile` = 用户填的 profile，被 Apple 健康的体重 / 体脂 / 身高覆盖
+   （`latestHealthEntry`，取所选日期之前最近一次；来源和日期一并放进 `derived.bodySource`）
 2. `computeBaseline(healthDays, dietDaily, day)` → 近 14 天基线
 3. `basalMetabolicRate` → `staticTDEE`
 4. `dynamicTDEE` —— 仅当 `useAppleEnergy` 且当天有 `activeEnergy`/`restingEnergy` 时才算
@@ -190,6 +191,11 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
   直接返回，「修复缓存并重新打开」那个按钮就永远不出现了。
 - 份量、克重这类会直接显示的数，取 min/max 时要留意另一侧是不是浮点——
   推荐里出现过 `海鲜粥 384.00000000000006g`，来源是「剩余热量 ÷ 每 100g 热量」。
+- **身高、体重、体脂只有 Apple 健康一个来源**，档案里那份手填值只在设备从来没给过
+  这一项时才顶上（新用户、清空重来）。界面上对应地把这三个字段变成只读，
+  因为「摆着能改的输入框、算的时候却用设备记录」比锁死更让人困惑。
+  取值用 `latestHealthEntry`：称重不是每天都有，当天没有就沿用最近一次，
+  并把那天的日期显示出来——别让前几天的数看起来像今天刚称的。
 
 ## 约定
 

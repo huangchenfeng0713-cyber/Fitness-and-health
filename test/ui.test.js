@@ -107,6 +107,33 @@ test('同一批数字不在两页各写一遍', () => {
   }
 });
 
+test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
+  /*
+   * 界面上摆着一个能编辑的输入框、算目标时用的却是设备记录，改了没反应——
+   * 比锁死更让人困惑。所以设备给过值就直接显示那个值，并写清是哪天读到的。
+   * 设备从来没给过时输入框照常可用，否则新用户连身高都填不进去。
+   */
+  const profile = read('js/views/cards/profile.js');
+  assert.match(profile, /const bodySource = state\.derived\?\.bodySource/, '锁定状态应来自 store 算好的来源');
+  assert.match(profile, /if \(!hit\) return null;/, '没有设备记录时要退回可编辑的输入框');
+  for (const key of ['heightCm', 'weightKg']) {
+    assert.ok(new RegExp(`lockedField\\([^)]*'${key}'`).test(profile), `${key} 没有走只读字段`);
+    assert.ok(new RegExp(`\\|\\| field\\([^)]*numInput\\('${key}'`).test(profile),
+      `${key} 缺少「设备没给过就自己填」的退路`);
+  }
+  assert.match(profile, /来自 Apple 健康/, '只读字段要写明来源');
+
+  // 只剩一个来源之后，那个「体重体脂跟随 Apple 健康」的开关就没有意义了
+  const settings = page('settings');
+  assert.ok(!settings.includes('syncWeightFromApple'), '身体数据只有一个来源，不该再留开关');
+
+  // 健康数据卡上的体重同样沿用最近一次，并把日期标在名字后面
+  const metrics = read('js/views/cards/health-metrics.js');
+  assert.match(metrics, /latestHealthEntry/, '体重应取最近一次记录而不是当天那条');
+  assert.match(metrics, /`体重 \$\{weight\.date\}`/, '沿用前几天的值要标出日期');
+  assert.ok(!/'饮水'/.test(metrics), '饮水已从健康数据卡撤掉');
+});
+
 test('动作列表默认只出前几个，但已选的绝不会被藏起来', () => {
   // 一个部位三十来个动作是整整一屏半；而列表里那一行的 ✓ 就是取消选择的入口，
   // 收起时把它藏掉，等于选了就撤不掉。

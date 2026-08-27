@@ -31,8 +31,6 @@ function toggleCard() {
         h('p', null, '这些选项只影响之后显示的目标，不会改动饮食记录。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
-    toggle('syncWeightFromApple', '体重体脂跟随 Apple 健康',
-      '按正在查看的日期，采用此前最近一次健康记录；体重变化后目标会随之更新。'),
   );
 }
 

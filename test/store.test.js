@@ -91,3 +91,56 @@ test('身体信息改回可用之后立刻恢复个性化', () => {
   assert.equal(fixed.demoMode, false);
   assert.ok(fixed.targets.kcal > 0);
 });
+
+
+/* ------------------- 身高体重只认 Apple 健康，且一直沿用最近一次 ------------------- */
+
+const withHealthDays = (days, patch = {}) => {
+  state.healthDays = days;
+  state.healthByDate = new Map(days.map((d) => [d.date, d]));
+  const derived = runWith(patch);
+  state.healthDays = [];
+  state.healthByDate = new Map();
+  return derived;
+};
+
+test('设备记录一律盖过手填的身高体重', () => {
+  /*
+   * 身高那条原先写的是「手填过就不再采用设备记录」，结果换了新表、量了新身高，
+   * 应用里用的还是几年前手填的那个数，BMI 和静息能量跟着一起错。
+   */
+  const d = withHealthDays(
+    [{ date: '2026-08-27', weightKg: 65.2, heightCm: 181, bodyFatPct: 16.4 }],
+    { heightCm: 175, weightKg: 72, bodyFatPct: 25 },
+  );
+  assert.equal(d.effectiveProfile.heightCm, 181, '手填身高不该压住设备记录');
+  assert.equal(d.effectiveProfile.weightKg, 65.2);
+  assert.equal(d.effectiveProfile.bodyFatPct, 16.4);
+});
+
+test('没有新记录就一直沿用上一次读到的值，并记下是哪天读的', () => {
+  // 称重不是每天都有：8-27 当天没称，仍应采用 8-24 那次，而不是退回手填值
+  const d = withHealthDays([
+    { date: '2026-08-24', weightKg: 62.4 },
+    { date: '2026-08-25', steps: 8000 },
+    { date: '2026-08-26', steps: 9000 },
+    { date: '2026-08-27', steps: 3541 },
+  ], { weightKg: 72 });
+  assert.equal(d.effectiveProfile.weightKg, 62.4, '当天没称重就该沿用最近一次');
+  assert.equal(d.bodySource.weightKg.date, '2026-08-24', '界面要能说清这个数是哪天读到的');
+});
+
+test('设备从来没给过时才用手填值，否则新用户连目标都算不出来', () => {
+  const d = withHealthDays([{ date: '2026-08-27', steps: 3541 }], { heightCm: 175, weightKg: 72 });
+  assert.equal(d.effectiveProfile.heightCm, 175);
+  assert.equal(d.effectiveProfile.weightKg, 72);
+  assert.equal(d.bodySource.weightKg, null, '没有来源时不该编一个出来');
+  assert.equal(d.profileError, null, '手填值仍要能算出目标');
+});
+
+test('只看得到未来那天的记录时不往回借', () => {
+  // 8-27 之后才称的重，不能用来解释 8-27 当天的目标
+  const d = withHealthDays([{ date: '2026-08-28', weightKg: 61 }], { weightKg: 72 });
+  assert.equal(d.effectiveProfile.weightKg, 72);
+  assert.equal(d.bodySource.weightKg, null);
+});
