@@ -17,7 +17,7 @@ const validationHelpersSource = edge.slice(
   edge.indexOf('async function sha256Hex'),
 );
 const validationHelpers = new Function(`${stripTypeScriptTypes(validationHelpersSource)}
-  return { resolveCapturedTimestamp, missingMeasurementTimeField };
+  return { resolveCapturedTimestamp, measurementTimeIssue };
 `)();
 
 test('健康同步表强制 RLS，浏览器不能读取令牌哈希或越权写健康表', () => {
@@ -109,20 +109,24 @@ test('四项快照指标分别要求对应测量时间，同时保留别名和�
     restingHR: 'restingHRMeasuredAt',
     vo2max: 'vo2maxMeasuredAt',
   };
-  for (const [metric, measuredAt] of Object.entries(requirements)) {
-    assert.equal(
-      validationHelpers.missingMeasurementTimeField({ [metric]: 1 }, {}),
-      measuredAt,
-    );
-    assert.equal(
-      validationHelpers.missingMeasurementTimeField(
-        { [metric]: 1 },
-        { [measuredAt]: '2026-08-25T23:55:00-04:00' },
-      ),
-      null,
-    );
+  const { measurementTimeIssue } = validationHelpers;
+  const latest = '2099-12-31';
+  for (const measuredAt of Object.values(requirements)) {
+    // 字段名必须在映射表里，否则这一项根本不会被要求测量时间
+    assert.ok(Object.values(requirements).includes(measuredAt));
   }
-  assert.match(edge, /code:\s*"missing_measurement_time"/);
+  assert.equal(measurementTimeIssue(null, 'Asia/Shanghai', latest), 'missing_measurement_time');
+  assert.equal(measurementTimeIssue('   ', 'Asia/Shanghai', latest), 'missing_measurement_time');
+  assert.equal(measurementTimeIssue('2026-08-25', 'Asia/Shanghai', latest), 'invalid_measurement_time');
+  assert.equal(
+    measurementTimeIssue(new Date(Date.now() + 3600e3).toISOString(), 'Asia/Shanghai', latest),
+    'future_measurement_time',
+  );
+  assert.equal(
+    measurementTimeIssue('2026-08-25T23:55:00-04:00', 'Asia/Shanghai', latest),
+    null,
+  );
+  assert.match(edge, /return "missing_measurement_time";/);
   assert.match(edge, /weightmeasuredat:\s*"weightMeasuredAt"/);
   assert.match(edge, /bodyfatmeasuredat:\s*"bodyFatMeasuredAt"/);
   assert.match(edge, /restinghrmeasuredat:\s*"restingHRMeasuredAt"/);
@@ -171,7 +175,7 @@ const metricLoop = (() => {
   const ranges = edge.slice(edge.indexOf('const numericRanges'), edge.indexOf('const aliases'));
   const loop = edge.slice(
     edge.indexOf('  const payload: Record<string, unknown> = {};'),
-    edge.indexOf('  const missingMeasurementTime ='),
+    edge.indexOf('  const measurementIssues:'),
   );
   // 先包成函数再脱类型：stripTypeScriptTypes 不接受顶层 return
   const src = `function run(body) {
@@ -231,4 +235,25 @@ test('一个合法指标都不剩时才失败，并说明是哪一项', () => {
   assert.equal(allEmpty.status, 400);
   assert.equal(allEmpty.payload.code, 'no_metrics');
   assert.deepEqual(allEmpty.payload.skipped.slice().sort(), ['restingHR', 'weightKg']);
+});
+
+
+test('体重缺测量时间时只摘掉体重，不再丢掉同一次的步数和能量', () => {
+  // 用户实测：静息心率那关修好之后，请求走到下一关又被整包否掉——
+  //   { "field": "weightMeasuredAt", "code": "missing_measurement_time", "ok": false }
+  // 要求 measuredAt 的目的只是「别把上周称的体重记成今天」，
+  // 摘掉体重本身就达到了目的，没有理由把步数和能量一起丢。
+  const loop = edge.slice(
+    edge.indexOf('  const measurementIssues:'),
+    edge.indexOf('  const url = Deno.env.get("SUPABASE_URL")'),
+  );
+  assert.ok(loop.includes('delete payload[metric]'), '没有摘掉缺测量时间的那一项');
+  assert.ok(loop.includes('measurementIssues.push'), '摘掉了却不报出来');
+  // 循环体内不允许再有直接 400 —— 那正是「一个字段毁掉整包」的写法
+  assert.ok(!/return response\(400/.test(loop.slice(0, loop.indexOf('if (!metricCount)'))),
+    '测量时间校验里仍有直接 400 的分支');
+  // 只有一个有效指标都不剩时才失败，并说明是哪一项
+  assert.match(loop, /if \(!metricCount\)[\s\S]*?measurementIssues\[0\]/);
+  // 响应要带上原因，否则用户看不到体重为什么没进去
+  assert.match(edge, /measurementIssues,/);
 });

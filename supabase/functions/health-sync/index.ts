@@ -136,16 +136,28 @@ function resolveCapturedTimestamp(body: Record<string, unknown>, fallback: strin
   return { ok: true as const, capturedAt, capturedProvided: providedValues.length > 0 };
 }
 
-function missingMeasurementTimeField(
-  payload: Record<string, unknown>,
-  body: Record<string, unknown>,
+/**
+ * 单次测量值（体重、体脂率、静息心率、VO2max）的测量时间是否可用。
+ * 返回错误码，或 null 表示没问题。
+ *
+ * 要求 measuredAt 的目的只有一个：别把上周称的体重记成今天的。
+ * 所以时间不可用时，正确的处理是丢掉这一项，而不是丢掉整次上传——
+ * 调用方据此把该指标从 payload 里摘掉，同一次的步数和能量照常入库。
+ */
+function measurementTimeIssue(
+  measuredAt: unknown,
+  timezone: string,
+  latestDate: string,
 ) {
-  for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
-    if (payload[metric] == null) continue;
-    const measuredAt = body[measuredKey];
-    if (measuredAt == null || (typeof measuredAt === "string" && !measuredAt.trim())) {
-      return measuredKey;
-    }
+  if (measuredAt == null || (typeof measuredAt === "string" && !measuredAt.trim())) {
+    return "missing_measurement_time";
+  }
+  if (!validTimestamp(measuredAt)) return "invalid_measurement_time";
+  const measured = new Date(String(measuredAt));
+  if (measured.getTime() > Date.now() + 10 * 60 * 1000) return "future_measurement_time";
+  const measuredDate = localDateAt(measured, timezone);
+  if (!validDateKey(measuredDate) || measuredDate < "2000-01-01" || measuredDate > latestDate) {
+    return "invalid_measurement_time";
   }
   return null;
 }
@@ -317,29 +329,28 @@ Deno.serve(async (req) => {
       : { ok: false, code: "no_metrics", skipped });
   }
 
-  const missingMeasurementTime = missingMeasurementTimeField(payload, body);
-  if (missingMeasurementTime) {
-    return response(400, {
-      ok: false,
-      code: "missing_measurement_time",
-      field: missingMeasurementTime,
-    });
-  }
-
+  /*
+   * 测量时间不可用时摘掉那一项，不再中断整次上传——和上面数值校验同一个道理。
+   * 原先这里三处都是直接 400：白天同步只要体重少个 weightMeasuredAt，
+   * 步数和能量就一起丢了。摘掉体重本身已经达到「别把旧体重记成今天」的目的。
+   */
+  const measurementIssues: Array<{ field: string; code: string }> = [];
   for (const [metric, measuredKey] of Object.entries(snapshotMetricTimes)) {
     if (payload[metric] == null) continue;
-    if (!validTimestamp(body[measuredKey])) {
-      return response(400, { ok: false, code: "invalid_measurement_time", field: measuredKey });
-    }
-    const measured = new Date(String(body[measuredKey]));
-    if (measured.getTime() > Date.now() + 10 * 60 * 1000) {
-      return response(400, { ok: false, code: "future_measurement_time", field: measuredKey });
-    }
-    const measuredDate = localDateAt(measured, timezone);
-    if (!validDateKey(measuredDate) || measuredDate < "2000-01-01" || measuredDate > latestDate) {
-      return response(400, { ok: false, code: "invalid_measurement_time", field: measuredKey });
+    const issue = measurementTimeIssue(body[measuredKey], timezone, latestDate);
+    if (issue) {
+      delete payload[metric];
+      metricCount -= 1;
+      rejected.push(metric);
+      measurementIssues.push({ field: measuredKey, code: issue });
+      continue;
     }
     payload[measuredKey] = body[measuredKey];
+  }
+  if (!metricCount) {
+    return response(400, measurementIssues.length
+      ? { ok: false, ...measurementIssues[0], rejected, measurementIssues }
+      : { ok: false, code: "no_metrics", skipped });
   }
 
   const url = Deno.env.get("SUPABASE_URL");
@@ -423,6 +434,8 @@ Deno.serve(async (req) => {
     stored: Object.keys(payload).filter((key) => key in numericRanges),
     skipped,
     rejected,
+    // 体重这类被摘掉时，说清是缺测量时间还是时间本身不合法
+    measurementIssues,
     measurements: accepted.filter((item) => item.kind !== "daily")
       .map((item) => ({ metric: item.kind, date: item.date, applied: item.applied })),
   });

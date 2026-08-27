@@ -193,11 +193,12 @@ iOS 可能因省电模式、关机、权限或系统调度稍晚执行，并不�
 | `no_metrics` | 字典里没有任何有效健康数值；先只保留步数、活动能量、静息能量测试。 |
 | `invalid_metric` | 只有在**一个有效指标都不剩**时才会返回。查看 `field` 与 `rejected`；检查单位和范围，体脂应传 `18.5`，不是 `0.185`。 |
 | 返回里出现 `skipped: ["restingHR"]` | 不是错误。当天还没有静息心率样本，快捷指令产出 `0`，服务端按「今天没有样本」跳过。同一次的步数和能量照常入库。 |
+| 返回里出现 `measurementIssues: [{"field":"weightMeasuredAt","code":"missing_measurement_time"}]` | 也不是错误。体重被单独摘掉了，其余字段照常入库。要让体重进去，就在字典里补上 `weightMeasuredAt`（取体重样本的开始日期）；不想同步体重就把 `weightKg` 从字典里删掉。 |
 | `invalid_timestamp` | 已传入的 `timestamp` / `capturedAt` 不是有效的完整时间。重新把“当前日期”格式化为 `yyyy-MM-dd'T'HH:mm:ssXXX`，不要只填日期。 |
 | `timestamp_conflict` | 同时传了多个采集时间，但它们不是同一时刻；只保留一个 `timestamp`，或确保值完全一致。 |
 | `date_timezone_mismatch` | `date`、`timestamp` 和 `timezone` 对应的本地日期不一致；重新按第一节生成日期。 |
 | `future_timestamp` | iPhone 系统时间快了，或格式化日期时选错变量。打开“自动设置日期与时间”。 |
-| `missing_measurement_time` | 上传了体重、体脂、静息心率或最大摄氧量，但缺少对应的 `...MeasuredAt`；读取原健康样本的开始日期后再上传。 |
+| `missing_measurement_time` | 只有在**一个有效指标都不剩**时才作为错误返回；否则只是把那一项摘掉并记进 `measurementIssues`。要让它入库，读取原健康样本的开始日期填进对应的 `...MeasuredAt`。 |
 | `rate_limited` | 一小时请求过多；稍后再运行，并减少自动化频率。 |
 | 返回成功但网页没变化 | 先确认登录的是同一账号，再点“立即读取账号最新数据”，并查看连接设备的“最近上传”。 |
 | 体重每天重复或变成 0 | 没有样本时省略体重；有样本时同时发送 `weightMeasuredAt`。 |
