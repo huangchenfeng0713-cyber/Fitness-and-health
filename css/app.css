@@ -447,6 +447,11 @@ html, body { height: 100%; overflow: hidden; }
 .insight.down, .insight.fiber { border-left-color: var(--carb); }
 .insight-title { font-size: 13.5px; font-weight: 600; }
 .insight-text { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 2px; }
+/* 建议里可以直接点的动作：点一下就进今日计划 */
+.tip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tip-action { font-size: 12px; display: inline-flex; align-items: baseline; gap: 5px; }
+.tip-action-note { font-size: 10.5px; color: var(--faint); }
+.chip-btn.active .tip-action-note { color: color-mix(in srgb, #fff 75%, transparent); }
 
 /* ============ 今日记录摘要 ============ */
 .entry-summary { display: flex; flex-direction: column; gap: 10px; }
@@ -853,6 +858,28 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .sync-device-row strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
 .sync-device-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
 .sync-device-empty { padding: 10px 0 0; }
+
+/* 快捷指令到底传上来了什么：缺字段不报错，只能靠这里核对 */
+.sync-fields { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sync-fields-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sync-fields-head span { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.sync-field-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sync-field {
+  font-size: 11.5px; padding: 3px 8px; border-radius: 999px;
+  background: var(--card-2); color: var(--faint); border: 1px solid var(--border);
+}
+.sync-field.got {
+  color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.sync-field-fix {
+  margin-top: 10px; padding: 9px 11px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  border-left: 3px solid var(--warn); font-size: 12px; line-height: 1.6;
+}
+.sync-field-fix ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+.sync-field-fix p { margin: 6px 0 0; color: var(--faint); font-size: 11.5px; }
+.sync-fields-ok { margin-top: 8px; font-size: 12px; color: var(--muted); }
 .auto-sync-status {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 10px;
   margin-top: 10px; color: var(--faint); font-size: 10.5px; line-height: 1.45;

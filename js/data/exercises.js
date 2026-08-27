@@ -35,6 +35,7 @@ export const PATTERNS = {
   adduction: '内收', abduction: '外展', calf_raise: '提踵',
   trunk_flexion: '躯干屈曲', anti_extension: '抗伸展',
   anti_rotation: '抗旋转', anti_lateral: '抗侧屈', rotation: '躯干旋转',
+  lateral_flexion: '躯干侧屈',
 };
 
 /** 五大部位。臂并进肩，和用户的分法一致 */
@@ -69,6 +70,11 @@ export const EXERCISES = [
   X('db_fly', '哑铃飞鸟', 'yaling feiniao dumbbell fly', 'chest', 'chest_fly', ['pec_mid'], ['delt_front'], 'dumbbell', false),
   X('pec_deck', '蝴蝶机夹胸', 'hudieji jiaxiong pec deck', 'chest', 'chest_fly', ['pec_mid'], ['delt_front'], 'machine', false),
   X('cable_fly_low', '绳索下斜夹胸（上举）', 'shengsuo shangju jiaxiong', 'chest', 'chest_fly', ['pec_upper'], ['delt_front'], 'cable', false),
+  X('incline_press_machine', '上斜推胸器械', 'shangxie tuixiong incline chest press machine', 'chest', 'incline_push', ['pec_upper'], ['delt_front', 'triceps'], 'machine'),
+  X('decline_press_machine', '下斜推胸器械', 'xiaxie tuixiong decline chest press machine', 'chest', 'horizontal_push', ['pec_lower'], ['triceps'], 'machine'),
+  X('smith_incline_press', '史密斯上斜推举', 'shimisi shangxie tuiju smith incline press', 'chest', 'incline_push', ['pec_upper'], ['delt_front', 'triceps'], 'machine'),
+  X('assisted_dip_machine', '助力双杠臂屈伸器械', 'zhuli shuanggang biqushen assisted dip machine', 'chest', 'dip', ['pec_lower'], ['triceps', 'delt_front'], 'machine'),
+  X('cable_crossover_high', '高位绳索交叉夹胸', 'gaowei shengsuo jiaocha jiaxiong cable crossover', 'chest', 'chest_fly', ['pec_lower'], ['pec_mid'], 'cable', false),
 
   // ---------------- 肩（臂） ----------------
   X('ohp_bb', '杠铃站姿推举', 'gangling zhanzi tuiju overhead press', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps', 'deep_core'], 'barbell'),
@@ -94,6 +100,17 @@ export const EXERCISES = [
   X('incline_curl', '上斜哑铃弯举', 'shangxie yaling wanju incline curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
   X('shrug_db', '哑铃耸肩', 'yaling songjian shrug', 'shoulder', 'shrug', ['trap_upper'], [], 'dumbbell', false),
   X('wrist_curl', '腕弯举', 'wan wanju wrist curl', 'shoulder', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
+  X('smith_ohp', '史密斯推肩', 'shimisi tuijian smith shoulder press', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps'], 'machine'),
+  X('shrug_machine', '器械耸肩', 'qixie songjian shrug machine', 'shoulder', 'shrug', ['trap_upper'], [], 'machine', false),
+  X('shrug_bb', '杠铃耸肩', 'gangling songjian barbell shrug', 'shoulder', 'shrug', ['trap_upper'], ['forearm'], 'barbell', false),
+  X('triceps_extension_machine', '坐姿臂屈伸器械', 'zuozi biqushen triceps extension machine', 'shoulder', 'elbow_extension', ['triceps'], [], 'machine', false),
+  X('curl_machine', '坐姿弯举器械', 'zuozi wanju biceps curl machine', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
+  X('preacher_curl_machine', '器械牧师凳弯举', 'qixie mushideng wanju preacher curl machine', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
+  X('cable_curl', '绳索弯举', 'shengsuo wanju cable curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'cable', false),
+  X('overhead_triceps_cable', '绳索过顶臂屈伸', 'shengsuo guoding biqushen overhead cable extension', 'shoulder', 'elbow_extension', ['triceps'], [], 'cable', false),
+  X('upright_row_cable', '绳索直立划船', 'shengsuo zhili huachuan upright row', 'shoulder', 'lateral_raise', ['delt_side'], ['trap_upper', 'biceps'], 'cable', false),
+  X('reverse_curl', '反握弯举', 'fanwo wanju reverse curl', 'shoulder', 'elbow_flexion', ['forearm'], ['biceps'], 'barbell', false),
+  X('wrist_curl_reverse', '反向腕弯举', 'fanxiang wan wanju reverse wrist curl', 'shoulder', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
 
   // ---------------- 背 ----------------
   X('pullup', '引体向上', 'yintixiangshang pullup', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid', 'forearm'], 'bodyweight'),
@@ -111,6 +128,14 @@ export const EXERCISES = [
   X('deadlift', '硬拉', 'yingla deadlift', 'back', 'hinge', ['erector', 'glute'], ['ham', 'lat', 'trap_mid', 'forearm'], 'barbell'),
   X('rack_pull', '架上拉', 'jiashang la rack pull', 'back', 'hinge', ['erector', 'trap_mid'], ['glute', 'lat'], 'barbell'),
   X('back_extension', '山羊挺身', 'shanyang tingshen back extension', 'back', 'hinge', ['erector'], ['glute', 'ham'], 'bodyweight', false),
+  X('row_machine_seated', '坐姿划船器械', 'zuozi huachuan seated row machine', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'machine'),
+  X('iso_lateral_row', '单侧划船器械', 'danze huachuan iso lateral row machine', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'machine'),
+  X('high_row_machine', '高位划船器械', 'gaowei huachuan high row machine', 'back', 'horizontal_pull', ['lat'], ['trap_mid', 'biceps'], 'machine'),
+  X('smith_row', '史密斯划船', 'shimisi huachuan smith row', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'machine'),
+  X('assisted_pullup_machine', '助力引体向上器械', 'zhuli yinti assisted pullup machine', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid'], 'machine'),
+  X('pulldown_machine', '器械高位下拉', 'qixie gaowei xiala pulldown machine', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid'], 'machine'),
+  X('pullover_machine', '器械上拉', 'qixie shangla pullover machine', 'back', 'pullover', ['lat'], ['triceps'], 'machine', false),
+  X('back_extension_machine', '器械背伸展', 'qixie beishenzhan back extension machine', 'back', 'hinge', ['erector'], ['glute'], 'machine', false),
 
   // ---------------- 腿 ----------------
   X('squat_bb', '杠铃深蹲', 'gangling shendun back squat', 'leg', 'squat', ['quad', 'glute'], ['ham', 'erector', 'adductor'], 'barbell'),
@@ -134,6 +159,20 @@ export const EXERCISES = [
   X('hip_adduction', '坐姿髋内收', 'zuozi kuanneishou hip adduction', 'leg', 'adduction', ['adductor'], [], 'machine', false),
   X('calf_raise_standing', '站姿提踵', 'zhanzi tizhong standing calf raise', 'leg', 'calf_raise', ['calf'], [], 'machine', false),
   X('calf_raise_seated', '坐姿提踵', 'zuozi tizhong seated calf raise', 'leg', 'calf_raise', ['calf'], [], 'machine', false),
+  X('smith_squat', '史密斯深蹲', 'shimisi shendun smith squat', 'leg', 'squat', ['quad', 'glute'], ['ham', 'adductor'], 'machine'),
+  X('pendulum_squat', '钟摆深蹲机', 'zhongbai shendun pendulum squat', 'leg', 'squat', ['quad'], ['glute'], 'machine'),
+  X('belt_squat', '腰带深蹲机', 'yaodai shendun belt squat', 'leg', 'squat', ['quad', 'glute'], ['ham'], 'machine'),
+  X('single_leg_press', '单腿腿举', 'dantui tuiju single leg press', 'leg', 'squat', ['quad', 'glute'], ['ham', 'abductor'], 'machine'),
+  X('smith_split_squat', '史密斯分腿蹲', 'shimisi fentuidun smith split squat', 'leg', 'lunge', ['quad', 'glute'], ['ham'], 'machine'),
+  X('reverse_hack_squat', '反向哈克深蹲', 'fanxiang hake shendun reverse hack squat', 'leg', 'hinge', ['glute', 'ham'], ['erector'], 'machine'),
+  X('hip_thrust_machine', '器械臀推', 'qixie tuntui hip thrust machine', 'leg', 'hip_thrust', ['glute'], ['ham', 'quad'], 'machine'),
+  X('glute_kickback_machine', '器械后踢腿', 'qixie houtitui glute kickback machine', 'leg', 'hip_thrust', ['glute'], ['ham'], 'machine', false),
+  X('standing_leg_curl', '站姿腿弯举', 'zhanzi tuiwanju standing leg curl', 'leg', 'leg_curl', ['ham'], [], 'machine', false),
+  X('nordic_curl', '北欧腘绳弯举', 'beiou guosheng wanju nordic curl', 'leg', 'leg_curl', ['ham'], ['glute'], 'bodyweight', false),
+  X('calf_raise_leg_press', '腿举机提踵', 'tuijuji tizhong leg press calf raise', 'leg', 'calf_raise', ['calf'], [], 'machine', false),
+  X('donkey_calf_raise', '驴式提踵', 'lvshi tizhong donkey calf raise', 'leg', 'calf_raise', ['calf'], [], 'machine', false),
+  X('cable_hip_abduction', '绳索站姿髋外展', 'shengsuo zhanzi kuanwaizhan cable hip abduction', 'leg', 'abduction', ['abductor'], ['glute'], 'cable', false),
+  X('copenhagen_plank', '哥本哈根侧板', 'gebenhagen ceban copenhagen plank', 'leg', 'adduction', ['adductor'], ['deep_core', 'oblique'], 'bodyweight', false),
 
   // ---------------- 腹 ----------------
   X('plank', '平板支撑', 'pingban zhicheng plank', 'core', 'anti_extension', ['deep_core'], ['abs'], 'bodyweight', false),
@@ -148,6 +187,12 @@ export const EXERCISES = [
   X('pallof_press', '帕洛夫推', 'paluofu tui pallof press', 'core', 'anti_rotation', ['deep_core', 'oblique'], [], 'cable', false),
   X('russian_twist', '俄罗斯转体', 'eluosi zhuanti russian twist', 'core', 'rotation', ['oblique'], ['abs'], 'bodyweight', false),
   X('cable_woodchop', '绳索斜砍', 'shengsuo xiekan woodchop', 'core', 'rotation', ['oblique'], ['deep_core'], 'cable', false),
+  X('ab_crunch_machine', '坐姿卷腹器械', 'zuozi juanfu ab crunch machine', 'core', 'trunk_flexion', ['abs'], ['oblique'], 'machine', false),
+  X('rotary_torso_machine', '坐姿转体器械', 'zuozi zhuanti rotary torso machine', 'core', 'rotation', ['oblique'], ['deep_core'], 'machine', false),
+  X('captains_chair_raise', '罗马椅举腿', 'luomayi jutui captains chair leg raise', 'core', 'trunk_flexion', ['abs', 'hip_flexor'], ['deep_core'], 'bodyweight', false),
+  X('decline_situp', '下斜仰卧起坐', 'xiaxie yangwoqizuo decline situp', 'core', 'trunk_flexion', ['abs'], ['hip_flexor'], 'bodyweight', false),
+  X('cable_side_bend', '绳索体侧屈', 'shengsuo ticequ cable side bend', 'core', 'lateral_flexion', ['oblique'], ['deep_core'], 'cable', false),
+  X('farmer_walk', '双侧农夫行走', 'shuangce nongfu xingzou farmer walk', 'core', 'anti_extension', ['deep_core'], ['forearm', 'trap_upper'], 'dumbbell', false),
 ];
 
 export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));

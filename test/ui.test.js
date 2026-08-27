@@ -458,3 +458,10 @@ test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', (
   assert.ok(!/sb_(?:secret|service_role)_/i.test(html), '生产页面不得包含 Secret/service-role key');
   assert.ok(config.includes("/^sb_(?:secret|service_role)_/i"), '配置校验必须继续拒绝高权限密钥');
 });
+
+test('7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切掉', () => {
+  // 右边距只有 12px，居中的「08-20」有一半落在绘图区外
+  const charts = read('js/lib/charts.js');
+  assert.match(charts, /const anchor = i === 0 \? 'start' : i === labelDays\.length - 1 \? 'end' : 'middle'/);
+  assert.match(charts, /'text-anchor': anchor/);
+});

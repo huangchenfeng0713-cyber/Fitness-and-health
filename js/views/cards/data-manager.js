@@ -5,7 +5,7 @@
  * 它以前长在数据页里，现在挂在设置页——都是维护性操作，和日常看数据不是一类。
  */
 
-import { h, num, toast, confirmAction, download, infoTip } from '../../lib/utils.js';
+import { h, num, toast, confirmAction, download, infoTip, todayKey } from '../../lib/utils.js';
 import { state, saveHealthDay, saveProfile, clearAllData, db } from '../../lib/store.js';
 import { isPlausibleHealthValue } from '../../core/health.js';
 import { runImportWorker, applyImport } from '../../lib/importer.js';
@@ -255,6 +255,56 @@ function credentialField(label, value, copyLabel, message) {
     }, copyLabel));
 }
 
+/*
+ * 「今天收到了哪些字段」。
+ *
+ * 快捷指令少传一个字段时服务端是静默跳过的（空值不该让整次上传失败），
+ * 结果就是用户看到别的数都在、唯独步数没有，却无从判断是哪一环断了。
+ * 把当天实际落库的字段直接列出来，缺了哪项一眼可见。
+ */
+const SYNC_FIELDS = [
+  ['steps', '步数', '「查找健康样本 → 步数」后面要接「计算统计数据 → 总计」'],
+  ['activeEnergy', '活动能量', '同样需要「计算统计数据 → 总计」，单位按 kcal 上传'],
+  ['restingEnergy', '静息能量', '同样需要「计算统计数据 → 总计」，单位按 kcal 上传'],
+  ['exerciseMinutes', '锻炼时间', '可选，基础同步稳定后再加'],
+  ['sleepMinutes', '睡眠', '可选，多阶段容易重复计入，默认不加'],
+  ['weightKg', '体重', '可选，必须同时上传真实 measuredAt'],
+  ['restingHR', '静息心率', '可选，需要手表在睡眠时佩戴才会产生'],
+];
+
+function syncFieldPanel() {
+  const today = todayKey();
+  const row = state.healthByDate.get(today);
+  if (!row) return null;
+  const has = (key) => row[key] != null && row[key] !== '';
+  // 只对基础三项报缺失：可选字段本来就允许不传，一律标红只会制造噪音
+  const missing = SYNC_FIELDS.slice(0, 3).filter(([k]) => !has(k));
+  /*
+   * 排查步骤只对快捷指令上传的那天有意义。
+   * 完整导出或手动补录的日子缺字段是另一回事，套一段「计算统计数据要选总计」
+   * 只会把人引到错的地方。_cloudHealthSync 是云端同步留下的标记。
+   */
+  const viaShortcut = Boolean(row._cloudHealthSync);
+  return h('div.sync-fields', null,
+    h('div.sync-fields-head', null,
+      h('strong', null, '今天收到了哪些字段'),
+      h('span', null, today)),
+    h('div.sync-field-chips', null,
+      SYNC_FIELDS.map(([key, label]) => h('span', {
+        class: `sync-field${has(key) ? ' got' : ''}`,
+      }, `${has(key) ? '✓' : '—'} ${label}`))),
+    missing.length && viaShortcut
+      ? h('div.sync-field-fix', null,
+        h('strong', null, `${missing.map(([, l]) => l).join('、')}没有收到`),
+        h('ul', null, missing.map(([, , fix]) => h('li', null, fix))),
+        h('p', null, '服务端对空值是静默跳过的（否则少一项就会让整次上传失败），'
+          + '所以缺字段不会报错，只能在这里核对。'))
+      : missing.length
+        ? h('p.sync-fields-ok', null,
+          `${missing.map(([, l]) => l).join('、')}今天还没有数据；跑一次快捷指令或在下面手动补录。`)
+        : h('p.sync-fields-ok', null, '基础三项都收到了。'));
+}
+
 function automaticSyncPanel(rerender) {
   const account = getAccountState();
   if (!account.user) {
@@ -469,6 +519,7 @@ function importPanel(rerender) {
 
   return h('div.import-panel', null,
     automaticSyncPanel(rerender),
+    syncFieldPanel(),
     h('div.import-fallback-title', null,
       h('strong', null, '文件与剪贴板导入'),
       h('span', null, '首次导入历史数据，或自动上传不可用时使用')),
@@ -496,10 +547,17 @@ function importPanel(rerender) {
 function guidePanel() {
   const shortcutRecipe = [
     '先登录本应用，在“同步 Apple 健康”里生成连接信息，点击“复制基础配置”保存上传 URL、设备令牌和字段示例',
-    '在 iPhone 上点击“新建”直接打开「快捷指令」编辑器；首次只读取今天的步数、活动能量和静息能量并分别求总和',
-    '添加“字典”，放入 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal；某项没有样本时省略该键，不要填 0',
+    '在 iPhone 上点击“新建”直接打开「快捷指令」编辑器',
+    '每个指标各加一组两步动作：先「查找健康样本」（类型分别选步数 / 活动能量 / 静息能量，'
+      + '范围选“今天”），紧接着加一个「计算统计数据」并把运算改成“总计”',
+    '这一步最容易漏：「查找健康样本」返回的是一天里几十上百条样本，不接“总计”就不是一个数字，'
+      + '上传时会被当成空值跳过——步数收不到几乎都是这个原因',
+    '添加“字典”，放入 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal，'
+      + '每个值选对应那一步「计算统计数据」的结果；某项确实没有样本时省略该键，不要填 0',
     '添加“获取 URL 内容”：方法选 POST，请求体选 JSON；标头增加 X-Health-Sync-Token，值填刚才保存的设备令牌',
-    '首次手动运行并允许读取健康数据；返回 ok: true 就表示已经写入账号',
+    '首次手动运行。iOS 会逐项询问健康读取权限，步数、活动能量、静息能量都要单独允许；'
+      + '若当时点了“不允许”，之后要到 设置 → 隐私与安全性 → 健康 → 快捷指令 里补开',
+    '返回 ok: true 就表示已经写入账号；回到本应用看下面的「今天收到了哪些字段」核对一遍',
     '基础同步稳定后再添加锻炼、站立和距离；体重、体脂等必须同时上传真实 measuredAt。睡眠容易因阶段重叠重复，默认不添加',
   ];
 
