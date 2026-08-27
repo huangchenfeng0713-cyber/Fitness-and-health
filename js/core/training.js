@@ -217,6 +217,7 @@ export function planAdvice(selection = []) {
   const highs = overlaps.filter((x) => x.level === 'high');
   const deferred = new Set();
   const dupTips = [];
+  const tipped = new Set();   // 已经单独出过提示的动作，汇总里不再重复计数
   for (const o of highs) {
     if (flagged.has(o.a.id) || flagged.has(o.b.id)) {
       deferred.add(o.a.id);
@@ -226,6 +227,7 @@ export function planAdvice(selection = []) {
     flagged.add(o.b.id);
     // 一次最多列五条：真有十几个重复时，先改这几个再回来看比一次倒给用户有用
     if (dupTips.length >= MAX_DUP_TIPS) { deferred.add(o.b.id); continue; }
+    tipped.add(o.b.id);
     const alts = replacementsFor(o.b, list, 3);
     dupTips.push({
       level: 'warn',
@@ -244,7 +246,8 @@ export function planAdvice(selection = []) {
     });
   }
   tips.push(...dupTips);
-  const stillOverlapping = [...deferred].filter((id) => !dupTips.some((t) => t.key.endsWith(id)));
+  // 用 id 集合判断，不要拿 key.endsWith(id) 去猜——id 互为后缀时会误判
+  const stillOverlapping = [...deferred].filter((id) => !tipped.has(id));
   if (stillOverlapping.length) {
     tips.push({
       level: 'info',
