@@ -90,8 +90,6 @@ test('同一批数字不在两页各写一遍', () => {
 
   // 健康数据每项配一个图标：六项全是数字加两个汉字，扫一眼分不出哪个是哪个
   const metrics = read('js/views/cards/health-metrics.js');
-  assert.match(metrics, /\.filter\(\(\[, , v\]\) => v != null\)/,
-    '没有值的项应当直接不出现，而不是排一串「—」');
   for (const key of ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'weightKg', 'restingHR']) {
     assert.ok(new RegExp(`${key}:\\s*'M`).test(metrics), `指标 ${key} 没有图标`);
   }
@@ -143,6 +141,32 @@ test('历史搜索按高度折叠两行，没溢出就不出「展开」', () =>
   assert.match(diet, /toggle\.hidden = !ui\.historyOpen && chips\.scrollHeight <= chips\.clientHeight/,
     '没溢出时不该挂一个「展开」');
   assert.match(css, /\.fav-chips\.collapsed \{[^}]*max-height/, '折叠不是按高度截的');
+});
+
+test('缺数据的指标画一道杠，不是整格消失', () => {
+  /*
+   * 原先「没有值就不出现」：手表哪天没记静息心率，这一格就凭空少一个，
+   * 格子重新排布、每天长得都不一样，而且「没测到」和「这个应用不显示心率」
+   * 从界面上分不出来。
+   */
+  const metrics = read('js/views/cards/health-metrics.js');
+  assert.match(metrics, /const DASH = '—'/, '没有占位符');
+  assert.match(metrics, /value \?\? DASH/, '缺值时没有退回占位符');
+  assert.ok(!/\.filter\(\(\[, , v\]\) => v != null\)/.test(metrics), '仍在把缺值的项过滤掉');
+  // 体脂例外：多数人没有体脂秤，常年挂一道杠只是噪音
+  assert.match(metrics, /\.\.\.\(bodyFat \? \[cell\('bodyFatPct'/, '体脂应当只在记到过时出现');
+  // 一个数都没有时是「还没同步过」，不是一排杠
+  assert.match(metrics, /has\s*\n?\s*\? h\('div\.metric-grid'/, '空状态判断没有走「有没有任何数据」');
+});
+
+test('漏记的那天不能被当成 0 画进折线', () => {
+  // Number(null) 是 0，Number.isFinite(0) 是 true —— 没记录的那天曾经就这么
+  // 混成实点，把折线拽到地板上，而图下面的解读用的是剔过 null 的均值
+  const charts = read('js/lib/charts.js');
+  assert.match(charts, /const hasValue = \(d\) => d != null && d\.y != null && d\.y !== ''/,
+    'lineChart 仍在用 Number.isFinite(Number(y)) 直接判断');
+  assert.ok(!/data\.filter\(\(d\) => Number\.isFinite\(Number\(d\.y\)\)\)/.test(charts));
+  assert.match(charts, /if \(hasValue\(point\)\)/, '分段逻辑也要用同一个判断');
 });
 
 test('趋势卡标题固定，不跟着下拉变', () => {
@@ -680,7 +704,8 @@ test('区间与图表改用下拉，不再铺一屏按钮', () => {
   assert.ok(!health.includes("h('div.chart-switch'"), '还留着一排图表按钮');
   assert.ok(!health.includes("h('div.range-switch'"), '还留着一排区间按钮');
   // 没数据的图仍可选，点进去会说明缺什么
-  assert.match(health, /availability\[c\.key\] \? c\.label : `\$\{c\.label\}（暂无数据）`/);
+  // 后缀短一点：下拉宽度只有半屏，「（暂无数据）」会把名字挤没
+  assert.match(health, /availability\[c\.key\] \? c\.label : `\$\{c\.label\} · 无数据`/);
   // 选择器和图必须在同一张卡里
   assert.match(health, /h\('section\.card\.trend-card'[\s\S]{0,900}h\('div\.trend-pickers'/);
 });

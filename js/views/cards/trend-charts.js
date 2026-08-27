@@ -403,7 +403,8 @@ export function trendCharts(rerender) {
           options: CHARTS.map((c) => ({
             key: c.key,
             // 没数据的仍然能选：点进去会说明缺什么，比直接藏起来好找
-            label: availability[c.key] ? c.label : `${c.label}（暂无数据）`,
+            // 后缀要短：下拉宽度只有半屏，「（暂无数据）」会把名字挤没
+            label: availability[c.key] ? c.label : `${c.label} · 无数据`,
           })),
           onPick: (key) => { activeChart = key; chartPicked = true; rerender(); },
         }),

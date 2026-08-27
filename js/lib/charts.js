@@ -194,7 +194,19 @@ export function lineChart({
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
-  const points = data.filter((d) => Number.isFinite(Number(d.y)));
+  /*
+   * 先剔掉 null 再转数字。
+   *
+   * Number(null) 是 0，而 Number.isFinite(0) 是 true —— 没记录的那天就这么
+   * 混成了「吃了 0 kcal」的实点：图上多出一串贴着地板的点，把折线拽下去，
+   * 而图下面那段解读用的是 analyzeSeries（它剔了 null），于是同一张卡里
+   * 「有记录的 6 天日均 2212」和一条从 0 起步的线并排放着，自相矛盾。
+   *
+   * 全是 null 时 points 为空，正好落到下面的空状态，不再画一条全零的线。
+   * 这个坑 CLAUDE.md 里记过一次（analyzeSeries 那处），这里当时漏了。
+   */
+  const hasValue = (d) => d != null && d.y != null && d.y !== '' && Number.isFinite(Number(d.y));
+  const points = data.filter(hasValue);
 
   if (points.length < minPoints) {
     const t = el('text', { x: width / 2, y: height / 2, 'text-anchor': 'middle', class: 'chart-empty', 'font-size': 13 });
@@ -281,7 +293,7 @@ export function lineChart({
   const segments = [];
   let segment = [];
   for (const point of data) {
-    if (Number.isFinite(Number(point.y))) {
+    if (hasValue(point)) {
       segment.push(point);
     } else if (breakOnMissing && segment.length) {
       segments.push(segment);

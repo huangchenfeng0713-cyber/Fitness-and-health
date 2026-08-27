@@ -188,6 +188,56 @@ try {
     await saveProfile({ demoMode: false });
   });
 
+  /*
+   * 没有记录时不画一条全零的线。
+   *
+   * Number(null) 是 0 而 Number.isFinite(0) 是 true，漏记的那天曾经就这么
+   * 混成实点：图上一串贴着地板的点把折线拽下去，而图下面那段解读
+   * （analyzeSeries 剔了 null）写的是「有记录的 6 天日均 2212」——
+   * 同一张卡里两句话互相打脸。这类只在渲染层显形，单元测试拦不住。
+   */
+  // 跳到一个肯定没有记录的日期（前面那些检查刚记过东西）
+  await page.evaluate(async () => {
+    const { setDay } = await import('./js/lib/store.js');
+    await setDay('2024-01-15');
+  });
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('数据'))?.click());
+  await page.waitForTimeout(600);
+  const zeroLine = await page.evaluate(() => {
+    const sel = document.querySelector('.trend-select');
+    if (!sel) return { noChart: true };
+    sel.value = 'kcal';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return null;
+  });
+  await page.waitForTimeout(500);
+  const chartState = zeroLine?.noChart ? zeroLine : await page.evaluate(() => {
+    const wrap = document.querySelector('.chart-wrap');
+    const dots = [...wrap.querySelectorAll('circle')];
+    const svg = wrap.querySelector('svg');
+    const h = svg ? Number(svg.getAttribute('viewBox').split(' ')[3]) : 0;
+    return {
+      dots: dots.length,
+      empty: !!wrap.querySelector('.chart-empty'),
+      // 贴着底边的点：全零线的特征
+      onFloor: dots.filter((c) => Number(c.getAttribute('cy')) > h - 12).length,
+    };
+  });
+  /*
+   * 判据是「画没画线」，不是「点在不在底边」。
+   * 一开始写成后者，结果旧代码也能过：那天连健康数据都没有，纵轴量程塌下来，
+   * 那串零点并不贴着底边——检查看着绿，bug 原样还在。
+   */
+  check('一条记录都没有时给空状态，不画线',
+    chartState.noChart || (chartState.empty && chartState.dots === 0),
+    chartState.noChart ? '数据页没有图'
+      : `本该是空状态，实际画了 ${chartState.dots} 个点（空状态文字：${chartState.empty ? '有' : '无'}）`);
+  await page.evaluate(async () => {
+    const { setDay } = await import('./js/lib/store.js');
+    await setDay(new Date().toLocaleDateString('sv-SE'));
+  });
+
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);

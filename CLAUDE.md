@@ -191,6 +191,15 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
 
 ## 容易踩的坑
 
+- **缺数据的指标画一道杠（`—`），不要整格消失。** 格子凭空少一个，
+  排布每天都不一样，而且「今天没测到」和「这个应用不显示这项」分不出来。
+  体脂是例外（多数人没有体脂秤，常年挂杠只是噪音）；整张卡一个数都没有时
+  走空状态，那不是「没测到」是「还没同步过」。
+- **`Number(null)` 是 0，而 `Number.isFinite(0)` 是 true。**
+  `lineChart` 曾经用 `Number.isFinite(Number(d.y))` 直接过滤，漏记的那天就这么
+  混成「吃了 0 kcal」的实点，把折线拽到地板上——而图下面那段解读用的是
+  `analyzeSeries`（它剔了 null），同一张卡里两句话互相打脸。
+  凡是「先转数字再判断」的地方都要先剔 `null`。
 - **能量单位区分大小写**：Apple 导出的 `unit="Cal"` 是大卡（kcal），小写 `cal` 才是 1/1000。
   先 `toLowerCase()` 再比较会让整套数据缩小一千倍 —— 这个 bug 上线过，`findMisscaledEnergyDays` /
   `repairMisscaledEnergy` 就是给用户修历史数据的。
