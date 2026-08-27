@@ -111,14 +111,38 @@ test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下',
    * 手机上这一滚就是大半屏。
    */
   const diet = read('js/views/diet.js');
+  const sheet = read('js/lib/sheet.js');
   const css = read('css/app.css');
-  assert.match(diet, /nodes\.sheetWrap = h\('div\.sheet-wrap'/, '份量面板没有做成弹层');
-  assert.match(diet, /nodes\.sheetWrap\.hidden = !food/, '弹层开合没有跟着选中状态走');
-  assert.match(diet, /classList\.toggle\('sheet-open'/, '弹层打开时没锁背景滚动');
+  assert.match(diet, /openSheet\(nodes\.portion/, '份量面板没有走公共弹层');
+  assert.match(diet, /if \(!food\) \{ closeSheet\(\); return; \}/, '取消选中时没有关掉弹层');
   assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
   assert.match(css, /\.sheet-action \{[\s\S]*?position: sticky/, '记录按钮没有钉住');
-  // 背景点一下要能关，否则弹层只能靠那个小叉子退出
-  assert.match(diet, /sheet-backdrop', \{\s*onclick/, '点背景关不掉弹层');
+
+  /*
+   * 滚动穿透：弹层内部滚到头之后手指继续滑，会带着背后的页面跑，
+   * 表现就是「点不中弹层里的东西」。两道都要有，缺一道 iOS 上都会漏。
+   */
+  assert.match(css, /\.sheet \{[\s\S]*?overscroll-behavior: contain/, '弹层没有拦住滚动链');
+  assert.match(css, /body\.sheet-open \{[\s\S]*?position: fixed/, 'iOS 上只有 overflow:hidden 拦不住拖动');
+  assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
+  assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
+  // 背景点一下、Esc 都要能关
+  assert.match(sheet, /sheet-backdrop', \{ onclick: \(\) => closeSheet\(\) \}/, '点背景关不掉弹层');
+  assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
+});
+
+test('喝水要先确认再落库，卡面上只留杯量按钮', () => {
+  // 原先点一下直接就记，口袋里误触一次就多出 250ml，
+  // 而且这个数会连着覆盖 Apple 健康那边的饮水
+  const card = read('js/views/cards/meal-advice.js');
+  assert.match(card, /\{ label: '一小杯', ml: 125 \}/);
+  assert.match(card, /\{ label: '中杯', ml: 250 \}/);
+  assert.match(card, /\{ label: '大杯', ml: 550 \}/);
+  assert.match(card, /openSheet\(waterSheet\(step/, '点杯量没有弹确认层');
+  assert.match(card, /okBtn\.onclick = async \(\) => \{[\s\S]*?saveHealthDay/, '确认按钮不落库');
+  // 落库只能发生在确认按钮里：卡面按钮直接写库就等于没有确认这一步
+  const saves = card.match(/saveHealthDay\(/g) || [];   // 只数调用点，import 那行不算
+  assert.equal(saves.length, 1, `喝水只该有一处落库，实际 ${saves.length} 处`);
 });
 
 test('搜索先出十条，换词收回展开；没找到时给反馈入口', () => {
@@ -169,6 +193,21 @@ test('漏记的那天不能被当成 0 画进折线', () => {
   assert.match(charts, /if \(hasValue\(point\)\)/, '分段逻辑也要用同一个判断');
 });
 
+test('图表 key 认不出来时退回第一张，不让整张卡消失', () => {
+  /*
+   * activeChart 是模块级状态，活得比一次渲染长。删掉某个图、改了 key，
+   * 或者别处误写一个值进来，SPEC[activeChart] 就是 undefined ——
+   * 直接调用会抛在渲染中途，结果是数据页少了一整张卡，控制台里什么都没有。
+   * 排查时实测过：把 activeChart 设成一个不存在的值，趋势卡整个不见了。
+   */
+  const charts = read('js/views/cards/trend-charts.js');
+  assert.match(charts, /if \(typeof SPEC\[activeChart\] !== 'function'\) activeChart = CHARTS\[0\]\.key;/,
+    '没有兜底：认不出来的 key 会让整张卡渲染失败');
+  // 兜底必须在取 spec 之前
+  assert.ok(charts.indexOf("typeof SPEC[activeChart] !== 'function'") < charts.indexOf('const spec = SPEC[activeChart]()'),
+    '兜底写在了取 spec 之后，等于没有');
+});
+
 test('趋势卡标题固定，不跟着下拉变', () => {
   // 同一张卡的名字每切一次就换一个，找不到锚点；下拉第一项本来就写着看的是什么
   const charts = read('js/views/cards/trend-charts.js');
@@ -201,6 +240,41 @@ test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
   assert.match(metrics, /latestHealthEntry/, '体重应取最近一次记录而不是当天那条');
   assert.match(metrics, /`体重 \$\{weight\.date\}`/, '沿用前几天的值要标出日期');
   assert.ok(!/'饮水'/.test(metrics), '饮水已从健康数据卡撤掉');
+});
+
+test('健身页有人体部位图，点哪块选哪组，已练的会点亮', () => {
+  /*
+   * 挑动作本来就是「我今天想练这块」，指着图上那块比在五个文字标签里挑更直接。
+   * 正反两张并排：背和斜方肌在正面图上画不出来，硬塞会让人对不上位置。
+   */
+  const training = read('js/views/training.js');
+  const map = read('js/data/body-map.js');
+  const css = read('css/app.css');
+  assert.match(training, /function bodyMap\(rerender\)/, '没有部位图');
+  assert.match(training, /view\('front'\), view\('back'\)/, '缺正面或背面');
+  // 五个组在图上都得点得到，否则有的组只能靠文字标签选
+  const groups = new Set((map.match(/group: '(\w+)'/g) || []).map((m) => m.split("'")[1]));
+  for (const key of ['chest', 'shoulder', 'back', 'leg', 'core']) {
+    assert.ok(groups.has(key), `部位图上点不到「${key}」`);
+  }
+  // 三种状态：选中 / 已覆盖 / 其余
+  assert.match(training, /covered\.has\(r\.group\) \? ' covered'/, '没有标出今天已经练到的部位');
+  for (const cls of ['.body-region.active', '.body-region.covered']) {
+    assert.ok(css.includes(cls), `${cls} 没有样式`);
+  }
+  // 图上的块要能用键盘操作
+  assert.match(training, /node\.setAttribute\('tabindex', '0'\)/, '部位块不能聚焦');
+  assert.match(training, /ev\.key === 'Enter' \|\| ev\.key === ' '/, '部位块不能用键盘选中');
+});
+
+test('动作行默认只给一行：练哪儿、什么模式', () => {
+  // 原先每行都把主动肌和所有协同肌铺开，十几行叠起来全是同一批肌肉名，
+  // 扫的时候反而找不到动作名在哪
+  const training = read('js/views/training.js');
+  const rows = training.match(/\$\{MUSCLES\[e\.primary\[0\]\] \|\| ''\} · \$\{PATTERNS\[e\.pattern\]\}/g) || [];
+  assert.ok(rows.length >= 2, `挑动作和动作推荐都该用一行式，只找到 ${rows.length} 处`);
+  // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
+  assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
 });
 
 test('动作列表默认只出前几个，但已选的绝不会被藏起来', () => {
@@ -677,7 +751,7 @@ test('身体信息不可用时，界面说清是哪一条不合格', () => {
 test('食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着', () => {
   // 写死必然漂移：库里已经 1080 项时，饮食页还写着「900+ 种」、README 写着 1010。
   const diet = read('js/views/diet.js');
-  assert.match(diet, /\$\{allFoods\(\)\.length\} 种食物/, '界面上的食物数仍是写死的');
+  assert.match(diet, /\$\{allFoods\(\)\.length\} 种/, '界面上的食物数仍是写死的');
   assert.ok(!diet.includes('900+'), '还残留写死的旧数字');
 
   const readme = read('README.md');
@@ -715,7 +789,8 @@ test('设置页不再把用户指向已经搬走的数据管理', () => {
   // 底下还有个 #health 链接——会把人送到一个没有数据管理的页面。
   const settings = read('js/views/settings.js');
   assert.ok(!settings.includes("href: '#health'"), '还留着指向数据页的死链');
-  assert.ok(settings.includes('都在本页的“数据管理”里'), '没有指向正确位置');
+  // 那句「维护操作都在本页」已删：数据管理卡就摆在同一页上方，不必再用一句话指路
+  assert.ok(!settings.includes('“数据”栏目只看结果'), '又加回了指路的说明文字');
 
   // 用户可见文案里不该再出现已经不存在的「趋势页」
   for (const file of ['js/core/advisor.js', 'js/core/health-insights.js', 'js/core/nutrition.js']) {

@@ -39,9 +39,16 @@ function moreToggle(key, total, shown, rerender) {
  * 旁边写「还差 29g」——碳水是蛋白和脂肪分完热量之后的余数，照那根条去补，
  * 是界面在劝人多吃。性质和措辞都由 core/metrics.js 定，这里只负责画。
  */
+/*
+ * 条形统一用强调色，只有饮水单独一个蓝。
+ *
+ * 原先蛋白紫、碳水橙、脂肪橘红、饮水蓝四条并排，一张卡里四个色相 ——
+ * 可每条旁边就写着「蛋白质」「碳水」，颜色并不承担区分作用，纯粹是装饰。
+ * 饮水留蓝是因为它和上面三条不是一类东西（那三条是吃进去的宏量）。
+ */
 const KIND_COLOR = {
-  kcal: 'var(--accent)', protein: 'var(--protein)', fat: 'var(--fat)',
-  carb: 'var(--carb)', fiber: 'var(--fiber)', sodium: 'var(--muted)',
+  kcal: 'var(--accent)', protein: 'var(--accent)', fat: 'var(--accent)',
+  carb: 'var(--accent)', fiber: 'var(--accent)', sodium: 'var(--muted)',
   sugar: 'var(--muted)', water: 'var(--water)',
 };
 

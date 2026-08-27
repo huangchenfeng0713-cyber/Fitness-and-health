@@ -235,10 +235,12 @@ test('动态预算的洞察与目标数字一致', () => {
     targets: t, profile, intake: zero, entries: [], now: at('12:30'),
     health: { activeEnergy: 800 }, baseline: { days: 14, activeEnergy: 400, kcalIntake: 1900 },
   });
-  const note = a.insights.find((i) => i.title.includes('热量预算'));
-  assert.ok(note, '应产生预算调整说明');
-  assert.match(note.title, /上调 338 kcal/);
-  assert.ok(note.text.includes('2050'), '正文里的目标值应与 targets.kcal 一致');
+  const note = a.insights.find((i) => i.title.includes('热量目标'));
+  assert.ok(note, '应说明这个目标是按什么算出来的');
+  assert.match(note.title, /高 338 kcal/);
+  // 两个数都要在：设备算出来的，和公式估算的
+  assert.ok(note.text.includes('2600') && note.text.includes('2262'),
+    `正文要给出设备值和公式值：${note.text}`);
 });
 
 test('每个餐次都能给出可执行的建议', () => {

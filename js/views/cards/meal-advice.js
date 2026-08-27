@@ -6,7 +6,8 @@
  * 隔着一次切页反而多余。抽成卡片模块挂到饮食页，搬家只改一行 import。
  */
 
-import { h, num, toast, runLocalAction } from '../../lib/utils.js';
+import { h, num, toast, runLocalAction, clearEl, mount, infoTip } from '../../lib/utils.js';
+import { openSheet, closeSheet } from '../../lib/sheet.js';
 import { ring } from '../../lib/charts.js';
 import { state, addEntry, saveHealthDay } from '../../lib/store.js';
 import { CATEGORIES, isEstimated } from '../../data/foods.js';
@@ -71,73 +72,86 @@ export function recommendCard(rerender) {
 /*
  * 一键喝水。
  *
- * 白水以前只能当普通食物记一笔，或者去设置里手动补录——两条路都太重，
- * 结果「饮水参考 1700ml」这个目标从来没人对得上。这里直接点两下加杯水。
- * 落在健康数据的 waterMl 字段上，和 Apple 健康导入的饮水是同一个数。
+ * 卡面上只有四个杯量按钮，点哪个都先弹一层确认：里面画着「记到多少」，
+ * 按下「记录喝水」才真的落库。原先是点一下直接就记，口袋里误触一次
+ * 就多出 250ml，而且这个数会连着覆盖 Apple 健康那边的饮水。
  *
- * 用圆环而不是长条：喝水看的是「还差多少」，圆环把已喝和缺口画在同一个形里，
- * 一眼就是几分之几；长条横跨整张卡，右边那半屏白白占着，还放不下按钮。
+ * 落在健康数据的 waterMl 字段上，和 Apple 健康导入的饮水是同一个数。
  */
 const WATER_STEPS = [
-  { label: '一杯', ml: 250 },
-  { label: '大杯', ml: 400 },
-  { label: '一瓶', ml: 550 },
+  { label: '一小杯', ml: 125 },
+  { label: '中杯', ml: 250 },
+  { label: '大杯', ml: 550 },
 ];
 
-// 自定义输入框展开着没有：整页重绘会重建它，状态放模块级才留得住
-let customWater = false;
+const MAX_ONE_TIME_ML = 3000;
+
+function waterSheet(step, drunk, goal, rerender) {
+  const custom = step == null;
+  const input = h('input.set-input', {
+    type: 'number', inputmode: 'numeric', step: '10', min: 1, max: MAX_ONE_TIME_ML,
+    placeholder: '毫升', 'aria-label': '饮水量（毫升）',
+    value: custom ? '' : String(step.ml),
+    oninput: () => refresh(),
+  });
+  const ringSlot = h('div.water-ring');
+  const summary = h('p.sheet-summary');
+  const okBtn = h('button.primary-btn');
+
+  const amount = () => Math.round(Number(input.value) || 0);
+
+  function refresh() {
+    const ml = amount();
+    const next = Math.max(0, drunk + ml);
+    const pct = goal > 0 ? Math.round((next / goal) * 100) : 0;
+    clearEl(ringSlot);
+    mount(ringSlot, ring({
+      pct, size: 108, stroke: 10, color: 'var(--water)',
+      label: num(next), sub: goal ? `/ ${num(goal)} ml` : 'ml',
+    }));
+    summary.textContent = ml > 0
+      ? `现在 ${num(drunk)} ml，记完 ${num(next)} ml`
+      : `现在 ${num(drunk)} ml`;
+    okBtn.textContent = ml > 0 ? `记录喝水 ${num(ml)} ml` : '记录喝水';
+    okBtn.disabled = ml <= 0 || ml > MAX_ONE_TIME_ML;
+  }
+
+  okBtn.onclick = async () => {
+    const ml = amount();
+    if (ml <= 0) { toast('请输入一个大于 0 的毫升数', 'warn'); return; }
+    if (ml > MAX_ONE_TIME_ML) { toast(`单次超过 ${MAX_ONE_TIME_ML} ml 不太可能，请核对`, 'warn'); return; }
+    await saveHealthDay(state.day, { waterMl: Math.max(0, drunk + ml), source: 'manual' });
+    closeSheet();
+    rerender();
+  };
+  refresh();
+
+  return h('div.water-sheet', null,
+    h('h3.sheet-title', null, custom ? '自定义水量' : step.label),
+    ringSlot,
+    summary,
+    custom || true ? h('div.water-custom', null, input, h('span.set-unit', null, 'ml')) : null,
+    h('div.sheet-action', null, okBtn));
+}
 
 export function waterCard(rerender) {
   const d = state.derived;
   if (!d) return null;
   const drunk = Number(d.health?.waterMl) || 0;
   const goal = Number(d.targets?.waterMl) || 0;
-  const pct = goal > 0 ? Math.round((drunk / goal) * 100) : 0;
-  const add = async (ml) => {
-    const next = Math.max(0, Math.round(drunk + ml));
-    await saveHealthDay(state.day, { waterMl: next, source: 'manual' });
-    rerender();
-  };
-
-  const customInput = h('input.set-input', {
-    type: 'number', inputmode: 'numeric', step: '10', min: 0, max: 3000,
-    placeholder: '毫升', 'aria-label': '自定义饮水量（毫升）',
-  });
-  const submitCustom = async () => {
-    const ml = Math.round(Number(customInput.value));
-    if (!Number.isFinite(ml) || ml <= 0) { toast('请输入一个大于 0 的毫升数', 'warn'); return; }
-    if (ml > 3000) { toast('单次超过 3000 ml 不太可能，请核对', 'warn'); return; }
-    customWater = false;
-    await add(ml);
-  };
-  customInput.onkeydown = (ev) => { if (ev.key === 'Enter') submitCustom(); };
+  const open = (step) => openSheet(waterSheet(step, drunk, goal, rerender), { label: '记录喝水' });
 
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '喝水'),
       h('div.card-head-actions', null,
-        drunk > 0 ? h('button.text-btn', {
-          onclick: () => add(-WATER_STEPS[0].ml), 'aria-label': '撤销上一杯',
-        }, '撤销一杯') : null)),
-
-    h('div.water-body', null,
-      h('div.water-ring', null, ring({
-        pct, size: 92, stroke: 9, color: 'var(--water)',
-        label: num(drunk), sub: goal ? `/ ${num(goal)} ml` : 'ml',
-      })),
-      h('div.water-actions', null,
-        WATER_STEPS.map((step) => h('button.secondary-btn', {
-          onclick: () => add(step.ml),
-        }, `＋${step.ml}`)),
-        h('button.secondary-btn', {
-          class: `secondary-btn${customWater ? ' active' : ''}`,
-          onclick: () => { customWater = !customWater; rerender(); },
-        }, '自定义'))),
-
-    customWater ? h('div.water-custom', null,
-      customInput,
-      h('button.secondary-btn.water-custom-ok', { onclick: submitCustom }, '加入')) : null,
-
-    h('p.form-hint', null,
-      '记在健康数据的饮水里，和 Apple 健康导入的是同一个数；导入会按更新时间覆盖手动记录。'));
+        h('span.card-tag', null, goal ? `${num(drunk)} / ${num(goal)} ml` : `${num(drunk)} ml`),
+        infoTip('查看饮水说明',
+          h('p', null, '记在健康数据的饮水里，和 Apple 健康导入的是同一个数；导入会按更新时间覆盖手动记录。'),
+          h('p', null, `参考量按温和气候、低身体活动的成人估算${goal ? `（${num(goal)} ml）` : ''}；运动或炎热天气需要额外补充。`)))),
+    h('div.water-actions', null,
+      WATER_STEPS.map((step) => h('button.secondary-btn', {
+        onclick: () => open(step),
+      }, `${step.label} ${step.ml}`)),
+      h('button.secondary-btn', { onclick: () => open(null) }, '自定义')));
 }

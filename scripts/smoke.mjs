@@ -238,6 +238,67 @@ try {
     await setDay(new Date().toLocaleDateString('sv-SE'));
   });
 
+  /*
+   * 弹层不能把背后的页面带着跑。
+   *
+   * 用户实测：「有时候我选不中，会滑到底下被它遮住的页面，特别是滑到最底下
+   * 的时候」——弹层内部滚到头之后，手指继续滑就换成背景在滚，看着就像点不中。
+   * 真正在滚的是 <main class="view">，不是 body，所以只锁 body 拦不住。
+   */
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('饮食'))?.click());
+  await page.waitForTimeout(500);
+  await page.fill('.search-input', '鸡');
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('main.view')?.scrollTo(0, 300));
+  await page.waitForTimeout(250);
+  const beforeY = await page.evaluate(() => document.querySelector('main.view')?.scrollTop ?? 0);
+  await page.evaluate(() => document.querySelector('.search-item')?.click());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { const el = document.querySelector('.sheet'); if (el) el.scrollTop = el.scrollHeight; });
+  const sheetBox = await page.evaluate(() => {
+    const el = document.querySelector('.sheet');
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x + 40, y: r.y + r.height / 2 };
+  });
+  if (sheetBox) {
+    for (let i = 0; i < 4; i += 1) {
+      await page.mouse.move(sheetBox.x, sheetBox.y);
+      await page.mouse.wheel(0, 500);
+      await page.waitForTimeout(100);
+    }
+  }
+  const sheetScroll = await page.evaluate(() => ({
+    open: !document.querySelector('.sheet-wrap')?.hidden,
+    duringY: document.querySelector('main.view')?.scrollTop ?? 0,
+    contain: document.querySelector('.sheet')
+      ? getComputedStyle(document.querySelector('.sheet')).overscrollBehaviorY : '',
+    // 真正在滚的是 main.view，弹层开着时它必须被锁住
+    scrollerLocked: getComputedStyle(document.querySelector('main.view')).overflowY,
+  }));
+  await page.evaluate(() => document.querySelector('.sheet-backdrop')?.click());
+  await page.waitForTimeout(500);
+  const afterY = await page.evaluate(() => document.querySelector('main.view')?.scrollTop ?? 0);
+  const sheetProblems = [
+    !sheetBox && '份量弹层没打开',
+    sheetBox && sheetScroll.contain !== 'contain' && '弹层没有拦住滚动链',
+    /*
+     * 这一条是主判据。上面那个「滚四下看背景动没动」在 Chromium 里用滚轮
+     * 复现不出 iOS 的手指拖动——只锁 body 也能过。真正的区别是有没有把
+     * main.view 锁住，所以直接量它。
+     */
+    sheetBox && sheetScroll.scrollerLocked !== 'hidden'
+      && `弹层开着时内容区没锁住（overflow-y: ${sheetScroll.scrollerLocked}），手指会把它滑走`,
+    sheetBox && sheetScroll.duringY !== beforeY
+      && `弹层滚到底后背景跟着跑了：${beforeY} → ${sheetScroll.duringY}`,
+    sheetBox && Math.abs(afterY - beforeY) > 5
+      && `关掉弹层后页面跳了：${beforeY} → ${afterY}`,
+  ].filter(Boolean);
+  check('弹层不会把背后的页面带着滚', sheetProblems.length === 0, sheetProblems.join('；'));
+  await page.evaluate(() => { const el = document.querySelector('.search-input'); if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); } });
+  await page.waitForTimeout(300);
+
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);

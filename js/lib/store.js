@@ -337,9 +337,6 @@ export function latestHealthEntry(key, upToDate = state.day) {
   return null;
 }
 
-export function latestHealthValue(key, upToDate = state.day) {
-  return latestHealthEntry(key, upToDate)?.value ?? null;
-}
 
 function countProteinHitDays(target, windowDays = 7) {
   if (!(target > 0) || !windowDays) return null;
