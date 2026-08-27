@@ -752,3 +752,41 @@ test('新增的品牌乳品都给出了常见规格', () => {
     assert.ok(grams >= 15 && grams <= 500, `${f.name} 的首份量 ${grams}g 不像常见规格`);
   }
 });
+
+test('家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计', () => {
+  const HOME_DISHES = [
+    'pork_pepper_shred', 'pork_edamame', 'pork_onion', 'pork_zhacai',
+    'pork_lettuce_stem', 'pork_cucumber', 'pork_green_bean', 'pork_dried_tofu',
+    'pork_snow_pea', 'pork_water_bamboo', 'pork_garlic_leaf',
+    'egg_cucumber', 'egg_bittergourd', 'egg_onion',
+    'vinegar_cabbage', 'stir_youmaicai', 'stir_water_spinach', 'mushroom_bokchoy',
+    'baby_cabbage_soup', 'vinegar_lotus_root', 'stir_yam', 'stir_pumpkin',
+    'tomato_cauliflower',
+    'cola_chicken_wing', 'braised_chicken_wing', 'chestnut_chicken', 'scallion_beef',
+    'liu_rou_duan', 'garlic_ribs', 'beer_duck', 'spicy_shrimp',
+    'winter_melon_ball_soup', 'luffa_egg_soup', 'cabbage_tofu_soup',
+    'corn_rib_soup', 'yam_rib_soup', 'tomato_fish', 'mushroom_chicken',
+    'minced_pork_eggplant',
+  ];
+  for (const id of HOME_DISHES) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少家常菜 ${id}`);
+    assert.equal(food.cat, 'dish');
+    // 油盐随各家做法差异很大，不能冒充实测值
+    assert.ok(isEstimated(food), `${food.name} 不应伪装成实测营养数据`);
+    const [portion] = food.s;
+    assert.ok(portion[1] >= 150 && portion[1] <= 350,
+      `${food.name} 的一份 ${portion[1]}g 不像家庭一盘`);
+  }
+  // 用户点名要的两道
+  assert.equal(searchFoods('青椒肉丝')[0].name, '青椒肉丝');
+  assert.equal(searchFoods('毛豆炒肉丝')[0].name, '毛豆炒肉丝');
+  // 按主料也要搜得到
+  for (const term of ['肉丝', '炒蛋', '排骨汤', '鸡翅', '藕片']) {
+    assert.ok(searchFoods(term).length > 0, `搜不到“${term}”`);
+  }
+  // 带骨/带壳的必须写明按可食部计，否则会被整盘称重记账
+  for (const id of ['garlic_ribs', 'spicy_shrimp']) {
+    assert.match(FOOD_BY_ID.get(id).note || '', /可食部/, `${id} 没说明按可食部计`);
+  }
+});
