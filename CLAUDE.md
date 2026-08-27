@@ -141,6 +141,15 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
   `test/module-refs.test.js` 是手搓的 `no-undef`，替代不了 eslint 但能拦住这一类。
 - 中文默认允许在任意两个字之间断行：短标签（`游离糖上限`、`1g 蛋白`）会被断成两截，
   要么 `white-space: nowrap`，要么 `word-break: keep-all`。
+- **`recompute()` 里不许把异常抛出去。** 它在 boot 的 `hydrateStore()` 里就会跑一次，
+  抛出去 = 整个应用起不来，而且用户连设置抽屉都打不开、没法回去改那条数据。
+  身体信息算不出目标时退回默认档案，把原因记进 `derived.profileError` 让界面去说。
+  （`saveProfile` 有校验，但恢复备份和云端同步是绕过它直接落库的。）
+- 启动失败要调 `__HEALTH_DIET_BOOT__.fail(err)`，**不要先 `clearEl(viewRoot)`**：
+  启动页在 `#view` 里，摘掉之后 `showRecovery()` 会因为 `isConnected` 为 false
+  直接返回，「修复缓存并重新打开」那个按钮就永远不出现了。
+- 份量、克重这类会直接显示的数，取 min/max 时要留意另一侧是不是浮点——
+  推荐里出现过 `海鲜粥 384.00000000000006g`，来源是「剩余热量 ÷ 每 100g 热量」。
 
 ## 约定
 

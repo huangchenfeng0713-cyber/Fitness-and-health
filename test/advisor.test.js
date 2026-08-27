@@ -337,3 +337,35 @@ test('没填生日时会说明年龄是估算的', () => {
   assert.ok(a.insights.some((i) => /年龄按 30 岁估算/.test(i.title)),
     '兜底年龄不能悄悄用掉');
 });
+
+test('推荐份量始终是整数克，热量上限那一侧不会漏出浮点数', () => {
+  // 实测：推荐里出现「海鲜粥 384.00000000000006g」「希腊酸奶 113.55932203389831g」。
+  // 份量上限是「剩余热量 ÷ 每 100g 热量」，本身是浮点；
+  // 直接和取整后的克数取 min，上限那一侧会原样漏到界面上。
+  const profile = {
+    sex: 'male', birthday: '1995-01-01', heightCm: 175, weightKg: 70,
+    goal: 'cut', rateKgPerWeek: -0.5, activity: 'light',
+  };
+  const targets = dailyTargets(profile, null);
+  const offenders = [];
+  let scanned = 0;
+  for (let hour = 6; hour <= 23; hour += 1) {
+    for (let eaten = 0; eaten < 2200; eaten += 137) {
+      const now = new Date(`2026-08-27T${String(hour).padStart(2, '0')}:00:00+08:00`);
+      const advice = buildAdvice({
+        targets,
+        intake: {
+          kcal: eaten, protein: eaten / 25, fat: eaten / 40, carb: eaten / 9,
+          fiber: eaten / 200, sugar: eaten / 120, sodium: eaten,
+        },
+        entries: [], profile, health: {}, baseline: {}, now,
+      });
+      for (const rec of advice.recommend || []) {
+        scanned += 1;
+        if (!Number.isInteger(rec.grams)) offenders.push(`${rec.food.name} ${rec.grams}`);
+      }
+    }
+  }
+  assert.ok(scanned > 500, `只扫到 ${scanned} 条推荐，覆盖不够`);
+  assert.deepEqual(offenders.slice(0, 5), [], `${offenders.length} 条推荐的克重不是整数`);
+});

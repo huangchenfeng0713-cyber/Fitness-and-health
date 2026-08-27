@@ -248,3 +248,33 @@ test('起手组合从复合动作打底', () => {
     assert.ok(chest.includes(m), `胸日起手组合没练到 ${MUSCLES[m]}`);
   }
 });
+
+test('动作再多，建议条数也不会失控', () => {
+  // 两两比对是 O(n²)：选满一个部位的十八个动作原先会生成 52 条提示、
+  // 页面 7000px 高，真正要紧的那条被埋在下面。
+  for (const g of GROUPS) {
+    const all = EXERCISES.filter((e) => e.group === g.key).map((e) => e.id);
+    const tips = planAdvice(all);
+    assert.ok(tips.length <= 14,
+      `${g.label} 全选 ${all.length} 个动作给出了 ${tips.length} 条建议`);
+    // 同一个动作不该被反复点名要换掉
+    const removals = tips.filter((t) => t.key.startsWith('dup-') && t.actions?.length)
+      .map((t) => t.actions[0].replaces);
+    assert.equal(new Set(removals).size, removals.length, '同一个动作被要求换掉多次');
+  }
+});
+
+test('提示过多时给出汇总，而不是默默吞掉', () => {
+  const all = EXERCISES.filter((e) => e.group === 'chest').map((e) => e.id);
+  const tips = planAdvice(all);
+  assert.ok(tips.some((t) => t.key === 'dup-more'), '省略掉的重复没有汇总说明');
+  assert.ok(tips.some((t) => t.key === 'part-more'), '省略掉的部分重叠没有汇总说明');
+  // 汇总要给得出数字，不能含糊说「还有一些」
+  assert.match(tips.find((t) => t.key === 'dup-more').title, /另有 \d+ 个动作/);
+});
+
+test('正常规模的一套动作不会被汇总提示打扰', () => {
+  // 五个动作、彼此不重复：不该冒出「还有 N 组重叠」这种话
+  const tips = planAdvice(['bench_press_bb', 'lat_pulldown', 'squat_bb', 'plank', 'lateral_raise_db']);
+  assert.ok(!tips.some((t) => t.key === 'dup-more' || t.key === 'part-more'), JSON.stringify(tips.map((t) => t.title)));
+});

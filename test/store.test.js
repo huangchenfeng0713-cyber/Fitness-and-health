@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compositionNote, migrateStoredProfile, resolveEnergyObservation } from '../js/lib/store.js';
+import {
+  compositionNote, migrateStoredProfile, resolveEnergyObservation, recompute, state,
+} from '../js/lib/store.js';
 
 test('普通食物没有自选配料时也能生成记录说明', () => {
   assert.equal(compositionNote(null), '');
@@ -41,4 +43,51 @@ test('旧数据可用导入时刻作覆盖时间，完全缺时间则明确回�
   const missing = resolveEnergyObservation({}, null, '2026-08-23', local(16));
   assert.equal(missing.observedAt, null);
   assert.equal(missing.missingObservationTime, true);
+});
+
+
+/*
+ * recompute() 在 boot 的 hydrateStore() 里就会跑一次。
+ * 之前它让 RangeError 直接冒泡：恢复一份含 16 岁生日的备份之后整个应用起不来，
+ * 首屏还显示成「本地存储不可用，IndexedDB 打不开」——救不回来，报错还指向无关的方向。
+ * 用户连设置抽屉都打不开，没法回去改那条数据。
+ */
+const BASE_PROFILE = {
+  sex: 'male', birthday: '1995-06-15', heightCm: 175, weightKg: 70,
+  goal: 'maintain', rateKgPerWeek: 0, activity: 'light', onboarded: true,
+};
+const AT_NOON = new Date('2026-08-27T12:00:00+08:00');
+
+const runWith = (patch) => {
+  state.profile = { ...BASE_PROFILE, ...patch };
+  state.day = '2026-08-27';
+  recompute(AT_NOON);
+  return state.derived;
+};
+
+test('身体信息算不出目标时不会让整条流水线崩掉', () => {
+  for (const [label, patch] of [
+    ['未成年', { birthday: '2011-06-15' }],
+    ['身高为 0', { heightCm: 0 }],
+    ['体重不合理', { weightKg: 0 }],
+    // 生日留空是有意的：按 30 岁估算，不算错误。这里测的是真的填坏了的情况
+    ['生日格式无效', { birthday: '不是日期' }],
+    ['减脂配正速率', { goal: 'cut', rateKgPerWeek: 0.5 }],
+  ]) {
+    let derived;
+    assert.doesNotThrow(() => { derived = runWith(patch); }, `${label} 让 recompute 抛异常了`);
+    assert.ok(derived.profileError, `${label} 没有记录原因`);
+    assert.ok(Number.isFinite(derived.targets.kcal) && derived.targets.kcal > 0,
+      `${label} 之后算不出可用的热量目标`);
+    // 退回默认档案算出来的数字不能冒充个性化结果
+    assert.equal(derived.demoMode, true, `${label} 没有标成非个性化`);
+  }
+});
+
+test('身体信息改回可用之后立刻恢复个性化', () => {
+  runWith({ birthday: '2011-06-15' });
+  const fixed = runWith({});
+  assert.equal(fixed.profileError, null);
+  assert.equal(fixed.demoMode, false);
+  assert.ok(fixed.targets.kcal > 0);
 });

@@ -445,6 +445,18 @@ test('启动卡住时提供只清程序缓存的自救入口，不会删除 Inde
   assert.ok(html.includes('setTimeout(() => showRecovery(), 12_000)'));
   assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.ready?.()'));
   assert.ok(app.includes('window.__HEALTH_DIET_BOOT__?.fail?.(error)'));
+
+  // initStore 失败时也要走 fail()：ready() 会把「修复缓存并重新打开」一并收掉，
+  // 用户就只剩一条指错方向的提示，没有任何出路
+  const bootCatch = app.slice(app.indexOf('await initStore();'), app.indexOf('void registerServiceWorker'));
+  assert.ok(bootCatch.includes('window.__HEALTH_DIET_BOOT__?.fail?.('), '启动失败没有留下自救入口');
+  assert.ok(!bootCatch.includes('?.ready?.()'), '启动失败仍在收掉启动页');
+  // 不能先 clearEl(viewRoot)：启动页在 #view 里，摘掉之后
+  // showRecovery() 会因为 screen.isConnected 为 false 直接返回，自救按钮永远不出现
+  // 按行首匹配，别把解释这段历史的注释也算进去
+  assert.ok(!/^\s*clearEl\(viewRoot\)/m.test(bootCatch), '启动失败时把自救界面一起清掉了');
+  // 也不能一律甩锅给 IndexedDB —— 数据迁移和身体信息校验也在 initStore 里
+  assert.ok(bootCatch.includes('storageLike'), '所有启动失败仍被说成存储不可用');
 });
 
 test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', () => {
@@ -473,4 +485,21 @@ test('短标签不会被从中间断成两截', () => {
   assert.match(css, /\.micro-label \{[^}]*flex: 0 0 100%/, '营养微量标签没有独占一行');
   assert.match(css, /\.micro-label \{[^}]*white-space: nowrap/);
   assert.match(css, /\.card-tag \{[\s\S]*?word-break: keep-all;[\s\S]*?\}/, '卡片角标仍会在词内断行');
+});
+
+test('身体信息不可用时，界面说清是哪一条不合格', () => {
+  // 笼统说「演示数据」会让人以为只是没填，实际是填了但被拒——
+  // 常见于恢复了一份旧备份，或换设备后云端同步下来的旧档案。
+  const dashboard = page('dashboard');
+  assert.match(dashboard, /derived\.profileError/, '首屏没有读取身体信息的错误原因');
+  assert.ok(dashboard.includes('身体信息暂时算不出目标'), '缺少可操作的提示文案');
+  assert.ok(dashboard.includes('设置 → 身体信息'), '没有告诉用户去哪里改');
+  // 提示要排在笼统的「演示身体数据」之前，否则具体原因会被它盖掉
+  const at = (s) => dashboard.indexOf(s);
+  assert.ok(at('derived.profileError') < at('当前使用演示身体数据'), '具体原因被笼统提示盖住了');
+
+  const store = read('js/lib/store.js');
+  assert.match(store, /const profileCheck = validateProfile\(effectiveProfile\)/);
+  assert.match(store, /const calcProfile = profileCheck\.valid/, '没有退回默认档案');
+  assert.ok(!/dailyTargets\(effectiveProfile/.test(store), '目标仍在用未经校验的档案计算');
 });

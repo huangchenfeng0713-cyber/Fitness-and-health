@@ -425,10 +425,20 @@ async function boot() {
     await initStore();
   } catch (err) {
     console.error(err);
-    clearEl(viewRoot).append(h('section.card', null,
-      h('h3.card-title', null, '本地存储不可用'),
-      h('p.empty-hint', null, '浏览器的 IndexedDB 打不开。如果在无痕模式下浏览，请换普通窗口再试。')));
-    window.__HEALTH_DIET_BOOT__?.ready?.();
+    /*
+     * 交给启动页自己处理。index.html 的 #boot-screen 上已经有
+     * 「修复缓存并重新打开」和「不会删除记录」的说明，就是为这种情况做的。
+     *
+     * 之前这里先 clearEl(viewRoot) 把启动页从 DOM 里摘掉、再调 ready()：
+     * showRecovery() 因为 screen.isConnected 已经是 false 直接返回，
+     * 自救按钮永远不出现，用户只剩一条「IndexedDB 打不开」的提示——
+     * 而能在 initStore 里失败的不只是存储，数据迁移和身体信息校验都在里面。
+     */
+    const storageLike = /indexeddb|quota|storage|database/i
+      .test(String(err?.name || '') + String(err?.message || ''));
+    window.__HEALTH_DIET_BOOT__?.fail?.(storageLike
+      ? new Error(`${err.message}。如果在无痕模式下浏览，请换普通窗口再试。`)
+      : err);
     return;
   }
 

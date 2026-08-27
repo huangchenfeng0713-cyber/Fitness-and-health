@@ -47,12 +47,28 @@ supabase functions deploy health-sync --no-verify-jwt
 会在 `supabase/functions/**` 有改动并合进 `main` 时自动部署。只需配一次：
 
 1. Supabase 后台 → 右上角头像 → **Account Settings → Access Tokens** → 生成一个 token 并复制。
-   - **Resource access** 选 Project，指到本项目（ref `kdkykrshqiamwecohxgw`）。
-   - **Permissions** 至少给 Edge Functions 的写入权限，其余保持 None。
-   - **Expires in 别用默认的 7 天**，选上限（目前最长 90 天）。到期后自动部署会失败，
-     而网页照常更新，如果没注意到就会回到「前端是新的、服务端是旧的」这种最难查的状态。
-     流程失败时会明确打出「多半是令牌过期」并给出换发地址，GitHub 也会发邮件通知。
-     换发只需重新生成令牌并更新同名 secret，workflow 不用改。
+   两种令牌，按仓库是不是只有自己能推代码来选：
+
+   | | Legacy token | 细粒度 token |
+   | --- | --- | --- |
+   | 有效期 | 永不过期 | 最长 90 天 |
+   | 权限 | 整个账号（数据库、API 密钥、组织成员） | 可只给 Edge Functions |
+   | 适用 | 单人仓库 | 有协作者、或会跑外部贡献的 workflow |
+
+   - **Legacy**：在 Generate token 页面点最上面那行的 **Create legacy token**，只需填名字。
+   - **细粒度**：Resource access 选 Project 指到本项目（ref `kdkykrshqiamwecohxgw`），
+     Permissions 至少给 Edge Functions 的写入，其余保持 None，Expires in 选上限。
+
+   两种令牌都会过期（后台目前最长只给到 90 天，Custom 也受同一上限约束）。
+   到期后自动部署会失败，而网页照常更新，如果没注意到就会回到
+   「前端是新的、服务端是旧的」这种最难查的状态。
+
+   为此另有 [`.github/workflows/check-supabase-token.yml`](../.github/workflows/check-supabase-token.yml)
+   每周一验证一次令牌是否还有效——部署只在改 Edge Function 时才触发，
+   光靠它发现不了「几周前就失效了」。这个定时检查把发现时间缩短到一周内。
+
+   换发只需重新生成令牌、更新同名 secret（点铅笔图标改值即可；
+   secret 被误删也不要紧，重新新建一条同名的就行），workflow 不用改。
 2. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，
    名字填 `SUPABASE_ACCESS_TOKEN`，值粘贴刚才的 token。
 3. 之后合并 PR 即可；也可以在 **Actions → 部署 health-sync → Run workflow** 手动触发。

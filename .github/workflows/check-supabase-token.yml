@@ -1,0 +1,37 @@
+# 每周确认部署令牌还有效。
+#
+# Supabase 的令牌一定会过期（后台最长只给到 90 天），而部署只在改动
+# Edge Function 时才触发。两件事凑在一起，最坏的情况是：令牌几周前就失效了，
+# 直到下一次改服务端代码才发现——期间网页是新版、服务端是旧版，
+# 而这正是本项目排查起来最费劲的一类问题。
+#
+# 所以每周主动验一次：失败会发邮件，把「几个月后才发现」缩短到「一周内」。
+name: 检查部署令牌
+
+on:
+  schedule:
+    # 每周一 09:00（UTC+8）＝ 周一 01:00 UTC
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # 只读操作，不会改动线上函数
+      - name: 验证令牌
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions list --project-ref kdkykrshqiamwecohxgw
+
+      - name: 失败原因提示
+        if: failure()
+        run: |
+          echo "::error::部署令牌已失效（多半是过期，也可能被撤销或权限被改窄）。"
+          echo "::error::到 https://supabase.com/dashboard/account/tokens 重新生成，"
+          echo "::error::再到仓库 Settings → Secrets and variables → Actions 更新 SUPABASE_ACCESS_TOKEN。"
+          echo "::error::在换发之前，任何对 supabase/functions/** 的改动都不会真正上线。"

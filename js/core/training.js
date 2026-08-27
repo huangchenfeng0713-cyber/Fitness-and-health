@@ -204,9 +204,32 @@ export function planAdvice(selection = []) {
   if (!list.length) return tips;
 
   const overlaps = findOverlaps(list);
-  for (const o of overlaps.filter((x) => x.level === 'high')) {
+  /*
+   * 一个动作只提一次。
+   *
+   * 两两比对是 O(n²)：选满一个部位的十八个动作会生成五十多条提示，
+   * 「杠铃卧推和另外五个重复」被拆成五条说五遍，真正要紧的那条反而被埋掉。
+   * 按重合度从高到低贪心：每对里挑一个标记为「该换掉的」，
+   * 只要这一对里已经有动作被标记过就跳过——去掉它之后那些重叠自然消失。
+   */
+  const MAX_DUP_TIPS = 5;
+  const flagged = new Set();
+  const highs = overlaps.filter((x) => x.level === 'high');
+  const deferred = new Set();
+  const dupTips = [];
+  const tipped = new Set();   // 已经单独出过提示的动作，汇总里不再重复计数
+  for (const o of highs) {
+    if (flagged.has(o.a.id) || flagged.has(o.b.id)) {
+      deferred.add(o.a.id);
+      deferred.add(o.b.id);
+      continue;
+    }
+    flagged.add(o.b.id);
+    // 一次最多列五条：真有十几个重复时，先改这几个再回来看比一次倒给用户有用
+    if (dupTips.length >= MAX_DUP_TIPS) { deferred.add(o.b.id); continue; }
+    tipped.add(o.b.id);
     const alts = replacementsFor(o.b, list, 3);
-    tips.push({
+    dupTips.push({
       level: 'warn',
       key: `dup-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 和 ${o.b.name} 练的是同一件事`,
@@ -222,13 +245,38 @@ export function planAdvice(selection = []) {
         + (alts.length ? `换掉 ${o.b.name}、改成下面任意一个更划算，它们和这套都不重复。` : ''),
     });
   }
-  for (const o of overlaps.filter((x) => x.level === 'some')) {
+  tips.push(...dupTips);
+  // 用 id 集合判断，不要拿 key.endsWith(id) 去猜——id 互为后缀时会误判
+  const stillOverlapping = [...deferred].filter((id) => !tipped.has(id));
+  if (stillOverlapping.length) {
+    tips.push({
+      level: 'info',
+      key: 'dup-more',
+      title: `另有 ${stillOverlapping.length} 个动作和上面这些重复`,
+      text: '先按上面的建议换掉几个，剩下的重叠多半会跟着消失，调整完再看一遍这里。',
+    });
+  }
+
+  /*
+   * 部分重叠只提最像的三组。这类提示是「知道就好」，不是必须处理的问题，
+   * 全部列出来只会把上面真正要改的那几条挤出屏幕。
+   */
+  const somes = overlaps.filter((x) => x.level === 'some');
+  for (const o of somes.slice(0, 3)) {
     tips.push({
       level: 'info',
       key: `part-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
       text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
         + '放在一起不算错，但两个都做力竭时后一个会明显掉力量，把复合动作排前面。',
+    });
+  }
+  if (somes.length > 3) {
+    tips.push({
+      level: 'info',
+      key: 'part-more',
+      title: `还有 ${somes.length - 3} 组动作部分重叠`,
+      text: '部分重叠不算错，这里只列最像的三组；真正要处理的是上面那些高度重复。',
     });
   }
 

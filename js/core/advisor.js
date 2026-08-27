@@ -102,7 +102,12 @@ function portionPhrase(name, mult) {
 /** 把克数吸附到该食物的常用份量上，让建议更好执行 */
 function snapToServing(food, grams, maxGrams = Infinity) {
   const unit = food.basis === '100ml' ? 'ml' : 'g';
-  const rounded = Math.min(Math.round(grams / 5) * 5, maxGrams);
+  /*
+   * 上限来自「剩余热量 ÷ 每 100g 热量」，是个浮点数。
+   * 直接 Math.min 会让上限那一侧原样漏出去，界面上就出现
+   * 「海鲜粥 384.00000000000006g」这种数——先取整再比较，且不越过上限。
+   */
+  const rounded = Math.min(Math.round(grams / 5) * 5, Math.floor(maxGrams));
   let best = { grams: rounded, label: `${rounded} ${unit}`, exact: false };
   for (const [name, g] of food.s || []) {
     for (const mult of [0.5, 1, 1.5, 2, 3]) {
