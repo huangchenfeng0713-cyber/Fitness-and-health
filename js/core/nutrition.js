@@ -51,6 +51,20 @@ export const ACTIVITY_LEVELS = {
 export const MAX_LOSS_RATE_PCT = 0.01;
 export const MAX_GAIN_RATE_PCT = 0.005;
 
+/*
+ * 上面两个是**建议上沿**，不是硬闸门。
+ *
+ * 科学结论说的是「超过这个速度，多出来的按比例主要是脂肪／瘦体重」，
+ * 不是「0.517% 不安全，必须拦下」。原先按 0.5% 硬截断，58kg 的人填 0.30
+ * 会被悄悄改成 0.29 —— 差 11 kcal/天，远小于食物估算和 TDEE 的误差，
+ * 却让界面说出「你填的 0.3 过快」这种过度精确的话。
+ *
+ * 现在只拦明显不可能的输入：每周超过体重的 1.5%。那个量级已经不是
+ * 「激进的计划」而是填错了（60kg 的人每周 ±0.9kg）。
+ * 落在建议上沿和硬上限之间的值原样保留，由界面说明它站在哪儿。
+ */
+export const ABSURD_RATE_PCT = 0.015;
+
 export const GOALS = {
   cut: { key: 'cut', label: '减脂', defaultRateKgPerWeek: -0.5 },
   maintain: { key: 'maintain', label: '维持', defaultRateKgPerWeek: 0 },
@@ -135,6 +149,57 @@ export function validateProfile(profile) {
     && (!Number.isFinite(Number(profile.proteinPerKg)) || Number(profile.proteinPerKg) < 0.5
       || Number(profile.proteinPerKg) > 3.5)) errors.push('自定义蛋白质需在 0.5–3.5 g/kg');
   return { valid: errors.length === 0, errors, age };
+}
+
+/**
+ * 填「目标速率」时该说什么，以及什么样的输入根本不该被存下来。
+ *
+ * 建议上沿（MAX_LOSS_RATE_PCT / MAX_GAIN_RATE_PCT）不是闸门：超过了照样能执行，
+ * 只是得把代价说清楚。真正拦下的只有明显填错的量级（ABSURD_RATE_PCT）。
+ * 表单里的即时提示和主卡上的说明共用这一个判断 ——
+ * 否则同一个数在「填的时候」和「看的时候」会得到两种说法。
+ *
+ * @returns {{level:'ok'|'over'|'absurd', text, advisoryKg, absurdKg, dailyKcal, pctOfWeight}}
+ */
+export function rateGuidance({ weightKg, rateKgPerWeek } = {}) {
+  const weight = Number(weightKg);
+  const rate = Number(rateKgPerWeek);
+  const blank = {
+    level: 'ok', text: '', advisoryKg: null, absurdKg: null, dailyKcal: 0, pctOfWeight: null,
+  };
+  if (!(weight > 0) || !Number.isFinite(rate)) return blank;
+  if (Math.abs(rate) < 0.005) {
+    return { ...blank, text: '维持体重：热量按估算消耗安排，不做刻意的盈余或赤字。' };
+  }
+  const gaining = rate > 0;
+  const advisoryKg = round(weight * (gaining ? MAX_GAIN_RATE_PCT : MAX_LOSS_RATE_PCT), 2);
+  const absurdKg = round(weight * ABSURD_RATE_PCT, 2);
+  const magnitude = Math.abs(rate);
+  const pctOfWeight = round((magnitude / weight) * 100, 2);
+  const dailyKcal = round((rate * KCAL_PER_KG_FAT) / 7);
+  const shape = { advisoryKg, absurdKg, dailyKcal, pctOfWeight };
+  const base = `约为体重的 ${pctOfWeight}%/周，相当于每天${gaining ? '多' : '少'}吃 ${Math.abs(dailyKcal)} kcal。`;
+
+  if (magnitude > absurdKg + 1e-9) {
+    return {
+      ...shape,
+      level: 'absurd',
+      text: `每周 ${magnitude} kg 超过了体重的 ${round(ABSURD_RATE_PCT * 100, 1)}%（约 ${absurdKg} kg/周）。`
+        + '这个量级已经不是激进的计划而是填错了，请先改小。',
+    };
+  }
+  if (magnitude > advisoryKg + 1e-9) {
+    return {
+      ...shape,
+      level: 'over',
+      text: `${base}超过建议上沿 ${advisoryKg} kg/周：`
+        + (gaining
+          ? '肌肉本身长不了这么快，再快出来的部分按比例主要是脂肪。'
+          : '再快下去掉的就不只是脂肪，瘦体重占的比例会上升。')
+        + '仍然可以按这个数执行，知道代价即可。',
+    };
+  }
+  return { ...shape, level: 'ok', text: `${base}在建议范围内（上沿约 ${advisoryKg} kg/周）。` };
 }
 
 function assertValidProfile(profile) {
@@ -411,16 +476,21 @@ export function dailyTargets(profile, dynamic = null) {
     ? Number(profile.rateKgPerWeek)
     : GOALS[goal].defaultRateKgPerWeek;
   const weight = Number(profile.weightKg);
-  // 减和增不是同一件事，用不同的上限（见 MAX_LOSS_RATE_PCT / MAX_GAIN_RATE_PCT）
-  const maxLossRate = weight * MAX_LOSS_RATE_PCT;
-  const maxGainRate = weight * MAX_GAIN_RATE_PCT;
-  const rateByWeight = clamp(requestedRate, -maxLossRate, maxGainRate);
+  /*
+   * 只拦离谱的输入，建议上沿不截断 —— 用户填的数照用，由界面说明它在哪一档。
+   * 减和增的建议上沿不是同一个数（见 MAX_LOSS_RATE_PCT / MAX_GAIN_RATE_PCT）。
+   */
+  const absurd = weight * ABSURD_RATE_PCT;
+  const rateByWeight = clamp(requestedRate, -absurd, absurd);
+  // 输入本身就离谱（不是被后面的每日热量上限收敛的）
+  const rateAbsurd = Math.abs(requestedRate) > absurd + 1e-9;
+  const advisoryCap = requestedRate < 0 ? weight * MAX_LOSS_RATE_PCT : weight * MAX_GAIN_RATE_PCT;
 
   const hasDynamicTdee = dynamic?.tdee > 0;
   const hasDeviceContribution = hasDynamicTdee
     && (dynamic.basalSource !== 'formula' || dynamic.activeSource !== 'formula-fallback');
   const tdee = hasDynamicTdee ? dynamic.tdee : stat.tdee;
-  // 固定 7700 只是短期预算近似；先限制到体重的 1%/周，再限制常用的 500–750 kcal 调整范围。
+  // 固定 7700 只是短期预算近似；离谱值已经在上面拦掉，这里再限制常用的 500–750 kcal 调整范围。
   const requestedDailyDelta = (rateByWeight * KCAL_PER_KG_FAT) / 7;
   const plannedDelta = clamp(requestedDailyDelta, -750, 500);
 
@@ -431,7 +501,22 @@ export function dailyTargets(profile, dynamic = null) {
   kcal = round(Math.max(kcal, floor));
   const dailyDelta = round(kcal - tdee);
   const rate = round((dailyDelta * 7) / KCAL_PER_KG_FAT, 2);
+  /*
+   * 三个状态，界面要说不同的话：
+   *   rateWasClamped   算出来的和填的不一样
+   *   rateLimitedBy    **最终**是哪一条决定了这个数 —— 文案只许点名它一个。
+   *                    原先那句「按体重比例和每日热量调整上限」点了两个机制，
+   *                    而实测只有一条在起作用，另一条根本没碰到。
+   *   rateOverAdvisory 最终这个速度站在建议上沿之外（不管是不是被截断过）
+   */
   const rateWasClamped = Math.abs(rate - requestedRate) > 0.005;
+  // 谁最后决定了这个数：先按离谱上限收，再按每日热量上限收，后者更靠后
+  const cappedByDailyKcal = Math.abs(requestedDailyDelta - plannedDelta) > 0.5;
+  const rateLimitedBy = !rateWasClamped ? null
+    : cappedByDailyKcal ? 'daily-kcal' : rateAbsurd ? 'absurd' : 'floor';
+  const rateAdvisoryPct = weight > 0 ? round((advisoryCap / weight) * 100, 2) : null;
+  const ratePctOfWeight = weight > 0 ? round((Math.abs(rate) / weight) * 100, 2) : null;
+  const overAdvisory = Math.abs(rate) > advisoryCap + 1e-9;
 
   const proteinPlan = proteinTarget(profile, goal);
 
@@ -486,6 +571,13 @@ export function dailyTargets(profile, dynamic = null) {
     rateKgPerWeek: rate,
     requestedRateKgPerWeek: requestedRate,
     rateWasClamped,
+    rateLimitedBy,
+    rateAbsurd,
+    // 最终速度站在建议上沿之外 —— 界面据此说明它站在哪儿，而不是改掉它
+    rateOverAdvisory: overAdvisory,
+    rateAdvisoryKg: round(advisoryCap, 2),
+    rateAdvisoryPct,
+    ratePctOfWeight,
     bmr: stat.bmr,
     formula: stat.formula,
     lbm: stat.lbm,

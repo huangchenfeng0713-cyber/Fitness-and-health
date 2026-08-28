@@ -493,6 +493,59 @@ html, body { height: 100%; overflow: hidden; }
 /* 出了建议范围，填充转成提醒色；罩子不动 */
 .range-bar.near .range-bar-fill { background: var(--warn) !important; }
 
+/*
+ * 碳水 / 脂肪合用的那一条。整条永远是满的 —— 它画的是「这块热量怎么分」，
+ * 不是「填到哪儿了」，所以有意义的只有分界线的位置。
+ *
+ * 两段同色不同浓度：颜色在这里确实要承担区分作用（哪边是碳水），
+ * 但换一个色相就成了「另一个指标」。竖标是计划的分界线。
+ */
+.split-bar {
+  position: relative; display: flex; height: 10px; border-radius: 999px;
+  background: var(--track); overflow: hidden;
+}
+.split-bar-carb { background: var(--accent); transition: width .25s ease; }
+.split-bar-fat {
+  background: color-mix(in srgb, var(--accent) 26%, var(--track));
+  transition: width .25s ease;
+}
+.split-bar-mark {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
+  background: color-mix(in srgb, var(--text) 72%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--card) 70%, transparent);
+}
+.split-bar.empty .split-bar-mark { background: color-mix(in srgb, var(--text) 28%, transparent); }
+
+/* 比例说不出吃了多少，克数补上；合计热量放中间，两头各是一项 */
+.split-grams {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin-top: 6px; font-size: var(--fs-caption); color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.split-grams span { white-space: nowrap; }
+.split-grams span:first-child::before,
+.split-grams span:last-child::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 999px;
+  margin-right: 5px; vertical-align: middle;
+}
+.split-grams span:first-child::before { background: var(--accent); }
+.split-grams span:last-child::before {
+  background: color-mix(in srgb, var(--accent) 26%, var(--track));
+}
+.split-grams-plan::before { content: none !important; }
+/* 中间那格是竖标的图例，别和两头的实测数字抢 */
+.split-grams-plan { color: color-mix(in srgb, var(--faint) 75%, transparent); }
+
+/*
+ * 计划速率的代价。橙字但不是「数字不对」那一档 ——
+ * 按 0.8%/周 增重是个可执行的选择，只是要知道多出来的按比例是脂肪。
+ */
+.hero-rate-note {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn); font-size: var(--fs-caption); line-height: 1.6;
+}
+
 .hero-ring-note {
   margin: 8px 0 0; font-size: 11.5px; color: var(--accent);
   text-align: center; white-space: nowrap;
@@ -743,6 +796,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .form-field input[type="date"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
 .form-field input[type="date"]::-webkit-calendar-picker-indicator { margin-left: 0; padding: 0; }
 .field-hint { font-size: 11.5px; color: var(--faint); line-height: 1.4; }
+/* 填速率时的即时判断：越线是橙（能存，只是有代价），填错是红（存不下去） */
+.rate-hint.over { color: var(--warn); }
+.rate-hint.absurd { color: var(--danger); font-weight: 600; }
 
 .toggle-row {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
@@ -887,6 +943,21 @@ body.sheet-open {
   border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
 }
 .insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
+
+/* 喝水：一个大点击区 + 次数。不画完成条 —— 它没有「该喝几次」这回事 */
+.water-tap-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.water-tap {
+  flex: none; display: inline-flex; align-items: center; gap: 7px;
+  min-height: 46px; padding: 0 18px; border: 0; border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--water) 12%, transparent);
+  color: var(--water); font-size: var(--fs-small); font-weight: 600; cursor: pointer;
+}
+.water-tap:active { background: color-mix(in srgb, var(--water) 22%, transparent); }
+.water-drop { width: 20px; height: 20px; fill: currentColor; }
+.water-count { flex: 1 1 auto; display: flex; align-items: baseline; gap: 3px; }
+.water-count strong { font-size: var(--fs-title); font-weight: 600; }
+.water-count span { font-size: var(--fs-caption); color: var(--muted); }
+.water-undo { flex: none; font-size: var(--fs-caption); }
 
 /* 只读态：位置和编辑态一样宽，切换时行不会跳 */
 .entry-actions.readonly { justify-content: flex-end; }

@@ -270,6 +270,7 @@ export function isPlausibleHealthValue(key, value) {
     restingHR: [20, 250], vo2max: [5, 120], sleepMinutes: [0, 1440],
     hkKcal: [0, 30000], hkProtein: [0, 5000], hkFat: [0, 5000], hkCarb: [0, 5000],
     hkFiber: [0, 1000], hkSugar: [0, 5000], hkSodium: [0, 1000000], waterMl: [0, 100000],
+    waterCount: [0, 200],
   };
   const range = limits[key];
   return !range || (v >= range[0] && v <= range[1]);

@@ -9,6 +9,8 @@
  * 纯函数，不碰 DOM。所有措辞也在这里定：同一个性质在哪儿都得是同一句话。
  */
 
+import { ATWATER } from './nutrition.js';
+
 /** 指标性质 */
 export const KIND = {
   /** 下限：够了就行，再多没有额外好处（蛋白、纤维） */
@@ -182,6 +184,83 @@ export function rangeScale(eaten, lo, hi) {
   };
 }
 
+
+/**
+ * 结构判定的宽容带：碳水供能占比和计划差几个百分点以内算「跟着计划走」。
+ * 纯工程取值，没有生理含义 —— 份量估算本身的误差就不止这么点。
+ */
+export const SPLIT_BALANCED_PP = 8;
+
+/**
+ * 碳水和脂肪合成一条：它们分的是同一块热量。
+ *
+ * 分开画成两条区间，最要命的是两条可以同时「在范围内」而总量对不上账：
+ * 2660 kcal 的计划上实测有 796 kcal（30%）的自由度，两条各自说自己没问题。
+ * 而且那时卡片会对着照计划吃的人写「碳水低于建议 74g」——热量明明已经吃满了。
+ *
+ * 合起来之后要回答的问题也变了，从「碳水够不够」变成「剩下这部分热量偏哪边」。
+ * 比例按 4 / 9 kcal 每克算（就是界面上说的「按热量算」），
+ * 不做纤维那 2 kcal 的细扣：那点差别不到 2%，写进去只会让人对不上手算的数。
+ *
+ * @returns {{carbG, fatG, kcal, carbPct, fatPct, planCarbPct, planFatPct,
+ *            diffPp, structure, label, level, note}}
+ */
+export function macroSplit(targets = {}, gaps = {}) {
+  const pos = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
+  const share = (carbG, fatG) => {
+    const carbKcal = carbG * ATWATER.carb;
+    const total = carbKcal + fatG * ATWATER.fat;
+    if (!(total > 0)) return null;
+    // 两个百分比必须凑成 100：各自四舍五入会印出「58% : 43%」
+    const carbPct = Math.round((carbKcal / total) * 100);
+    return { carbPct, fatPct: 100 - carbPct, kcal: Math.round(total) };
+  };
+
+  const carbG = round(pos(gaps.carb?.eaten), 1);
+  const fatG = round(pos(gaps.fat?.eaten), 1);
+  const now = share(carbG, fatG);
+  const plan = share(pos(targets.carb), pos(targets.fat));
+  const base = {
+    carbG, fatG, kcal: now?.kcal || 0,
+    planCarbPct: plan?.carbPct ?? null, planFatPct: plan?.fatPct ?? null,
+  };
+
+  if (!now) {
+    return {
+      ...base,
+      carbPct: null,
+      fatPct: null,
+      diffPp: null,
+      structure: 'none',
+      label: '还没有记录',
+      level: LEVEL.plain,
+      note: plan ? `计划 ${plan.carbPct}% : ${plan.fatPct}%` : '',
+    };
+  }
+
+  const diffPp = plan ? now.carbPct - plan.carbPct : 0;
+  const structure = !plan || Math.abs(diffPp) <= SPLIT_BALANCED_PP
+    ? 'balanced' : diffPp > 0 ? 'carb' : 'fat';
+  const label = structure === 'balanced'
+    ? '结构接近计划'
+    : `${structure === 'carb' ? '偏碳水' : '偏脂肪'} ${Math.abs(diffPp)} 个百分点`;
+  return {
+    ...base,
+    carbPct: now.carbPct,
+    fatPct: now.fatPct,
+    diffPp,
+    structure,
+    label,
+    /*
+     * 偏一点不是错误，所以没有橙和红。
+     * 三大营养素怎么分配本来就有很宽的合理区间，把「今天多吃了米饭」
+     * 画成警告色，等于把一个偏好问题说成了健康问题。
+     */
+    level: structure === 'balanced' ? LEVEL.met : LEVEL.plain,
+    note: plan ? `计划 ${plan.carbPct}% : ${plan.fatPct}%` : '',
+  };
+}
+
 /**
  * 今日主卡上八个指标各是什么性质。
  *
@@ -224,8 +303,13 @@ export function dailyMetrics(targets, gaps, water = null) {
       eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 1,
     },
     {
-      key: 'water', label: '饮水', unit: ' ml', kind: KIND.log,
-      eaten: Number(water) || 0, target: targets.waterMl,
+      /*
+       * 饮水只数「主动喝了几次」，不记毫升。
+       * 饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，单算白水没法
+       * 代表全天水分够不够 ——「125 / 1700 ml」那根条会被读成「今天只完成了 7%」。
+       */
+      key: 'water', label: '饮水', unit: ' 次', kind: KIND.log,
+      eaten: Math.max(0, Math.round(Number(water) || 0)), target: 0,
     },
   ].map((m) => ({ ...m, state: metricState(m) }));
 }

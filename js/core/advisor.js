@@ -442,7 +442,7 @@ export function buildAdvice(input) {
   // ---- 状态判定 ----
   const hasIntake = (entries || []).length > 0
     || ['kcal', 'protein', 'fat', 'carb'].some((key) => Number(gaps[key]?.eaten) > 0);
-  const status = judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget, hasIntake });
+  const status = judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake });
 
   // ---- 洞察 ----
   const insights = buildInsights({ gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries });
@@ -459,11 +459,18 @@ export function buildAdvice(input) {
   };
 }
 
-/** 一句话总体判定 */
-export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget, hasIntake = true }) {
+/*
+ * 主卡最上面那一段，**只说热量**。
+ *
+ * 它回答的是「今天吃的热量够不够、能不能走到计划要的那个速度」——
+ * 一个问题一句话。原先这里还会抢着说蛋白缺口和钠超标：那两条在
+ * 「今日提示」里本来就各有一条，同一件事在一屏里说两遍，
+ * 而且会把热量的结论挤掉（钠超标 11% 就能顶掉「今天还差 900 kcal」）。
+ * 蛋白、钠、纤维、糖一律归 buildInsights。
+ */
+export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake = true }) {
   const dayProgress = clamp((hour - 6) / 16, 0, 1); // 6:00~22:00
   const kcalPct = gaps.kcal.pct;
-  const proteinPct = gaps.protein.pct;
   const expected = round(dayProgress * 100);
 
   if (kcalLeft < -targets.kcal * 0.12) {
@@ -479,17 +486,7 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     return {
       level: 'warn',
       headline: `热量刚好吃满并略超 ${Math.abs(kcalLeft)} kcal`,
-      detail: proteinLeft > 0
-        ? `蛋白完成 ${proteinPct}%。蛋白质本身含有热量，今天无法在不继续增加热量的情况下补齐；不必硬补，明天把蛋白提前分配到前几餐。`
-        : `蛋白已经完成 ${proteinPct}%。今天无需补偿性少吃，下一餐回到正常预算即可。`,
-    };
-  }
-  if (proteinLeft > 0 && proteinLeft * ATWATER.protein > kcalLeft + 1) {
-    const minimumOver = Math.ceil(proteinLeft * ATWATER.protein - kcalLeft);
-    return {
-      level: 'warn',
-      headline: `热量只剩 ${round(kcalLeft)} kcal，无法补齐 ${round(proteinLeft)}g 蛋白`,
-      detail: `这些蛋白即使不带脂肪和碳水也至少需要 ${round(proteinLeft * ATWATER.protein)} kcal。可选择守住热量余量，或优先补蛋白并接受至少约 ${minimumOver} kcal 的超出；今天不必为了凑数强行进食。`,
+      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。这个幅度对计划几乎没有影响，今天无需补偿性少吃，下一餐回到正常预算即可。`,
     };
   }
   /*
@@ -503,20 +500,12 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
     // 全天的一半。那适合内部排预算，却不适合直接叫人一餐补回；空记录时只展示
     // 当前餐原本的日占比，避免出现「13:30 午餐建议 975 kcal」这种过量暗示。
     const normalMealKcal = round(Math.min(budget.kcal, targets.kcal * budget.meal.share));
-    const normalMealProtein = round(Math.min(budget.protein, targets.protein * budget.meal.share), 1);
     return {
       level: late ? 'warn' : 'good',
-      headline: `还有 ${kcalLeft} kcal 热量余量，蛋白还差 ${round(proteinLeft)}g`,
+      headline: `还有 ${kcalLeft} kcal 热量余量`,
       detail: late
-        ? `今天还没有饮食记录。若只是漏记，请先补记；若确实尚未进食，也不建议在夜间一次补完全天缺口。`
-        : `今天还没有饮食记录。若只是漏记，请先补记；若确实还没吃，${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal、${normalMealProtein}g 蛋白，不必在这一餐补完当天缺口。`,
-    };
-  }
-  if (proteinLeft > gaps.protein.target * 0.5 && dayProgress > 0.6) {
-    return {
-      level: 'warn',
-      headline: `蛋白还差 ${round(proteinLeft)}g，缺口偏大`,
-      detail: `已经过了一天的 ${expected}%，蛋白才完成 ${proteinPct}%。剩余 ${kcalLeft} kcal 需要优先给高蛋白食物，碳水和脂肪往后放。`,
+        ? '今天还没有饮食记录。若只是漏记，请先补记；若确实尚未进食，也不建议在夜间一次补完全天缺口。'
+        : `今天还没有饮食记录。若只是漏记，请先补记；若确实还没吃，${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
     };
   }
   if (kcalPct < expected - 30 && dayProgress > 0.5) {
@@ -527,24 +516,16 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
-  if (gaps.sodium.pct > 110) {
-    return {
-      level: 'warn',
-      headline: `钠摄入超标 ${gaps.sodium.pct - 100}%`,
-      detail: `已摄入 ${gaps.sodium.eaten} mg（建议上限 ${gaps.sodium.target} mg）。今天余下的选择请避开加工肉、腌制品和重口味汤汁；如有医生规定的限盐或限水方案，以医嘱为准。`,
-    };
-  }
   const pace = kcalPct - expected;
   const paceText = Math.abs(pace) <= 12
     ? `记录量与当前时间参考（${expected}%）大致接近`
     : pace > 0
       ? `记录量高于当前时间参考（${expected}%），后面餐次按剩余量安排即可`
       : `记录量低于当前时间参考（${expected}%），先确认是否漏记，别把缺口全留到晚上`;
-  const proteinText = proteinLeft > 0 ? `蛋白还差 ${round(proteinLeft)}g` : '蛋白已达标';
   return {
     level: 'good',
-    headline: `还有 ${kcalLeft} kcal 热量余量，${proteinText}`,
-    detail: `热量完成 ${kcalPct}%，蛋白完成 ${proteinPct}%，${paceText}。${budget.meal.label}建议 ${budget.kcal} kcal、${budget.protein}g 蛋白。`,
+    headline: `还有 ${kcalLeft} kcal 热量余量`,
+    detail: `热量完成 ${kcalPct}%，${paceText}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
   };
 }
 
@@ -610,10 +591,22 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
       + '。全天总量够的前提下，可把 20–40g 蛋白安排在训练前后。');
   }
 
-  // 蛋白
-  if (gaps.protein.remaining > 10) {
-    const eq = proteinEquivalent(gaps.protein.remaining);
-    add('protein', `蛋白还差 ${round(gaps.protein.remaining)}g`, `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。目标依据：${targets.proteinBasis}。`);
+  /*
+   * 蛋白。「补不齐了」这条以前长在主卡最上面那一段里，可那一段只该说热量；
+   * 而且它和下面这条「蛋白还差 Xg」讲的是同一个缺口，一屏里说了两遍。
+   */
+  const proteinShort = gaps.protein.remaining;
+  const kcalLeft = gaps.kcal.remaining;
+  if (proteinShort > 0 && proteinShort * ATWATER.protein > kcalLeft + 1) {
+    const need = round(proteinShort * ATWATER.protein);
+    const minimumOver = Math.max(1, Math.ceil(need - kcalLeft));
+    add('protein', `剩下的热量补不齐这 ${round(proteinShort)}g 蛋白`,
+      `蛋白质本身带热量：这些蛋白即使一点脂肪和碳水都不带也要 ${need} kcal，`
+      + `而今天只剩 ${round(kcalLeft)} kcal。可以守住热量余量，也可以优先补蛋白并接受大约 ${minimumOver} kcal 的超出；`
+      + '不必为了凑数强行进食，明天把蛋白提前分到前几餐更省事。');
+  } else if (proteinShort > 10) {
+    const eq = proteinEquivalent(proteinShort);
+    add('protein', `蛋白还差 ${round(proteinShort)}g`, `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。目标依据：${targets.proteinBasis}。`);
   } else if (gaps.protein.pct >= 100) {
     add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);
   }
@@ -646,10 +639,7 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
    */
 
   // 饮水
-  if (health.waterMl != null && targets.waterMl) {
-    const left = targets.waterMl - health.waterMl;
-    if (left > 500) add('info', `饮水参考还差 ${round(left)} ml`, `通用参考为 ${targets.waterMl} ml，可在余下时间分次补充；炎热、运动和医生要求会改变个人需要。`);
-  }
+
 
   if (!entries.length && gaps.kcal.eaten <= 0 && now.getHours() >= 12) {
     add('warn', '今天还没有记录任何饮食', '漏记会让所有建议失真。哪怕只是大致估个份量，也比不记准确得多。');

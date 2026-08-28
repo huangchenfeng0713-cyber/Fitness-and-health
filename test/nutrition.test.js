@@ -4,7 +4,10 @@ import {
   basalMetabolicRate, staticTDEE, dailyTargets, dynamicTDEE, activityCurve,
   leanBodyMass, bmi, bmiCategory, ageFrom, proteinTarget, sumNutrients, computeGaps,
   validateProfile, ATWATER, KCAL_PER_KG_FAT, CARB_RDA_G, ACTIVITY_LEVELS, ageIsEstimated,
+  rateGuidance, MAX_GAIN_RATE_PCT, MAX_LOSS_RATE_PCT,
 } from '../js/core/nutrition.js';
+
+const round = (v, d = 0) => Math.round(v * 10 ** d) / 10 ** d;
 
 const male = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, activity: 'light', goal: 'maintain' };
 const female = { sex: 'female', age: 28, heightCm: 162, weightKg: 55, activity: 'sedentary', goal: 'cut' };
@@ -484,27 +487,98 @@ test('蛋白目标落在文献给出的区间内', () => {
   assert.ok(perLbm >= 2.3 && perLbm <= 3.1, `减脂期 ${perLbm} g/kg 瘦体重应落在 Helms 区间`);
 });
 
-test('增重速率的上限不能照抄减重那条 1% 体重/周', () => {
+test('增重的建议上沿不能照抄减重那条 1% 体重/周', () => {
   /*
    * 1% 体重/周 来自减重：再快下去掉的就不只是脂肪。它约束的是脂肪能被
    * 动员多快。增重受的是另一个限制 —— 肌肉本身长多快，即便新手也就
    * 每周 0.25%~0.5% 体重，超出这一段多出来的按比例主要是脂肪。
    * 共用一个 1% 会允许 45kg 的人计划每周 +0.45kg（一个月长 4% 体重）。
+   *
+   * 这两个数现在是**建议上沿**而不是闸门（见 ABSURD_RATE_PCT 那段注释），
+   * 所以要检查的是「越没越线」，不是「有没有被改小」。
    */
   for (const weightKg of [45, 60, 70, 85, 100, 120]) {
     const prof = { sex: 'male', age: 28, heightCm: 178, weightKg, activity: 'active' };
-    const gain = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 5 });
-    const pctGain = (gain.rateKgPerWeek / weightKg) * 100;
-    assert.ok(pctGain <= 0.52, `${weightKg}kg 允许每周增 ${pctGain.toFixed(2)}% 体重，超过 0.5% 的上限`);
-    assert.ok(pctGain > 0.35, `${weightKg}kg 只允许 ${pctGain.toFixed(2)}%，收得太狠`);
+    const advisory = (rateKgPerWeek, goal) => rateGuidance({ weightKg, rateKgPerWeek });
 
-    // 减重那条不受影响，仍是 1%
-    const loss = dailyTargets({ ...prof, goal: 'cut', rateKgPerWeek: -5 });
-    const pctLoss = (Math.abs(loss.rateKgPerWeek) / weightKg) * 100;
-    assert.ok(pctLoss <= 1.005, `${weightKg}kg 允许每周减 ${pctLoss.toFixed(2)}% 体重`);
-    assert.ok(pctLoss > pctGain, `${weightKg}kg 的减重上限该比增重上限宽`);
+    const gainCap = round(weightKg * MAX_GAIN_RATE_PCT, 2);
+    const lossCap = round(weightKg * MAX_LOSS_RATE_PCT, 2);
+    assert.ok(lossCap > gainCap, `${weightKg}kg 的减重上沿该比增重上沿宽`);
+    assert.equal(advisory(gainCap).level, 'ok', `${weightKg}kg 增 ${gainCap} 不该越线`);
+    assert.equal(advisory(gainCap + 0.06).level, 'over', `${weightKg}kg 增 ${gainCap + 0.06} 该越线`);
+    assert.equal(advisory(-lossCap).level, 'ok', `${weightKg}kg 减 ${lossCap} 不该越线`);
+
+    // 同一个速度：减重侧还在建议内，增重侧已经越线
+    const between = round((gainCap + lossCap) / 2, 2);
+    assert.equal(advisory(-between).level, 'ok');
+    assert.equal(advisory(between).level, 'over');
+
+    // 闸门只拦离谱的量级，而且拦的是同一个数（不分增减）
+    assert.equal(advisory(weightKg * 0.02).level, 'absurd');
+    assert.equal(advisory(-weightKg * 0.02).level, 'absurd');
   }
   // 默认的 +0.25 kg/周 对一般体重不该被收敛
   const normal = dailyTargets({ sex: 'male', age: 28, heightCm: 178, weightKg: 70, activity: 'active', goal: 'bulk' });
   assert.equal(normal.rateWasClamped, false, `默认增重速率被收敛了：${normal.rateKgPerWeek}`);
+});
+
+/*
+ * 建议上沿之内之外都照填的数算，只有明显填错的量级才拦。
+ *
+ * 原先 0.5% 是硬截断：58kg 的人填 +0.30 会被悄悄改成 +0.29，
+ * 差 11 kcal/天 —— 远小于食物估算和 TDEE 本身的误差，
+ * 界面却要为此说一句「你填的 0.3 过快」。科学结论说的是
+ * 「超过 0.5% 就不划算」，不是「0.517% 不安全必须拦下」，
+ * 这两句话不该由同一个机制执行。
+ */
+test('建议上沿只警告不截断，硬闸门只拦离谱的量级', () => {
+  const prof = { sex: 'male', age: 28, heightCm: 178, weightKg: 58, activity: 'active' };
+
+  const slightlyOver = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 0.3 });
+  assert.equal(slightlyOver.rateKgPerWeek, 0.3, '越过建议上沿一点点不该被改数');
+  assert.equal(slightlyOver.rateWasClamped, false);
+  assert.equal(slightlyOver.rateOverAdvisory, true, '越线了得说出来');
+  assert.equal(slightlyOver.rateAdvisoryKg, 0.29);
+
+  const onCap = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 0.29 });
+  assert.equal(onCap.rateOverAdvisory, false, '正好落在上沿上不算越线');
+
+  // 离谱的输入照样拦下来，而且要说清是被哪一条限住的
+  const absurd = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 3 });
+  assert.ok(absurd.rateWasClamped);
+  assert.ok(Math.abs(absurd.rateKgPerWeek) < 3);
+  assert.equal(absurd.rateAbsurd, true);
+
+  /*
+   * 「是哪一条限住的」只许点名一个。原先那句话同时点了体重比例和
+   * 每日热量上限两个机制，而实测只有后者真的碰到了 —— 用户照着去查
+   * 另一条会发现根本对不上。
+   */
+  const byDailyKcal = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 0.6 });
+  assert.equal(byDailyKcal.rateLimitedBy, 'daily-kcal',
+    `0.6 是被每天 +500 kcal 的上限限住的，却报了 ${byDailyKcal.rateLimitedBy}`);
+});
+
+test('填速率时的即时提示：三档说三种话', () => {
+  const at = (rateKgPerWeek) => rateGuidance({ weightKg: 58, rateKgPerWeek });
+
+  assert.equal(at(0.25).level, 'ok');
+  assert.match(at(0.25).text, /在建议范围内/);
+  // 「相当于每天多吃多少 kcal」是填数的人真正要的那个换算
+  assert.match(at(0.25).text, /每天多吃 275 kcal/);
+  assert.match(at(-0.5).text, /每天少吃 550 kcal/);
+
+  assert.equal(at(0.45).level, 'over');
+  assert.match(at(0.45).text, /超过建议上沿 0.29 kg\/周/);
+  assert.match(at(0.45).text, /主要是脂肪/);
+  assert.match(at(-0.75).text, /瘦体重/);
+  // 越线不是错误：仍然能存，只是要知道代价
+  assert.match(at(0.45).text, /仍然可以按这个数执行/);
+
+  assert.equal(at(1.2).level, 'absurd');
+  assert.match(at(1.2).text, /填错/);
+
+  assert.equal(at(0).text, '维持体重：热量按估算消耗安排，不做刻意的盈余或赤字。');
+  // 体重还没填时不要硬凑一句话出来
+  assert.equal(rateGuidance({ weightKg: null, rateKgPerWeek: 0.5 }).text, '');
 });

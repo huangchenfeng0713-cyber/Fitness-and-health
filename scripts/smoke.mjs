@@ -139,16 +139,46 @@ try {
     }));
     const ring = document.querySelector('.ring circle:nth-of-type(2)');
     const foot = document.querySelector('.hero-ring-note')?.textContent || '';
-    return { rows, chips, foot, ringStroke: ring ? getComputedStyle(ring).stroke : null };
+    /*
+     * 碳水和脂肪合用的那一条：整条永远是满的，有意义的是分界线在哪。
+     * 段宽是 JS 写进 style 的百分比，写错了不会报错，只会画出半条 —— 得量。
+     */
+    const splitEl = document.querySelector('.split-row');
+    const seg = (sel) => splitEl?.querySelector(sel)?.getBoundingClientRect().width || 0;
+    const noteEl = splitEl?.querySelector('.metric-row-note');
+    const split = splitEl ? {
+      barWidth: splitEl.querySelector('.split-bar')?.getBoundingClientRect().width || 0,
+      carbWidth: seg('.split-bar-carb'),
+      fatWidth: seg('.split-bar-fat'),
+      hasMark: !!splitEl.querySelector('.split-bar-mark'),
+      text: splitEl.innerText.replace(/\n/g, ' '),
+      // 这一行的说明比别的长，nowrap + ellipsis 很容易把它截掉
+      noteClipped: noteEl ? noteEl.scrollWidth > noteEl.clientWidth + 1 : false,
+    } : null;
+    return {
+      rows, chips, foot, split,
+      splitCount: document.querySelectorAll('.split-row').length,
+      ringStroke: ring ? getComputedStyle(ring).stroke : null,
+    };
   });
-  const carb = semantics.rows.find((r) => r.label.includes('碳水'));
+  const { split } = semantics;
   const all = [...semantics.rows, ...semantics.chips];
   const wrongRed = all.filter((r) => r.level === 'over'
     && !['钠', '游离糖'].some((k) => r.label.includes(k)));
   const problems = [
-    !carb && '碳水那行没渲染出来',
-    // 碳水是余数：条形可以有（一眼看出吃到哪儿了），但绝不能说「还差多少」
-    carb && /还差/.test(carb.note) && `碳水是余数，不该说「${carb.note}」`,
+    semantics.splitCount !== 1 && `碳水脂肪该合用一条，实际 ${semantics.splitCount} 条`,
+    /*
+     * 分开画两条区间时，两条可以同时「在范围内」而总量差出 796 kcal。
+     * 它们分的是同一块热量，只能有一条。
+     */
+    semantics.rows.some((r) => r.label === '碳水' || r.label === '脂肪')
+      && '碳水或脂肪又单独占了一行',
+    split && Math.abs(split.carbWidth + split.fatWidth - split.barWidth) > 2
+      && `合用那条没铺满：${split.carbWidth.toFixed(0)}+${split.fatWidth.toFixed(0)} ≠ ${split.barWidth.toFixed(0)}`,
+    split && !split.hasMark && '条上没有画计划的分界线',
+    split && split.noteClipped && `结构说明被截断了：${split.text}`,
+    // 比例说不出吃了多少，克数得跟着一起给
+    split && !/碳水 \d+(\.\d+)?g/.test(split.text) && `合用那条没写克数：${split.text}`,
     semantics.chips.length !== 3 && `门槛类指标应有三个方框，实际 ${semantics.chips.length}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
