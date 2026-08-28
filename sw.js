@@ -23,6 +23,7 @@ const SHELL = [
   './js/lib/health-cloud-sync.js',
   './js/lib/utils.js',
   './js/lib/charts.js',
+  './js/lib/select-bar.js',
   './js/core/metrics.js',
   './js/core/portion.js',
   './js/core/nutrition.js',
