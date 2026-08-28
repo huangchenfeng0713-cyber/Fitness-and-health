@@ -875,3 +875,18 @@ test('乳糖和整食自带的糖不计入游离糖', () => {
   assert.equal(condensed.nfs, 12, '炼乳的乳糖估计值被改了');
   assert.ok(freeSugarPer100(condensed) > 40, '炼乳加进去的糖必须照算');
 });
+
+test('带甜味做法的菜不能被当成完全不加糖', () => {
+  /*
+   * 菜肴的游离糖靠 DISH_ADDED_SUGAR 逐道给值，没列出的按不加糖处理 ——
+   * 加新菜时漏填，糖醋、红烧这类的游离糖就会算成 0，而「游离糖上限」
+   * 正是界面上会报警的那一项。名字里带甜味做法却算出 0 游离糖，基本就是漏填了。
+   */
+  const KEYWORDS = ['糖醋', '红烧', '照烧', '鱼香', '京酱', '可乐', '蜜汁', '拔丝', '冰糖',
+    '咕咾', '锅包', '叉烧', '酱烧', '卤'];
+  const missed = FOODS
+    .filter((f) => f.cat === 'dish' && KEYWORDS.some((k) => f.name.includes(k)))
+    .filter((f) => Number(f.n[5]) > 0 && nutrientsFor(f, 100).sugar <= 0.05)
+    .map((f) => `${f.id}（${f.name}，总糖 ${f.n[5]}g）`);
+  assert.deepEqual(missed, [], `这些菜没在 DISH_ADDED_SUGAR 里给值：${missed.join('、')}`);
+});

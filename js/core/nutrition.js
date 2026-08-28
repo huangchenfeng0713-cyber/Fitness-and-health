@@ -289,8 +289,29 @@ export function dynamicTDEE({
   const MAX_ACTIVE_PER_MIN = 15;
   const elapsedMin = Math.max(1, f * 1440);
   const activeCeiling = elapsedMin * MAX_ACTIVE_PER_MIN;
+  /*
+   * 第二道：和这个人自己近期的活动量比。
+   *
+   * 上面那条速率天花板只在一天刚开始时收得紧 —— 到了晚上 elapsedMin 接近 1440，
+   * 它涨到 21600 kcal，而它本来就是为了拦「导入端把多天累加成一天」写的：
+   * 日均 600 kcal 的人晚上报来 18000（一个月的量）照样放行，
+   * 热量目标被顶到 19717 kcal。那不是「今天练得狠」，是数据错了。
+   *
+   * 所以再按本人基线卡一道：4 倍日均、或日均 + 2500 kcal，取宽的那个。
+   * 一场马拉松的活动能量约 2600 kcal，日均 600 的人放行到 3100，接得住；
+   * 按天累加出来的假数据一定会超。没有基线时这条不生效 ——
+   * 新用户手上没有可比的数，宁可信设备。
+   *
+   * 两个都是护栏，没有生理含义，只是「这个数还能不能当依据」的判断。
+   */
+  const MAX_ACTIVE_VS_BASELINE = 4;
+  const MAX_ACTIVE_EXTRA = 2500;
+  const baselineCeiling = hasBaselineActive
+    ? Math.max(baselineActiveValue * MAX_ACTIVE_VS_BASELINE, baselineActiveValue + MAX_ACTIVE_EXTRA)
+    : Infinity;
   const curveNow = activityCurve(f);
-  const activeCapped = hasActiveToday && activeNow > activeCeiling;
+  const activeCapped = hasActiveToday
+    && (activeNow > activeCeiling || activeNow > baselineCeiling);
   // 超了就不是「削到天花板」而是「这个数不能用」：退回按平时节奏推算，
   // 拿天花板当真值等于把编出来的数字当依据，只是错得少一点而已。
   const activeAccepted = hasActiveToday && !activeCapped ? activeNow : 0;
@@ -491,6 +512,9 @@ export function sumNutrients(entries = []) {
     kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sugar: 0, totalSugar: 0, sodium: 0,
   };
   for (const e of entries) {
+    // 恢复备份和云端同步是绕过 addEntry 直接落库的，条目里混进 null 不是假想：
+    // 这里一抛，recompute 就断了，用户连设置抽屉都打不开、没法回去删那条数据
+    if (!e || typeof e !== 'object') continue;
     total.kcal += Number(e.kcal) || 0;
     total.protein += Number(e.protein) || 0;
     total.fat += Number(e.fat) || 0;

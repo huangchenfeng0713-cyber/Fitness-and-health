@@ -375,7 +375,7 @@ export function buildAdvice(input) {
     goal: targets.goal,
     hour,
     isTrainingDay,
-    recentIds: new Set(entries.map((e) => e.foodId).filter(Boolean)),
+    recentIds: new Set(entries.map((e) => e?.foodId).filter(Boolean)),
     kcalLeft,
     proteinLeft,
   };

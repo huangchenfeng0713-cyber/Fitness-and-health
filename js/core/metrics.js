@@ -81,6 +81,16 @@ export function metricState({
   // 脂肪碳水那两条是「文献建议」（IOM AMDR）。措辞不能混。
   rangeWord = '建议',
 }) {
+  /*
+   * 先把进来的数收干净再用。目标一旦是 NaN 或负数，措辞里就会直接印出
+   * 「还差 NaNg」「上限 -100g」—— 用户看到的是乱码，而不是「这项没数据」。
+   * dailyTargets 自己不会产出这种值，但恢复备份和云端同步能把它写进来。
+   */
+  const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
+  eaten = num(eaten);
+  target = num(target);
+  lo = lo == null ? null : num(lo);
+  hi = hi == null ? null : num(hi);
   const n = (v) => `${round(v, decimals)}${unit}`;
 
   if (kind === KIND.remainder) {

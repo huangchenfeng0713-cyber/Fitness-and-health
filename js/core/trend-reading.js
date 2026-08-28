@@ -22,13 +22,34 @@ export const MIN_POINTS_FOR_CLAIM = 3;
  * 一条序列的基本形状。
  * drift 用前后两半的均值差，比最小二乘更抗单点异常，也更容易讲清楚。
  */
-export function analyzeSeries(points = [], decimals = 0) {
-  // 先剔掉 null/undefined 再转数字：Number(null) 是 0，
-  // 漏记的那天会被当成「吃了 0 kcal」拉低平均（这个口径全应用一致）
-  const ys = points
+/**
+ * 取出这段序列里真正有数的那些值。
+ *
+ * 先剔掉 null/undefined 再转数字：`Number(null)` 是 0，
+ * 漏记的那天会被当成「吃了 0 kcal」拉低平均（这个口径全应用一致）。
+ * 传进来不是数组时（调用方还没准备好数据）当空序列处理，别把整张卡炸掉。
+ */
+function seriesValues(points) {
+  return (Array.isArray(points) ? points : [])
     .filter((p) => p != null && p.y != null && p.y !== '')
     .map((p) => Number(p.y))
     .filter(Number.isFinite);
+}
+
+/**
+ * 数「有几天满足某个条件」。
+ *
+ * 必须和 analyzeSeries 走同一套过滤。直接 `points.filter((p) => Number(p.y) < X)`
+ * 会把没记录的那天算进去 —— 14 天里只有 3 天有记录、而且都贴着目标，
+ * 卡片却写「另有 11 天不到目标的四分之三」，睡眠写「11 天不足 6.5 小时」，
+ * 步数写「11 天不到 4000 步」。分母是有记录的天数，分子也得是同一批天。
+ */
+function countDays(points, pred) {
+  return seriesValues(points).filter(pred).length;
+}
+
+export function analyzeSeries(points = [], decimals = 0) {
+  const ys = seriesValues(points);
   if (!ys.length) return null;
   const avg = ys.reduce((a, b) => a + b, 0) / ys.length;
   const half = Math.ceil(ys.length / 2);
@@ -61,8 +82,8 @@ function readKcal(points, { target }) {
     return `有记录的 ${s.n} 天里日均 ${s.avg} kcal。`
       + `再记满 ${MIN_POINTS_FOR_CLAIM - s.n} 天，这里会给出和目标的差距、超标了几天。`;
   }
-  const over = points.filter((p) => target > 0 && Number(p.y) > target * 1.05).length;
-  const under = points.filter((p) => target > 0 && Number(p.y) < target * 0.75).length;
+  const over = target > 0 ? countDays(points, (y) => y > target * 1.05) : 0;
+  const under = target > 0 ? countDays(points, (y) => y < target * 0.75) : 0;
   const gap = target > 0 ? round(s.avg - target) : null;
   return join([
     `有记录的 ${s.n} 天里日均 ${s.avg} kcal`,
@@ -84,7 +105,7 @@ function readKcal(points, { target }) {
 function readProtein(points, { target, threshold }) {
   const s = analyzeSeries(points);
   if (!s) return '这段时间还没有饮食记录，记满几天才能看出蛋白是否吃够。';
-  const hit = points.filter((p) => Number(p.y) >= threshold).length;
+  const hit = countDays(points, (y) => y >= threshold);
   // 同上：两天里达标一天不叫「达标率 50%」
   if (s.n < MIN_POINTS_FOR_CLAIM) {
     return `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`
@@ -159,7 +180,7 @@ function readActive(points) {
 function readSleep(points) {
   const s = analyzeSeries(points, 1);
   if (!s) return '这段时间还没有睡眠记录。';
-  const short = points.filter((p) => Number(p.y) < 6.5).length;
+  const short = countDays(points, (y) => y < 6.5);
   return join([
     s.avg < 6.5 ? `日均 ${s.avg} 小时，明显低于成人 7~9 小时的常见建议。`
       : s.avg < 7 ? `日均 ${s.avg} 小时，离 7 小时还差一点。`
@@ -196,7 +217,7 @@ function readRestingHR(points) {
 function readBalance(points) {
   const s = analyzeSeries(points);
   if (!s) return '需要同一天既有饮食记录、又有设备的静息与活动能量，才能算收支。';
-  const deficit = points.filter((p) => Number(p.y) < 0).length;
+  const deficit = countDays(points, (y) => y < 0);
   const head = `${s.n} 天里日均 ${s.avg > 0 ? '+' : ''}${s.avg} kcal，其中 ${deficit} 天为负（摄入低于消耗）。`;
   // 一两天就换算成「每周掉几公斤」是最容易造出假结论的地方，样本不够就只报数
   if (s.n < MIN_POINTS_FOR_CLAIM) {
@@ -215,7 +236,7 @@ function readBalance(points) {
 function readSteps(points) {
   const s = analyzeSeries(points);
   if (!s) return '这段时间还没有步数记录。';
-  const low = points.filter((p) => Number(p.y) < 4000).length;
+  const low = countDays(points, (y) => y < 4000);
   return join([
     `日均 ${s.avg} 步，区间内 ${s.min} ~ ${s.max} 步。`,
     s.avg < 5000 ? '低于本应用的下限参考分档；先把每天的日常走动加到 5000 步，比一次走很多更容易坚持。'
@@ -235,7 +256,7 @@ function readExercise(points) {
   const s = analyzeSeries(points);
   if (!s) return '这段时间还没有锻炼记录。';
   const weekly = Math.round((s.avg * 7));
-  const zero = points.filter((p) => Number(p.y) <= 0).length;
+  const zero = countDays(points, (y) => y <= 0);
   return join([
     `日均 ${s.avg} 分钟，按这个节奏一周约 ${weekly} 分钟。`,
     weekly >= 150 ? '达到 WHO 每周 150 分钟中等强度身体活动的建议。'

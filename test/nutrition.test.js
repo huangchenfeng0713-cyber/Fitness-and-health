@@ -243,6 +243,42 @@ test('凌晨报来不可能的活动能量时，热量目标不被顶高', () =>
     `不可信的数据应等同于「今天还没有活动数据」，实得 ${bad.tdee} vs ${none.tdee}`);
 });
 
+test('晚上报来的多天累加值也要拦住，不能只在凌晨管用', () => {
+  /*
+   * 15 kcal/分钟那条天花板到了晚上就形同虚设：elapsedMin 接近 1440，
+   * 上限涨到 21600 kcal。日均 600 的人 20:00 报来 18000（一个月的量）
+   * 照样放行，热量目标被顶到 19717 kcal —— 而这正是那条护栏要拦的情况。
+   */
+  const evening = 20 / 24;
+  const fake = dynamicTDEE({
+    bmr: 1768, activeSoFar: 18000, basalSoFar: 1500, dayFraction: evening,
+    baselineActive: 600, baselineResting: 1700, fallbackTDEE: 2600,
+  });
+  assert.equal(fake.activeCapped, true, `18000 kcal 活动能量必须被判为不可信，实得 tdee ${fake.tdee}`);
+  assert.ok(fake.tdee < 3000, `TDEE 应回到正常量级，实得 ${fake.tdee}`);
+  assert.equal(fake.activeReported, 18000, '原始值仍要能读到，界面才说得出哪儿不对');
+
+  // 一场马拉松的活动能量约 2600 kcal —— 日均 600 的人真跑了也不该被误伤
+  const marathon = dynamicTDEE({
+    bmr: 1768, activeSoFar: 2600, basalSoFar: 1500, dayFraction: evening,
+    baselineActive: 600, baselineResting: 1700, fallbackTDEE: 2600,
+  });
+  assert.equal(marathon.activeCapped, false, `马拉松被误判成脏数据，tdee ${marathon.tdee}`);
+
+  // 久坐的人第一次去徒步：基线低，但绝对量并不离谱，靠 +2500 那一项放行
+  const firstHike = dynamicTDEE({
+    bmr: 1600, activeSoFar: 1800, basalSoFar: 1400, dayFraction: evening,
+    baselineActive: 120, baselineResting: 1550, fallbackTDEE: 2000,
+  });
+  assert.equal(firstHike.activeCapped, false, '基线低不等于今天不能动，实得 capped=true');
+
+  // 没有基线时这条不生效：新用户手上没有可比的数，宁可信设备
+  const noBaseline = dynamicTDEE({
+    bmr: 1768, activeSoFar: 3000, basalSoFar: 1500, dayFraction: evening, fallbackTDEE: 2600,
+  });
+  assert.equal(noBaseline.activeCapped, false);
+});
+
 test('真实的大运动量不会被上限误伤', () => {
   // 半天骑车 700 kcal：12 小时里平均不到 1 kcal/分钟，完全正常
   const hard = dynamicTDEE({

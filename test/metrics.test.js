@@ -149,3 +149,18 @@ test('目标为 0 或缺失时不产生 NaN', () => {
     assert.doesNotMatch(st.note, /NaN|undefined|Infinity/, `${kind} 的措辞里漏了脏值：${st.note}`);
   }
 });
+
+test('目标是脏数据时不许把 NaN 印到界面上', () => {
+  // dailyTargets 自己不会产出这种值，但恢复备份和云端同步是绕过校验直接落库的。
+  // 界面上出现「还差 NaNg」「上限 -100g」时，用户看到的是乱码，不是「这项没数据」。
+  for (const t of [NaN, -100, null, undefined, 'abc', Infinity]) {
+    for (const kind of [KIND.floor, KIND.ceiling, KIND.range, KIND.remainder, KIND.log]) {
+      const st = metricState({ kind, eaten: 50, target: t, lo: t, hi: t, unit: 'g' });
+      const text = `${st.note}${st.range || ''}`;
+      assert.doesNotMatch(text, /NaN|Infinity|undefined/, `${kind} / ${String(t)} → ${text}`);
+      for (const k of ['fillPct', 'zoneStart', 'zoneEnd']) {
+        if (st[k] != null) assert.ok(Number.isFinite(st[k]), `${kind} 的 ${k} 是 ${st[k]}`);
+      }
+    }
+  }
+});

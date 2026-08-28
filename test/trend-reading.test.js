@@ -206,3 +206,38 @@ test('所有解读都不会输出脏值', () => {
     assert.ok(!/NaN|undefined|Infinity|\[object/.test(text), `${metric}: ${text}`);
   }
 });
+
+test('「有几天低于X」只数有记录的天，不把漏记的算成 0', () => {
+  /*
+   * Number(null) 是 0，而 0 小于任何正阈值。
+   * 14 个日历日里只有 3 天有记录、而且都贴着目标，卡片却写出
+   * 「另有 11 天不到目标的四分之三」「11 天不足 6.5 小时」「11 天不到 4000 步」——
+   * 那 11 天根本没有数。analyzeSeries 早就剔了 null，这几处计数绕过了它。
+   */
+  const spotty = (v) => Array.from({ length: 14 }, (_, i) => ({ x: `d${i}`, y: i < 3 ? v : null }));
+
+  const kcal = trendReading('kcal', spotty(2000), { target: 2000 });
+  assert.match(kcal, /有记录的 3 天/);
+  assert.doesNotMatch(kcal, /11 天/, `把漏记的天算成了低于目标：${kcal}`);
+  assert.doesNotMatch(kcal, /不到目标的四分之三/, kcal);
+
+  const sleep = trendReading('sleep', spotty(7.5), {});
+  assert.doesNotMatch(sleep, /天不足 6\.5 小时/, `睡得够却被数出「不足」的天数：${sleep}`);
+
+  const steps = trendReading('steps', spotty(9000), {});
+  assert.doesNotMatch(steps, /天不到 4000 步/, `走够了却被数出「不到 4000 步」的天数：${steps}`);
+
+  const exercise = trendReading('exercise', spotty(30), {});
+  assert.doesNotMatch(exercise, /11 天没有记录到锻炼/, exercise);
+
+  // 真的低于阈值时还是要数出来，别把这条修成永远不报
+  const reallyLow = Array.from({ length: 6 }, (_, i) => ({ x: `d${i}`, y: i < 4 ? 3000 : 9000 }));
+  assert.match(trendReading('steps', reallyLow, {}), /4 天不到 4000 步/);
+});
+
+test('序列不是数组时不炸卡片', () => {
+  // 整张趋势卡曾经因为渲染中途抛异常整块消失，而且控制台什么都不留
+  assert.equal(analyzeSeries(null), null);
+  assert.equal(analyzeSeries(undefined), null);
+  assert.equal(typeof trendReading('kcal', null, { target: 2000 }), 'string');
+});
