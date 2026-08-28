@@ -483,3 +483,28 @@ test('蛋白目标落在文献给出的区间内', () => {
   const perLbm = withBf.grams / 64;
   assert.ok(perLbm >= 2.3 && perLbm <= 3.1, `减脂期 ${perLbm} g/kg 瘦体重应落在 Helms 区间`);
 });
+
+test('增重速率的上限不能照抄减重那条 1% 体重/周', () => {
+  /*
+   * 1% 体重/周 来自减重：再快下去掉的就不只是脂肪。它约束的是脂肪能被
+   * 动员多快。增重受的是另一个限制 —— 肌肉本身长多快，即便新手也就
+   * 每周 0.25%~0.5% 体重，超出这一段多出来的按比例主要是脂肪。
+   * 共用一个 1% 会允许 45kg 的人计划每周 +0.45kg（一个月长 4% 体重）。
+   */
+  for (const weightKg of [45, 60, 70, 85, 100, 120]) {
+    const prof = { sex: 'male', age: 28, heightCm: 178, weightKg, activity: 'active' };
+    const gain = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 5 });
+    const pctGain = (gain.rateKgPerWeek / weightKg) * 100;
+    assert.ok(pctGain <= 0.52, `${weightKg}kg 允许每周增 ${pctGain.toFixed(2)}% 体重，超过 0.5% 的上限`);
+    assert.ok(pctGain > 0.35, `${weightKg}kg 只允许 ${pctGain.toFixed(2)}%，收得太狠`);
+
+    // 减重那条不受影响，仍是 1%
+    const loss = dailyTargets({ ...prof, goal: 'cut', rateKgPerWeek: -5 });
+    const pctLoss = (Math.abs(loss.rateKgPerWeek) / weightKg) * 100;
+    assert.ok(pctLoss <= 1.005, `${weightKg}kg 允许每周减 ${pctLoss.toFixed(2)}% 体重`);
+    assert.ok(pctLoss > pctGain, `${weightKg}kg 的减重上限该比增重上限宽`);
+  }
+  // 默认的 +0.25 kg/周 对一般体重不该被收敛
+  const normal = dailyTargets({ sex: 'male', age: 28, heightCm: 178, weightKg: 70, activity: 'active', goal: 'bulk' });
+  assert.equal(normal.rateWasClamped, false, `默认增重速率被收敛了：${normal.rateKgPerWeek}`);
+});

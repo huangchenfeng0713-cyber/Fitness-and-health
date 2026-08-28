@@ -10,10 +10,9 @@
 
 import { h, clearEl, mount, num, todayKey, infoTip } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
-import { BODY_BASE, REGIONS, VIEW_LABEL } from '../data/body-map.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import {
-  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, planAdvice,
+  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, coveredGroupKeys, planAdvice,
   starterCombo, starterSplitCombo,
   sessionVolume, recentExercises, weeklyVolume,
   overlapScore, overlapLevel,
@@ -67,79 +66,26 @@ function muscleLine(e) {
 }
 
 /*
- * 人体部位图。
+ * 部位标签上带一个点：今天已选的动作练到了这一组。
  *
- * 挑动作本来就是「我今天想练这块」，指着图上那块比在五个文字标签里挑更直接。
- * 正反两张并排：背和斜方肌在正面图上画不出来，硬塞只会让人对不上位置。
- *
- * 三种状态叠在同一块形上：
- *   选中   —— 现在在看这一组，实心强调色
- *   已覆盖 —— 今日已选的动作练到了这块，淡一层强调色
- *   其余   —— 中性底
- * 「已覆盖」是这张图真正有用的地方：一眼看出今天哪儿练了、哪儿空着。
+ * 这原本是人体图唯一比这排标签多给的信息（「今天哪儿练了、哪儿空着」）。
+ * 图本身已经删掉 —— 它在真机上一块胸肌只有 19px 宽，画不出能看的解剖细节，
+ * 而正下方这排文字标签做的是同一件事，还说得更清楚。只把这条信息搬过来。
+ * 协同肌也算：卧推练到了三头，问「肩臂今天空着吗」时它不该算空着。
  */
-function bodyMap(rerender) {
-  const covered = new Set();
-  for (const e of pickedExercises()) {
-    for (const m of [...e.primary, ...e.secondary]) {
-      const g = GROUPS.find((x) => x.muscles.includes(m));
-      if (g) covered.add(g.key);
-    }
-  }
-  const ns = 'http://www.w3.org/2000/svg';
-  const draw = (spec, className) => {
-    let node;
-    if (spec.shape === 'ellipse') {
-      node = document.createElementNS(ns, 'ellipse');
-      node.setAttribute('cx', spec.cx); node.setAttribute('cy', spec.cy);
-      node.setAttribute('rx', spec.rx); node.setAttribute('ry', spec.ry);
-    } else {
-      node = document.createElementNS(ns, 'path');
-      node.setAttribute('d', spec.d);
-    }
-    node.setAttribute('class', className);
-    return node;
-  };
-
-  const view = (side) => {
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 210');
-    svg.setAttribute('class', 'body-view');
-    for (const base of BODY_BASE) svg.append(draw(base, 'body-base'));
-    const grouped = new Map();
-    for (const r of REGIONS.filter((x) => x.view === side)) {
-      let node = grouped.get(r.group);
-      if (!node) {
-        node = document.createElementNS(ns, 'g');
-        const label = GROUPS.find((g) => g.key === r.group)?.label || r.group;
-        node.setAttribute('class', 'body-region-group');
-        node.setAttribute('role', 'button');
-        node.setAttribute('tabindex', '0');
-        node.setAttribute('aria-label', `${VIEW_LABEL[side]}${label}`);
-        node.setAttribute('aria-pressed', String(activeGroup === r.group));
-        const pick = () => { activeGroup = r.group; showAllExercises = false; rerender(); };
-        node.addEventListener('click', pick);
-        node.addEventListener('keydown', (ev) => {
-          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
-        });
-        grouped.set(r.group, node);
-        svg.append(node);
-      }
-      const visualState = activeGroup === r.group ? ' active' : covered.has(r.group) ? ' covered' : '';
-      node.append(draw(r, `body-region${visualState}`));
-    }
-    return h('div.body-side', null, svg, h('span.body-side-label', null, VIEW_LABEL[side]));
-  };
-  return h('div.body-map', null, view('front'), view('back'));
-}
-
 function groupTabs(rerender) {
+  const covered = coveredGroupKeys(picked());
   return h('div.range-switch.body-part-switch', null,
-    GROUPS.map((g) => h('button', {
-      class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
-      type: 'button', 'aria-pressed': String(activeGroup === g.key),
-      onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
-    }, g.label)));
+    GROUPS.map((g) => {
+      const done = covered.has(g.key);
+      return h('button', {
+        class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
+        type: 'button', 'aria-pressed': String(activeGroup === g.key),
+        // 点是纯装饰，读屏软件按这句话来
+        'aria-label': done ? `${g.label}（今天已练到）` : g.label,
+        onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
+      }, g.label, done ? h('span.tab-dot', { 'aria-hidden': 'true' }) : null);
+    }));
 }
 
 /** 身体部位 / 动作模式 —— 两种挑法之间切换 */
@@ -204,7 +150,11 @@ function exerciseRow(e, rerender, lastDone) {
 }
 
 function equipTabs(rerender, all) {
-  return h('div.chart-switch', null,
+  // 器械档位本来就是互斥的一组选择，和上面两排一样用分段控件。
+  // 它原先借的是趋势卡那个 .chart-switch —— 那套样式带着一条分隔线和
+  // 10px 上内边距（给「图下面还有别的内容」用的），套在灰槽里就成了
+  // 一行说不出理由的空白。趋势卡早就改用下拉了，那套样式已无人使用。
+  return h('div.range-switch', null,
     EQUIP_FILTERS.map((f) => {
       const n = all.filter(f.match).length;
       return h('button', {
@@ -241,7 +191,6 @@ function pickerCard(rerender) {
       h('h3', null, '动作选择'),
       h('span.card-tag', null, `${scopeLabel} · ${list.length} 个`)),
     // 部位图只在按部位挑的时候有意义：推拉腿是跨部位的
-    byGroup ? bodyMap(rerender) : null,
     modeTabs(rerender),
     byGroup ? groupTabs(rerender) : splitTabs(rerender),
     equipTabs(rerender, all),

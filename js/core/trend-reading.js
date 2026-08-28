@@ -8,6 +8,8 @@
  * 样本不够就说样本不够，不硬凑一句像模像样的建议。
  */
 
+import { MAX_LOSS_RATE_PCT, MAX_GAIN_RATE_PCT } from './nutrition.js';
+
 const round = (v, d = 0) => {
   const m = 10 ** d;
   return Math.round(v * m) / m;
@@ -128,9 +130,11 @@ function readProtein(points, { target, threshold }) {
 function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
   const s = analyzeSeries(points, 1);
   if (!s) return '这段时间还没有体重记录。每周固定同一时间称一次，趋势才看得出来。';
+  // 调用方没给次数时用序列自己的点数，别把「undefined 次记录」印到卡片上
+  const n = Number.isFinite(Number(records)) ? records : s.n;
   if (kgPerWeek == null) {
     return join([
-      `所选区间有 ${records} 次记录，最新 ${Number(points[points.length - 1].y).toFixed(1)} kg。`,
+      `所选区间有 ${n} 次记录，最新 ${Number(points[points.length - 1].y).toFixed(1)} kg。`,
       '至少需要 4 次、且首末相隔 7 天才能估算每周趋势——固定早晨空腹称，两周就能看出方向。',
     ]);
   }
@@ -143,9 +147,16 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
   const progress = dir ? round(kgPerWeek * dir, 2) : null;
   const diff = progress == null ? null : round(progress - Math.abs(goalRate), 2);
   const latest = Number(points[points.length - 1].y);
-  const fast = latest > 0 && Math.abs(kgPerWeek) / latest > 0.01;
+  /*
+   * 「偏快」的门槛按方向分开：减重 1%/周，增重 0.5%/周。
+   * 增重快过 0.5% 时多出来的按比例主要是脂肪 —— 这和 dailyTargets 里
+   * 计划速率的上限是同一组数，两处不能各说各的。
+   */
+  const pct = latest > 0 ? Math.abs(kgPerWeek) / latest : 0;
+  const tooFastLoss = kgPerWeek < 0 && pct > MAX_LOSS_RATE_PCT;
+  const tooFastGain = kgPerWeek > 0 && pct > MAX_GAIN_RATE_PCT;
   return join([
-    `覆盖 ${spanDays} 个日历日、${records} 次称重，拟合趋势 ${kgPerWeek > 0 ? '+' : ''}${kgPerWeek} kg/周`,
+    `覆盖 ${spanDays} 个日历日、${n} 次称重，拟合趋势 ${kgPerWeek > 0 ? '+' : ''}${kgPerWeek} kg/周`,
     goalRate != null ? `（目标 ${goalRate > 0 ? '+' : ''}${goalRate}）。` : '。',
     diff == null
       // 目标是维持：偏离哪个方向都要说，但不存在快慢
@@ -154,7 +165,8 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
       : progress < 0 ? `方向反了：目标是${goalRate > 0 ? '增重' : '减重'}，实际在往另一边走。`
         : Math.abs(diff) < 0.1 ? '和目标基本一致，照现在的吃法继续。'
           : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
-    fast && kgPerWeek < 0 ? '每周变化超过体重的 1% 时，掉的往往不只是脂肪，把热量缺口收小一些更划算。' : '',
+    tooFastLoss ? '每周变化超过体重的 1% 时，掉的往往不只是脂肪，把热量缺口收小一些更划算。' : '',
+    tooFastGain ? '每周涨超过体重的 0.5% 时，多出来的按比例主要是脂肪而不是肌肉，把盈余收小一些更划算。' : '',
     s.spread >= 2 ? `区间内最高最低差 ${s.spread} kg，多半是水分和排空差异，看趋势线不要看单日数字。` : '',
   ]);
 }

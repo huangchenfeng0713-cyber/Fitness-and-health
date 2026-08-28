@@ -91,6 +91,21 @@ export function coverage(selection = []) {
 }
 
 /**
+ * 今天这套动作练到了哪几个部位（主动肌 + 协同肌）。
+ *
+ * 和 coverage() 不同：那个按肌肉逐条报缺口，用于排计划；这个只回答
+ * 「这一组今天碰过没有」，给挑动作那排标记用。协同肌也算 ——
+ * 卧推练到了三头，问「今天肩臂空着吗」时它不该算空着。
+ */
+export function coveredGroupKeys(selection = []) {
+  const hit = new Set();
+  for (const e of toExercises(selection)) {
+    for (const m of [...(e.primary || []), ...(e.secondary || [])]) hit.add(m);
+  }
+  return new Set(GROUPS.filter((g) => g.muscles.some((m) => hit.has(m))).map((g) => g.key));
+}
+
+/**
  * 替换建议：给定已选动作，从同部位里挑与整套重合度最低的几个。
  * 排除已选的，也排除和「要换掉的那个」本身高度重复的——换了等于没换。
  */

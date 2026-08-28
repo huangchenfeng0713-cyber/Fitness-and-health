@@ -397,3 +397,55 @@ test('四类都有足够多的动作，凑得出一次训练', () => {
     assert.ok(n >= 12, `${s.label}只有 ${n} 个动作，排不出一次完整训练`);
   }
 });
+
+test('动作所属分组必须包含它的主动肌', () => {
+  /*
+   * 不成立的话，「从哪个列表里挑到它」和「它练到了哪一组」会对不上：
+   * 耸肩曾经列在「肩臂」里，而它唯一的主动肌斜方肌上束属于「背」——
+   * 从肩臂选中它，部位标签上的点却亮在背，而在背的列表里根本找不到它。
+   */
+  const wrong = EXERCISES.filter((e) => {
+    const g = GROUPS.find((x) => x.key === e.group);
+    return !g || !(e.primary || []).some((m) => g.muscles.includes(m));
+  }).map((e) => `${e.name}（归在 ${e.group}，主动肌 ${e.primary}）`);
+  assert.deepEqual(wrong, [], `这些动作的分组和主动肌对不上：${wrong.join('、')}`);
+});
+
+test('划船和引体一定要写上肱二头肌', () => {
+  // 漏了会让重合度算低（弯举和划船看起来不重叠），也会让
+  // 「肩臂今天空着吗」在只练了拉的日子里答错。
+  const missing = EXERCISES
+    .filter((e) => ['horizontal_pull', 'vertical_pull'].includes(e.pattern))
+    .filter((e) => ![...(e.primary || []), ...(e.secondary || [])].includes('biceps'))
+    .map((e) => e.name);
+  assert.deepEqual(missing, [], `这些拉的动作没写肱二头肌：${missing.join('、')}`);
+});
+
+test('推的动作一定要写上肱三头肌', () => {
+  const missing = EXERCISES
+    .filter((e) => ['horizontal_push', 'incline_push', 'vertical_push'].includes(e.pattern))
+    .filter((e) => ![...(e.primary || []), ...(e.secondary || [])].includes('triceps'))
+    .map((e) => e.name);
+  assert.deepEqual(missing, [], `这些推的动作没写肱三头肌：${missing.join('、')}`);
+});
+
+test('起手组合每个都覆盖到该部位的主要肌肉，且不含高度重复', () => {
+  // 推荐给新手的那一套如果自己就含两个几乎一样的动作，等于教错了
+  for (const g of GROUPS) {
+    const combo = starterCombo(g.key);
+    assert.ok(combo.length >= 3, `${g.label} 的起手组合只有 ${combo.length} 个动作`);
+    const high = findOverlaps(combo).filter((o) => o.level === 'high');
+    assert.deepEqual(high.map((o) => `${o.a.name}×${o.b.name}`), [],
+      `${g.label} 的起手组合里有高度重复`);
+    const patterns = new Set(combo.map((e) => e.pattern));
+    assert.equal(patterns.size, combo.length, `${g.label} 的起手组合里有重复的动作模式`);
+  }
+  for (const s of SPLITS) {
+    const combo = starterSplitCombo(s.key);
+    assert.ok(combo.length >= 3, `${s.label} 的起手组合只有 ${combo.length} 个动作`);
+    const high = findOverlaps(combo).filter((o) => o.level === 'high');
+    assert.deepEqual(high.map((o) => `${o.a.name}×${o.b.name}`), [], `${s.label} 的起手组合里有高度重复`);
+    // 归类必须自洽：推日里不能混进拉的动作
+    for (const e of combo) assert.equal(splitOf(e), s.key, `${e.name} 出现在「${s.label}」的推荐里，但它属于 ${splitOf(e)}`);
+  }
+});
