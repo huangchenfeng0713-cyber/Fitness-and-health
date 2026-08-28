@@ -192,6 +192,33 @@ function isEditing() {
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable;
 }
 
+/*
+ * 定时器、可见性、账号轮询这几条路都记得躲开输入框，唯独 store 订阅这条没有 ——
+ * 于是在饮食记录里改克数时，后台任何一次落库（五分钟一次的账号健康轮询、
+ * 云端同步拉到新数据）都会把整页重绘一遍，正在编辑的那个 input 被连根换掉：
+ * 焦点回到 body，iOS 收起键盘，敲了一半的数字也没了。
+ *
+ * 跳过不能就这么算了，否则页面会一直停在旧数据上。记一笔，等这次输入结束补上。
+ */
+let renderPending = false;
+
+function renderCurrentSafely({ force = false } = {}) {
+  if (!force && isEditing()) { renderPending = true; return; }
+  renderPending = false;
+  renderCurrent();
+}
+
+document.addEventListener('focusout', () => {
+  if (!renderPending) return;
+  /*
+   * 等一拍再判断：在两个格子之间跳的时候，focusout 先于下一个 focusin 触发，
+   * 这一刻 activeElement 还是 body，直接重绘等于把用户从第二个框里踢出去。
+   */
+  setTimeout(() => {
+    if (renderPending && !isEditing()) renderCurrentSafely();
+  }, 0);
+});
+
 function accountDataLocked(account = getAccountState()) {
   return accountBootstrapPending
     || account.ownershipPending === true
@@ -499,17 +526,18 @@ async function boot() {
   subscribe(() => {
     renderTopbar();
     syncOnboarding();
-    renderCurrent();
+    renderCurrentSafely();
     if (settingsOpen && !isEditing()) renderSettings(settingsRoot);
   });
 
   let healthAccountUserId = null;
   subscribeAccount((account) => {
     syncOnboarding();
-    renderCurrent();
     // 账号归属变为不确定时必须立即移除旧资料，即使焦点仍在体重/生日输入框里。
     // 只有普通状态刷新才为了保留键盘和草稿而跳过重绘。
-    if (settingsOpen && (accountDataLocked(account) || !isEditing())) renderSettings(settingsRoot);
+    const locked = accountDataLocked(account);
+    renderCurrentSafely({ force: locked });
+    if (settingsOpen && (locked || !isEditing())) renderSettings(settingsRoot);
     const nextUserId = account.user?.id || null;
     if (!nextUserId) {
       healthAccountUserId = null;

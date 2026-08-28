@@ -13,7 +13,7 @@ import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/ex
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
 import {
-  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, coveredGroupKeys, planAdvice,
+  exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   starterCombo, starterSplitCombo,
   sessionVolume, recentExercises, weeklyVolume,
   overlapScore, overlapLevel,
@@ -117,10 +117,19 @@ function splitTabs(rerender) {
     }, sp.label)));
 }
 
-/** 已选动作里，和这个动作重合度最高的那一个（用来在列表上直接标出来） */
+/*
+ * 和这个动作重合度最高的那一个，用来在挑的时候当场标出来。
+ *
+ * **勾中还没提交的那些也要算进来。** 原先只比已经在计划里的：
+ * 连勾杠铃卧推和哑铃卧推，两个都还没落库，一句提示都不出，
+ * 等按下「加入计划」之后才在训练建议里读到「这俩刺激高度相似」——
+ * 那时候人已经选完了，改起来要回头再走一遍。
+ */
 function clashWith(e) {
+  const others = [...pickedExercises(), ...[...pending].map((id) => EXERCISE_BY_ID.get(id))]
+    .filter(Boolean);
   let worst = null;
-  for (const other of pickedExercises()) {
+  for (const other of others) {
     if (other.id === e.id) continue;
     const score = overlapScore(e, other);
     if (overlapLevel(score) === 'none') continue;
@@ -129,12 +138,30 @@ function clashWith(e) {
   return worst;
 }
 
+/*
+ * 一行上那句重复提示；没有重复、或者这一行本来就已经选中了，都不显示。
+ *
+ * **已经选中的行不提示。** 这句话的用处是「先别点这个」——
+ * 都选完了再在两行上各写一遍「和对方几乎一样」，说的是同一件事，
+ * 而且把列表铺满红字。选完之后要看的分析在「训练建议」里。
+ *
+ * 措辞要短：这是挑动作时扫一眼的东西，不是读的。
+ */
+function clashLine(e) {
+  if (picked().includes(e.id) || pending.has(e.id)) return null;
+  const clash = clashWith(e);
+  if (!clash) return null;
+  return clash.level === 'high'
+    ? { cls: 'ex-clash', text: `和「${clash.other.name}」重复` }
+    : { cls: 'ex-clash soft', text: `和「${clash.other.name}」部分重叠` };
+}
+
 function exerciseRow(e, rerender, lastDone) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
-  const clash = chosen ? null : clashWith(e);
-  // 单独留住这个节点，勾选时只改它的字，不重建整行
+  // 单独留住这两个节点，勾选时只改它们，不重建整行
   const pickNode = h('span.ex-pick', null, chosen ? '✓' : marked ? '●' : '＋');
+  const clashNode = h('div.ex-clash-slot');
   const row = h('button.ex-row', {
     class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
     type: 'button',
@@ -155,6 +182,8 @@ function exerciseRow(e, rerender, lastDone) {
       row.classList.toggle('marked', on);
       row.setAttribute('aria-pressed', String(on));
       pickNode.textContent = on ? '●' : '＋';
+      // 勾中一个会改变其它行「和已选的重不重」，所以整列的提示都要跟一下
+      for (const other of row.parentNode?.children || []) other.syncClash?.();
       if (pickerBar) pickerBar.render();
     },
   },
@@ -169,12 +198,23 @@ function exerciseRow(e, rerender, lastDone) {
     h('div.ex-muscle', null,
       `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`,
       e.compound ? h('span.ex-tag.compound', null, '复合') : null),
-    clash && clash.level === 'high'
-      ? h('div.ex-clash', null, `与已选的「${clash.other.name}」刺激高度相似`)
-      : clash ? h('div.ex-clash.soft', null, `与「${clash.other.name}」部分重叠`) : null,
+    clashNode,
     // 标出上次练过是哪天，省得每次从头翻
     lastDone && !chosen ? h('div.ex-last', null, `上次 ${lastDone.slice(5)}`) : null),
   pickNode);
+
+  /*
+   * 只改这一句提示的文字，不动行的其它部分。
+   * 走 rerender() 会重排整张列表，下一个要点的动作就跑走了。
+   */
+  row.syncClash = () => {
+    const line = clashLine(e);
+    // 保留 ex-clash-slot：整条 className 覆盖掉的话，提示消失之后
+    // `:empty { display: none }` 就不再命中，行里会留一道空白
+    clashNode.className = line ? `ex-clash-slot ${line.cls}` : 'ex-clash-slot';
+    clashNode.textContent = line ? line.text : '';
+  };
+  row.syncClash();
   return row;
 }
 
@@ -325,17 +365,23 @@ function planRow(exercise, index) {
       }, item.sets.length ? '再加一组' : '加第一组')) : null);
 }
 
+/*
+ * 这张卡只回答「今天选了什么、做了几组」。
+ *
+ * 原先它还兼着报「覆盖部位」和「这套动作之间没有明显重复」——
+ * 那是建议，和下面那张「训练建议」说的是同一件事，在同一屏里说两遍。
+ * 重复的提示现在提前到挑动作那一步（每行自己带一句），
+ * 需要细看的分析仍在训练建议里。这里只做记录。
+ */
 function planCard() {
   const list = pickedExercises();
-  const dayLabel = state.day === todayKey() ? '已选动作建议' : `${state.day} 的训练`;
+  const dayLabel = state.day === todayKey() ? '已选动作' : `${state.day} 的训练`;
   if (!list.length) {
     // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
     return h('section.card', null,
       h('div.card-head', null, h('h3', null, dayLabel)),
       h('p.empty-hint', null, '请添加训练动作'));
   }
-  const overlaps = findOverlaps(list);
-  const cov = coverage(list).filter((c) => c.exercises > 0);
   const volume = sessionVolume(session());
   return h('section.card', null,
     h('div.card-head', null,
@@ -345,10 +391,7 @@ function planCard() {
           ? `${list.length} 个动作 · ${volume.sets} 组${volume.tonnage ? ` · ${num(volume.tonnage)} kg` : ''}`
           : `${list.length} 个动作`),
         h('button.text-btn', { onclick: () => updateSession(() => []) }, '清空'))),
-    h('div.plan-list', null, list.map((e, i) => planRow(e, i))),
-    cov.length ? h('p.form-hint', { style: { marginTop: '10px' } },
-      `覆盖部位：${cov.map((c) => `${c.label}(${c.exercises})`).join('　')}`) : null,
-    overlaps.length ? null : h('p.form-hint', null, '这套动作之间没有明显重复。'));
+    h('div.plan-list', null, list.map((e, i) => planRow(e, i))));
 }
 
 /*
