@@ -862,6 +862,17 @@ body.sheet-open {
  * 多选条：钉在滚动容器底部，饮食页和健身页共用。
  * 钉在 .view 上而不是视口上 —— 视口底部是 tab 栏的位置。
  */
+/* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
+.chip-focus { color: var(--accent); font-weight: 600; }
+.chip-focus.active { color: var(--card); background: var(--accent); border-color: var(--accent); }
+
+/* 可点的提示：右下角一行「去看…›」，告诉人这条能点 */
+.insight-actionable {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
+}
+.insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
+
 /* 勾中但还没加进计划：比已选浅一层，看得出是「待确认」 */
 .ex-row.marked { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .ex-row.marked .ex-pick { color: var(--accent); }

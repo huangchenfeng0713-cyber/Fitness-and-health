@@ -24,6 +24,7 @@ const SHELL = [
   './js/lib/utils.js',
   './js/lib/charts.js',
   './js/lib/select-bar.js',
+  './js/lib/nav.js',
   './js/core/metrics.js',
   './js/core/portion.js',
   './js/core/nutrition.js',

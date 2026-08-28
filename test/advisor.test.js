@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dailyTargets } from '../js/core/nutrition.js';
 import {
-  buildAdvice, currentMeal, mealBudget, deriveTags, MEALS, CAFFEINE_CUTOFF_HOUR,
+  buildAdvice, currentMeal, mealBudget, deriveTags, MEALS, CAFFEINE_CUTOFF_HOUR, focusFoods,
 } from '../js/core/advisor.js';
-import { FOOD_BY_ID, per100 } from '../js/data/foods.js';
+import { FOOD_BY_ID, FOODS, per100 } from '../js/data/foods.js';
 
 const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, bodyFatPct: 18, activity: 'light', goal: 'cut' };
 const targets = dailyTargets(profile);
@@ -368,4 +368,39 @@ test('推荐份量始终是整数克，热量上限那一侧不会漏出浮点�
   }
   assert.ok(scanned > 500, `只扫到 ${scanned} 条推荐，覆盖不够`);
   assert.deepEqual(offenders.slice(0, 5), [], `${offenders.length} 条推荐的克重不是整数`);
+});
+
+test('「补蛋白 / 补纤维」按每 100 kcal 含量排，且不推调味料和补剂', () => {
+  /*
+   * 按每 100g 的绝对量排会推出牛肉干：每 100g 有 45g 蛋白，也有 400 kcal，
+   * 照它补 40g 蛋白要顺带吃进 350 kcal —— 补蛋白时真正的约束是热量预算。
+   */
+  const protein = focusFoods('protein', FOODS, 60);
+  assert.ok(protein.length >= 20, `补蛋白只挑出 ${protein.length} 项`);
+  const density = (f, k) => {
+    const p = per100(f);
+    return p.kcal > 0 ? (p[k] / p.kcal) * 100 : 0;
+  };
+  for (let i = 1; i < protein.length; i += 1) {
+    assert.ok(density(protein[i - 1], 'protein') >= density(protein[i], 'protein') - 1e-9,
+      `${protein[i - 1].name} 排在 ${protein[i].name} 前面，但蛋白密度更低`);
+  }
+  const fiber = focusFoods('fiber', FOODS, 60);
+  for (let i = 1; i < fiber.length; i += 1) {
+    assert.ok(density(fiber[i - 1], 'fiber') >= density(fiber[i], 'fiber') - 1e-9,
+      `${fiber[i - 1].name} 排在 ${fiber[i].name} 前面，但纤维密度更低`);
+  }
+
+  /*
+   * cat: 'other' 是食用油、生抽、白砂糖、肌酸和 BCAA。BCAA 按每 100 kcal
+   * 的氨基酸含量确实排第一，但那是三种氨基酸不是完整蛋白，
+   * 全天蛋白够的前提下补它对合成没有额外作用 —— 不该出现在「我该吃什么」里。
+   */
+  for (const key of ['protein', 'fiber']) {
+    const bad = focusFoods(key, FOODS, 999).filter((f) => f.cat === 'other').map((f) => f.name);
+    assert.deepEqual(bad, [], `${key} 的候选里混进了调味料或补剂：${bad.join('、')}`);
+  }
+
+  assert.deepEqual(focusFoods('nope', FOODS), [], '不认识的类别应当返回空表');
+  assert.deepEqual(focusFoods('protein', []), [], '空食物库不该炸');
 });

@@ -20,9 +20,10 @@ import {
   SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
-import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { MEALS, MEAL_LABEL, currentMeal, focusFoods, FOCUS_LABEL } from '../core/advisor.js';
 import { initialPortion } from '../core/portion.js';
 import { selectBar } from '../lib/select-bar.js';
+import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 
@@ -39,6 +40,7 @@ const ui = {
   showCustomForm: false,
   historyOpen: false,   // 历史搜索是否展开
   moreResults: false,   // 搜索结果是否已展开全部
+  focus: null,          // 'protein' | 'fiber' —— 从今日页的提示跳过来时的筛选
   /*
    * 待记录的一篮子。
    *
@@ -86,8 +88,9 @@ function buildShell(root) {
       ui.query = e.target.value;
       // 换了搜索词就收回「显示更多」，否则搜下一个词还是一次铺满
       ui.moreResults = false;
-      if (ui.category) {
+      if (ui.category || ui.focus) {
         ui.category = null;
+        ui.focus = null;
         refreshCategories();
       }
       refreshResults();
@@ -179,21 +182,33 @@ function refreshFav() {
   toggle.hidden = !ui.historyOpen && chips.scrollHeight <= chips.clientHeight + 2;
 }
 
+/** 换一种筛法：清掉另外两种，别让三个条件叠在一起 */
+function pickFilter({ category = null, focus = null }) {
+  ui.category = category;
+  ui.focus = focus;
+  ui.query = '';
+  ui.moreResults = false;
+  if (nodes.searchInput) nodes.searchInput.value = '';
+  refreshCategories();
+  refreshResults();
+}
+
 function refreshCategories() {
   clearEl(nodes.categories);
   mount(nodes.categories, h('div.category-browser', null,
     h('span.category-label', null, '分类'),
     h('div.category-scroll', null,
+      /*
+       * 「补蛋白 / 补纤维」排在分类前面：它们回答的是「我现在缺什么」，
+       * 而分类回答的是「我知道要找什么」。今日页那两条提示点过来落的就是这里。
+       */
+      Object.entries(FOCUS_LABEL).map(([key, label]) => h('button.chip-btn.chip-focus', {
+        class: `chip-btn chip-focus${ui.focus === key ? ' active' : ''}`,
+        onclick: () => pickFilter({ focus: ui.focus === key ? null : key }),
+      }, label)),
       Object.entries(CATEGORIES).map(([key, label]) => h('button.chip-btn', {
         class: ui.category === key ? 'active' : '',
-        onclick: () => {
-          ui.category = ui.category === key ? null : key;
-          ui.query = '';
-          ui.moreResults = false;
-          nodes.searchInput.value = '';
-          refreshCategories();
-          refreshResults();
-        },
+        onclick: () => pickFilter({ category: ui.category === key ? null : key }),
       }, label)))));
 }
 
@@ -270,7 +285,7 @@ function refreshBasket() {
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query && !ui.category) { refreshAdvice(); return; }
+  if (!ui.query && !ui.category && !ui.focus) { refreshAdvice(); return; }
   refreshAdvice();
 
   /*
@@ -280,7 +295,9 @@ function refreshResults() {
    */
   const all = ui.query
     ? searchFoods(ui.query, allFoods(), 60)
-    : allFoods().filter((food) => food.cat === ui.category);
+    : ui.focus
+      ? focusFoods(ui.focus, allFoods(), 60)
+      : allFoods().filter((food) => food.cat === ui.category);
   const results = ui.moreResults ? all.slice(0, 60) : all.slice(0, RESULT_PREVIEW);
   if (!all.length) {
     mount(nodes.results,
@@ -289,7 +306,10 @@ function refreshResults() {
     return;
   }
   mount(nodes.results,
-    ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`),
+    ui.category ? h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`) : null,
+    // 说清这张表是按什么排的，否则「为什么鳕鱼排在鸡胸肉前面」没人猜得到
+    ui.focus ? h('div.result-caption', null,
+      `${FOCUS_LABEL[ui.focus]} · ${all.length} 项，按每 100 kcal 含量从高到低`) : null,
     h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     const basis = f.basis === '100ml' ? '100ml' : '100g';
@@ -1005,4 +1025,15 @@ export function renderDiet(root) {
   refreshQuick();
   refreshEntries();
   refreshAdvice();
+
+  /*
+   * 从今日页的「蛋白还差 83g」点过来。意图取一次就没了 ——
+   * 60 秒定时器和 visibilitychange 都会再跑一遍 renderDiet，
+   * 留着的话用户手动切走筛选之后又会被拽回来。
+   */
+  const intent = takeIntent();
+  if (intent?.focus && FOCUS_LABEL[intent.focus]) {
+    pickFilter({ focus: intent.focus });
+    nodes.searchCard?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
