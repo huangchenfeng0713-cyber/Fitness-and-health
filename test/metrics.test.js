@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   KIND, LEVEL, metricState, rangeScale, dailyMetrics, KCAL_BAND,
+  macroSplit, SPLIT_BALANCED_PP,
 } from '../js/core/metrics.js';
 
 test('碳水按 AMDR 区间判断，不再说「按剩余热量分配」', () => {
@@ -163,4 +164,78 @@ test('目标是脏数据时不许把 NaN 印到界面上', () => {
       }
     }
   }
+});
+
+/*
+ * 碳水和脂肪合成一条：它们分的是同一块热量。
+ *
+ * 分开画两条区间最要命的一点是两条可以同时「在范围内」而总量对不上账 ——
+ * 实测 2660 kcal 的计划上有 796 kcal（30%）的自由度。合起来之后
+ * 要回答的问题也换了：不是「碳水够不够」，是「这块热量偏哪边」。
+ */
+test('碳水脂肪合成一条：按供能比例分，两个百分比必须凑成 100', () => {
+  const targets = { carb: 240, fat: 74 };
+  const at = (carb, fat) => macroSplit(targets, { carb: { eaten: carb }, fat: { eaten: fat } });
+
+  // 240*4 = 960，74*9 = 666 → 59% : 41%
+  const onPlan = at(240, 74);
+  assert.equal(onPlan.carbPct + onPlan.fatPct, 100);
+  assert.equal(onPlan.carbPct, 59);
+  assert.equal(onPlan.planCarbPct, 59);
+  assert.equal(onPlan.structure, 'balanced');
+  assert.equal(onPlan.level, LEVEL.met);
+
+  // 比例说不出吃了多少，克数得一起给
+  assert.equal(onPlan.carbG, 240);
+  assert.equal(onPlan.fatG, 74);
+  assert.equal(onPlan.kcal, 960 + 666);
+
+  const carbHeavy = at(300, 50);
+  assert.equal(carbHeavy.structure, 'carb');
+  assert.match(carbHeavy.label, /偏碳水/);
+  const fatHeavy = at(120, 110);
+  assert.equal(fatHeavy.structure, 'fat');
+  assert.match(fatHeavy.label, /偏脂肪/);
+
+  /*
+   * 偏一点不是错误，所以没有橙也没有红。三大营养素怎么分本来就有很宽的
+   * 合理区间，把「今天多吃了米饭」画成警告色，是把偏好问题说成健康问题。
+   */
+  for (const s of [carbHeavy, fatHeavy]) {
+    assert.ok([LEVEL.plain, LEVEL.met].includes(s.level), `结构偏移不该是警告色：${s.level}`);
+  }
+
+  // 凑整不能凑出 58% : 43% 这种加起来不是 100 的数
+  for (let carb = 0; carb <= 400; carb += 7) {
+    for (let fat = 1; fat <= 140; fat += 11) {
+      const s = at(carb, fat);
+      assert.equal(s.carbPct + s.fatPct, 100, `${carb}g/${fat}g 的两段加起来不是 100`);
+    }
+  }
+});
+
+test('一口没吃时不硬凑一个比例出来', () => {
+  const s = macroSplit({ carb: 240, fat: 74 }, { carb: { eaten: 0 }, fat: { eaten: 0 } });
+  assert.equal(s.structure, 'none');
+  assert.equal(s.carbPct, null);
+  assert.equal(s.fatPct, null);
+  // 计划的分界线还是要给：条上那根竖标靠它定位
+  assert.equal(s.planCarbPct, 59);
+  assert.doesNotMatch(s.label, /偏/, `没记录时不该判结构：${s.label}`);
+});
+
+test('结构的容忍带是相对计划的，不是照抄 AMDR', () => {
+  /*
+   * 拿 AMDR 的 45%~65% 当靶子会自相矛盾：高蛋白减脂档蛋白就占掉四成供能，
+   * 照方案吃到的碳水远在 45% 供能以下，卡片会对着照方案吃的人写「低于建议」。
+   * 所以参照物是这个人自己的计划分配。
+   */
+  const lowCarbPlan = { carb: 90, fat: 110 };   // 计划本身就偏脂肪：24% : 76%
+  const s = macroSplit(lowCarbPlan, { carb: { eaten: 90 }, fat: { eaten: 110 } });
+  assert.equal(s.structure, 'balanced', '照着自己的计划吃，不该被判成偏脂肪');
+  assert.equal(s.carbPct, s.planCarbPct);
+
+  const off = macroSplit(lowCarbPlan, { carb: { eaten: 200 }, fat: { eaten: 60 } });
+  assert.equal(off.structure, 'carb');
+  assert.ok(Math.abs(off.diffPp) > SPLIT_BALANCED_PP);
 });

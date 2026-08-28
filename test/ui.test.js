@@ -5,6 +5,13 @@ import { readFileSync, readdirSync } from 'node:fs';
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 /*
+ * 断言之前先把注释去掉。这一条踩过两次：注释里写着「用 click 而不是 pointerdown」，
+ * 而用例断言的是「代码里不许出现 pointerdown」—— 它匹配到了那句解释自己的话，
+ * 于是明明改对了却一直红。
+ */
+const strip = (code) => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+
+/*
  * 一个页面「包含」什么，应该按它挂载了哪些卡片来算，而不是按代码写在哪个文件里。
  * 身体信息、每日目标、数据管理都抽成了独立卡片模块，可以挂到任意页面；
  * 断言跟着页面走，之后再调整栏目分布就不用改这些用例。
@@ -133,18 +140,26 @@ test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下',
   assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
 });
 
-test('喝水要先确认再落库，卡面上只留杯量按钮', () => {
-  // 原先点一下直接就记，口袋里误触一次就多出 250ml，
-  // 而且这个数会连着覆盖 Apple 健康那边的饮水
+test('喝水只数次数，不记毫升，也不画完成条', () => {
+  /*
+   * 饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，单算白水没法代表全天
+   * 水分够不够。原先那根「125 / 1700 ml」的进度条会被读成「今天只完成了 7%」，
+   * 而 metricState 里饮水本来就定义成 log ——「只是记录，没有达标一说」。
+   * 现在只回答一个能诚实回答的问题：今天主动喝了几次水。
+   */
   const card = read('js/views/cards/meal-advice.js');
-  assert.match(card, /\{ label: '一小杯', ml: 125 \}/);
-  assert.match(card, /\{ label: '中杯', ml: 250 \}/);
-  assert.match(card, /\{ label: '大杯', ml: 550 \}/);
-  assert.match(card, /openSheet\(waterSheet\(step/, '点杯量没有弹确认层');
-  assert.match(card, /okBtn\.onclick = async \(\) => \{[\s\S]*?saveHealthDay/, '确认按钮不落库');
-  // 落库只能发生在确认按钮里：卡面按钮直接写库就等于没有确认这一步
-  const saves = card.match(/saveHealthDay\(/g) || [];   // 只数调用点，import 那行不算
-  assert.equal(saves.length, 1, `喝水只该有一处落库，实际 ${saves.length} 处`);
+  assert.match(card, /const waterTaps = \(\) =>/, '没有按次数计的饮水');
+  assert.match(card, /waterCount: next/, '次数没有落到 waterCount 字段上');
+  assert.ok(!/MAX_ONE_TIME_ML|waterMl: Math\.max/.test(card), '还留着按毫升记录的老路');
+  // 误触之后总得有办法改回来
+  assert.match(card, /'撤销一次'/, '点错了没法退回去');
+  assert.match(card, /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
+
+  // Apple 健康同步来的毫升不能丢：那是设备数据，仍留在数据页
+  assert.match(read('js/views/cards/health-metrics.js'), /'waterMl'/, '数据页不该丢掉设备记录的饮水');
+
+  // 说明里必须讲清楚这个数不代表全天水分
+  assert.match(card, /饮料、汤、粥、水果和饭菜里的水分同样被人体吸收/, '没有说清这个数的口径');
 });
 
 test('搜索先出十条，换词收回展开；没找到时给反馈入口', () => {
@@ -1018,4 +1033,75 @@ test('饮食记录默认只读，按「编辑」才能改克数或删除', () =>
 
   // 搜索卡把「饮食记录」这个名字让出来了，两张卡不能重名
   assert.match(diet, /h\('h3', null, '添加食物'\)/, '搜索卡应当改名，否则两张卡都叫「饮食记录」');
+});
+
+/*
+ * 碳水和脂肪合用一条，比例按热量算。
+ *
+ * 分开画两条区间时，两条可以同时「在范围内」而总量差出 796 kcal
+ * （2660 kcal 的计划上是 30%）—— 各自说自己没问题，合起来对不上账；
+ * 照计划吃的人还会读到「碳水低于建议 74g」。
+ */
+test('碳水脂肪合成一条，比例和克数都要在上面', () => {
+  const dashboard = page('dashboard');
+  const code = strip(dashboard);
+
+  assert.match(code, /macroSplit\(targets, gaps\)/, '主卡没有算碳水脂肪的结构比例');
+  assert.match(code, /splitBar\(/, '合用的那一条没有画出来');
+  assert.match(code, /markPct: split\.planCarbPct/, '条上要标出计划的分界线');
+  assert.match(code, /split-grams-plan.*split\.note/, '条上那根竖标得有说明');
+
+  // 比例说不出吃了多少，克数得一起给
+  assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
+  assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
+  assert.match(code, /split\.carbPct\}% : \$\{split\.fatPct\}%/, '缺少两者的比例');
+
+  // 不能再各画各的：一旦回到两行，那 796 kcal 的自由度就又回来了
+  assert.ok(!/metricRow\(by\.carb\)|metricRow\(by\.fat\)/.test(code),
+    '碳水或脂肪又单独占了一行');
+  assert.ok(!/BAR_KEYS[\s\S]{0,80}'carb'/.test(code), '碳水又回到了逐条画的名单里');
+
+  const splitCode = read('js/lib/charts.js');
+  assert.match(strip(splitCode), /export function splitBar/, 'splitBar 得住在 charts.js 里');
+  assert.match(read('css/app.css'), /\.split-bar-carb/, '合用那条没有样式');
+});
+
+/*
+ * 主卡顶上那一段只说热量，速率的代价也归它 —— 那是「吃多少」的事。
+ * 蛋白、钠这些归下面的「今日提示」，见 advisor 那边的用例。
+ */
+test('速率越线在主卡上说，不藏进感叹号', () => {
+  const dashboard = page('dashboard');
+  const code = strip(dashboard);
+
+  const heroInfo = code.slice(code.indexOf('function heroInfo('), code.indexOf('function rateNote('));
+  assert.ok(!heroInfo.includes('rateWasClamped'),
+    '「你填的数被改过了」还留在折叠面板里，藏起来等于没说');
+
+  const hero = code.slice(code.indexOf('function heroCard('), code.indexOf('function energyBalance('));
+  assert.match(hero, /rateNote\(targets\)/, '主卡上没有速率说明');
+
+  const note = code.slice(code.indexOf('function rateNote('));
+  assert.match(note, /rateOverAdvisory/, '越过建议上沿要说出来');
+  assert.match(note, /rateAdvisoryKg/, '要给出建议上沿到底是多少');
+  /*
+   * 只许点名最后真正起作用的那一条。原先那句「已按体重比例和每日热量
+   * 调整上限改为…」一口气点了两个机制，实测只有一条碰到了。
+   */
+  assert.match(note, /rateLimitedBy/, '截断原因得按实际起作用的那一条来说');
+  assert.ok(!/按体重比例和每日热量/.test(code), '又把两个机制写回同一句话里了');
+});
+
+/*
+ * 建议上沿不拦人，但填的时候得看得见代价；离谱的量级才拦。
+ */
+test('填目标速率时给出即时判断，离谱的存不下去', () => {
+  const profile = strip(read('js/views/cards/profile.js'));
+  assert.match(profile, /rateGuidance/, '速率输入框旁边没有即时提示');
+  assert.match(profile, /syncRateHint/, '提示没有跟着输入更新');
+  assert.match(profile, /level === 'absurd'[\s\S]{0,200}return;/,
+    '离谱的速率仍然能存下去');
+  // 提示要靠改一个节点更新，不能重绘表单：重绘会把正在输入的框连根换掉
+  const hint = profile.slice(profile.indexOf('const syncRateHint'), profile.indexOf('const rate = h('));
+  assert.ok(!/rerender\(/.test(hint), '刷新提示时重绘了整张表单');
 });

@@ -149,6 +149,41 @@ export function rangeBar({
 }
 
 /**
+ * 碳水 / 脂肪合用的一条：整条就是这两项的热量，按供能比例分成两段。
+ *
+ * 和上下几条都不一样 —— 它不是「填到哪儿了」，整条永远是满的，
+ * 有意义的是分界线的位置。计划的分界线画一根竖标，一眼看得出偏了多少。
+ *
+ * @param {number} carbPct 碳水占这两项热量的百分比（脂肪自动补齐 100）
+ * @param {number|null} markPct 计划的分界线位置，null 则不画
+ */
+export function splitBar({ carbPct = 0, markPct = null, empty = false }) {
+  const wrap = document.createElement('div');
+  wrap.className = `split-bar${empty ? ' empty' : ''}`;
+  const pct = Math.max(0, Math.min(100, Number(carbPct) || 0));
+
+  if (!empty) {
+    const carb = document.createElement('div');
+    carb.className = 'split-bar-carb';
+    carb.style.width = `${pct}%`;
+    wrap.append(carb);
+
+    const fat = document.createElement('div');
+    fat.className = 'split-bar-fat';
+    fat.style.width = `${100 - pct}%`;
+    wrap.append(fat);
+  }
+
+  if (markPct != null && Number.isFinite(Number(markPct))) {
+    const mark = document.createElement('div');
+    mark.className = 'split-bar-mark';
+    mark.style.left = `${Math.max(0, Math.min(100, Number(markPct)))}%`;
+    wrap.append(mark);
+  }
+  return wrap;
+}
+
+/**
  * 横向进度条（宏量营养素）
  * @param {number} [delta] 本次将要增加的量，用半透明的第二段画出来，
  *        让人一眼看出「记完这笔会推进到哪」。

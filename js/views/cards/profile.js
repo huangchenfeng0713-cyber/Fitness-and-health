@@ -8,7 +8,7 @@
 import { h, num, toast, infoTip, field } from '../../lib/utils.js';
 import { state, saveProfile } from '../../lib/store.js';
 import {
-  ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile,
+  ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile, rateGuidance,
 } from '../../core/nutrition.js';
 
 /**
@@ -53,6 +53,15 @@ export function profileCard(rerender) {
     onclick: async () => {
       const checked = validateProfile(draft);
       if (!checked.valid) { toast(checked.errors[0], 'warn'); return; }
+      /*
+       * 建议上沿之外照存不误 —— 那只是「不划算」，不是「不许」。
+       * 拦下的只有明显填错的量级（每周超过体重的 1.5%），
+       * 那种数存进去会让全套热量目标一起失真。
+       */
+      if (rateGuidance({ weightKg: planWeight(), rateKgPerWeek: draft.rateKgPerWeek }).level === 'absurd') {
+        toast('目标速率超出可执行范围，请先改小', 'warn');
+        return;
+      }
       await saveProfile({
         ...draft, ageEstimated: !draft.birthday, demoMode: false, onboarded: true,
       });
@@ -93,6 +102,11 @@ export function profileCard(rerender) {
    * 清空重来，总得有办法把身高填进去，否则连静息能量都算不出来。
    */
   const bodySource = state.derived?.bodySource || {};
+  /*
+   * 算速率提示要用**实际参与计算的体重**。体重被 Apple 健康锁住时草稿里那份
+   * 可能是空的或过期的，拿它去算「体重的百分之几」会给出另一个答案。
+   */
+  const planWeight = () => Number(state.derived?.effectiveProfile?.weightKg ?? d.weightKg) || 0;
   // 身高是整数居多，写成「176.0 cm」反倒像在标一个并不存在的精度
   const trim = (v) => String(Math.round(v * 10) / 10);
   const lockedField = (label, key, unit, fmt = (v) => num(v, 1)) => {
@@ -114,11 +128,25 @@ export function profileCard(rerender) {
     },
   });
 
+  /*
+   * 速率的提示跟着输入实时变，但**不能重绘表单**：重绘会把正在编辑的 input
+   * 连根换掉，iOS 上就是打一个字键盘收一次。所以只改这一个节点的文字和类名。
+   */
+  const rateHint = h('span');
+  const plannedRate = () => (d.rateKgPerWeek != null
+    ? d.rateKgPerWeek : GOALS[d.goal]?.defaultRateKgPerWeek ?? 0);
+  const syncRateHint = () => {
+    const g = rateGuidance({ weightKg: planWeight(), rateKgPerWeek: plannedRate() });
+    rateHint.textContent = g.text || '减脂填负数';
+    rateHint.className = g.level === 'ok' ? '' : `rate-hint ${g.level}`;
+  };
+
   const rate = h('input', {
     type: 'number', step: '0.05', inputmode: 'decimal',
     value: d.rateKgPerWeek != null ? d.rateKgPerWeek : GOALS[d.goal]?.defaultRateKgPerWeek ?? 0,
-    oninput: (e) => { d.rateKgPerWeek = Number(e.target.value); touch(); },
+    oninput: (e) => { d.rateKgPerWeek = Number(e.target.value); syncRateHint(); touch(); },
   });
+  syncRateHint();
 
   const activity = h('select', {
     onchange: (e) => { d.activity = e.target.value; touch(); },
@@ -129,6 +157,7 @@ export function profileCard(rerender) {
       d.goal = e.target.value;
       d.rateKgPerWeek = GOALS[e.target.value].defaultRateKgPerWeek;
       rate.value = d.rateKgPerWeek;   // 直接改 DOM，不重绘
+      syncRateHint();
       touch();
     },
   }, Object.values(GOALS).map((g) => h('option', { value: g.key, selected: d.goal === g.key }, g.label)));
@@ -165,7 +194,7 @@ export function profileCard(rerender) {
       // 选项文字长（「轻度活动（每周 1-3 次）」），半格会被截断
       field('日常活动量', activity, '选择平时的生活强度', 'span-all'),
       field('目标', goal),
-      field('目标速率（kg/周）', rate, '减脂填负数'),
+      field('目标速率（kg/周）', rate, rateHint, 'span-all'),
     ),
     saveBtn,
     h('div.stat-row', null,

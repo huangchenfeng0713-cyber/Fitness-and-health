@@ -45,15 +45,41 @@ test('热量不足以承载蛋白缺口时，不生成物理上不可能的餐�
     entries: [],
     now: at('23:48'),
   });
-  assert.match(a.status.headline, /无法补齐 16g 蛋白/);
-  assert.match(a.status.detail, /至少需要 64 kcal/);
-  assert.ok(!/零热量.*高蛋白/.test(a.status.detail));
+  // 这条结论归「今日提示」——主卡最上面那一段只说热量
+  const blocked = a.insights.find((i) => /补不齐/.test(i.title));
+  assert.ok(blocked, `没有生成「补不齐」提示：${a.insights.map((i) => i.title).join(' / ')}`);
+  assert.match(blocked.title, /16g 蛋白/);
+  assert.match(blocked.text, /要 64 kcal/);
+  assert.ok(!/零热量.*高蛋白/.test(blocked.text));
 });
 
 test('蛋白已经达标时不显示负数缺口', () => {
   const a = advise({ kcal: 900, protein: targets.protein + 12 });
-  assert.match(a.status.headline, /蛋白已达标/);
-  assert.doesNotMatch(a.status.headline, /蛋白还差 -/);
+  const done = a.insights.find((i) => /蛋白已达标/.test(i.title));
+  assert.ok(done, '蛋白达标时应有一条达标提示');
+  assert.doesNotMatch(a.insights.map((i) => i.title + i.text).join(' '), /蛋白还差 -/);
+});
+
+/*
+ * 主卡顶上那一段只回答「今天热量够不够、够不够走到计划的速度」。
+ * 蛋白缺口、钠超标这些各有各的提示条，挤进来会把热量的结论顶掉：
+ * 实测钠只超 11%，主卡顶上就变成了「钠摄入超标 11%」，
+ * 而当时那天还差 900 kcal 没吃——真正该说的那句话反而不见了。
+ */
+test('主卡首段只说热量，不说蛋白和钠', () => {
+  const cases = [
+    advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') }),
+    advise({ kcal: 900, protein: 20, sodium: 3200 }, { now: at('19:00') }),
+    advise({ kcal: targets.kcal - 30, protein: 40, sodium: 4000 }, { now: at('20:00') }),
+    advise({ kcal: targets.kcal + 40, protein: 30 }, { now: at('21:00') }),
+    buildAdvice({
+      targets, profile, intake: { ...zero }, entries: [], now: at('13:30'),
+    }),
+  ];
+  for (const a of cases) {
+    const copy = `${a.status.headline} ${a.status.detail}`;
+    assert.doesNotMatch(copy, /蛋白|钠|纤维|游离糖/, `首段说了热量以外的事：${copy}`);
+  }
 });
 
 test('脂肪计划值与参考上限分开，超过计划值不会被误判为超上限', () => {
@@ -144,7 +170,7 @@ test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
   const top = a.recommend[0];
   const p = per100(top.food);
   assert.ok((p.protein * 4) / p.kcal > 0.3, `首推 ${top.food.name} 的蛋白供能比过低`);
-  assert.match(a.status.headline, /蛋白/);
+  assert.ok(a.insights.some((i) => /蛋白还差/.test(i.title)), '蛋白缺口大时要有一条提示');
 });
 
 test('热量明显高于计划只做橙色提醒，不把计划误说成危险上限', () => {

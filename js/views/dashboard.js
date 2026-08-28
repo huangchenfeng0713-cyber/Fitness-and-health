@@ -12,8 +12,8 @@
 import {
   h, clearEl, num, mount, infoTip,
 } from '../lib/utils.js';
-import { ring, macroBar, rangeBar } from '../lib/charts.js';
-import { dailyMetrics, KIND } from '../core/metrics.js';
+import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
+import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
@@ -57,14 +57,15 @@ const KIND_COLOR = {
 /*
  * 分两组画。
  *
- * 上面四项（蛋白、碳水、脂肪、饮水）是「吃进去多少」，一行一条，看得出进度；
+ * 上面是「吃进去多少」：蛋白一条、碳水脂肪合用一条、饮水一条；
  * 下面三项（纤维、钠、游离糖）是门槛，只关心够没够 / 超没超，压成三个方框
  * 一行排开——它们不需要一整行的条，摊开只会把卡片拉长。
  *
- * 措辞仍由 core/metrics.js 决定：碳水那条写的是「不必吃满」，
- * 条形只报「到这儿了」，不再写「还差多少」。
+ * 碳水和脂肪原先各占一条区间。两条都「在范围内」时总量却能差出 796 kcal
+ * （2660 kcal 的计划上是 30%），两条各自说自己没问题、合起来对不上账；
+ * 照计划吃的人还会看到「碳水低于建议 74g」。它们分的本来就是同一块热量，
+ * 所以合成一条，说的也换成真正有意义的那件事：这块热量偏碳水还是偏脂肪。
  */
-const BAR_KEYS = ['protein', 'carb', 'fat', 'water'];
 const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
@@ -75,16 +76,46 @@ function metricRow(m) {
       h('span.metric-row-label', null, m.label),
       h('strong.metric-row-value', null, `${value}${m.unit}`),
       h('span.metric-row-note', null, st.range ? `${st.note} · ${st.range}` : st.note)),
-    st.zoneStart != null
-      ? rangeBar({
-        fillPct: st.fillPct, zoneStart: st.zoneStart, zoneEnd: st.zoneEnd,
-        color: KIND_COLOR[m.key], level: st.level,
-      })
-      : macroBar({
-        value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
-        // 只有真上限会画成红色，下限和余数不会
-        overIsBad: m.kind === KIND.ceiling,
-      }));
+    /*
+     * 记录类不画条。metricState 里它就定义成「只是记录，没有达标一说」，
+     * 而这里原先是无条件画的 —— 没有区间就落到 macroBar，饮水于是长出
+     * 一根「填到 1700」的进度条，界面在要求用户把一个不该有目标的数填满。
+     */
+    m.kind === KIND.log ? null
+      : st.zoneStart != null
+        ? rangeBar({
+          fillPct: st.fillPct, zoneStart: st.zoneStart, zoneEnd: st.zoneEnd,
+          color: KIND_COLOR[m.key], level: st.level,
+        })
+        : macroBar({
+          value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
+          // 只有真上限会画成红色，下限和余数不会
+          overIsBad: m.kind === KIND.ceiling,
+        }));
+}
+
+/**
+ * 碳水 / 脂肪合用的那一行。
+ *
+ * 上面一行是比例（这决定结构偏哪边），下面一行是各自的克数——
+ * 只给比例的话，「58% : 42%」既说不出吃了多少，也没法和食物对上。
+ */
+function splitRow(split) {
+  const empty = split.structure === 'none';
+  return h('div', { class: `metric-row split-row ${split.level}` },
+    h('div.metric-row-top', null,
+      h('span.metric-row-label', null, '碳水 / 脂肪'),
+      h('strong.metric-row-value', null, empty ? '—' : `${split.carbPct}% : ${split.fatPct}%`),
+      h('span.metric-row-note', null, split.label)),
+    splitBar({ carbPct: split.carbPct || 0, markPct: split.planCarbPct, empty }),
+    /*
+     * 中间那格是条上那根竖标的说明。合计热量原先摆在这儿，可它和圆环里的
+     * 数字是同一件事；而竖标不解释的话，没人知道那道线是什么。
+     */
+    h('div.split-grams', null,
+      h('span', null, `碳水 ${num(split.carbG)}g`),
+      h('span.split-grams-plan', null, split.note),
+      h('span', null, `脂肪 ${num(split.fatG)}g`)));
 }
 
 /** 门槛类指标：方框里两个数，够不够 / 超没超一眼看完 */
@@ -99,7 +130,7 @@ function metricChip(m) {
 
 function heroCard(advice, targets, derived) {
   const { status, gaps } = advice;
-  const metrics = dailyMetrics(targets, gaps, derived.health?.waterMl);
+  const metrics = dailyMetrics(targets, gaps, derived.health?.waterCount);
   const kcal = metrics.find((m) => m.key === 'kcal');
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
@@ -120,6 +151,8 @@ function heroCard(advice, targets, derived) {
         h('h2', null, status.headline)),
       heroInfo(derived, targets)),
     h('p.hero-detail', null, status.detail),
+    // 计划速率的代价也是热量的事，紧跟着热量那一段说
+    rateNote(targets),
 
     // 圆环说「吃到计划的哪儿了」，右边说「今天实际收支」，都是热量的事，放一起
     h('div.hero-body', null,
@@ -142,7 +175,10 @@ function heroCard(advice, targets, derived) {
             : diff > 0 ? `比计划多 ${num(diff)} kcal` : `比计划少 ${num(-diff)} kcal`)),
       energyBalance(derived, targets)),
 
-    h('div.metric-list', null, BAR_KEYS.map((k) => metricRow(by[k]))),
+    h('div.metric-list', null,
+      metricRow(by.protein),
+      splitRow(macroSplit(targets, gaps)),
+      metricRow(by.water)),
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
@@ -226,9 +262,44 @@ function heroInfo(derived, targets) {
     targets.clampedByFloor && h('p', null,
       '按目标速率算出的热量低于成人常用饮食计划下限（女 1200 / 男 1500 kcal），已自动上调；'
       + '如有疾病、孕哺或特殊训练需求，请由专业人员个体化评估。'),
-    targets.rateWasClamped && h('p', null,
-      `你填写的 ${targets.requestedRateKgPerWeek > 0 ? '+' : ''}${targets.requestedRateKgPerWeek} kg/周过快，`
-      + `已按体重比例和每日热量调整上限改为 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周。`));
+  );
+}
+
+/** 带符号写速率：+0.3 和 0.3 读起来是两件事 */
+const signedRate = (v) => `${Number(v) > 0 ? '+' : ''}${Number(v)}`;
+
+/*
+ * 计划速率对热量的影响，说在热量那一段的正下方。
+ *
+ * 建议上沿（减 1% / 增 0.5% 体重每周）不再拦人：科学结论说的是
+ * 「超过这个速度，多出来的按比例主要是脂肪」，不是「0.52% 不安全必须拦下」。
+ * 所以填进去的数照用，代价在这里说出来 —— 藏进感叹号等于没说。
+ *
+ * 截断的话只点名**最后真正起作用的那一条**。原先那句「已按体重比例和
+ * 每日热量调整上限改为…」一口气点了两个机制，而实测只有一条碰到了，
+ * 用户照着去查另一条会发现根本对不上。
+ */
+function rateNote(targets) {
+  const why = {
+    'daily-kcal': '每天的热量调整幅度已经到顶（最多少吃 750 / 多吃 500 kcal）',
+    absurd: '这个速率超出了可执行范围',
+    floor: '热量已经压到成人饮食计划下限（女 1200 / 男 1500 kcal）',
+  }[targets.rateLimitedBy];
+  const lines = [
+    targets.rateWasClamped && why
+      ? `你填的 ${signedRate(targets.requestedRateKgPerWeek)} kg/周没能完整执行：${why}，`
+        + `热量按 ${signedRate(targets.rateKgPerWeek)} kg/周安排。`
+      : null,
+    targets.rateOverAdvisory && targets.rateAdvisoryKg
+      ? `计划 ${signedRate(targets.rateKgPerWeek)} kg/周约为体重的 ${targets.ratePctOfWeight}%/周，`
+        + `超过建议上沿（约 ${targets.rateAdvisoryKg} kg/周）。`
+        + (targets.rateKgPerWeek > 0
+          ? '热量给到这个程度，多出来的部分按比例主要是脂肪 —— 肌肉本身长不了这么快。'
+          : '热量缺口到这个程度，掉的就不只是脂肪，瘦体重占的比例会上升。')
+      : null,
+  ].filter(Boolean);
+  if (!lines.length) return null;
+  return h('p.hero-rate-note', null, lines.join('　'));
 }
 
 /** 只有「你看到的数字不对」才留在卡面上 */
