@@ -865,3 +865,40 @@ test('每个 store 都要同步到导入上限、备份校验和云同步三处'
     assert.match(sync, new RegExp(`'${store}'`), `cloud-sync.js 的 store 名单漏了 ${store}，换设备会丢这类数据`);
   }
 });
+
+test('多选：勾选只改页面内存，按确认才落库', () => {
+  /*
+   * 两处原先都是「点一个 → 立刻落库 → 整页重绘」。健身页量得出来：
+   * 连点三个动作，页面每次自己滚一段，同一行的 y 从 813 跳到 201 又跳到 897 ——
+   * 列表在手指底下动，第二下十有八九点错。饮食那边一顿三菜一饭要 12 次操作，
+   * 因为每记一样都要开一次份量弹层再关掉。
+   */
+  const diet = read('js/views/diet.js');
+  const training = read('js/views/training.js');
+  const bar = read('js/lib/select-bar.js');
+
+  // 共用同一条多选条，别在两个视图里各搭一个
+  for (const [name, src] of [['diet', diet], ['training', training]]) {
+    assert.match(src, /import \{ selectBar \} from '\.\.\/lib\/select-bar\.js'/, `${name} 没用共用的多选条`);
+  }
+  assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
+
+  // 饮食：＋ 进篮子，不开弹层；只有 recordBasket 里才 addEntry
+  assert.match(diet, /function addToBasket\(food\)/, '饮食页没有待记录篮子');
+  assert.match(diet, /async function recordBasket\(\)/, '篮子不能一次性记录');
+  assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
+  const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
+  assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入篮子时不该落库，也不该弹出份量面板');
+
+  // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
+  assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
+  const rowBody = training.slice(training.indexOf('function exerciseRow'), training.indexOf('h(\'div.ex-main\''));
+  // 注释里解释「为什么不能 rerender」的那句话不算，只看真正会跑的代码
+  const rowCode = rowBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  assert.match(rowCode, /if \(pending\.has\(e\.id\)\) pending\.delete\(e\.id\); else pending\.add\(e\.id\);/,
+    '勾选没有走 pending');
+  assert.ok(!/\brerender\(\)/.test(rowCode.slice(rowCode.indexOf('pending.add'))),
+    '勾选之后不该整页重绘 —— 列表会重排，下一个要点的动作就跑走了');
+  assert.match(training, /async function commitPending\(\)/, '没有「一次加入计划」');
+  assert.match(training, /pending = new Set\(\);\s*\n\s*await updateSession/, '提交时应当一次写库');
+});

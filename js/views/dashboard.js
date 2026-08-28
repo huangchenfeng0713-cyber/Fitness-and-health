@@ -16,6 +16,8 @@ import { ring, macroBar, rangeBar } from '../lib/charts.js';
 import { dailyMetrics, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
+import { FOCUS_LABEL } from '../core/advisor.js';
+import { setIntent } from '../lib/nav.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
 
@@ -256,15 +258,33 @@ function energyFreshness(derived) {
 
 /* ---------------------------------------------------------------- 提示 */
 
+/*
+ * 有些提示说的是「你还缺什么」，而能补上它的食物在饮食页。
+ * 只报数字等于把问题原样退回去 —— 这几条做成可点的，
+ * 点一下带着「我要补蛋白」跳过去，落在按每 100 kcal 含量排好的那张表上。
+ */
+const INSIGHT_FOCUS = { protein: 'protein', fiber: 'fiber' };
+
 function insightsCard(advice, rerender) {
   const all = advice.insights;
   if (!all.length) return null;
   const list = expanded.insights ? all : all.slice(0, 3);
   return h('section.card', null,
     h('div.card-head', null, h('h3', null, '今日提示')),
-    h('div.insight-list', null, list.map((i) => h(`div.insight.${i.type}`, null,
-      h('div.insight-title', null, i.title),
-      h('div.insight-text', null, i.text)))),
+    h('div.insight-list', null, list.map((i) => {
+      const focus = INSIGHT_FOCUS[i.type];
+      const body = [
+        h('div.insight-title', null, i.title),
+        h('div.insight-text', null, i.text),
+        focus ? h('div.insight-go', null, `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
+      ];
+      if (!focus) return h(`div.insight.${i.type}`, null, ...body);
+      return h(`button.insight.${i.type}`, {
+        class: `insight ${i.type} insight-actionable`,
+        type: 'button',
+        onclick: () => { setIntent({ focus }); location.hash = 'diet'; },
+      }, ...body);
+    })),
     moreToggle('insights', all.length, 3, rerender),
   );
 }

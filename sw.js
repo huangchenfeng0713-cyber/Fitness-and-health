@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v2.2.0';
+const CACHE = 'health-diet-v2.3.0';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
 // 根模块及其固定版本依赖只在账号功能首次成功加载后按需缓存；不为本地模式访客预下载。
@@ -23,6 +23,8 @@ const SHELL = [
   './js/lib/health-cloud-sync.js',
   './js/lib/utils.js',
   './js/lib/charts.js',
+  './js/lib/select-bar.js',
+  './js/lib/nav.js',
   './js/core/metrics.js',
   './js/core/portion.js',
   './js/core/nutrition.js',
@@ -31,6 +33,7 @@ const SHELL = [
   './js/core/health.js',
   './js/core/health-insights.js',
   './js/core/trend-reading.js',
+  './js/core/weekly-summary.js',
   './js/core/cloud-health.js',
   './js/lib/importer.js',
   './js/core/health-merge.js',
@@ -45,6 +48,7 @@ const SHELL = [
   './js/data/exercises.js',
   './js/views/cards/profile.js',
   './js/views/cards/health-metrics.js',
+  './js/views/cards/weekly-summary.js',
   './js/views/cards/data-manager.js',
   './js/views/cards/trend-charts.js',
   './js/views/cards/meal-advice.js',

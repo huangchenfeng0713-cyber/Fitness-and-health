@@ -858,6 +858,92 @@ body.sheet-open {
 .water-sheet .water-custom { width: 100%; max-width: 220px; margin-top: 14px; }
 .water-sheet .sheet-action { width: 100%; }
 
+/*
+ * 多选条：钉在滚动容器底部，饮食页和健身页共用。
+ * 钉在 .view 上而不是视口上 —— 视口底部是 tab 栏的位置。
+ */
+/* 一周小结：一行一项，值和说明左右分栏 */
+.week-rows { display: flex; flex-direction: column; }
+.week-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--hairline);
+}
+.week-row:last-child { border-bottom: 0; }
+.week-row-label { flex: none; width: 68px; font-size: var(--fs-small); color: var(--muted); }
+.week-row-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.week-row-value { flex: none; font-size: var(--fs-body); font-weight: 600; }
+.week-row-note { flex: 1 1 auto; font-size: var(--fs-caption); color: var(--faint); }
+/* 只有两档着色：做到了给绿，该留意给橙。小结不是体检报告，不上红色 */
+.week-row.good .week-row-value { color: var(--ok, var(--accent)); }
+.week-row.warn .week-row-value { color: var(--warn); }
+
+/* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
+.chip-focus { color: var(--accent); font-weight: 600; }
+.chip-focus.active { color: var(--card); background: var(--accent); border-color: var(--accent); }
+
+/* 可点的提示：右下角一行「去看…›」，告诉人这条能点 */
+.insight-actionable {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
+}
+.insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
+
+/* 勾中但还没加进计划：比已选浅一层，看得出是「待确认」 */
+.ex-row.marked { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ex-row.marked .ex-pick { color: var(--accent); }
+
+/* 搜索结果一行两个入口：点行开份量面板，点 ＋ 直接进待记录 */
+.search-item-wrap { display: flex; align-items: stretch; gap: 6px; }
+.search-item-wrap .search-item { flex: 1 1 auto; min-width: 0; }
+.search-item-add {
+  flex: none; width: 40px; border: 0; background: none;
+  color: var(--accent); font-size: 17px; line-height: 1;
+  border-radius: var(--r-sm); cursor: pointer;
+}
+.search-item-add.chosen { color: var(--card); background: var(--accent); }
+
+.select-bar {
+  position: sticky; bottom: 0; z-index: 3;
+  /* 顶到卡片的内边距外面，让它横贯整张卡 */
+  margin: 10px -16px -17px;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.select-bar[hidden] { display: none; }
+.select-bar-main { display: flex; align-items: center; gap: 8px; }
+.select-bar-summary {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px;
+  border: 0; background: none; padding: 4px 0; text-align: left;
+}
+/* 主行和副行分开摆：挤在一行上「已选 4 样 · 966 kcal · 蛋白 52g」会折成两截 */
+.select-bar-summary-text { min-width: 0; }
+.select-bar-summary-text strong {
+  display: block; font-size: var(--fs-small); color: var(--text); font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.select-bar-detail { display: block; font-size: var(--fs-caption); color: var(--muted); }
+.select-bar-caret { flex: none; color: var(--faint); font-size: 11px; }
+.select-bar-clear { display: block; width: 100%; padding: 8px 0; font-size: var(--fs-caption); }
+.select-bar-go {
+  flex: none; width: auto; min-height: 40px; padding: 0 14px; margin: 0;
+  font-size: var(--fs-small); white-space: nowrap;
+}
+/* 展开后逐项列出：多选之后最想确认的就是「我到底选了什么」 */
+.select-bar-list {
+  max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
+  margin-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.select-bar-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.select-bar-item:last-child { border-bottom: 0; }
+.select-bar-item-main { flex: 1 1 auto; min-width: 0; }
+.select-bar-item-main strong { font-size: var(--fs-small); font-weight: 500; }
+.select-bar-item-note { display: block; font-size: var(--fs-caption); color: var(--muted); }
+
 .portion-panel { margin-top: 2px; }
 /*
  * 记录按钮钉在弹层底部。

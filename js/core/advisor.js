@@ -78,6 +78,48 @@ function tagsOf(food) {
 }
 
 /** 当前时刻落在哪一餐 */
+/*
+ * 「补蛋白 / 补纤维」这两张筛选表。
+ *
+ * 排序按**每 100 kcal 能拿到多少**，不按每 100g 的绝对量。
+ * 补蛋白时真正的约束是热量预算：牛肉干每 100g 有 45g 蛋白，可也有 400 kcal，
+ * 晚上照它补 40g 蛋白要顺带吃进 350 kcal，热量早就超了。
+ * 同一个道理，薯片每 100g 有 4g 纤维，但那是 548 kcal 换来的。
+ *
+ * 先用 deriveTags 的门槛筛掉「其实算不上这一类」的，再按密度排 ——
+ * 只按密度排的话黄瓜会排在鸡胸肉前面。
+ */
+const FOCUS_SPECS = {
+  protein: { tag: 'high-protein', label: '补蛋白', per: (p) => (p.kcal > 0 ? (p.protein / p.kcal) * 100 : 0) },
+  fiber: { tag: 'high-fiber', label: '补纤维', per: (p) => (p.kcal > 0 ? (p.fiber / p.kcal) * 100 : 0) },
+};
+
+export const FOCUS_LABEL = Object.fromEntries(
+  Object.entries(FOCUS_SPECS).map(([k, v]) => [k, v.label]),
+);
+
+/*
+ * 调味料和补剂不进这张表。
+ *
+ * cat: 'other' 装的是食用油、生抽、白砂糖、肌酸和 BCAA —— 没有一样是
+ * 「我该吃点什么补上」的答案。BCAA 尤其不该排在第一：它按每 100 kcal
+ * 的氨基酸含量确实最高，但那是三种氨基酸，不是完整蛋白，
+ * 在全天蛋白够的前提下补它对合成没有额外作用。
+ */
+const FOCUS_EXCLUDE_CATS = new Set(['other']);
+
+/** 某一类「补什么」的候选食物，密度高的排前面 */
+export function focusFoods(key, foods = [], limit = 60) {
+  const spec = FOCUS_SPECS[key];
+  if (!spec) return [];
+  return foods
+    .filter((f) => !FOCUS_EXCLUDE_CATS.has(f.cat) && deriveTags(f).has(spec.tag))
+    .map((f) => ({ food: f, density: spec.per(per100(f)) }))
+    .sort((a, b) => b.density - a.density)
+    .slice(0, limit)
+    .map((x) => x.food);
+}
+
 export function currentMeal(now = new Date()) {
   const h = now.getHours() + now.getMinutes() / 60;
   for (const m of MEALS) if (h < m.endHour) return m;

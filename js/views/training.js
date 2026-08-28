@@ -8,9 +8,10 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey, infoTip } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, infoTip, toast } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
+import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, coveredGroupKeys, planAdvice,
   starterCombo, starterSplitCombo,
@@ -35,6 +36,15 @@ let expanded = null;
  */
 const LIST_PREVIEW = 8;
 let showAllExercises = false;
+/*
+ * 待加入计划的一批动作。
+ *
+ * 只放在页面内存里，勾选不写库、不重绘 —— 原先每点一个都要落库并整页重绘，
+ * 实测连点三个：页面自己滚了两次，同一行的 y 从 813 跳到 201 又跳到 897。
+ * 列表在手指底下动，第二下十有八九点错。攒够了按一次「加入计划」。
+ */
+let pending = new Set();
+let pickerBar = null;
 
 const session = () => trainingFor(state.day);
 const picked = () => session().items.map((i) => i.id);
@@ -121,13 +131,31 @@ function clashWith(e) {
 
 function exerciseRow(e, rerender, lastDone) {
   const chosen = picked().includes(e.id);
+  const marked = pending.has(e.id);
   const clash = chosen ? null : clashWith(e);
-  return h('button.ex-row', {
-    class: `ex-row${chosen ? ' chosen' : ''}`,
+  // 单独留住这个节点，勾选时只改它的字，不重建整行
+  const pickNode = h('span.ex-pick', null, chosen ? '✓' : marked ? '●' : '＋');
+  const row = h('button.ex-row', {
+    class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
+    type: 'button',
+    'aria-pressed': String(chosen || marked),
     onclick: () => {
-      updateSession((items) => (chosen
-        ? items.filter((i) => i.id !== e.id)
-        : [...items, { id: e.id, sets: [], done: false }]));
+      // 已在计划里的：点一下就撤掉。撤销不常做，重绘一次可以接受。
+      if (chosen) {
+        updateSession((items) => items.filter((i) => i.id !== e.id));
+        return;
+      }
+      /*
+       * 还没加的：只改这一行的样子和底下那条多选条，不整页重绘。
+       * 走 rerender() 的话列表会重排（多出一行「与已选的X刺激高度相似」），
+       * 下一个要点的动作就跑走了 —— 这正是要避开的那件事。
+       */
+      if (pending.has(e.id)) pending.delete(e.id); else pending.add(e.id);
+      const on = pending.has(e.id);
+      row.classList.toggle('marked', on);
+      row.setAttribute('aria-pressed', String(on));
+      pickNode.textContent = on ? '●' : '＋';
+      if (pickerBar) pickerBar.render();
     },
   },
   h('div.ex-main', null,
@@ -146,7 +174,8 @@ function exerciseRow(e, rerender, lastDone) {
       : clash ? h('div.ex-clash.soft', null, `与「${clash.other.name}」部分重叠`) : null,
     // 标出上次练过是哪天，省得每次从头翻
     lastDone && !chosen ? h('div.ex-last', null, `上次 ${lastDone.slice(5)}`) : null),
-  h('span.ex-pick', null, chosen ? '✓' : '＋'));
+  pickNode);
+  return row;
 }
 
 function equipTabs(rerender, all) {
@@ -199,7 +228,33 @@ function pickerCard(rerender) {
       : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
     list.length > LIST_PREVIEW ? h('button.more-btn', {
       onclick: () => { showAllExercises = !showAllExercises; rerender(); },
-    }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null);
+    }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
+    pickerBar.el);
+}
+
+/** 勾中的这一批一次加进计划：一次落库、一次重绘 */
+async function commitPending() {
+  const ids = [...pending].filter((id) => !picked().includes(id));
+  if (!ids.length) { pending = new Set(); return; }
+  pending = new Set();
+  await updateSession((items) => [...items, ...ids.map((id) => ({ id, sets: [], done: false }))]);
+  toast(`已加入 ${ids.length} 个动作`, 'ok');
+}
+
+function buildPickerBar() {
+  return selectBar({
+    summary: () => `已选 ${pending.size} 个动作`,
+    detail: () => [...pending]
+      .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、'),
+    actionLabel: () => '加入计划',
+    items: () => [...pending].map((id) => {
+      const e = EXERCISE_BY_ID.get(id);
+      return e ? { key: id, label: e.name, note: `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}` } : null;
+    }).filter(Boolean),
+    onRemove: (id) => { pending.delete(id); rerenderTraining?.(); },
+    onClear: () => { pending = new Set(); rerenderTraining?.(); },
+    onConfirm: () => { commitPending(); },
+  });
 }
 
 /*
@@ -386,6 +441,8 @@ export function renderTraining(root) {
   const rerender = () => renderTraining(root);
   rerenderTraining = rerender;
   clearEl(root);
+  // 整页重绘会把上一条的 DOM 丢掉，重新建一条；pending 本身是模块级的，留着
+  pickerBar = buildPickerBar();
   mount(root,
     planCard(),
     adviceCard(rerender),

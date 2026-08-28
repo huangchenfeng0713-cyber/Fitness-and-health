@@ -20,8 +20,10 @@ import {
   SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
-import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { MEALS, MEAL_LABEL, currentMeal, focusFoods, FOCUS_LABEL } from '../core/advisor.js';
 import { initialPortion } from '../core/portion.js';
+import { selectBar } from '../lib/select-bar.js';
+import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 
@@ -38,6 +40,16 @@ const ui = {
   showCustomForm: false,
   historyOpen: false,   // 历史搜索是否展开
   moreResults: false,   // 搜索结果是否已展开全部
+  focus: null,          // 'protein' | 'fiber' —— 从今日页的提示跳过来时的筛选
+  /*
+   * 待记录的一篮子。
+   *
+   * 一顿三菜一饭原先要 12 次操作：每样都得开一次份量弹层、记一次、再关掉。
+   * 篮子里的项只在页面内存里，按「记录到X餐」才一次性落库。
+   * 每项 { food, grams, sugarLevel } —— 份量取的是这个人自己记过的量
+   * （portionMemory），没记过就用库里的第一档。
+   */
+  basket: [],
 };
 
 /** 常驻 DOM 节点引用 */
@@ -76,8 +88,9 @@ function buildShell(root) {
       ui.query = e.target.value;
       // 换了搜索词就收回「显示更多」，否则搜下一个词还是一次铺满
       ui.moreResults = false;
-      if (ui.category) {
+      if (ui.category || ui.focus) {
         ui.category = null;
+        ui.focus = null;
         refreshCategories();
       }
       refreshResults();
@@ -92,6 +105,20 @@ function buildShell(root) {
     },
   }, '+ 自定义');
 
+  nodes.basketBar = selectBar({
+    summary: () => `已选 ${ui.basket.length} 样 · ${basketTotals().kcal} kcal`,
+    detail: () => `蛋白 ${basketTotals().protein}g`,
+    actionLabel: () => `记录到${MEAL_LABEL[guessMeal()]}`,
+    items: () => ui.basket.map((b) => ({
+      key: b.food.id,
+      label: b.food.name,
+      note: `${b.grams}${b.food.basis === '100ml' ? 'ml' : 'g'} · ${Math.round(Number(nutrientsFor(b.food, b.grams, b.sugarLevel || undefined).kcal))} kcal`,
+    })),
+    onRemove: (id) => { removeFromBasket(id); refreshResults(); },
+    onClear: () => { ui.basket = []; refreshResults(); },
+    onConfirm: () => { recordBasket(); },
+  });
+
   nodes.searchCard = h('section.card', null,
     h('div.card-head.search-card-head', null,
       h('h3', null, '饮食记录'),
@@ -100,7 +127,8 @@ function buildShell(root) {
     nodes.customBox,
     nodes.favRow,
     nodes.categories,
-    nodes.results);
+    nodes.results,
+    nodes.basketBar.el);
 
   nodes.root = h('div.view-stack', null,
     // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
@@ -154,21 +182,33 @@ function refreshFav() {
   toggle.hidden = !ui.historyOpen && chips.scrollHeight <= chips.clientHeight + 2;
 }
 
+/** 换一种筛法：清掉另外两种，别让三个条件叠在一起 */
+function pickFilter({ category = null, focus = null }) {
+  ui.category = category;
+  ui.focus = focus;
+  ui.query = '';
+  ui.moreResults = false;
+  if (nodes.searchInput) nodes.searchInput.value = '';
+  refreshCategories();
+  refreshResults();
+}
+
 function refreshCategories() {
   clearEl(nodes.categories);
   mount(nodes.categories, h('div.category-browser', null,
     h('span.category-label', null, '分类'),
     h('div.category-scroll', null,
+      /*
+       * 「补蛋白 / 补纤维」排在分类前面：它们回答的是「我现在缺什么」，
+       * 而分类回答的是「我知道要找什么」。今日页那两条提示点过来落的就是这里。
+       */
+      Object.entries(FOCUS_LABEL).map(([key, label]) => h('button.chip-btn.chip-focus', {
+        class: `chip-btn chip-focus${ui.focus === key ? ' active' : ''}`,
+        onclick: () => pickFilter({ focus: ui.focus === key ? null : key }),
+      }, label)),
       Object.entries(CATEGORIES).map(([key, label]) => h('button.chip-btn', {
         class: ui.category === key ? 'active' : '',
-        onclick: () => {
-          ui.category = ui.category === key ? null : key;
-          ui.query = '';
-          ui.moreResults = false;
-          nodes.searchInput.value = '';
-          refreshCategories();
-          refreshResults();
-        },
+        onclick: () => pickFilter({ category: ui.category === key ? null : key }),
       }, label)))));
 }
 
@@ -178,10 +218,74 @@ function refreshCategories() {
  * 把「现在该吃什么」放这儿既填了空白，也正好是用户要的下一步。
  */
 
+/* ---------------------------------------------------------------- 多选篮子 */
+
+const inBasket = (id) => ui.basket.some((b) => b.food.id === id);
+
+/** 往篮子里放一样。份量用这个人自己记过的量，没记过就用库里第一档 */
+function addToBasket(food) {
+  if (inBasket(food.id)) return;
+  const start = initialPortion(food, portionMemory());
+  ui.basket = [...ui.basket, {
+    food,
+    grams: start.grams,
+    // 茶饮的糖度在篮子里不逐项问，按默认；要改糖度就点开份量面板单独记
+    sugarLevel: hasSugarLevel(food) ? DEFAULT_SUGAR_LEVEL : null,
+  }];
+}
+
+const removeFromBasket = (id) => { ui.basket = ui.basket.filter((b) => b.food.id !== id); };
+
+/** 篮子里这些加起来是多少 —— 按下记录之前能核对一眼 */
+function basketTotals() {
+  const total = { kcal: 0, protein: 0 };
+  for (const b of ui.basket) {
+    const n = nutrientsFor(b.food, b.grams, b.sugarLevel || undefined);
+    total.kcal += Number(n.kcal) || 0;
+    total.protein += Number(n.protein) || 0;
+  }
+  return { kcal: Math.round(total.kcal), protein: Math.round(total.protein) };
+}
+
+/** 一次把篮子里的全记下来 */
+async function recordBasket() {
+  const list = ui.basket;
+  if (!list.length) return;
+  const meal = guessMeal();
+  const label = MEAL_LABEL[meal];
+  let ok = 0;
+  for (const b of list) {
+    const levelLabel = b.sugarLevel && b.sugarLevel !== 'full' ? `（${sugarLevel(b.sugarLevel).label}）` : '';
+    try {
+      await addEntry({
+        foodId: b.food.id, grams: b.grams, meal,
+        sugarLevel: b.sugarLevel,
+        name: b.food.name + levelLabel,
+        custom: b.food.custom ? b.food : null,
+      });
+      ok += 1;
+    } catch (err) {
+      // 一条失败不该把剩下的也丢掉；最后统一报还剩几条没记上
+      console.error('记录失败', b.food.name, err);
+    }
+  }
+  const failed = list.length - ok;
+  ui.basket = failed ? list.slice(ok) : [];
+  ui.query = '';
+  if (nodes.searchInput) nodes.searchInput.value = '';
+  toast(failed ? `记下 ${ok} 样，还有 ${failed} 样没记上` : `已记录 ${ok} 样到${label}`, failed ? 'warn' : 'ok');
+  refreshResults();
+  refreshBasket();
+}
+
+function refreshBasket() {
+  if (nodes.basketBar) nodes.basketBar.render();
+}
+
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query && !ui.category) { refreshAdvice(); return; }
+  if (!ui.query && !ui.category && !ui.focus) { refreshAdvice(); return; }
   refreshAdvice();
 
   /*
@@ -191,7 +295,9 @@ function refreshResults() {
    */
   const all = ui.query
     ? searchFoods(ui.query, allFoods(), 60)
-    : allFoods().filter((food) => food.cat === ui.category);
+    : ui.focus
+      ? focusFoods(ui.focus, allFoods(), 60)
+      : allFoods().filter((food) => food.cat === ui.category);
   const results = ui.moreResults ? all.slice(0, 60) : all.slice(0, RESULT_PREVIEW);
   if (!all.length) {
     mount(nodes.results,
@@ -200,19 +306,41 @@ function refreshResults() {
     return;
   }
   mount(nodes.results,
-    ui.category && h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`),
+    ui.category ? h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`) : null,
+    // 说清这张表是按什么排的，否则「为什么鳕鱼排在鸡胸肉前面」没人猜得到
+    ui.focus ? h('div.result-caption', null,
+      `${FOCUS_LABEL[ui.focus]} · ${all.length} 项，按每 100 kcal 含量从高到低`) : null,
     h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     const basis = f.basis === '100ml' ? '100ml' : '100g';
-    return h('button.search-item', { onclick: () => selectFood(f) },
-      h('div.search-item-main', null,
-        h('strong', null, f.name),
-        h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
-      h('div.search-item-tags', null,
-        isEstimated(f) && h('span.chip.chip-est', {
-          title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
-        }, '估算'),
-        h('span.chip', null, CATEGORIES[f.cat] || '自定义')));
+    const chosen = inBasket(f.id);
+    /*
+     * 一行两个入口：
+     *   点行本身  → 开份量面板，改完克数单独记（要调份量、选糖度时走这条）
+     *   点右边的 ＋ → 直接进篮子，用你上次记的份量，不开弹层
+     * 记一顿饭的时候按的都是 ＋，弹层一次都不用开。
+     */
+    return h('div.search-item-wrap', null,
+      h('button.search-item', { type: 'button', onclick: () => selectFood(f) },
+        h('div.search-item-main', null,
+          h('strong', null, f.name),
+          h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
+        h('div.search-item-tags', null,
+          isEstimated(f) && h('span.chip.chip-est', {
+            title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
+          }, '估算'),
+          h('span.chip', null, CATEGORIES[f.cat] || '自定义'))),
+      h('button.search-item-add', {
+        type: 'button',
+        class: `search-item-add${chosen ? ' chosen' : ''}`,
+        'aria-label': chosen ? `把 ${f.name} 移出待记录` : `把 ${f.name} 加入待记录`,
+        'aria-pressed': String(chosen),
+        onclick: () => {
+          if (chosen) removeFromBasket(f.id); else addToBasket(f);
+          refreshResults();
+          refreshBasket();
+        },
+      }, chosen ? '✓' : '＋'));
     })),
     all.length > results.length ? h('button.more-btn', {
       onclick: () => { ui.moreResults = true; refreshResults(); },
@@ -897,4 +1025,15 @@ export function renderDiet(root) {
   refreshQuick();
   refreshEntries();
   refreshAdvice();
+
+  /*
+   * 从今日页的「蛋白还差 83g」点过来。意图取一次就没了 ——
+   * 60 秒定时器和 visibilitychange 都会再跑一遍 renderDiet，
+   * 留着的话用户手动切走筛选之后又会被拽回来。
+   */
+  const intent = takeIntent();
+  if (intent?.focus && FOCUS_LABEL[intent.focus]) {
+    pickFilter({ focus: intent.focus });
+    nodes.searchCard?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }

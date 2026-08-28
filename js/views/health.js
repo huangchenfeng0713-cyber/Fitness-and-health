@@ -15,6 +15,7 @@ import {
 } from '../lib/store.js';
 import { trendCharts } from './cards/trend-charts.js';
 import { healthMetricsCard } from './cards/health-metrics.js';
+import { weeklySummaryCard } from './cards/weekly-summary.js';
 
 /**
  * 早期版本把 Apple 导出的 unit="Cal"（千卡）当成小卡除以了 1000，
@@ -92,6 +93,8 @@ export function renderHealth(root) {
     repairCard(rerender),
     implausibleCard(rerender),
     healthMetricsCard(),
+    // 小结在趋势图上面：先回答「这一周整体怎么样」，想看某项怎么走再往下翻
+    weeklySummaryCard(),
     ...(trendCharts(rerender) || []),
   );
 }
