@@ -921,3 +921,33 @@ test('带甜味做法的菜不能被当成完全不加糖', () => {
     .map((f) => `${f.id}（${f.name}，总糖 ${f.n[5]}g）`);
   assert.deepEqual(missed, [], `这些菜没在 DISH_ADDED_SUGAR 里给值：${missed.join('、')}`);
 });
+
+test('连锁条目的 nfs 要真的生效，不能写了不算', () => {
+  /*
+   * brandedBbqFood 原先没把 nfs 往外传：条目里写着 nfs、说明里写着
+   * 「乳糖不计入游离糖」，实际却全按游离糖算 —— 界面在说假话。
+   */
+  const withNfs = FOODS.filter((f) => f.cat === 'chain' && f.nfs > 0);
+  assert.ok(withNfs.length >= 3, `只有 ${withNfs.length} 个连锁条目标了 nfs，helper 可能又把它吞了`);
+  for (const f of withNfs) {
+    const free = nutrientsFor(f, 100).sugar;
+    const total = Number(f.n[5]);
+    assert.ok(free < total - 0.01, `${f.name} 标了 nfs=${f.nfs}，游离糖却仍等于总糖 ${free}`);
+    assert.ok(Math.abs(free - (total - f.nfs)) < 0.05,
+      `${f.name} 的游离糖 ${free} 对不上「总糖 ${total} − nfs ${f.nfs}」`);
+  }
+});
+
+test('南浦拌饭：石锅拌饭几款的差别应当在浇头上，不在那碗饭上', () => {
+  // 底下都是同一碗饭，所以碳水该几乎一样，热量差主要来自脂肪。
+  // 这条同时也在盯着「批量加菜时把某一项抄错一个数量级」。
+  const bibimbaps = FOODS.filter((f) => f.id.startsWith('nanpu_') && f.id.includes('bibimbap'));
+  assert.ok(bibimbaps.length >= 4, `南浦的石锅拌饭只有 ${bibimbaps.length} 款`);
+  const carbs = bibimbaps.map((f) => f.n[3]);
+  assert.ok(Math.max(...carbs) - Math.min(...carbs) <= 3,
+    `几款拌饭的碳水差了 ${(Math.max(...carbs) - Math.min(...carbs)).toFixed(1)}g/100g，底下不是同一碗饭？`);
+  for (const f of bibimbaps) {
+    const per = nutrientsFor(f, f.s[0][1]);
+    assert.ok(per.kcal > 500 && per.kcal < 1100, `${f.name} 一份 ${Math.round(per.kcal)} kcal，不像一份拌饭`);
+  }
+});

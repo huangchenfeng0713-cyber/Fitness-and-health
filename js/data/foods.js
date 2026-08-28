@@ -121,6 +121,13 @@ const SOURCE_FEIHA_BBQ = Object.freeze({
   ref: '破店肥哈东北烧烤携程门店菜单核对品名；营养按同类东北烧烤配方估算',
   accessed: '2026-08-26',
 });
+const SOURCE_NANPU = Object.freeze({
+  type: 'recipe',
+  // 这家没有公开营养表，品名也拿不到官方菜单，只能按该品类门店通行的菜品整理。
+  // 写清楚是「整理」而不是「核对」——别把估算说成核对过的。
+  ref: '南浦拌饭为韩式石锅拌饭连锁；品名按该品类门店通行菜单整理，营养按同类配方与常见份量估算',
+  accessed: '2026-08-28',
+});
 const SOURCE_KFC_CN_EST = Object.freeze({
   type: 'recipe',
   ref: '肯德基中国官方产品宣传核对品名；中国食物成分表肯德基条目、FatSecret 品牌条目及公开称重拆解交叉核对营养',
@@ -168,10 +175,14 @@ const META_KFC_DRINK_EST = Object.freeze({
 
 function brandedBbqFood({
   id, name, alias, n, servingGrams, source, servingLabel = '一份可食部', note = '', flags = [],
+  // 乳糖、完整果肉的内源糖不属于 WHO 游离糖。这个字段原先没往外传，
+  // 写了也不生效 —— 而条目的说明里却写着「已单列」，等于界面在说假话。
+  nfs = undefined,
 }) {
   return {
     id, name, alias, cat: 'chain', n, s: [[servingLabel, servingGrams]],
     source, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+    ...(nfs === undefined ? {} : { nfs }),
     note: `${note ? `${note}；` : ''}品牌未公开完整营养表，按同类原料、常见腌料和烤制成品率估算；门店、批次及实际蘸料会有差异`,
     f: [...flags, 'est'],
   };
@@ -1285,7 +1296,7 @@ export const FOODS = [
   brandedBbqFood({ id: 'ayp_bibimbap', name: '安又胖 国民拌饭', alias: '安三胖 anyoupang ansanpang guomin banfan bibimbap', n: [150, 6, 5, 21, 1.5, 3, 520], servingGrams: 400, source: SOURCE_AYP_BBQ }),
   brandedBbqFood({ id: 'ayp_tuna_rice_ball', name: '安又胖 手作金枪鱼饭团', alias: '安三胖 anyoupang ansanpang jinqiangyu fantuan tuna rice ball', n: [204, 7, 6, 31, 1, 2, 480], servingGrams: 180, source: SOURCE_AYP_BBQ, flags: ['processed'] }),
   brandedBbqFood({ id: 'ayp_rock_fried_chicken', name: '安又胖 摇滚炸鸡', alias: '安三胖 anyoupang ansanpang yaogun zhaji 爆汁炸鸡 fried chicken', n: [298, 19, 19, 13, 0.5, 2, 760], servingGrams: 200, source: SOURCE_AYP_BBQ, flags: ['fried', 'processed'] }),
-  brandedBbqFood({ id: 'ayp_grilled_pineapple', name: '安又胖 烤菠萝', alias: '安三胖 anyoupang ansanpang kao boluo grilled pineapple', n: [97, 0.5, 2.5, 19, 2, 14, 120], servingGrams: 120, source: SOURCE_AYP_BBQ }),
+  brandedBbqFood({ id: 'ayp_grilled_pineapple', name: '安又胖 烤菠萝', alias: '安三胖 anyoupang ansanpang kao boluo grilled pineapple', n: [97, 0.5, 2.5, 19, 2, 14, 120], servingGrams: 120, source: SOURCE_AYP_BBQ, nfs: 12, note: '菠萝本身的糖属于完整水果内源糖，不计入游离糖；只把烤制时的糖浆算作游离糖' }),
   brandedBbqFood({ id: 'ayp_pumpkin_porridge', name: '安又胖 南瓜粥', alias: '安三胖 anyoupang ansanpang nangua zhou pumpkin porridge', n: [56, 1.2, 1, 11, 0.8, 5, 120], servingGrams: 220, source: SOURCE_AYP_BBQ }),
   brandedBbqFood({ id: 'ayp_potato_salad', name: '安又胖 土豆泥', alias: '安三胖 anyoupang ansanpang tudouni potato salad', n: [166, 2, 12, 13, 1.2, 2, 420], servingGrams: 100, source: SOURCE_AYP_BBQ }),
   brandedBbqFood({ id: 'ayp_tiramisu_bingsu', name: '安又胖 首尔提拉米苏雪花冰', alias: '安三胖 anyoupang ansanpang shouer tiramisu xuehuabing bingsu', n: [194, 3, 7, 30, 0.5, 24, 95], servingGrams: 350, source: SOURCE_AYP_BBQ, flags: ['processed'] }),
@@ -1340,6 +1351,26 @@ export const FOODS = [
   brandedBbqFood({ id: 'feiha_cold_noodle', name: '破店肥哈 大冷面', alias: 'podian feiha dalengmian korean cold noodle', n: [108, 3, 1, 22, 1, 4, 600], servingGrams: 500, note: '按面、配菜和整碗汤计；不喝汤时钠摄入更低', source: SOURCE_FEIHA_BBQ }),
   brandedBbqFood({ id: 'feiha_grilled_bread', name: '破店肥哈 烤面包', alias: 'podian feiha kao mianbao grilled bread', n: [323, 8, 11, 49, 2, 8, 420], servingGrams: 100, servingLabel: '一份（2片）', source: SOURCE_FEIHA_BBQ, flags: ['refined'] }),
   brandedBbqFood({ id: 'feiha_crayfish_tail', name: '破店肥哈 麻辣龙虾尾', alias: 'podian feiha mala longxiawei crayfish tail', n: [144, 16, 7, 4, 0.3, 1, 850], servingGrams: 220, note: '按去壳虾尾可食部和附着酱汁计，不含壳与盘底余汁', source: SOURCE_FEIHA_BBQ }),
+
+  /*
+   * 南浦拌饭：石锅拌饭连锁。主力是各种浇头的石锅拌饭，其余是汤锅、冷面和小食。
+   * 拌饭那几款的差别几乎全在浇头上（牛肉 / 五花 / 海鲜 / 芝士），底下都是同一碗饭 ——
+   * 所以热量差主要来自脂肪，碳水几乎一样。
+   */
+  brandedBbqFood({ id: 'nanpu_beef_bibimbap', name: '南浦拌饭 牛肉石锅拌饭', alias: 'nanpu banfan niurou shiguo banfan beef bibimbap 南浦石锅拌饭', n: [155, 6.5, 5, 21, 1.5, 3, 520], servingGrams: 500, source: SOURCE_NANPU, note: '含拌饭酱；拌开后酱汁全部计入' }),
+  brandedBbqFood({ id: 'nanpu_pork_kimchi_bibimbap', name: '南浦拌饭 泡菜五花肉石锅拌饭', alias: 'nanpu banfan paocai wuhuarou shiguo banfan kimchi pork bibimbap', n: [175, 6, 7.5, 21, 1.6, 3.5, 640], servingGrams: 500, source: SOURCE_NANPU }),
+  brandedBbqFood({ id: 'nanpu_seafood_bibimbap', name: '南浦拌饭 海鲜石锅拌饭', alias: 'nanpu banfan haixian shiguo banfan seafood bibimbap', n: [145, 7, 4, 20.5, 1.5, 3, 580], servingGrams: 500, source: SOURCE_NANPU }),
+  brandedBbqFood({ id: 'nanpu_cheese_bibimbap', name: '南浦拌饭 芝士石锅拌饭', alias: 'nanpu banfan zhishi shiguo banfan cheese bibimbap', n: [185, 8, 8, 20, 1.3, 3.5, 660], servingGrams: 500, source: SOURCE_NANPU, nfs: 1.2, note: '芝士带来的乳糖不算游离糖，已单列' }),
+  brandedBbqFood({ id: 'nanpu_veg_bibimbap', name: '南浦拌饭 什锦石锅拌饭', alias: 'nanpu banfan shijin shiguo banfan vegetable bibimbap 素拌饭 原味拌饭', n: [140, 4.5, 4.5, 21.5, 1.8, 3, 500], servingGrams: 500, source: SOURCE_NANPU }),
+  brandedBbqFood({ id: 'nanpu_army_stew', name: '南浦拌饭 部队锅', alias: 'nanpu banfan budui guo army stew budae jjigae', n: [120, 6.5, 6.5, 9, 1, 2, 900], servingGrams: 500, source: SOURCE_NANPU, flags: ['processed'], note: '含火腿肠、午餐肉与方便面；按整锅连汤计，不喝汤时钠摄入更低' }),
+  brandedBbqFood({ id: 'nanpu_soybean_paste_soup', name: '南浦拌饭 大酱汤', alias: 'nanpu banfan dajiang tang doenjang jjigae soybean paste soup', n: [55, 4, 2.5, 4.5, 1.2, 1.5, 850], servingGrams: 350, source: SOURCE_NANPU, note: '按整碗连汤计；不喝汤时钠摄入更低' }),
+  brandedBbqFood({ id: 'nanpu_soft_tofu_soup', name: '南浦拌饭 嫩豆腐汤', alias: 'nanpu banfan nendoufu tang sundubu jjigae soft tofu soup', n: [62, 5, 3.5, 3, 0.8, 1.2, 820], servingGrams: 400, source: SOURCE_NANPU, note: '按整碗连汤计；不喝汤时钠摄入更低' }),
+  brandedBbqFood({ id: 'nanpu_cold_noodle', name: '南浦拌饭 韩式冷面', alias: 'nanpu banfan hanshi lengmian korean cold noodle naengmyeon', n: [105, 3.5, 1, 21, 1, 4, 620], servingGrams: 550, source: SOURCE_NANPU, note: '按面、配菜和整碗冷汤计；不喝汤时钠摄入更低' }),
+  brandedBbqFood({ id: 'nanpu_tteokbokki', name: '南浦拌饭 辣炒年糕', alias: 'nanpu banfan lachao niangao tteokbokki', n: [190, 4, 3, 38, 1.2, 10, 700], servingGrams: 300, source: SOURCE_NANPU, flags: ['refined'] }),
+  brandedBbqFood({ id: 'nanpu_cheese_tteokbokki', name: '南浦拌饭 芝士炒年糕', alias: 'nanpu banfan zhishi chao niangao cheese tteokbokki', n: [215, 6.5, 6.5, 34, 1.1, 9, 760], servingGrams: 320, source: SOURCE_NANPU, flags: ['refined'], nfs: 1 }),
+  brandedBbqFood({ id: 'nanpu_gimbap', name: '南浦拌饭 紫菜包饭', alias: 'nanpu banfan zicai baofan gimbap kimbap 韩式饭卷', n: [165, 5, 4.5, 27, 1.5, 2, 480], servingGrams: 220, servingLabel: '一份（约8块）', source: SOURCE_NANPU }),
+  brandedBbqFood({ id: 'nanpu_fried_chicken', name: '南浦拌饭 韩式炸鸡', alias: 'nanpu banfan hanshi zhaji korean fried chicken', n: [265, 17, 15, 15, 0.6, 5, 700], servingGrams: 250, source: SOURCE_NANPU, flags: ['fried', 'processed'], note: '按去骨可食部和裹粉、酱汁计' }),
+  brandedBbqFood({ id: 'nanpu_kimchi_pancake', name: '南浦拌饭 泡菜饼', alias: 'nanpu banfan paocai bing kimchi pancake kimchijeon 韩式煎饼', n: [205, 5, 10, 24, 1.4, 2.5, 680], servingGrams: 200, source: SOURCE_NANPU, flags: ['fried'] }),
 
   // ---------- 果汁与常见即饮果蔬饮品（液体均按 100ml） ----------
   { id: 'juice_apple', name: '苹果汁（100%）', alias: 'pingguozhi apple juice 纯果汁', cat: 'drink', n: [46, 0.1, 0.1, 11.3, 0.2, 9.6, 4], s: [['一杯', 250], ['一小瓶', 300]], nfs: 0, ...META_USDA_DRINK, f: ['sweetdrink', 'quick'] },
