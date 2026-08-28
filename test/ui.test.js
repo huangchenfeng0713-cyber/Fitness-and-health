@@ -436,7 +436,11 @@ test('账号归属未确认时锁定业务界面和设置，只允许原账号�
   assert.ok(settings.indexOf('else if (actionableConflict)')
     < settings.indexOf('else if (account.ownershipPending === true)'),
   '可操作冲突被 ownershipPending 加载态挡住，用户将无法选择版本');
-  assert.ok(app.includes('accountDataLocked(account) || !isEditing()'), '输入框聚焦时隐私锁仍可能保留旧设置 DOM');
+  // 隐私锁必须无视输入焦点：焦点在体重框里也得立刻把旧账号的数据从界面上撤掉
+  assert.ok(/const locked = accountDataLocked\(account\)/.test(app), '账号回调里没有算出锁定态');
+  assert.ok(app.includes('locked || !isEditing()'), '输入框聚焦时隐私锁仍可能保留旧设置 DOM');
+  assert.ok(app.includes('renderCurrentSafely({ force: locked })'),
+    '隐私锁触发时业务页面也必须强制重绘，不能因为焦点在输入框里就跳过');
   assert.ok(settings.includes('确认属于我并上传'));
   assert.ok(settings.includes('清空本机，使用空账号'));
 });
@@ -901,4 +905,69 @@ test('多选：勾选只改页面内存，按确认才落库', () => {
     '勾选之后不该整页重绘 —— 列表会重排，下一个要点的动作就跑走了');
   assert.match(training, /async function commitPending\(\)/, '没有「一次加入计划」');
   assert.match(training, /pending = new Set\(\);\s*\n\s*await updateSession/, '提交时应当一次写库');
+});
+
+test('输入框有焦点时不许整页重绘，但事后要补上', () => {
+  /*
+   * 定时器、可见性、账号轮询这几条路一直都记得躲开输入框，唯独 store 订阅
+   * 这条没有 —— 在饮食记录里改克数时，后台任何一次落库（五分钟一次的账号
+   * 健康轮询、云端同步拉到新数据）都会把正在编辑的那个 input 连根换掉：
+   * 焦点回到 body，iOS 收起键盘，敲了一半的数字也没了。
+   */
+  const app = read('js/app.js');
+  assert.match(app, /function renderCurrentSafely\(\{ force = false \} = \{\}\)/, '缺少带输入保护的重绘入口');
+  assert.match(app, /if \(!force && isEditing\(\)\) \{ renderPending = true; return; \}/,
+    '重绘时没有躲开输入框，或者跳过之后没记下来');
+
+  // store 订阅这条必须走带保护的那个入口
+  const sub = app.slice(app.indexOf('subscribe(() => {'), app.indexOf('let healthAccountUserId'));
+  assert.match(sub, /renderCurrentSafely\(\)/, 'store 订阅仍在直接 renderCurrent');
+  assert.ok(!/\brenderCurrent\(\);/.test(sub), 'store 订阅里还留着不带保护的 renderCurrent()');
+
+  // 跳过不能就这么算了：失焦之后要补一次，否则页面停在旧数据上
+  assert.match(app, /document\.addEventListener\('focusout'/, '跳过重绘之后没有补回来的入口');
+  assert.match(app, /if \(renderPending && !isEditing\(\)\) renderCurrentSafely\(\)/,
+    '补重绘时没有再确认一次焦点 —— 在两个格子之间跳会把人从第二个框里踢出去');
+});
+
+test('重复提示在挑的时候就出，勾中还没提交的也算', () => {
+  /*
+   * 原先 clashWith 只比已经落库的那些：连勾杠铃卧推和哑铃卧推，两个都还没提交，
+   * 一句提示都不出，等按下「加入计划」之后才在训练建议里读到「这俩刺激高度相似」——
+   * 那时候人已经选完了，改起来要回头再走一遍。
+   */
+  const training = read('js/views/training.js');
+  assert.match(training, /\[\.\.\.pickedExercises\(\), \.\.\.\[\.\.\.pending\]\.map/,
+    '重复判定没有把勾中还没提交的算进来');
+
+  // 已经选中的行不再提示：两行上各写一遍「和对方几乎一样」是同一件事说两遍
+  assert.match(training, /if \(picked\(\)\.includes\(e\.id\) \|\| pending\.has\(e\.id\)\) return null;/,
+    '已选中的行还在显示重复提示');
+
+  // 勾一个会改变别的行「重不重」，整列都要跟一下；但只能改那一句，不能整页重绘
+  assert.match(training, /for \(const other of row\.parentNode\?\.children \|\| \[\]\) other\.syncClash\?\.\(\)/,
+    '勾选之后其它行的提示没有跟着更新');
+  assert.match(training, /clashNode\.className = line \? `ex-clash-slot \$\{line\.cls\}` : 'ex-clash-slot'/,
+    '整条 className 被覆盖会让空槽的隐藏样式失效，行里留一道空白');
+
+  // 提示要短，而且不是红色 —— 选两个卧推变式是取舍不是错误
+  assert.match(training, /和「\$\{clash\.other\.name\}」重复/, '提示文案太长，挑动作时是扫不是读');
+  const css = read('css/app.css');
+  assert.match(css, /\.ex-clash \{[^}]*color: var\(--warn\)/s, '重复提示不该用红色');
+});
+
+test('「已选动作」只记录选了什么，不在这里给建议', () => {
+  /*
+   * 这张卡原先还兼着报「覆盖部位」和「这套动作之间没有明显重复」，
+   * 和下面那张「训练建议」说的是同一件事，在同一屏里说两遍。
+   */
+  const training = read('js/views/training.js');
+  const card = training.slice(training.indexOf('function planCard()'), training.indexOf('function tipAction'));
+  assert.match(card, /'已选动作' : `\$\{state\.day\} 的训练`/, '卡片标题没改成「已选动作」');
+  assert.ok(!card.includes('覆盖部位'), '记录卡里还留着覆盖部位的分析');
+  assert.ok(!card.includes('没有明显重复'), '记录卡里还留着重复度的结论');
+  assert.ok(!/findOverlaps|coverage\(/.test(card), '记录卡还在调分析函数');
+  // 但组数、重量和清空这些「记录」的部分要留着
+  assert.match(card, /planRow\(e, i\)/, '动作行没了，就没法记组数');
+  assert.match(card, /volume\.sets/, '组数统计没了');
 });

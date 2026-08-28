@@ -888,6 +888,9 @@ body.sheet-open {
 }
 .insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
 
+/* 重复提示的位置：没有提示时是个零高度的空槽，不占地方 */
+.ex-clash-slot:empty { display: none; }
+
 /* 勾中但还没加进计划：比已选浅一层，看得出是「待确认」 */
 .ex-row.marked { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .ex-row.marked .ex-pick { color: var(--accent); }
@@ -1648,8 +1651,12 @@ body.sheet-open {
 .ex-tag.compound { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
 .ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ex-muscle-old { font-size: 12.5px; color: var(--faint); margin-top: 3px; }
-.ex-clash { font-size: 12.5px; color: var(--danger); margin-top: 3px; }
-.ex-clash.soft { color: var(--warn); }
+/*
+ * 重复提示用橙不用红。选了两个卧推变式不是错误，是取舍 ——
+ * 红色留给真正的错误（全应用一致：「红色只留给真上限」）。
+ */
+.ex-clash { font-size: 12.5px; color: var(--warn); margin-top: 3px; }
+.ex-clash.soft { color: var(--muted); }
 .ex-pick { flex: none; width: 26px; text-align: center; font-size: 17px; color: var(--accent); }
 
 .plan-list { display: flex; flex-direction: column; }
