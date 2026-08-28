@@ -785,6 +785,26 @@ export const FOODS = [
   { id: 'coco_qingke', name: 'CoCo都可 青稞奶茶', alias: 'coco qingkenaicha', cat: 'chain', n: [84, 1.2, 2.4, 14.2, 0.4, 7.6, 23], s: [['中杯 500ml', 500]], sf: 1.6, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
   { id: 'shuyi_grassjelly', name: '书亦烧仙草 招牌烧仙草', alias: 'shuyi shaoxiancao', cat: 'chain', n: [86, 1.2, 2.4, 14.8, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
   { id: 'yihetang_kaonai', name: '益禾堂 烤奶', alias: 'yihetang kaonai', cat: 'chain', n: [70, 1.2, 2.2, 11.0, 0.0, 6.0, 24], s: [['中杯 500ml', 500]], sf: 1.2, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
+  /*
+   * 洪都大拇指：南昌本地茶饮连锁。招牌是「椰椰」那一条线 ——
+   * 鲜果打底 + 椰乳，上面盖一球冰淇淋。
+   *
+   * 这条线的糖有两个来源，无糖档只能去掉其中一个：糖浆能不加，
+   * 但冰淇淋和椰乳自带的糖去不掉，所以 sf 比一般奶茶高不少。
+   * 其中只有奶来的乳糖不算 WHO 游离糖（nfs）；西瓜汁、葡萄汁这些
+   * 即使来自水果也算游离糖，不往 nfs 里放。
+   *
+   * 鲜果椰乳那几款不含茶底，不打 caffeinated。
+   */
+  { id: 'hddmz_watermelon_coco', name: '洪都大拇指 冰淇淋西瓜椰椰', alias: 'hongdu damuzhi dabumu bingqilin xigua yeye 大拇指 西瓜椰椰 冰淇淋西瓜', cat: 'chain', n: [62, 0.7, 2.2, 10.0, 0.2, 9.0, 18], s: [['中杯 500ml', 500]], sf: 4.2, nfs: 0.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'hddmz_grape_coco', name: '洪都大拇指 冰淇淋葡萄椰椰', alias: 'hongdu damuzhi bingqilin putao yeye 葡萄椰椰', cat: 'chain', n: [66, 0.7, 2.2, 11.0, 0.2, 10.0, 18], s: [['中杯 500ml', 500]], sf: 4.6, nfs: 0.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'hddmz_mango_coco', name: '洪都大拇指 冰淇淋芒果椰椰', alias: 'hongdu damuzhi bingqilin mangguo yeye 芒果椰椰', cat: 'chain', n: [68, 0.8, 2.4, 11.0, 0.3, 9.8, 18], s: [['中杯 500ml', 500]], sf: 4.8, nfs: 0.6, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'hddmz_coco_milk_tea', name: '洪都大拇指 生椰奶茶', alias: 'hongdu damuzhi shengye naicha 椰椰奶茶', cat: 'chain', n: [72, 1.0, 2.6, 11.4, 0.0, 7.0, 22], s: [['中杯 500ml', 500]], sf: 1.6, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
+  { id: 'hddmz_signature_milk_tea', name: '洪都大拇指 招牌奶茶', alias: 'hongdu damuzhi zhaopai naicha', cat: 'chain', n: [76, 1.1, 2.4, 12.4, 0.0, 7.4, 24], s: [['中杯 500ml', 500]], sf: 1.2, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
+  { id: 'hddmz_boba', name: '洪都大拇指 珍珠奶茶', alias: 'hongdu damuzhi zhenzhu naicha', cat: 'chain', n: [88, 1.0, 2.5, 15.2, 0.2, 8.6, 23], s: [['中杯 500ml', 500]], sf: 1.2, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
+  { id: 'hddmz_mango_sago', name: '洪都大拇指 杨枝甘露', alias: 'hongdu damuzhi yangzhi ganlu', cat: 'chain', n: [72, 0.7, 1.9, 12.8, 0.3, 10.6, 16], s: [['中杯 500ml', 500]], sf: 3.8, nfs: 0.5, f: ['quick', 'est', 'sweetdrink', 'tealevel'] },
+  { id: 'hddmz_grass_jelly', name: '洪都大拇指 烧仙草', alias: 'hongdu damuzhi shao xiancao', cat: 'chain', n: [86, 1.2, 2.4, 15.0, 0.5, 8.0, 24], s: [['中杯 500ml', 500]], sf: 2.2, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
+  { id: 'hddmz_lemon_tea', name: '洪都大拇指 柠檬茶', alias: 'hongdu damuzhi ningmeng cha', cat: 'chain', n: [40, 0.1, 0.0, 9.8, 0.1, 9.0, 3], s: [['中杯 500ml', 500]], sf: 0.8, nfs: 0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
   { id: 'chayan_youlan', name: '茶颜悦色 幽兰拿铁', alias: 'chayanyuese youlannatie', cat: 'chain', n: [71, 1.5, 2.9, 9.6, 0.1, 5.8, 27], s: [['中杯 480ml', 480]], sf: 2.1, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
   { id: 'bawang_boya', name: '霸王茶姬 伯牙绝弦', alias: 'bawangchaji boyajuexian', cat: 'chain', n: [47, 1.3, 1.3, 7.4, 0.0, 6.0, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },
   { id: 'bawang_osmanthus', name: '霸王茶姬 桂馥兰香', alias: 'bawangchaji guifulanxiang', cat: 'chain', n: [45, 1.3, 1.3, 7.0, 0.0, 5.5, 26], s: [['中杯 470ml', 470]], sf: 1.9, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },

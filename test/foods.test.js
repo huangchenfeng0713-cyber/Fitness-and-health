@@ -951,3 +951,39 @@ test('南浦拌饭：石锅拌饭几款的差别应当在浇头上，不在那�
     assert.ok(per.kcal > 500 && per.kcal < 1100, `${f.name} 一份 ${Math.round(per.kcal)} kcal，不像一份拌饭`);
   }
 });
+
+test('冰淇淋打底的茶饮：点「无糖」不等于没有糖', () => {
+  /*
+   * 洪都大拇指那条「椰椰」线是鲜果 + 椰乳 + 一球冰淇淋。
+   * 无糖档去掉的只是糖浆，冰淇淋和椰乳自带的糖去不掉 ——
+   * 一杯点成无糖仍有 18g 游离糖，占 WHO 每日上限的三分之一还多。
+   * 这条要是被写成 sf: 0，界面会告诉用户「无糖 = 0 糖」，那是假的。
+   */
+  const iceCreamSeries = FOODS.filter((f) => f.id.startsWith('hddmz_') && f.name.includes('冰淇淋'));
+  assert.ok(iceCreamSeries.length >= 3, `冰淇淋椰椰只有 ${iceCreamSeries.length} 款`);
+  for (const f of iceCreamSeries) {
+    const none = nutrientsFor(f, 500, 'none');
+    assert.ok(none.sugar > 10,
+      `${f.name} 点无糖之后游离糖只剩 ${none.sugar}g —— 冰淇淋和椰乳的糖是去不掉的`);
+    assert.ok(none.sugar < nutrientsFor(f, 500, 'full').sugar,
+      `${f.name} 的无糖档和全糖档一样，糖度换算没生效`);
+  }
+
+  // 鲜果汁的糖即使来自水果也算游离糖，只有奶来的乳糖不算
+  const watermelon = FOODS.find((f) => f.id === 'hddmz_watermelon_coco');
+  assert.ok(watermelon.nfs > 0 && watermelon.nfs < watermelon.sf,
+    `西瓜椰椰的 nfs=${watermelon.nfs} 应当是 sf=${watermelon.sf} 里的一小部分（只有乳糖）`);
+});
+
+test('鲜果椰乳类不含茶底，不该标成含咖啡因', () => {
+  // 标错的话会在「临睡前慎选」那条提示里误伤
+  for (const id of ['hddmz_watermelon_coco', 'hddmz_grape_coco', 'hddmz_mango_coco']) {
+    const f = FOODS.find((x) => x.id === id);
+    assert.ok(!(f.f || []).includes('caffeinated'), `${f.name} 不含茶底，不该标 caffeinated`);
+  }
+  // 奶茶、烧仙草、柠檬茶有茶底，要标
+  for (const id of ['hddmz_signature_milk_tea', 'hddmz_boba', 'hddmz_grass_jelly', 'hddmz_lemon_tea']) {
+    const f = FOODS.find((x) => x.id === id);
+    assert.ok((f.f || []).includes('caffeinated'), `${f.name} 有茶底，应当标 caffeinated`);
+  }
+});
