@@ -42,7 +42,6 @@ const SHELL = [
   './js/views/settings.js',
   './js/views/training.js',
   './js/core/training.js',
-  './js/data/body-map.js',
   './js/data/exercises.js',
   './js/views/cards/profile.js',
   './js/views/cards/health-metrics.js',

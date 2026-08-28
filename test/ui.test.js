@@ -242,37 +242,47 @@ test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
   assert.ok(!/'饮水'/.test(metrics), '饮水已从健康数据卡撤掉');
 });
 
-test('健身页有人体部位图，点哪块选哪组，已练的会点亮', () => {
+test('挑动作的两种入口都在，部位标签标出今天已练到的组', () => {
   /*
-   * 挑动作本来就是「我今天想练这块」，指着图上那块比在五个文字标签里挑更直接。
-   * 正反两张并排：背和斜方肌在正面图上画不出来，硬塞会让人对不上位置。
+   * 人体图已删。它在真机上一整块胸大肌只有 19px 宽 —— 那个尺寸画不出
+   * 能看清的解剖形状，而它占掉 248px 高，把动作列表整个顶到首屏之外；
+   * 正下方那排文字标签做的是同一件选择，还说得更清楚。
+   * 图唯一多给的信息是「今天哪儿练了、哪儿空着」，搬到标签上的小圆点里。
    */
   const training = read('js/views/training.js');
-  const map = read('js/data/body-map.js');
   const css = read('css/app.css');
-  assert.match(training, /function bodyMap\(rerender\)/, '没有部位图');
-  assert.match(training, /view\('front'\), view\('back'\)/, '缺正面或背面');
-  // 五个组在图上都得点得到，否则有的组只能靠文字标签选
-  const groups = new Set((map.match(/group: '(\w+)'/g) || []).map((m) => m.split("'")[1]));
-  for (const key of ['chest', 'shoulder', 'back', 'leg', 'core']) {
-    assert.ok(groups.has(key), `部位图上点不到「${key}」`);
-  }
-  assert.ok((map.match(/group: 'leg'/g) || []).length >= 7,
-    '腿部应拆出股四头、腘绳肌、臀肌和小腿等肌束，不能再画成矩形块');
-  // 三种状态：选中 / 已覆盖 / 其余
-  assert.match(training, /covered\.has\(r\.group\) \? ' covered'/, '没有标出今天已经练到的部位');
-  for (const cls of ['.body-region.active', '.body-region.covered']) {
-    assert.ok(css.includes(cls), `${cls} 没有样式`);
-  }
-  // 图上的块要能用键盘操作
-  assert.match(training, /node\.setAttribute\('tabindex', '0'\)/, '部位块不能聚焦');
-  assert.match(training, /ev\.key === 'Enter' \|\| ev\.key === ' '/, '部位块不能用键盘选中');
+  assert.ok(!training.includes('bodyMap'), '人体图应当已经删掉');
+  assert.ok(!css.includes('.body-region'), '人体图的样式还留着');
+
+  assert.match(training, /const covered = coveredGroupKeys\(picked\(\)\)/,
+    '部位标签没有标出今天已练到的组');
+  assert.match(training, /h\('span\.tab-dot'/, '缺少已练到的标记');
+  assert.match(training, /`\$\{g\.label\}（今天已练到）`/, '标记没有给读屏软件的说法');
+  assert.match(css, /\.tab-dot\s*\{/, '.tab-dot 没有样式');
+
   assert.match(training, /\['group', '身体部位'\].*\['split', '动作模式'\]/s,
     '两种选择入口应使用“身体部位 / 动作模式”');
   assert.match(read('js/app.js'), /按身体部位或动作模式挑选，记下组数与重量/,
     '健身页副标题仍只说按部位，和实际两种选择方式不一致');
   assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
+});
+
+test('摞在一起的分段控件之间要留缝，器械档位不借趋势卡那套样式', () => {
+  /*
+   * 三排分段控件各自 margin: 0，直接摞起来就是几条灰槽贴着边，看着像
+   * 一整块被割开的色块。而器械档位原先借的是 .chart-switch —— 那套样式
+   * 带着一条分隔线和 10px 上内边距（给趋势图下面留的），套进灰槽里
+   * 就成了一行说不出理由的空白。趋势卡早就改用下拉，那套样式已无人使用。
+   */
+  const css = read('css/app.css');
+  const training = read('js/views/training.js');
+  assert.match(css, /\.range-switch \+ \.range-switch\s*\{[^}]*margin-top/s, '摞起来的分段控件之间没有缝');
+  assert.ok(!css.includes('.chart-switch'), '.chart-switch 已无人使用，应当删掉');
+  assert.ok(!/h\('div\.chart-switch/.test(training), '器械档位不该再借趋势卡那套样式');
+  // 等宽会让「固定器械 10」在 320px 的机子上被截断
+  assert.match(css, /\.range-switch \.chip-btn\s*\{[\s\S]*?flex:\s*1 1 auto/,
+    '分段控件按内容分宽，不能等宽');
 });
 
 test('动作推荐跟随当前选择方式，不会永远按身体部位生成', () => {
