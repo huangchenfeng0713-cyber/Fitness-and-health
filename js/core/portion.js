@@ -50,17 +50,23 @@ export function nextPortionMemory(memory, food, grams, limit = PORTION_MEMORY_LI
  *
  * 记住的量正好等于某个常用份量时选中那一档（显示「1 碗」比「250 克」好读），
  * 对不上就落到按克输入那一档（下标 = 份量个数）。
+ *
+ * qty 是「几份」：按份量档时是 1，按克输入时它本身就是克数 ——
+ * 面板上那个大数字读的是 qty，不是 grams。只设 grams 不设 qty，
+ * 弹层一打开大读数是一道杠，而下面的输入框里明明写着 420。
  */
 export function initialPortion(food, memory) {
   const servings = food?.s || [];
   const remembered = rememberedPortion(memory, food?.id);
   if (remembered == null) {
-    return { unitIdx: 0, grams: servings[0]?.[1] || 100, remembered: null };
+    return { unitIdx: 0, grams: servings[0]?.[1] || 100, qty: 1, remembered: null };
   }
   const matched = servings.findIndex(([, w]) => Math.abs(Number(w) - remembered) < 0.5);
+  const gramMode = matched < 0;
   return {
-    unitIdx: matched >= 0 ? matched : servings.length,
+    unitIdx: gramMode ? servings.length : matched,
     grams: remembered,
+    qty: gramMode ? remembered : 1,
     remembered,
   };
 }

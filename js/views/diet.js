@@ -256,6 +256,7 @@ function selectFood(food) {
   const start = initialPortion(food, portionMemory());
   ui.unitIdx = start.unitIdx;
   ui.grams = start.grams;
+  ui.qty = start.qty;
   refreshPortion();
 }
 
@@ -478,6 +479,11 @@ function refreshPortion() {
   const caffeineWarning = Number(food.caffeineMg) > 0 ? h('p.functional-warning') : null;
   const gramsInput = h('input.grams-input', {
     type: 'number', min: 1, step: 5, inputmode: 'numeric',
+    // 建出来就带上初值：pending 判的是「用户把输入框清空了」，
+    // 不是「这个框还没画」。少了这个初值，弹层以按克输入开场时
+    // （记住的份量对不上任何一档）第一帧大读数是一道杠，
+    // 而下面输入框里明明写着 420 —— 同一个面板里两个数对不上。
+    value: String(ui.grams),
     'aria-label': isLiquid ? '毫升数' : '克数',
     // 输入过程中既不钳制也不回写：一旦在 oninput 里把值改回去，
     // 用户删到空的那一刻就会被填成 1，等于永远删不干净、改不了数。

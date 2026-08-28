@@ -65,3 +65,16 @@ test('记住的量对得上某一档就选那一档，对不上才落到按克�
   const noServings = initialPortion({ id: 'x' }, {});
   assert.deepEqual([noServings.unitIdx, noServings.grams], [0, 100], '没有常用份量时兜底 100g');
 });
+
+test('qty 要一起给出来：面板上那个大数字读的是它，不是 grams', () => {
+  /*
+   * 只设 grams 不设 qty，弹层以按克输入开场时大读数是一道杠（computeGrams 拿到的
+   * qty 还是上一次的 1），而下面输入框里明明写着 420 —— 同一个面板两个数对不上。
+   * 按份量档时 qty 是「几份」，按克输入时 qty 本身就是克数。
+   */
+  const free = initialPortion(rice, { rice_white: 420 });
+  assert.equal(free.qty, 420, '按克输入时 qty 就是克数');
+  assert.equal(initialPortion(rice, { rice_white: 100 }).qty, 1, '选中某一档时是 1 份');
+  assert.equal(initialPortion(rice, {}).qty, 1);
+  assert.equal(initialPortion({ id: 'x' }, {}).qty, 1);
+});
