@@ -76,7 +76,7 @@ test('栏目分工：数据页看数据与走势，设置页放身体信息与�
 test('同一批数字不在两页各写一遍', () => {
   /*
    * 简化那一轮盘出来的重复：
-   *  - 今日的「今日记录」和饮食页的「饮食记录编辑」是同一批记录，一个只读一个可编辑；
+   *  - 今日的「今日记录」和饮食页的「饮食记录」是同一批记录，前者只读、后者可编辑；
    *  - 今日主卡已经把八项目标当分母写了一遍（85/87g 蛋白、1867/2000mg 钠）；
    *  - 「初步体重趋势 +0.14 kg/周」和体重图下面那段话说的是同一件事，图那边说得更全。
    * 功能一项没少，只是各自留在该在的那一页。
@@ -86,7 +86,9 @@ test('同一批数字不在两页各写一遍', () => {
 
   const mounted = dashboard.slice(dashboard.indexOf('export function renderDashboard'));
   assert.ok(!/entriesCard|'今日记录'/.test(mounted), '今日页又挂回了只读的记录卡');
-  assert.ok(diet.includes('饮食记录编辑'), '可编辑的那张记录卡不能一起没了');
+  // 那张卡改叫「饮食记录」，默认只读，按「编辑」才给出改克数和删除
+  assert.match(diet, /h\('h3', null, '饮食记录'\)/, '可编辑的那张记录卡不能一起没了');
+  assert.match(diet, /editing \? '完成' : '编辑'/, '记录卡缺少编辑开关');
 
   // 健康数据每项配一个图标：六项全是数字加两个汉字，扫一眼分不出哪个是哪个
   const metrics = read('js/views/cards/health-metrics.js');
@@ -970,4 +972,50 @@ test('「已选动作」只记录选了什么，不在这里给建议', () => {
   // 但组数、重量和清空这些「记录」的部分要留着
   assert.match(card, /planRow\(e, i\)/, '动作行没了，就没法记组数');
   assert.match(card, /volume\.sets/, '组数统计没了');
+});
+
+test('说明层点外面就收起来，不必回去再点一次感叹号', () => {
+  /*
+   * <details> 原生只认 summary 上的点击：说明打开之后，用户以为随便点一下别处
+   * 就能关掉，结果它一直挂在那儿。
+   */
+  const utils = read('js/lib/utils.js');
+  assert.match(utils, /document\.addEventListener\('click'/, '没有装「点外面收起来」的监听');
+  assert.match(utils, /closeOthers\(event\.target\.closest\?\.\('details\.info-tip'\) \|\| null\)/,
+    '判断点在不在自己里面应当用 closest —— 点说明层内部（选字、点链接）不该关掉它');
+  assert.match(utils, /if \(event\.key === 'Escape'\) closeOthers\(null\)/, 'Esc 应当也能收起来');
+
+  /*
+   * 监听器只装一次。每建一个 infoTip 就装一个的话，
+   * 饮食记录里几十条记录就是几十个 document 级监听器。
+   */
+  assert.match(utils, /let infoTipDismissBound = false;/, '监听器没有做只装一次的保护');
+  assert.match(utils, /if \(infoTipDismissBound\) return;\s*\n\s*infoTipDismissBound = true;/,
+    '只装一次的保护写得不对');
+
+  // 用 click 不用 pointerdown：pointerdown 早于原生的 summary 切换，点感叹号会闪一下
+  // 注释里解释「为什么不用 pointerdown」的那句话不算，只看真正会跑的代码
+  const bind = utils.slice(utils.indexOf('function bindInfoTipDismiss'), utils.indexOf('export function infoTip'))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  assert.ok(!/pointerdown/.test(bind), 'pointerdown 早于原生切换，点感叹号本身会先关再开，闪一下');
+});
+
+test('饮食记录默认只读，按「编辑」才能改克数或删除', () => {
+  /*
+   * 每行右边原先都挂着一个可输入的克数框和一个红叉。这张卡大部分时候是
+   * 拿来核对「今天吃了什么」的，滑动列表时很容易蹭到，而删掉一条没有撤销。
+   */
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /editEntries: false,/, '记录卡没有编辑态');
+  assert.match(diet, /function entryRow\(e, editing\)/, '行没有按编辑态区分只读和可改');
+  assert.match(diet, /editing \? h\('div\.entry-actions'/, '只读态仍然渲染了可编辑的操作区');
+  assert.match(diet, /h\('div\.entry-actions\.readonly'/, '只读态应当仍看得到吃了多少');
+
+  // 「和昨天一样 / 清空这一天」也是改数据，同样跟着编辑态走
+  assert.match(diet, /editing \? copyRow\(\) : null/, '批量改数据的按钮没有跟着编辑态收起来');
+  // 一条都没有时不该停在编辑态，否则下次进来看到一个没用的「完成」
+  assert.match(diet, /ui\.editEntries = false;\s+\/\/ 一条都没有/, '空态没有退出编辑');
+
+  // 搜索卡把「饮食记录」这个名字让出来了，两张卡不能重名
+  assert.match(diet, /h\('h3', null, '添加食物'\)/, '搜索卡应当改名，否则两张卡都叫「饮食记录」');
 });

@@ -92,16 +92,43 @@ export function field(label, control, hint, extraClass = '') {
     hint && h('small.field-hint', null, hint));
 }
 
+/*
+ * 点开的说明层，点外面就该收起来。
+ *
+ * <details> 原生只认 summary 上的点击：说明打开之后，用户以为随便点一下别处
+ * 就能关掉，结果它一直挂在那儿，非得回去再点一次那个感叹号。
+ *
+ * 监听器只装一次（挂在 document 上，靠 closest 判断点在不在自己里面），
+ * 不能每建一个 infoTip 就装一个 —— 列表里几十条记录就是几十个监听器。
+ */
+let infoTipDismissBound = false;
+
+function bindInfoTipDismiss() {
+  if (infoTipDismissBound) return;
+  infoTipDismissBound = true;
+  const closeOthers = (except) => {
+    document.querySelectorAll('details.info-tip[open]').forEach((tip) => {
+      if (tip !== except) tip.open = false;
+    });
+  };
+  /*
+   * 用 click 而不是 pointerdown：pointerdown 早于原生的 summary 切换，
+   * 点感叹号本身会变成「先被这里关掉、再被原生打开」，闪一下。
+   * 点在自己的说明层里不关 —— 里面可能要选中文字或者点链接。
+   */
+  document.addEventListener('click', (event) => {
+    closeOthers(event.target.closest?.('details.info-tip') || null);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeOthers(null);
+  });
+}
+
 export function infoTip(label, ...children) {
+  bindInfoTipDismiss();
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, '!'),
     h('div.info-tip-panel', { role: 'note' }, children));
-  details.addEventListener('toggle', () => {
-    if (!details.open) return;
-    document.querySelectorAll('details.info-tip[open]').forEach((other) => {
-      if (other !== details) other.open = false;
-    });
-  });
   return details;
 }
 

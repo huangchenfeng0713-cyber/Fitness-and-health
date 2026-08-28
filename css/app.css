@@ -888,6 +888,10 @@ body.sheet-open {
 }
 .insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
 
+/* 只读态：位置和编辑态一样宽，切换时行不会跳 */
+.entry-actions.readonly { justify-content: flex-end; }
+.entry-grams-text { font-size: var(--fs-small); color: var(--muted); white-space: nowrap; }
+
 /* 重复提示的位置：没有提示时是个零高度的空槽，不占地方 */
 .ex-clash-slot:empty { display: none; }
 

@@ -42,6 +42,14 @@ const ui = {
   moreResults: false,   // 搜索结果是否已展开全部
   focus: null,          // 'protein' | 'fiber' —— 从今日页的提示跳过来时的筛选
   /*
+   * 记录卡是不是在编辑态。
+   *
+   * 默认只看不改：这张卡大部分时候是拿来「核对今天吃了什么」的，
+   * 而每行右边挂着一个可输入的克数框和一个红叉，滑动列表时很容易误触 ——
+   * 删掉一条记录没有撤销。要改就先按一下「编辑」。
+   */
+  editEntries: false,
+  /*
    * 待记录的一篮子。
    *
    * 一顿三菜一饭原先要 12 次操作：每样都得开一次份量弹层、记一次、再关掉。
@@ -120,8 +128,9 @@ function buildShell(root) {
   });
 
   nodes.searchCard = h('section.card', null,
+    // 「饮食记录」这个名字让给下面那张真正列出记录的卡；这一张做的是「加一笔」
     h('div.card-head.search-card-head', null,
-      h('h3', null, '饮食记录'),
+      h('h3', null, '添加食物'),
       h('span.card-tag', null, `${allFoods().length} 种`)),
     h('div.search-row', null, nodes.searchInput, nodes.customToggle),
     nodes.customBox,
@@ -912,8 +921,9 @@ function refreshEntries() {
   );
 
   if (!entries.length) {
+    ui.editEntries = false;   // 一条都没有还留在编辑态，下次进来会看到一个没用的「完成」
     mount(nodes.entries, h('section.card', null,
-      h('div.card-head', null, h('h3', null, '饮食记录编辑')),
+      h('div.card-head', null, h('h3', null, '饮食记录')),
       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
       copyRow()));
     return;
@@ -921,21 +931,34 @@ function refreshEntries() {
 
   const grouped = {};
   for (const e of entries) (grouped[e.meal] ||= []).push(e);
+  const editing = ui.editEntries;
 
   mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '饮食记录编辑'),
-      h('span.card-tag', null,
-        `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`)),
+      h('h3', null, '饮食记录'),
+      h('div.card-head-actions', null,
+        h('span.card-tag', null,
+          `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
+        h('button.text-btn', {
+          type: 'button', 'aria-pressed': String(editing),
+          onclick: () => { ui.editEntries = !ui.editEntries; refreshEntries(); },
+        }, editing ? '完成' : '编辑'))),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
         h('strong', null, MEAL_LABEL[meal] || meal),
         h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
-      list.map(entryRow))),
-    copyRow()));
+      list.map((e) => entryRow(e, editing)))),
+    // 「和昨天一样 / 清空这一天」也是改数据，跟着编辑态走
+    editing ? copyRow() : null));
 }
 
-function entryRow(e) {
+/*
+ * 一条记录。默认只读 —— 按了「编辑」才给出克数输入框和删除。
+ *
+ * 原先每行都挂着可输入的框和一个红叉：这张卡大部分时候是拿来核对
+ * 「今天吃了什么」的，滑动列表时很容易蹭到，而删掉一条没有撤销。
+ */
+function entryRow(e, editing) {
   const isLiquid = findFood(e.foodId)?.basis === '100ml';
   const unit = isLiquid ? 'ml' : 'g';
   return h('div.entry-row', null,
@@ -945,7 +968,7 @@ function entryRow(e) {
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
         ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
-    h('div.entry-actions', null,
+    editing ? h('div.entry-actions', null,
       h('input.entry-grams', {
         type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',
         'aria-label': `${e.name} 的${isLiquid ? '毫升数' : '克数'}`,
@@ -969,7 +992,10 @@ function entryRow(e) {
           const result = await runLocalAction(ev.currentTarget, () => removeEntry(e.id), '删除记录');
           if (result.ok) toast('已删除');
         },
-      }, '×')));
+      }, '×'))
+      // 只读时仍要看得到吃了多少，只是不能改
+      : h('div.entry-actions.readonly', null,
+        h('span.entry-grams-text', null, `${num(e.grams)} ${unit}`)));
 }
 
 function copyRow() {
