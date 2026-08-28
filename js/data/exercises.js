@@ -41,7 +41,7 @@ export const PATTERNS = {
 /** 五大部位。臂并进肩，和用户的分法一致 */
 export const GROUPS = [
   { key: 'chest', label: '胸', muscles: ['pec_upper', 'pec_mid', 'pec_lower'] },
-  { key: 'shoulder', label: '肩（臂）', muscles: ['delt_front', 'delt_side', 'delt_rear', 'triceps', 'biceps', 'forearm'] },
+  { key: 'shoulder', label: '肩臂', muscles: ['delt_front', 'delt_side', 'delt_rear', 'triceps', 'biceps', 'forearm'] },
   { key: 'back', label: '背', muscles: ['lat', 'trap_mid', 'rhomboid', 'trap_upper', 'erector'] },
   { key: 'leg', label: '腿', muscles: ['quad', 'ham', 'glute', 'adductor', 'abductor', 'calf'] },
   { key: 'core', label: '腹', muscles: ['abs', 'oblique', 'deep_core', 'hip_flexor'] },

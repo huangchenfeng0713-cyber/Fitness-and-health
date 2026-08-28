@@ -398,7 +398,9 @@ export function buildAdvice(input) {
 
   // ---- 避免 ----
   // ---- 状态判定 ----
-  const status = judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget });
+  const hasIntake = (entries || []).length > 0
+    || ['kcal', 'protein', 'fat', 'carb'].some((key) => Number(gaps[key]?.eaten) > 0);
+  const status = judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget, hasIntake });
 
   // ---- 洞察 ----
   const insights = buildInsights({ gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries });
@@ -416,7 +418,7 @@ export function buildAdvice(input) {
 }
 
 /** 一句话总体判定 */
-export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget }) {
+export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget, hasIntake = true }) {
   const dayProgress = clamp((hour - 6) / 16, 0, 1); // 6:00~22:00
   const kcalPct = gaps.kcal.pct;
   const proteinPct = gaps.protein.pct;
@@ -424,9 +426,11 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
 
   if (kcalLeft < -targets.kcal * 0.12) {
     return {
-      level: 'bad',
-      headline: `热量超出 ${Math.abs(kcalLeft)} kcal`,
-      detail: `已摄入 ${gaps.kcal.eaten} kcal，超过今日目标 ${gaps.kcal.target} kcal。今天剩下的时间以水、无糖茶和蔬菜为主，明天不必补偿性少吃，回到正常预算即可。`,
+      // 热量目标是计划区间，不是安全上限。单日偏高用橙色提醒即可；
+      // 红色只留给钠、游离糖等真正的上限，避免诱导跳餐或补偿性节食。
+      level: 'warn',
+      headline: `今日比计划多 ${Math.abs(kcalLeft)} kcal`,
+      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划为 ${gaps.kcal.target} kcal。单日偏差不能说明增减脂结果，不必跳过下一餐或明天补偿性少吃；如果一周内反复偏高，再结合 7 天体重趋势调整份量。`,
     };
   }
   if (kcalLeft < 0) {
@@ -444,6 +448,26 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
       level: 'warn',
       headline: `热量只剩 ${round(kcalLeft)} kcal，无法补齐 ${round(proteinLeft)}g 蛋白`,
       detail: `这些蛋白即使不带脂肪和碳水也至少需要 ${round(proteinLeft * ATWATER.protein)} kcal。可选择守住热量余量，或优先补蛋白并接受至少约 ${minimumOver} kcal 的超出；今天不必为了凑数强行进食。`,
+    };
+  }
+  /*
+   * 0 kcal 只说明「没有饮食记录」，不能据此断言这个人吃得慢。
+   * 之前到下午会拿 0% 直接和时间进度比较，结果用户明明一口没记，界面却说
+   * 「吃得慢一些」——既像在评价进食速度，也没有指出更可能的漏记。
+   */
+  if (!hasIntake) {
+    const late = hour >= 21;
+    // 没吃早餐时，剩余预算算法会把缺口按后续餐次重新分配，午餐数字因此可能接近
+    // 全天的一半。那适合内部排预算，却不适合直接叫人一餐补回；空记录时只展示
+    // 当前餐原本的日占比，避免出现「13:30 午餐建议 975 kcal」这种过量暗示。
+    const normalMealKcal = round(Math.min(budget.kcal, targets.kcal * budget.meal.share));
+    const normalMealProtein = round(Math.min(budget.protein, targets.protein * budget.meal.share), 1);
+    return {
+      level: late ? 'warn' : 'good',
+      headline: `还有 ${kcalLeft} kcal 热量余量，蛋白还差 ${round(proteinLeft)}g`,
+      detail: late
+        ? `今天还没有饮食记录。若只是漏记，请先补记；若确实尚未进食，也不建议在夜间一次补完全天缺口。`
+        : `今天还没有饮食记录。若只是漏记，请先补记；若确实还没吃，${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal、${normalMealProtein}g 蛋白，不必在这一餐补完当天缺口。`,
     };
   }
   if (proteinLeft > gaps.protein.target * 0.5 && dayProgress > 0.6) {
@@ -470,10 +494,10 @@ export function judgeStatus({ gaps, kcalLeft, proteinLeft, hour, targets, budget
   }
   const pace = kcalPct - expected;
   const paceText = Math.abs(pace) <= 12
-    ? `与当前时间进度（${expected}%）基本同步`
+    ? `记录量与当前时间参考（${expected}%）大致接近`
     : pace > 0
-      ? `比当前时间进度（${expected}%）吃得快一些，后面几餐留意份量`
-      : `比当前时间进度（${expected}%）吃得慢一些，别把缺口全压到晚上`;
+      ? `记录量高于当前时间参考（${expected}%），后面餐次按剩余量安排即可`
+      : `记录量低于当前时间参考（${expected}%），先确认是否漏记，别把缺口全留到晚上`;
   const proteinText = proteinLeft > 0 ? `蛋白还差 ${round(proteinLeft)}g` : '蛋白已达标';
   return {
     level: 'good',

@@ -257,6 +257,8 @@ test('健身页有人体部位图，点哪块选哪组，已练的会点亮', ()
   for (const key of ['chest', 'shoulder', 'back', 'leg', 'core']) {
     assert.ok(groups.has(key), `部位图上点不到「${key}」`);
   }
+  assert.ok((map.match(/group: 'leg'/g) || []).length >= 7,
+    '腿部应拆出股四头、腘绳肌、臀肌和小腿等肌束，不能再画成矩形块');
   // 三种状态：选中 / 已覆盖 / 其余
   assert.match(training, /covered\.has\(r\.group\) \? ' covered'/, '没有标出今天已经练到的部位');
   for (const cls of ['.body-region.active', '.body-region.covered']) {
@@ -265,6 +267,18 @@ test('健身页有人体部位图，点哪块选哪组，已练的会点亮', ()
   // 图上的块要能用键盘操作
   assert.match(training, /node\.setAttribute\('tabindex', '0'\)/, '部位块不能聚焦');
   assert.match(training, /ev\.key === 'Enter' \|\| ev\.key === ' '/, '部位块不能用键盘选中');
+  assert.match(training, /\['group', '身体部位'\].*\['split', '动作模式'\]/s,
+    '两种选择入口应使用“身体部位 / 动作模式”');
+  assert.match(read('js/app.js'), /按身体部位或动作模式挑选，记下组数与重量/,
+    '健身页副标题仍只说按部位，和实际两种选择方式不一致');
+  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
+    '胸、肩臂、背、腿、腹之间应留出轻微间距');
+});
+
+test('动作推荐跟随当前选择方式，不会永远按身体部位生成', () => {
+  const training = read('js/views/training.js');
+  assert.match(training, /byGroup \? starterCombo\(activeGroup\) : starterSplitCombo\(activeSplit\)/);
+  assert.match(training, /4–5 个互补动作/);
 });
 
 test('动作行默认只给一行：练哪儿、什么模式', () => {

@@ -1,5 +1,5 @@
 /**
- * 健身：按部位挑动作，实时告诉你这套里哪些动作刺激高度相似，并按天记下来。
+ * 健身：按身体部位或动作模式挑动作，实时指出刺激高度相似的组合，并按天记下来。
  *
  * 计划本身存 IndexedDB（`store.saveTraining`），不再是页面内存里的一个数组——
  * 之前刷新一下当天选的动作就全没了，记不下来的计划等于没记。
@@ -13,7 +13,8 @@ import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/ex
 import { BODY_BASE, REGIONS, VIEW_LABEL } from '../data/body-map.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import {
-  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, planAdvice, starterCombo,
+  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, planAdvice,
+  starterCombo, starterSplitCombo,
   sessionVolume, recentExercises, weeklyVolume,
   overlapScore, overlapLevel,
 } from '../core/training.js';
@@ -102,23 +103,30 @@ function bodyMap(rerender) {
 
   const view = (side) => {
     const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 196');
+    svg.setAttribute('viewBox', '0 0 100 210');
     svg.setAttribute('class', 'body-view');
     for (const base of BODY_BASE) svg.append(draw(base, 'body-base'));
+    const grouped = new Map();
     for (const r of REGIONS.filter((x) => x.view === side)) {
-      const state = activeGroup === r.group ? ' active' : covered.has(r.group) ? ' covered' : '';
-      const node = draw(r, `body-region${state}`);
-      const label = GROUPS.find((g) => g.key === r.group)?.label || r.group;
-      node.setAttribute('role', 'button');
-      node.setAttribute('tabindex', '0');
-      node.setAttribute('aria-label', label);
-      node.setAttribute('aria-pressed', String(activeGroup === r.group));
-      const pick = () => { activeGroup = r.group; showAllExercises = false; rerender(); };
-      node.addEventListener('click', pick);
-      node.addEventListener('keydown', (ev) => {
-        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
-      });
-      svg.append(node);
+      let node = grouped.get(r.group);
+      if (!node) {
+        node = document.createElementNS(ns, 'g');
+        const label = GROUPS.find((g) => g.key === r.group)?.label || r.group;
+        node.setAttribute('class', 'body-region-group');
+        node.setAttribute('role', 'button');
+        node.setAttribute('tabindex', '0');
+        node.setAttribute('aria-label', `${VIEW_LABEL[side]}${label}`);
+        node.setAttribute('aria-pressed', String(activeGroup === r.group));
+        const pick = () => { activeGroup = r.group; showAllExercises = false; rerender(); };
+        node.addEventListener('click', pick);
+        node.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); pick(); }
+        });
+        grouped.set(r.group, node);
+        svg.append(node);
+      }
+      const visualState = activeGroup === r.group ? ' active' : covered.has(r.group) ? ' covered' : '';
+      node.append(draw(r, `body-region${visualState}`));
     }
     return h('div.body-side', null, svg, h('span.body-side-label', null, VIEW_LABEL[side]));
   };
@@ -126,18 +134,20 @@ function bodyMap(rerender) {
 }
 
 function groupTabs(rerender) {
-  return h('div.range-switch', null,
+  return h('div.range-switch.body-part-switch', null,
     GROUPS.map((g) => h('button', {
       class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
+      type: 'button', 'aria-pressed': String(activeGroup === g.key),
       onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
     }, g.label)));
 }
 
-/** 按部位 / 按推拉腿 —— 两种挑法之间切换 */
+/** 身体部位 / 动作模式 —— 两种挑法之间切换 */
 function modeTabs(rerender) {
   return h('div.range-switch', null,
-    [['group', '按部位'], ['split', '推拉腿']].map(([key, label]) => h('button', {
+    [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
       class: `chip-btn${pickMode === key ? ' active' : ''}`,
+      type: 'button', 'aria-pressed': String(pickMode === key),
       onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
     }, label)));
 }
@@ -146,6 +156,7 @@ function splitTabs(rerender) {
   return h('div.range-switch', null,
     SPLITS.map((sp) => h('button', {
       class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
+      type: 'button', 'aria-pressed': String(activeSplit === sp.key),
       onclick: () => { activeSplit = sp.key; showAllExercises = false; rerender(); },
     }, sp.label)));
 }
@@ -198,6 +209,7 @@ function equipTabs(rerender, all) {
       const n = all.filter(f.match).length;
       return h('button', {
         class: `chip-btn${equipFilter === f.key ? ' active' : ''}${n ? '' : ' empty'}`,
+        type: 'button', 'aria-pressed': String(equipFilter === f.key),
         onclick: () => { equipFilter = f.key; showAllExercises = false; rerender(); },
       }, `${f.label} ${n}`);
     }));
@@ -391,16 +403,19 @@ function weeklyCard() {
 /** 没选动作时，给个「这个部位怎么练」的起手方案 */
 function starterCard(rerender) {
   if (picked().length) return null;
+  const byGroup = pickMode === 'group';
   const group = GROUPS.find((g) => g.key === activeGroup);
-  const combo = starterCombo(activeGroup);
+  const split = SPLITS.find((s) => s.key === activeSplit);
+  const combo = byGroup ? starterCombo(activeGroup) : starterSplitCombo(activeSplit);
   if (!combo.length) return null;
+  const scopeLabel = byGroup ? group.label : split.label;
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '动作推荐'),
       h('div.card-head-actions', null,
-        h('span.card-tag', null, `${group.label} · 起手组合`),
+        h('span.card-tag', null, `${scopeLabel} · 参考组合`),
         infoTip('查看这套怎么来的',
-          h('p', null, '三个不同的动作模式，各自补上另外两个练不到的地方，之间没有重复。')))),
+          h('p', null, '按当前范围选出 4–5 个互补动作，优先覆盖不同动作模式并减少重复。它只是可编辑的起手模板，不是最低动作数量。')))),
     h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,
       h('span.plan-index', null, String(i + 1)),
       h('div.plan-main', null,

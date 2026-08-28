@@ -1439,6 +1439,23 @@ export const FOODS = [
   { id: 'tomato_fish', name: '番茄龙利鱼', alias: 'fanqielongliyu tomato basa fish', cat: 'dish', n: [105, 13.0, 4.5, 3.5, 0.8, 2.2, 620], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'mushroom_chicken', name: '香菇滑鸡', alias: 'xiangguhuaji shiitake chicken', cat: 'dish', n: [165, 15.0, 10.0, 4.0, 1.2, 1.5, 690], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'minced_pork_eggplant', name: '肉末茄子', alias: 'roumoqiezi minced pork eggplant', cat: 'dish', n: [165, 6.5, 12.5, 7.0, 2.2, 3.0, 700], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
+
+  // ---------- 下馆子常见菜（按餐馆成品 100g 估算） ----------
+  // 「一份」是整盘或砂锅的常见上桌重量；两人分食时按实际吃到的比例记录。
+  { id: 'nongjia_yiwangxiang', name: '农家一碗香', alias: 'nongjia yiwanxiang 一碗香 农家菜 辣椒炒肉炒蛋', cat: 'dish', n: [220, 13.0, 17.0, 6.0, 0.8, 1.5, 760], s: [['一份', 300]], ...META_RECIPE_READY, note: '按猪肉、鸡蛋和辣椒同炒估算；肥瘦肉比例与用油量会明显影响热量', f: ['est'] },
+  { id: 'soybean_pork_trotter', name: '黄豆焖猪脚', alias: 'huangdou men zhujiao 黄豆猪脚 黄豆猪蹄 黄豆炖猪蹄 soybean pork trotter', cat: 'dish', n: [285, 18.0, 21.0, 7.0, 2.0, 1.0, 720], s: [['一份可食部', 250]], ...META_RECIPE_READY, note: '按去骨猪脚皮肉和熟黄豆可食部估算，不含骨头；汤汁和糖色用量因店而异', f: ['est'] },
+  { id: 'dry_pot_qianye_tofu', name: '干锅千叶豆腐', alias: 'ganguo qianyedoufu 千页豆腐 干锅豆腐', cat: 'dish', n: [205, 10.0, 15.0, 9.0, 1.2, 2.0, 900], s: [['一份', 300]], ...META_RECIPE_READY, note: '按千叶豆腐、五花肉和配菜同炒估算；盘底余油不计入', f: ['est'] },
+  { id: 'dry_pot_potato', name: '干锅土豆片', alias: 'ganguo tudoupian 干锅洋芋片 dry pot potato', cat: 'dish', n: [165, 3.5, 11.0, 17.0, 2.2, 1.5, 780], s: [['一份', 300]], ...META_RECIPE_READY, note: '按土豆片过油后与配菜干锅炒制估算；是否油炸和盘底余油会造成较大差异', f: ['est'] },
+  { id: 'pepper_salt_ribs', name: '椒盐排骨', alias: 'jiaoyan paigu salt pepper ribs', cat: 'dish', n: [285, 17.0, 22.0, 7.0, 0.3, 1.0, 800], s: [['一份可食部', 220]], ...META_RECIPE_READY, note: '按去骨可食部和附着炸粉计，不含骨头；实际整盘称重不能直接当作可食重量', f: ['fried', 'est'] },
+  { id: 'fish_head_tofu_soup', name: '鱼头豆腐汤', alias: 'yutou doufu tang fish head tofu soup', cat: 'dish', n: [75, 7.0, 4.5, 3.0, 0.4, 0.6, 420], s: [['一份可食部', 400]], ...META_RECIPE_READY, note: '按鱼肉、豆腐和整碗汤计，不含鱼骨；只喝汤或不喝汤都会改变实际营养', f: ['est'] },
+  { id: 'lotus_root_rib_soup', name: '莲藕排骨汤', alias: 'lianou paigu tang lotus root rib soup', cat: 'dish', n: [80, 5.5, 4.0, 6.0, 1.0, 1.0, 420], s: [['一份可食部', 400]], ...META_RECIPE_READY, note: '按去骨排骨肉、莲藕和整碗汤计；只喝汤不吃料时蛋白质会明显更低', f: ['est'] },
+  { id: 'ground_pot_chicken', name: '地锅鸡', alias: 'diguoji 地锅鸡贴饼 ground pot chicken', cat: 'dish', n: [185, 13.0, 8.0, 17.0, 1.0, 2.5, 720], s: [['一份可食部', 350]], ...META_RECIPE_READY, note: '按鸡肉可食部、贴饼和附着汤汁一起估算，不含鸡骨与盘底余汁', f: ['est'] },
+  { id: 'sizzling_japanese_tofu', name: '铁板日本豆腐', alias: 'tieban riben doufu 玉子豆腐 鸡蛋豆腐 sizzling japanese tofu', cat: 'dish', n: [165, 7.0, 12.0, 8.0, 0.5, 2.0, 780], s: [['一份', 300]], ...META_RECIPE_READY, note: '按日本豆腐裹粉煎炸后加酱汁和配菜估算；裹粉与用油量差异较大', f: ['fried', 'est'] },
+  { id: 'dry_pot_frog', name: '干锅牛蛙', alias: 'ganguo niuwa dry pot frog', cat: 'dish', n: [160, 19.0, 8.0, 7.0, 1.0, 1.0, 900], s: [['一份可食部', 300]], ...META_RECIPE_READY, note: '按牛蛙肉、配菜和附着油汁可食部估算，不含骨头和盘底余油', f: ['est'] },
+  { id: 'stir_fried_intestine', name: '溜肥肠', alias: 'liufeichang 熘肥肠 炒肥肠 stir fried pork intestine', cat: 'dish', n: [260, 12.0, 22.0, 6.0, 0.5, 1.0, 900], s: [['一份', 250]], ...META_RECIPE_READY, note: '按熟肥肠、配菜和芡汁估算；预煮去油程度会显著影响脂肪', f: ['est'] },
+  { id: 'casserole_tofu', name: '砂锅豆腐煲', alias: 'shaguo doufubao 豆腐砂锅 tofu casserole', cat: 'dish', n: [105, 7.0, 6.5, 5.0, 1.2, 1.5, 650], s: [['一份', 350]], ...META_RECIPE_READY, note: '按豆腐、菌菇蔬菜和整份汤汁估算；加入五花肉或油炸豆腐时热量会更高', f: ['est'] },
+  { id: 'pickled_cabbage_pork', name: '酸菜白肉', alias: 'suancai bairou 东北酸菜汆白肉 pickled cabbage pork', cat: 'dish', n: [145, 8.0, 11.0, 4.0, 1.2, 1.0, 950], s: [['一份', 350]], ...META_RECIPE_READY, note: '按五花肉、酸菜和整碗汤计；酸菜用量、漂洗和喝汤多少会显著影响钠', f: ['est'] },
+  { id: 'chili_scrambled_egg', name: '辣椒炒鸡蛋', alias: 'lajiao chao jidan 青椒炒蛋 尖椒炒蛋 chili scrambled egg', cat: 'dish', n: [150, 8.0, 11.5, 4.0, 1.3, 2.0, 560], s: [['一份', 250]], ...META_RECIPE_READY, note: '按鸡蛋和鲜辣椒同炒估算；主要差异来自鸡蛋数量与用油量', f: ['est'] },
 ];
 
 /*
@@ -1492,6 +1509,10 @@ const DISH_ADDED_SUGAR = Object.freeze({
   pork_water_bamboo: 0.3, sour_beef_hotpot: 0.3, soy_sauce_fried_rice: 0.3,
   stir_pork_cabbage: 0.3, tomato_beef_noodle: 0.3, tomato_cauliflower: 0.3, tomato_fish: 0.3,
   broccoli_shrimp: 0.2, hotpot_clear: 0.2, hotpot_spicy: 0.2, zucchini_egg: 0.2,
+  nongjia_yiwangxiang: 0.5, soybean_pork_trotter: 0.8, dry_pot_qianye_tofu: 0.8,
+  dry_pot_potato: 0.5, pepper_salt_ribs: 0.3, sizzling_japanese_tofu: 0.8,
+  dry_pot_frog: 0.5, stir_fried_intestine: 0.5, casserole_tofu: 0.2,
+  chili_scrambled_egg: 0.2,
 });
 
 // 旧库兼容迁移：不改营养数字，只把已能确定的来源、估算边界和糖口径显式化。
