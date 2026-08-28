@@ -193,6 +193,47 @@ export function exercisesForGroup(groupKey) {
     .sort((a, b) => (b.compound ? 1 : 0) - (a.compound ? 1 : 0));
 }
 
+/*
+ * 推荐组合是一个可编辑的起手模板，不是「至少要做几个动作」的健康门槛。
+ * 每个范围先列最有代表性的互补动作模式，再从该模式中优先选库里靠前的复合动作。
+ * 这样不会出现腿日先推髋内收/外展、拉日先给四个弯举的排序错误。
+ */
+const GROUP_STARTER_PATTERNS = Object.freeze({
+  chest: ['horizontal_push', 'incline_push', 'chest_fly', 'dip'],
+  shoulder: ['vertical_push', 'lateral_raise', 'rear_delt', 'elbow_flexion', 'elbow_extension'],
+  back: ['vertical_pull', 'horizontal_pull', 'hinge', 'pullover'],
+  leg: ['squat', 'hinge', 'lunge', 'leg_curl', 'calf_raise'],
+  core: ['anti_extension', 'trunk_flexion', 'anti_lateral', 'anti_rotation'],
+});
+
+const SPLIT_STARTER_PATTERNS = Object.freeze({
+  push: ['horizontal_push', 'vertical_push', 'incline_push', 'lateral_raise', 'elbow_extension'],
+  pull: ['vertical_pull', 'horizontal_pull', 'rear_delt', 'elbow_flexion'],
+  legs: ['squat', 'hinge', 'lunge', 'leg_curl', 'calf_raise'],
+  core: ['anti_extension', 'trunk_flexion', 'anti_lateral', 'anti_rotation'],
+});
+
+function comboForPatterns(list, patterns, requestedSize) {
+  const size = Math.max(1, Math.min(Number(requestedSize) || patterns.length, list.length));
+  const combo = [];
+  for (const pattern of patterns) {
+    if (combo.length >= size) break;
+    const candidate = list
+      .filter((e) => e.pattern === pattern && !combo.some((picked) => picked.id === e.id))
+      .sort((a, b) => Number(b.compound) - Number(a.compound))
+      .find((e) => combo.every((picked) => overlapLevel(overlapScore(e, picked)) !== 'high'));
+    if (candidate) combo.push(candidate);
+  }
+  // 动作库较小或某个模式缺失时仍尽量凑齐，但不塞进高度重复的替代品。
+  for (const exercise of list) {
+    if (combo.length >= size) break;
+    if (combo.some((picked) => picked.id === exercise.id)) continue;
+    if (combo.some((picked) => overlapLevel(overlapScore(exercise, picked)) === 'high')) continue;
+    combo.push(exercise);
+  }
+  return combo;
+}
+
 /**
  * 某个部位的起手组合。
  *
@@ -200,40 +241,26 @@ export function exercisesForGroup(groupKey) {
  * 重合最低的永远是孤立动作——胸日会被搭成「一个卧推 + 两个飞鸟」，
  * 三个动作全压在胸大肌中部，上胸下胸一个没练到。
  *
- * 现在的规则：三个动作必须是三个不同的动作模式（推 / 拉 / 铰链…），
+ * 现在的规则：默认的 4–5 个动作优先来自不同动作模式（推 / 拉 / 铰链…），
  * 每一步只收「至少练到一块还没练到的肌肉」的，其中复合动作优先，
  * 再按库里的录入顺序（主流动作排在前面）。
  *
  * 换模式这条比「多覆盖几块肌肉」更管用：只按覆盖面排会搭出
  * 「杠铃划船 + 俯卧撑胸划船」这种两个水平拉，或者把早安式体前屈顶进新手方案。
  */
-export function starterCombo(groupKey, size = 3) {
+export function starterCombo(groupKey, size = null) {
   const list = exercisesForGroup(groupKey);
   if (!list.length) return [];
-  const anchor = list.find((e) => e.compound) || list[0];
-  const combo = [anchor];
-  const covered = new Set(anchor.primary);
-  while (combo.length < size) {
-    const patterns = new Set(combo.map((e) => e.pattern));
-    const pool = list.filter((e) => !combo.some((c) => c.id === e.id));
-    // 模式不重样是硬要求；实在挑不出来（动作少的部位）才放宽
-    const fresh = pool.filter((e) => !patterns.has(e.pattern));
-    const next = (fresh.length ? fresh : pool)
-      .map((e, order) => ({
-        exercise: e,
-        order,
-        fillsGap: e.primary.some((m) => !covered.has(m)),
-        worst: Math.max(...combo.map((c) => overlapScore(e, c)), 0),
-      }))
-      .filter((c) => overlapLevel(c.worst) !== 'high')
-      .sort((a, b) => (Number(b.fillsGap) - Number(a.fillsGap))
-        || (Number(b.exercise.compound) - Number(a.exercise.compound))
-        || (a.order - b.order))[0];
-    if (!next) break;
-    combo.push(next.exercise);
-    for (const m of next.exercise.primary) covered.add(m);
-  }
-  return combo;
+  const patterns = GROUP_STARTER_PATTERNS[groupKey] || [...new Set(list.map((e) => e.pattern))];
+  return comboForPatterns(list, patterns, size ?? patterns.length);
+}
+
+/** 按推 / 拉 / 腿 / 核心生成另一套起手组合。 */
+export function starterSplitCombo(splitKey, size = null) {
+  const list = exercisesForSplit(splitKey);
+  if (!list.length) return [];
+  const patterns = SPLIT_STARTER_PATTERNS[splitKey] || [...new Set(list.map((e) => e.pattern))];
+  return comboForPatterns(list, patterns, size ?? patterns.length);
 }
 
 /**
@@ -285,9 +312,9 @@ export function planAdvice(selection = []) {
         + (o.a.equipment === o.b.equipment
           ? `器械也一样（${EQUIPMENT[o.a.equipment]}），只是换了台机子。`
           : `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。`)
-        + '同一次训练里放两个，多出来的组数主要是加训练量，不是加新的刺激角度——'
+        + '同一次训练里放两个，多出来的组数主要是加训练量，不是增加明显不同的刺激角度——'
         + '要不要保留取决于你的训练目的和这一周的总量。'
-        + (alts.length ? `如果想换个角度，把 ${o.b.name} 换成下面任意一个，它们和这套都不重复。` : ''),
+        + (alts.length ? `如果想换个角度，把 ${o.b.name} 换成下面任意一个，它们和这套没有高度重复。` : ''),
     });
   }
   tips.push(...dupTips);
@@ -314,7 +341,7 @@ export function planAdvice(selection = []) {
       title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
       text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
         + '放在一起很常见，只是两个都做到接近力竭时，后一个的可用负荷会明显下降；'
-        + '把复合动作排前面通常更划算。',
+        + '如果复合动作是当天主项，通常把它排在前面更容易维持动作质量。',
     });
   }
   if (somes.length > 3) {
@@ -336,7 +363,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'push-pull',
       title: push > pull ? `推的动作 ${push} 个，拉只有 ${pull} 个` : `拉的动作 ${pull} 个，推只有 ${push} 个`,
-      text: '长期偏向一侧容易让肩往前扣。不必每次都一比一，但一周之内推和拉的组数尽量接近。',
+      text: '不必每次训练都一比一，但一周内同时安排推和拉，通常比长期只练一侧更完整。具体比例应按目标、动作和恢复情况调整。',
     });
   }
 
@@ -347,7 +374,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'no-compound',
       title: '这套全是孤立动作',
-      text: '孤立动作适合补短板，但整体力量和肌肉量主要靠复合动作推动。先加一个深蹲、硬拉、卧推或引体这类多关节动作打底。',
+      text: '孤立动作也能有效训练局部肌肉；复合动作的优势是用更少动作覆盖更多肌群。可先加一个适合自己的多关节动作作为主项。',
     });
   } else if (compound > 0) {
     const first = list.findIndex((e) => e.compound);
@@ -356,7 +383,7 @@ export function planAdvice(selection = []) {
         level: 'info',
         key: 'order',
         title: `建议把 ${list[first].name} 排到最前面`,
-        text: '复合动作对神经和关节的要求最高，放在体力最好的时候做；孤立动作留到后面收尾。',
+        text: '通常把最重要、技术要求更高的动作放在体力较好时更容易稳定完成；如果某块肌肉是优先目标，也可以把相应动作提前。',
       });
     }
   }

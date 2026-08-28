@@ -103,6 +103,27 @@ test('空腹开局：状态良好，推荐非空且份量合理', () => {
   }
 });
 
+test('半天没有饮食记录时不评价“吃得慢”，而是说明尚未记录', () => {
+  const a = advise({}, { now: at('13:30') });
+  const normalLunch = Math.round(targets.kcal * 0.35);
+  assert.equal(a.status.level, 'good');
+  assert.match(a.status.detail, /还没有饮食记录/);
+  assert.match(a.status.detail, /午餐/);
+  assert.match(a.status.detail, new RegExp(`约 ${normalLunch} kcal`));
+  assert.match(a.status.detail, /不必在这一餐补完当天缺口/);
+  assert.ok(a.budget.kcal > normalLunch, '这个用例必须覆盖剩余预算被重分配的情况');
+  assert.doesNotMatch(a.status.detail, new RegExp(`约 ${a.budget.kcal} kcal`),
+    '空腹午餐不应直接展示重新分配后的大额预算');
+  assert.doesNotMatch(a.status.detail, /吃得慢|当前时间进度/);
+});
+
+test('深夜仍无记录时不鼓励一次补完全天缺口', () => {
+  const a = advise({}, { now: at('22:30') });
+  assert.equal(a.status.level, 'warn');
+  assert.match(a.status.detail, /漏记/);
+  assert.match(a.status.detail, /不建议.*一次补完/);
+});
+
 test('推荐不会让人一顿吃掉全天剩余热量', () => {
   const a = advise();
   for (const r of a.recommend) {
@@ -126,12 +147,24 @@ test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
   assert.match(a.status.headline, /蛋白/);
 });
 
-test('热量超标时给出 bad 状态，只剩零热量的选择', () => {
+test('热量明显高于计划只做橙色提醒，不把计划误说成危险上限', () => {
   const a = advise({ kcal: targets.kcal + 400, protein: 140, fat: 70, carb: 200 });
-  assert.equal(a.status.level, 'bad');
+  assert.equal(a.status.level, 'warn');
+  assert.match(a.status.headline, /比计划多/);
+  assert.match(a.status.detail, /单日偏差不能说明/);
+  assert.match(a.status.detail, /7 天体重趋势/);
+  assert.match(a.status.detail, /不必跳过下一餐/);
+  assert.doesNotMatch(a.status.detail, /只.*水|无糖茶|蔬菜为主/);
   for (const r of a.recommend) {
     assert.ok(r.nutrients.kcal <= 5, `预算吃光后仍推荐了 ${r.food.name}（${r.nutrients.kcal} kcal）`);
   }
+});
+
+test('有饮食记录时也不再用“吃得快慢”描述记账进度', () => {
+  const a = advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') });
+  const copy = `${a.status.headline} ${a.status.detail}`;
+  assert.match(copy, /记录量低于当前时间参考|缺口偏大|偏少了/);
+  assert.doesNotMatch(copy, /吃得快|吃得慢/);
 });
 
 test('深夜不推荐需要现做的生鲜与高油食物', () => {

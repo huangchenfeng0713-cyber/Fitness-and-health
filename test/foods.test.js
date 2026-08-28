@@ -824,6 +824,37 @@ test('家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计', ()
   }
 });
 
+test('下馆子常见菜覆盖一碗香、黄豆猪脚及不同做法，并说明估算边界', () => {
+  const RESTAURANT_CLASSICS = [
+    'nongjia_yiwangxiang', 'soybean_pork_trotter', 'dry_pot_qianye_tofu',
+    'dry_pot_potato', 'pepper_salt_ribs', 'fish_head_tofu_soup',
+    'lotus_root_rib_soup', 'ground_pot_chicken', 'sizzling_japanese_tofu',
+    'dry_pot_frog', 'stir_fried_intestine', 'casserole_tofu',
+    'pickled_cabbage_pork', 'chili_scrambled_egg',
+  ];
+  for (const id of RESTAURANT_CLASSICS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少下馆子常见菜 ${id}`);
+    assert.equal(food.cat, 'dish');
+    assert.ok(isEstimated(food), `${food.name} 不应伪装成实测营养数据`);
+    assert.equal(food.source?.type, 'recipe', `${food.name} 没有配方估算来源`);
+    assert.ok(food.note?.length >= 20, `${food.name} 没说明油盐、可食部或配方差异`);
+  }
+
+  for (const [term, id] of [
+    ['农家一碗香', 'nongjia_yiwangxiang'], ['一碗香', 'nongjia_yiwangxiang'],
+    ['黄豆猪脚', 'soybean_pork_trotter'], ['黄豆猪蹄', 'soybean_pork_trotter'],
+    ['地锅鸡', 'ground_pot_chicken'], ['铁板日本豆腐', 'sizzling_japanese_tofu'],
+  ]) {
+    assert.ok(searchFoods(term).some((food) => food.id === id), `“${term}”没有命中 ${id}`);
+  }
+
+  for (const id of ['soybean_pork_trotter', 'pepper_salt_ribs', 'fish_head_tofu_soup',
+    'lotus_root_rib_soup', 'ground_pot_chicken', 'dry_pot_frog']) {
+    assert.match(FOOD_BY_ID.get(id).note, /不含.*骨|去骨/, `${id} 没防止把骨头重量记成摄入`);
+  }
+});
+
 test('菜肴的游离糖只算加进去的那部分，食材自带的糖不计', () => {
   // 总糖是一回事，WHO 游离糖是另一回事。之前 229 道菜全都没写 nfs，
   // 炒青菜里青菜自带的糖也被计进游离糖上限——一天三盘菜能凭空多出十几克。

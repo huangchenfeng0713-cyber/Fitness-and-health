@@ -663,16 +663,16 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 /* ============ 人体部位图 ============ */
-.body-map { display: flex; justify-content: center; gap: 22px; margin: 2px 0 12px; }
+.body-map { display: flex; justify-content: center; gap: 28px; margin: 0 0 14px; }
 .body-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.body-view { width: 96px; height: 188px; display: block; }
+.body-view { width: 108px; height: 227px; display: block; }
 .body-side-label { font-size: var(--fs-caption); color: var(--faint); }
 /* 轮廓只是个底，不该抢戏 */
 /* 不描边：躯干、手臂、腿是分开的几块，一描边接缝就全露出来 */
-.body-base { fill: var(--card-2); }
+.body-base { fill: color-mix(in srgb, var(--muted) 8%, var(--card-2)); }
 .body-region {
-  fill: var(--track); cursor: pointer;
-  stroke: var(--card); stroke-width: .6;
+  fill: color-mix(in srgb, var(--muted) 14%, var(--card-2)); cursor: pointer;
+  stroke: var(--card); stroke-width: .48; vector-effect: non-scaling-stroke;
   transition: fill .16s ease;
 }
 .body-region:hover { fill: color-mix(in srgb, var(--accent) 22%, var(--track)); }
@@ -681,7 +681,8 @@ html, body { height: 100%; overflow: hidden; }
 .body-region.covered { fill: color-mix(in srgb, var(--accent) 26%, var(--track)); }
 /* 现在在看这一组 */
 .body-region.active { fill: var(--accent); }
-.body-region:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.body-region-group:focus-visible { outline: none; }
+.body-region-group:focus-visible .body-region { stroke: var(--accent); stroke-width: 1.4; }
 
 /* ============ 按钮 / 表单 ============ */
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
@@ -1326,6 +1327,7 @@ body.sheet-open {
   box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
 }
 .range-switch .chip-btn.empty, .chart-switch .chip-btn.empty { opacity: .45; }
+.body-part-switch { gap: 5px; }
 
 /*
  * 图表选择器。七个选项换行铺开而不是横向滚动：横滚会把后面几张图藏在屏幕外，
