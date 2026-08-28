@@ -474,20 +474,24 @@ html, body { height: 100%; overflow: hidden; }
 }
 .micro-chip.over .micro-val { color: var(--danger); }
 
-/* 区间落点条：中间浅色是目标区间，竖标记是现在落在哪 */
+/*
+ * 区间条：底槽 + 建议区间的罩子 + 从左往右的填充。
+ * 罩子颜色固定，不随状态变 —— 它是建议本身，不是对你的评价。
+ */
 .range-bar {
   position: relative; height: 8px; border-radius: 999px;
   background: var(--track); overflow: hidden;
 }
-.range-bar-band {
-  position: absolute; left: 20%; right: 20%; top: 0; bottom: 0;
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
+.range-bar-zone {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.range-bar.near .range-bar-band { background: color-mix(in srgb, var(--warn) 20%, transparent); }
-.range-bar-marker {
-  position: absolute; top: -1px; bottom: -1px; width: 3px; border-radius: 6px;
-  transform: translateX(-1.5px); transition: left .25s ease;
+.range-bar-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 999px; transition: width .25s ease;
 }
+/* 出了建议范围，填充转成提醒色；罩子不动 */
+.range-bar.near .range-bar-fill { background: var(--warn) !important; }
 
 .hero-ring-note {
   margin: 8px 0 0; font-size: 11.5px; color: var(--accent);
@@ -661,12 +665,14 @@ html, body { height: 100%; overflow: hidden; }
 /* ============ 人体部位图 ============ */
 .body-map { display: flex; justify-content: center; gap: 22px; margin: 2px 0 12px; }
 .body-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.body-view { width: 80px; height: 146px; display: block; }
+.body-view { width: 96px; height: 188px; display: block; }
 .body-side-label { font-size: var(--fs-caption); color: var(--faint); }
-/* 头和脖子只是让人认出这是个人，不可点 */
-.body-base { fill: var(--track); }
+/* 轮廓只是个底，不该抢戏 */
+/* 不描边：躯干、手臂、腿是分开的几块，一描边接缝就全露出来 */
+.body-base { fill: var(--card-2); }
 .body-region {
   fill: var(--track); cursor: pointer;
+  stroke: var(--card); stroke-width: .6;
   transition: fill .16s ease;
 }
 .body-region:hover { fill: color-mix(in srgb, var(--accent) 22%, var(--track)); }

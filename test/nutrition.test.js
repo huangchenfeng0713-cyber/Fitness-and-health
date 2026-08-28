@@ -243,6 +243,42 @@ test('凌晨报来不可能的活动能量时，热量目标不被顶高', () =>
     `不可信的数据应等同于「今天还没有活动数据」，实得 ${bad.tdee} vs ${none.tdee}`);
 });
 
+test('晚上报来的多天累加值也要拦住，不能只在凌晨管用', () => {
+  /*
+   * 15 kcal/分钟那条天花板到了晚上就形同虚设：elapsedMin 接近 1440，
+   * 上限涨到 21600 kcal。日均 600 的人 20:00 报来 18000（一个月的量）
+   * 照样放行，热量目标被顶到 19717 kcal —— 而这正是那条护栏要拦的情况。
+   */
+  const evening = 20 / 24;
+  const fake = dynamicTDEE({
+    bmr: 1768, activeSoFar: 18000, basalSoFar: 1500, dayFraction: evening,
+    baselineActive: 600, baselineResting: 1700, fallbackTDEE: 2600,
+  });
+  assert.equal(fake.activeCapped, true, `18000 kcal 活动能量必须被判为不可信，实得 tdee ${fake.tdee}`);
+  assert.ok(fake.tdee < 3000, `TDEE 应回到正常量级，实得 ${fake.tdee}`);
+  assert.equal(fake.activeReported, 18000, '原始值仍要能读到，界面才说得出哪儿不对');
+
+  // 一场马拉松的活动能量约 2600 kcal —— 日均 600 的人真跑了也不该被误伤
+  const marathon = dynamicTDEE({
+    bmr: 1768, activeSoFar: 2600, basalSoFar: 1500, dayFraction: evening,
+    baselineActive: 600, baselineResting: 1700, fallbackTDEE: 2600,
+  });
+  assert.equal(marathon.activeCapped, false, `马拉松被误判成脏数据，tdee ${marathon.tdee}`);
+
+  // 久坐的人第一次去徒步：基线低，但绝对量并不离谱，靠 +2500 那一项放行
+  const firstHike = dynamicTDEE({
+    bmr: 1600, activeSoFar: 1800, basalSoFar: 1400, dayFraction: evening,
+    baselineActive: 120, baselineResting: 1550, fallbackTDEE: 2000,
+  });
+  assert.equal(firstHike.activeCapped, false, '基线低不等于今天不能动，实得 capped=true');
+
+  // 没有基线时这条不生效：新用户手上没有可比的数，宁可信设备
+  const noBaseline = dynamicTDEE({
+    bmr: 1768, activeSoFar: 3000, basalSoFar: 1500, dayFraction: evening, fallbackTDEE: 2600,
+  });
+  assert.equal(noBaseline.activeCapped, false);
+});
+
 test('真实的大运动量不会被上限误伤', () => {
   // 半天骑车 700 kcal：12 小时里平均不到 1 kcal/分钟，完全正常
   const hard = dynamicTDEE({
@@ -332,6 +368,47 @@ test('脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）', () =
     const pct = (t.fat * 9) / t.kcal;
     assert.ok(pct >= 0.195 && pct <= 0.355, `${JSON.stringify(p)} 得到 ${(pct * 100).toFixed(1)}%`);
   }
+});
+
+test('碳水区间由当天热量预算解出，照方案吃绝不会被判成「低于建议」', () => {
+  /*
+   * 这条挡的是「碳水区间直接搬 AMDR 45%~65%」那版：
+   * 高蛋白减脂档蛋白占掉四成供能，方案给的碳水（76g）远在 45% 供能（184g）以下，
+   * 卡片会对着照方案吃的人写「低于建议 108g」—— 应用在指责用户执行它自己开的方案。
+   */
+  let checked = 0;
+  for (const sex of ['male', 'female']) {
+    for (const goal of ['cut', 'maintain', 'bulk']) {
+      for (const activity of ['sedentary', 'light', 'moderate', 'active', 'athlete']) {
+        for (const weightKg of [42, 55, 70, 80, 95, 120]) {
+          for (const proteinPerKg of [undefined, 1.2, 1.6, 2.0, 2.4, 2.8]) {
+            const t = dailyTargets({
+              sex, age: 30, heightCm: sex === 'male' ? 175 : 162, weightKg, activity, goal, proteinPerKg,
+            });
+            const who = `${sex}/${goal}/${activity}/${weightKg}kg/${proteinPerKg}`;
+            assert.ok(t.carbLower <= t.carb && t.carb <= t.carbUpper,
+              `${who}：方案碳水 ${t.carb}g 掉在自己的建议区间 ${t.carbLower}–${t.carbUpper}g 外`);
+            assert.ok(t.fatLower <= t.fat && t.fat <= t.fatUpper,
+              `${who}：方案脂肪 ${t.fat}g 掉在 AMDR ${t.fatLower}–${t.fatUpper}g 外`);
+            checked += 1;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(checked > 1000, '组合太少，扫不出边角');
+});
+
+test('碳水区间的两端就是脂肪吃到 AMDR 两端时的余数', () => {
+  // 区间讲的是「多吃的脂肪要从碳水里扣」，两端必须能被这条式子解释，
+  // 否则又变回了凭空给的靶子。
+  const t = dailyTargets({ sex: 'male', age: 30, heightCm: 178, weightKg: 80, activity: 'moderate', goal: 'cut' });
+  const carbAtFat = (f) => (t.kcal - t.protein * 4 - f * 9) / 4;
+  assert.ok(Math.abs(t.carbLower - carbAtFat(t.fatUpper)) <= 1,
+    `下界 ${t.carbLower} 对不上脂肪吃满 ${t.fatUpper}g 时的余数 ${carbAtFat(t.fatUpper).toFixed(1)}`);
+  assert.ok(Math.abs(t.carbUpper - carbAtFat(t.fatLower)) <= 1,
+    `上界 ${t.carbUpper} 对不上脂肪只吃 ${t.fatLower}g 时的余数 ${carbAtFat(t.fatLower).toFixed(1)}`);
+  assert.ok(t.carbLower < t.carb && t.carb < t.carbUpper, '计划值该落在区间中间');
 });
 
 test('碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过', () => {

@@ -6,20 +6,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  KIND, LEVEL, metricState, rangePosition, dailyMetrics, KCAL_BAND,
+  KIND, LEVEL, metricState, rangeScale, dailyMetrics, KCAL_BAND,
 } from '../js/core/metrics.js';
 
-test('余数不说「还差多少」——碳水是算出来的，不是要吃到的', () => {
+test('碳水按 AMDR 区间判断，不再说「按剩余热量分配」', () => {
   /*
-   * 实测截图：碳水 254/283，界面写「还差 29g」。碳水是蛋白和脂肪分完热量之后
-   * 的余数，照着那句话去补，是界面在劝人多吃。
+   * targets.carb 是「热量减蛋白减脂肪」的余数，不能当靶子 ——
+   * 拿余数当靶子就变回「还差 29g，快去吃」。所以对照的是 IOM AMDR 的
+   * 45%~65% 供能区间：有出处，而且两端都有。
+   *
+   * 原先的措辞「按剩余热量分配，不必吃满」说的是对的，但那是开发者视角，
+   * 用户看不懂。
    */
-  const st = metricState({ kind: KIND.remainder, eaten: 254, target: 283 });
-  assert.equal(st.level, LEVEL.plain, '余数永远是中性的，没有好坏');
-  assert.doesNotMatch(st.note, /还差/, `余数不该说还差：${st.note}`);
-  assert.match(st.note, /不必吃满/);
-  // 吃超了也一样中性
-  assert.equal(metricState({ kind: KIND.remainder, eaten: 400, target: 283 }).level, LEVEL.plain);
+  const st = metricState({ kind: KIND.range, eaten: 356, target: 357, lo: 281, hi: 406, unit: 'g' });
+  assert.equal(st.level, LEVEL.met);
+  assert.equal(st.note, '在建议范围内');
+  assert.doesNotMatch(st.note, /还差|剩余热量|吃满/, `碳水不该说这些：${st.note}`);
+  assert.equal(st.range, '281–406g', '要把区间本身写出来，光说「在范围内」看不出范围是多少');
 });
 
 test('下限够了就是绿的，再多也不会变成警告', () => {
@@ -52,28 +55,42 @@ test('热量在计划区间内是绿的，出界只到橙，永远不红', () =>
   const target = 2076;
   const lo = Math.round(target * (1 - KCAL_BAND));
   const hi = Math.round(target * (1 + KCAL_BAND));
-  const onPlan = metricState({ kind: KIND.range, eaten: 2256, target, lo, hi, unit: ' kcal' });
+  const onPlan = metricState({ kind: KIND.range, eaten: 2256, target, lo, hi, unit: ' kcal', rangeWord: '计划' });
   assert.equal(onPlan.level, LEVEL.met, `+180 kcal 应算在计划范围内：${onPlan.note}`);
   assert.equal(onPlan.note, '在计划范围内');
 
   for (const eaten of [1200, 3000]) {
-    const out = metricState({ kind: KIND.range, eaten, target, lo, hi, unit: ' kcal' });
+    const out = metricState({ kind: KIND.range, eaten, target, lo, hi, unit: ' kcal', rangeWord: '计划' });
     assert.equal(out.level, LEVEL.near, '出了区间只到橙');
     assert.notEqual(out.level, LEVEL.over, '热量任何情况下都不该画成红色');
   }
-  assert.match(metricState({ kind: KIND.range, eaten: 1200, target, lo, hi, unit: ' kcal' }).note, /低于计划/);
-  assert.match(metricState({ kind: KIND.range, eaten: 3000, target, lo, hi, unit: ' kcal' }).note, /高于计划/);
+  assert.match(metricState({ kind: KIND.range, eaten: 1200, target, lo, hi, unit: ' kcal', rangeWord: '计划' }).note, /低于计划/);
+  assert.match(metricState({ kind: KIND.range, eaten: 3000, target, lo, hi, unit: ' kcal', rangeWord: '计划' }).note, /高于计划/);
 });
 
-test('区间落点：里面按比例铺开，外面收敛到两端', () => {
-  assert.equal(rangePosition(50, 40, 60), 50, '正中间');
-  assert.equal(rangePosition(40, 40, 60), 20, '下界落在 20%');
-  assert.equal(rangePosition(60, 40, 60), 80, '上界落在 80%');
-  assert.ok(rangePosition(10, 40, 60) < 20 && rangePosition(10, 40, 60) >= 0);
-  assert.ok(rangePosition(200, 40, 60) > 80 && rangePosition(200, 40, 60) <= 100);
-  // 区间退化时不能算出 NaN 或跑出界
-  for (const v of [rangePosition(5, 10, 10), rangePosition(0, 0, 0)]) {
-    assert.ok(Number.isFinite(v) && v >= 0 && v <= 100, `落点越界：${v}`);
+test('区间条整条线性，罩子位置只由区间本身决定', () => {
+  /*
+   * 旧画法把区间压在 20%~80%，两头各留 20% 表示「低了/高了」——
+   * 吃 10g 和吃 30g 标记位置差不了多少，图在压缩事实。现在整条线性。
+   */
+  const a = rangeScale(74, 55, 97);
+  assert.ok(a.fillPct > a.zoneStart && a.fillPct < a.zoneEnd, '落在区间里，填充应当停在罩子中间');
+  const low = rangeScale(30, 55, 97);
+  assert.ok(low.fillPct < low.zoneStart, '少了，填充该停在罩子左边');
+  const high = rangeScale(130, 55, 97);
+  assert.ok(high.fillPct > high.zoneEnd, '多了，填充该越过罩子右边');
+
+  // 线性：量翻倍，填充百分比也翻倍（同一根轴上比较）
+  const one = rangeScale(20, 55, 97);
+  const two = rangeScale(40, 55, 97);
+  assert.ok(Math.abs(two.fillPct - one.fillPct * 2) < 0.01,
+    `刻度不是线性的：20g→${one.fillPct}%，40g→${two.fillPct}%`);
+
+  // 区间退化或为零时不能算出 NaN、也不能跑出界
+  for (const s2 of [rangeScale(5, 10, 10), rangeScale(0, 0, 0), rangeScale(0, 55, 97)]) {
+    for (const k of ['fillPct', 'zoneStart', 'zoneEnd']) {
+      assert.ok(Number.isFinite(s2[k]) && s2[k] >= 0 && s2[k] <= 100, `${k} 越界或是 NaN：${s2[k]}`);
+    }
   }
 });
 
@@ -86,7 +103,7 @@ test('饮水只是记录，不判达标', () => {
 test('八项指标各自归到该有的性质', () => {
   const targets = {
     kcal: 2076, protein: 106, fat: 69, fatLower: 46, fatUpper: 81,
-    carb: 283, fiber: 30, sodium: 2000, sugar: 52, waterMl: 1700,
+    carb: 283, carbLower: 234, carbUpper: 337, fiber: 30, sodium: 2000, sugar: 52, waterMl: 1700,
   };
   const g = (eaten, target) => ({ eaten, target, remaining: target - eaten, pct: (eaten / target) * 100 });
   const gaps = {
@@ -99,7 +116,7 @@ test('八项指标各自归到该有的性质', () => {
   assert.equal(by.kcal.kind, KIND.range);
   assert.equal(by.protein.kind, KIND.floor);
   assert.equal(by.fat.kind, KIND.range);
-  assert.equal(by.carb.kind, KIND.remainder);
+  assert.equal(by.carb.kind, KIND.range);
   assert.equal(by.fiber.kind, KIND.floor);
   assert.equal(by.sodium.kind, KIND.ceiling);
   assert.equal(by.sugar.kind, KIND.ceiling);
@@ -108,9 +125,10 @@ test('八项指标各自归到该有的性质', () => {
   // 截图那一天该说的话
   assert.equal(by.protein.state.level, LEVEL.met, '蛋白 109/106 已达标');
   assert.equal(by.sodium.state.level, LEVEL.over, '钠 2814/2000 是真超标');
-  assert.equal(by.carb.state.level, LEVEL.plain, '碳水永远中性');
+  // 碳水 254g 低于 45% 供能（约 234g 起）—— 这里它落在区间里
+  assert.ok([LEVEL.met, LEVEL.near].includes(by.carb.state.level), '碳水应按区间判断');
   assert.equal(by.fat.state.level, LEVEL.near, '脂肪 91 高出 AMDR 上界 81');
-  assert.match(by.fat.state.note, /高于计划 10g/);
+  assert.match(by.fat.state.note, /高于建议 10g/, '脂肪区间是 AMDR，措辞该是「建议」不是「计划」');
 
   /*
    * 红的只有钠和游离糖 —— 这两项确实超过了各自的上限（2814/2000、56.7/52）。
@@ -119,7 +137,7 @@ test('八项指标各自归到该有的性质', () => {
    */
   const reds = list.filter((m) => m.state.level === LEVEL.over).map((m) => m.key);
   assert.deepEqual(reds, ['sodium', 'sugar'], `只有真上限能变红，实际：${reds}`);
-  for (const key of ['kcal', 'protein', 'carb', 'fiber', 'water']) {
+  for (const key of ['kcal', 'protein', 'carb', 'fat', 'fiber', 'water']) {
     assert.notEqual(by[key].state.level, LEVEL.over, `${key} 不是上限，不该变红`);
   }
 });
@@ -129,5 +147,20 @@ test('目标为 0 或缺失时不产生 NaN', () => {
     const st = metricState({ kind, eaten: 0, target: 0, lo: 0, hi: 0 });
     assert.ok(Number.isFinite(st.fillPct), `${kind} 的 fillPct 是 NaN`);
     assert.doesNotMatch(st.note, /NaN|undefined|Infinity/, `${kind} 的措辞里漏了脏值：${st.note}`);
+  }
+});
+
+test('目标是脏数据时不许把 NaN 印到界面上', () => {
+  // dailyTargets 自己不会产出这种值，但恢复备份和云端同步是绕过校验直接落库的。
+  // 界面上出现「还差 NaNg」「上限 -100g」时，用户看到的是乱码，不是「这项没数据」。
+  for (const t of [NaN, -100, null, undefined, 'abc', Infinity]) {
+    for (const kind of [KIND.floor, KIND.ceiling, KIND.range, KIND.remainder, KIND.log]) {
+      const st = metricState({ kind, eaten: 50, target: t, lo: t, hi: t, unit: 'g' });
+      const text = `${st.note}${st.range || ''}`;
+      assert.doesNotMatch(text, /NaN|Infinity|undefined/, `${kind} / ${String(t)} → ${text}`);
+      for (const k of ['fillPct', 'zoneStart', 'zoneEnd']) {
+        if (st[k] != null) assert.ok(Number.isFinite(st[k]), `${kind} 的 ${k} 是 ${st[k]}`);
+      }
+    }
   }
 });

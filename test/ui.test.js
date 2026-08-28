@@ -820,3 +820,24 @@ test('训练计划按天落库，不再是刷新就没的页面内存', () => {
   const sync = read('js/lib/cloud-sync.js');
   assert.match(sync, /'customFoods', 'training'/, '云同步没带上 training');
 });
+
+test('每个 store 都要同步到导入上限、备份校验和云同步三处', () => {
+  /*
+   * 上面那条只盯着 training 一个名字，再加第六个 store 照样能漏。
+   * 这条按 db.js 里的 STORES 逐个查 —— 漏了云同步那份名单，
+   * 换设备时那一类数据就静默丢失，用户是在新手机上发现的。
+   */
+  const db = read('js/lib/db.js');
+  const block = db.match(/export const STORES = \{([\s\S]*?)\};/);
+  assert.ok(block, '没找到 STORES 定义');
+  const stores = [...block[1].matchAll(/^\s*(\w+):\s*'([^']+)'/gm)].map((m) => m[2]);
+  assert.ok(stores.length >= 5, `STORES 只解析出 ${stores.length} 个，正则可能过期了`);
+
+  const limits = db.match(/const IMPORT_LIMITS = Object\.freeze\(\{([\s\S]*?)\}\);/);
+  assert.ok(limits, '没找到 IMPORT_LIMITS');
+  const sync = read('js/lib/cloud-sync.js');
+  for (const store of stores) {
+    assert.match(limits[1], new RegExp(`\\b${store}\\s*:`), `IMPORT_LIMITS 漏了 ${store}`);
+    assert.match(sync, new RegExp(`'${store}'`), `cloud-sync.js 的 store 名单漏了 ${store}，换设备会丢这类数据`);
+  }
+});

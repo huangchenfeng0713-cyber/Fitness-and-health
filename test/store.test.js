@@ -144,3 +144,48 @@ test('只看得到未来那天的记录时不往回借', () => {
   assert.equal(d.effectiveProfile.weightKg, 72);
   assert.equal(d.bodySource.weightKg, null);
 });
+
+test('recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一次', () => {
+  /*
+   * 抛出去 = 整个应用起不来，而且用户连设置抽屉都打不开、没法回去改那条数据。
+   * addEntry 和 saveProfile 都有校验，但恢复备份和云端同步是绕过它们直接落库的，
+   * 所以这里假设 state 里什么都可能有。
+   */
+  const ok = { sex: 'male', age: 30, heightCm: 178, weightKg: 80, activity: 'moderate', goal: 'cut' };
+  const blank = () => ({
+    profile: {}, healthDays: [], healthByDate: new Map(), dietEntries: [], dietDaily: [],
+    day: '2026-08-28', trainingDays: [], portionMemory: {}, favorites: [], customFoods: [],
+  });
+  const cases = {
+    空档案: { profile: {} },
+    身高体重不合格: { profile: { ...ok, heightCm: 5, weightKg: 5 } },
+    活动和目标是垃圾: { profile: { ...ok, activity: '???', goal: '???' } },
+    健康数据是脏的: {
+      profile: ok,
+      healthDays: [{ date: '2026-08-28', weightKg: 'abc', restingEnergy: -5, bodyFatPct: 'x' }],
+    },
+    // 备份里混进一条 null：曾经在 sumNutrients 和 buildAdvice 各炸一次
+    饮食条目里混进null: { profile: ok, dietEntries: [{ foodId: 'nope', grams: 'x' }, null] },
+    // `new Date('xT20:00:00')` 是 Invalid Date，一路传进 buildAdvice 就抛 RangeError
+    日期串坏掉: { profile: ok, day: 'not-a-date' },
+  };
+  for (const [name, patch] of Object.entries(cases)) {
+    Object.assign(state, blank(), patch);
+    assert.doesNotThrow(() => recompute(), `${name} 让 recompute 抛了异常`);
+    const t = state.derived?.targets || {};
+    for (const k of ['kcal', 'protein', 'fat', 'carb']) {
+      assert.ok(Number.isFinite(t[k]) && t[k] >= 0, `${name} 之后 ${k} 是 ${t[k]}`);
+    }
+  }
+});
+
+test('身体信息算不出目标时退回默认档案，并把原因交给界面去说', () => {
+  Object.assign(state, {
+    profile: { sex: 'male', age: 30, heightCm: 5, weightKg: 5, activity: 'moderate', goal: 'cut' },
+    healthDays: [], healthByDate: new Map(), dietEntries: [], dietDaily: [],
+    day: '2026-08-28', trainingDays: [], portionMemory: {}, favorites: [], customFoods: [],
+  });
+  recompute();
+  assert.ok(state.derived.profileError, '没有把失败原因记进 derived，界面就无话可说');
+  assert.ok(state.derived.targets.kcal > 0, '仍要给出一份能显示的默认目标');
+});

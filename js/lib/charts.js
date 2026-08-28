@@ -117,25 +117,34 @@ export function ring({
 }
 
 /**
- * 区间落点条。
+ * 区间条：从左往右填到你的量，建议区间画成一段罩子。
  *
- * 热量和脂肪是「落在范围里就对」，不是「填得越满越好」。用填充长度画区间
- * 会骗人：填到 100% 看着像圆满，其实可能刚好越过上界。所以中间一段浅色是
- * 目标区间，一根竖标记落在哪就是哪。
+ * 位置由 core/metrics.js 的 rangeScale 算好（整条线性），这里只管画。
+ * 罩子的颜色固定 —— 它是「建议吃到哪儿」，不该因为你今天吃多了就换色；
+ * 该变色的是填充本身。
  *
- * @param {number} markerPct 落点位置 0~100（core/metrics.js 的 rangePosition 算好）
+ * @param {number} fillPct   已摄入占整条的百分比
+ * @param {number} zoneStart 建议区间下界的位置
+ * @param {number} zoneEnd   建议区间上界的位置
  */
-export function rangeBar({ markerPct = 50, color = 'var(--accent)', level = 'met' }) {
+export function rangeBar({
+  fillPct = 0, zoneStart = 0, zoneEnd = 100, color = 'var(--accent)', level = 'met',
+}) {
   const wrap = document.createElement('div');
   wrap.className = `range-bar ${level}`;
-  const band = document.createElement('div');
-  band.className = 'range-bar-band';
-  wrap.append(band);
-  const marker = document.createElement('div');
-  marker.className = 'range-bar-marker';
-  marker.style.left = `${Math.max(0, Math.min(100, markerPct))}%`;
-  marker.style.background = color;
-  wrap.append(marker);
+
+  const zone = document.createElement('div');
+  zone.className = 'range-bar-zone';
+  zone.style.left = `${zoneStart}%`;
+  zone.style.width = `${Math.max(0, zoneEnd - zoneStart)}%`;
+  wrap.append(zone);
+
+  const fill = document.createElement('div');
+  fill.className = 'range-bar-fill';
+  fill.style.width = `${fillPct}%`;
+  fill.style.background = color;
+  wrap.append(fill);
+
   return wrap;
 }
 

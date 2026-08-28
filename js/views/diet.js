@@ -13,7 +13,7 @@ import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
-  allFoods, findFood, addCustomFood, removeCustomFood,
+  allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
@@ -21,6 +21,7 @@ import {
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { initialPortion } from '../core/portion.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 
@@ -239,11 +240,23 @@ function feedbackLink(query) {
 function selectFood(food) {
   ui.selected = food;
   refreshAdvice();
-  ui.unitIdx = 0;
   ui.qty = 1;
   ui.sugar = DEFAULT_SUGAR_LEVEL;
   ui.mix = hasFoodMix(food) ? defaultFoodMix(food) : {};
-  ui.grams = food.s?.[0]?.[1] || 100;
+
+  /*
+   * 上次记的是多少，这次就默认多少。
+   *
+   * 库里那个「一碗 250g」是通用估值，各人的碗差得远；而克数是乘数，
+   * 估错一倍热量就差一倍。改过一次之后按你的数来，比让应用继续猜要实在。
+   *
+   * 如果记住的量正好等于某个常用份量，就把那一档选中（显示「1 碗」比
+   * 显示「250 克」好读）；对不上就落到按克输入那一档。
+   */
+  const start = initialPortion(food, portionMemory());
+  ui.unitIdx = start.unitIdx;
+  ui.grams = start.grams;
+  ui.qty = start.qty;
   refreshPortion();
 }
 
@@ -466,6 +479,11 @@ function refreshPortion() {
   const caffeineWarning = Number(food.caffeineMg) > 0 ? h('p.functional-warning') : null;
   const gramsInput = h('input.grams-input', {
     type: 'number', min: 1, step: 5, inputmode: 'numeric',
+    // 建出来就带上初值：pending 判的是「用户把输入框清空了」，
+    // 不是「这个框还没画」。少了这个初值，弹层以按克输入开场时
+    // （记住的份量对不上任何一档）第一帧大读数是一道杠，
+    // 而下面输入框里明明写着 420 —— 同一个面板里两个数对不上。
+    value: String(ui.grams),
     'aria-label': isLiquid ? '毫升数' : '克数',
     // 输入过程中既不钳制也不回写：一旦在 oninput 里把值改回去，
     // 用户删到空的那一刻就会被填成 1，等于永远删不干净、改不了数。

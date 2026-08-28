@@ -10,6 +10,7 @@ import {
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
 import { normalizeSession } from '../core/training.js';
+import { nextPortionMemory } from '../core/portion.js';
 import {
   computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
   findImplausibleDays, clearImplausibleValues, implausibleFields, isPlausibleHealthValue,
@@ -51,6 +52,7 @@ export const state = {
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
   favorites: [],         // 常吃食物 id
+  portionMemory: {},     // { foodId: 克数 } —— 用户自己改过的份量
   lastImport: null,
   derived: null,
 };
@@ -96,9 +98,10 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, favorites, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
+  const [profile, favorites, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', []),
+    db.getSetting('portionMemory', {}),
     db.getSetting('lastImport', null),
     db.getAll(db.STORES.customFoods),
     db.getAll(db.STORES.health),
@@ -118,12 +121,13 @@ async function hydrateStore({ notify = false } = {}) {
     }
   }
   state.favorites = favorites || [];
+  state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
   state.customFoods = customFoods || [];
   state.trainingDays = (training || []).map(normalizeSession).filter((s) => s.date);
   setHealthDays(healthDays || []);
-  rebuildDietDaily(dietAll || []);
-  state.dietEntries = (dietAll || []).filter((e) => e.date === state.day);
+  rebuildDietDaily(cleanEntries(dietAll));
+  state.dietEntries = cleanEntries(dietAll).filter((e) => e.date === state.day);
   state.ready = true;
   recompute();
   if (notify) emit();
@@ -164,6 +168,28 @@ function rebuildDietDaily(entries) {
  * 重新计算当前日期的目标、摄入与建议。
  * 任何一次记录、任何一次设置修改后都会调用，做到"实时调整"。
  */
+/*
+ * 从库里读出来的饮食条目先过一遍。
+ *
+ * addEntry 有校验，但恢复备份和云端同步是绕过它直接落库的 —— 一条 null
+ * 就能让 recompute 里的 sumNutrients / buildAdvice 抛异常，而 recompute
+ * 是在 boot 里跑的：抛出去用户连设置抽屉都打不开，没法回去删那条数据。
+ */
+const cleanEntries = (rows) => (Array.isArray(rows) ? rows : [])
+  .filter((e) => e && typeof e === 'object');
+
+/*
+ * 看历史日期时把 now 钉在当天 20:00，否则会按此刻的钟点给出「该吃午饭了」这种建议。
+ *
+ * 日期串坏掉时退回真实时间：`new Date('xT20:00:00')` 是 Invalid Date，
+ * 一路传进 buildAdvice 就抛 RangeError，而 recompute 是不许抛的。
+ * 备份恢复和云端同步都能把一个坏 day 写进来。
+ */
+function pinnedNow(day, now) {
+  const pinned = new Date(`${day}T20:00:00`);
+  return Number.isNaN(pinned.getTime()) ? now : pinned;
+}
+
 export function recompute(now = new Date()) {
   const p = state.profile;
   const health = state.healthByDate.get(state.day) || {};
@@ -281,7 +307,7 @@ export function recompute(now = new Date()) {
       // 分母用「有饮食记录的天数」，不是日历天数——否则会把没记的日子算成没达标
       proteinHitDays: countProteinHitDays(targets.protein, baseline.windowDays),
     },
-    now: isToday ? now : new Date(`${state.day}T20:00:00`),
+    now: isToday ? now : pinnedNow(state.day, now),
   });
 
   state.derived = {
@@ -352,7 +378,7 @@ function countProteinHitDays(target, windowDays = 7) {
 
 export async function setDay(dayKey) {
   state.day = dayKey;
-  state.dietEntries = await db.getDietByDate(dayKey);
+  state.dietEntries = cleanEntries(await db.getDietByDate(dayKey));
   recompute();
   emit();
 }
@@ -428,6 +454,7 @@ export async function addEntry({
   entry.id = id;
   state.dietEntries = [...state.dietEntries, entry];
   await touchFavorite(food.id);
+  await rememberPortion(food, entry.grams);
   await refreshDietDaily();
   recompute();
   emit();
@@ -501,6 +528,18 @@ async function touchFavorite(foodId) {
   const next = [foodId, ...state.favorites.filter((f) => f !== foodId)].slice(0, 24);
   await db.setSetting('favorites', next);
   state.favorites = next;
+}
+
+// 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
+export function portionMemory() {
+  return state.portionMemory;
+}
+
+async function rememberPortion(food, grams) {
+  const next = nextPortionMemory(state.portionMemory, food, grams);
+  if (!next) return;
+  await db.setSetting('portionMemory', next);
+  state.portionMemory = next;
 }
 
 export async function addCustomFood(food) {
@@ -623,6 +662,7 @@ export async function clearAllData() {
   state.dietDaily = [];
   state.customFoods = [];
   state.favorites = [];
+  state.portionMemory = {};
   state.lastImport = null;
   recompute();
   emit();

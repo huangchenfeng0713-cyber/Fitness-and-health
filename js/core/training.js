@@ -143,6 +143,50 @@ export function exercisesForMuscles(muscles = [], options = {}) {
 }
 
 /** 某个部位可以练哪些动作，复合动作排前面 */
+/**
+ * 推 / 拉 / 腿 / 核心 —— 另一种挑动作的分法。
+ *
+ * 「今天练胸」和「今天是推的日子」是两种不同的思路：前者按部位，后者按动作模式。
+ * 分化训练（PPL）用的是后者，一次练完所有推的动作，因为它们共用同一批
+ * 协同肌（三角肌前束、肱三头肌），分开练等于让这些小肌肉连着两天挨累。
+ *
+ * 归类按动作模式走，不按主动肌 —— 侧平举练的是肩，但它和卧推共用不了
+ * 肱三头肌，可在 PPL 的惯例里它仍归推日（同一天把肩练完，别再单开一天）。
+ */
+export const SPLITS = [
+  { key: 'push', label: '推', patterns: ['horizontal_push', 'incline_push', 'vertical_push', 'chest_fly', 'dip', 'elbow_extension', 'lateral_raise'] },
+  { key: 'pull', label: '拉', patterns: ['horizontal_pull', 'vertical_pull', 'pullover', 'shrug', 'rear_delt', 'elbow_flexion'] },
+  { key: 'legs', label: '腿', patterns: ['squat', 'hinge', 'lunge', 'leg_extension', 'leg_curl', 'hip_thrust', 'adduction', 'abduction', 'calf_raise'] },
+  { key: 'core', label: '核心', patterns: ['trunk_flexion', 'anti_extension', 'anti_rotation', 'anti_lateral', 'rotation', 'lateral_flexion'] },
+];
+
+const SPLIT_BY_PATTERN = new Map(
+  SPLITS.flatMap((s) => s.patterns.map((p) => [p, s.key])),
+);
+
+/*
+ * 髋铰链是唯一一个光看模式分不了的：这一类里既有以竖脊肌为主的
+ * （硬拉、架上拉、山羊挺身、器械背伸展 —— PPL 里都在拉日），
+ * 也有以腘绳肌臀大肌为主的（罗马尼亚硬拉、早安式 —— 在腿日）。
+ * 一律归腿的话，练拉日的人在「拉」里找不到硬拉和背伸展。
+ * 所以这一类按主动肌里排第一的那块再分一次。
+ */
+const PULL_DOMINANT = new Set(['erector', 'trap_mid', 'trap_upper', 'rhomboid', 'lat']);
+
+/** 一个动作属于推 / 拉 / 腿 / 核心里的哪一类 */
+export function splitOf(exercise) {
+  const base = SPLIT_BY_PATTERN.get(exercise?.pattern) || null;
+  if (base === 'legs' && exercise?.pattern === 'hinge' && PULL_DOMINANT.has(exercise.primary?.[0])) {
+    return 'pull';
+  }
+  return base;
+}
+
+/** 某一类下的全部动作，顺序沿用动作库里的录入顺序 */
+export function exercisesForSplit(key) {
+  return EXERCISES.filter((e) => splitOf(e) === key);
+}
+
 export function exercisesForGroup(groupKey) {
   return EXERCISES
     .filter((e) => e.group === groupKey)
