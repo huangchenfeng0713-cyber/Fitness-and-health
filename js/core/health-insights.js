@@ -8,6 +8,8 @@
  * 美国睡眠医学会（AASM）成人睡眠时长共识，以及《中国居民膳食指南》。
  */
 
+import { MAX_LOSS_RATE_PCT, MAX_GAIN_RATE_PCT } from './nutrition.js';
+
 const round = (v, d = 0) => {
   const m = 10 ** d;
   return Math.round(v * m) / m;
@@ -17,6 +19,12 @@ const avg = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length :
 
 const DAY_MS = 86400000;
 const WEIGHT_RATE_TOLERANCE = 0.15;
+/*
+ * 「偏快」的门槛按方向分开，和 dailyTargets 里计划速率的上限用同一组数。
+ * 原先两个方向都用 1%：计划那头只允许 +0.5%/周，实测涨到 0.9% 却一声不吭，
+ * 同一个应用的两处对「多快算快」给出两个答案。
+ */
+const FAST_PCT = { loss: MAX_LOSS_RATE_PCT * 100, gain: MAX_GAIN_RATE_PCT * 100 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -263,11 +271,12 @@ export function healthInsights(healthDays = [], opts = {}) {
     const pctPerWeek = perWeek != null && latest > 0 ? Math.abs(perWeek / latest) * 100 : null;
 
     if (perWeek != null) {
-      if (pctPerWeek != null && pctPerWeek > 1) {
+      const fastLimit = perWeek < 0 ? FAST_PCT.loss : FAST_PCT.gain;
+      if (pctPerWeek != null && pctPerWeek > fastLimit) {
         add('weight', 'warn', `体重变化 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周，速度偏快`,
-          `相当于每周 ${round(pctPerWeek, 1)}% 体重。${perWeek < 0
+          `相当于每周 ${round(pctPerWeek, 1)}% 体重，超过 ${fastLimit}%。${perWeek < 0
             ? '减重过快时，变化往往不只来自脂肪，肌肉和水分也可能占较大比例；建议收小热量缺口。'
-            : '增重过快时也可能混有水分变化；建议复核目标、饮食记录和连续几周趋势。'}`, perWeek);
+            : '增重快于每周 0.5% 体重时，多出来的按比例主要是脂肪而不是肌肉；也可能混有水分变化。建议收小盈余，并复核饮食记录和连续几周趋势。'}`, perWeek);
       } else if (rateGap != null && Math.abs(rateGap) > WEIGHT_RATE_TOLERANCE) {
         const enoughForAdjustment = weightSpan >= 28 && weight.length >= 8;
         const direction = Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(goalRate) > 0

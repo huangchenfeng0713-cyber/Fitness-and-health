@@ -39,6 +39,18 @@ export const ACTIVITY_LEVELS = {
   athlete: { key: 'athlete', label: '运动员 / 体力劳动', factor: 1.9 },
 };
 
+/*
+ * 体重变化速率的上限，按占体重的比例/周。计划和判读共用这两个数 ——
+ * 「计划允许多快」和「实测多快算偏快」不该是两个门槛。
+ *
+ * 减：1%/周。再快下去掉的就不只是脂肪。约束的是脂肪能被动员多快。
+ * 增：0.5%/周。约束的是另一回事 —— 肌肉本身长多快。即便新手，肌肉的
+ *     积累速度也就每周 0.25%~0.5% 体重，超出这一段多出来的按比例主要是脂肪。
+ * 两者共用一个 1% 会允许 45kg 的人计划每周 +0.45kg，一个月长 4% 体重。
+ */
+export const MAX_LOSS_RATE_PCT = 0.01;
+export const MAX_GAIN_RATE_PCT = 0.005;
+
 export const GOALS = {
   cut: { key: 'cut', label: '减脂', defaultRateKgPerWeek: -0.5 },
   maintain: { key: 'maintain', label: '维持', defaultRateKgPerWeek: 0 },
@@ -399,8 +411,10 @@ export function dailyTargets(profile, dynamic = null) {
     ? Number(profile.rateKgPerWeek)
     : GOALS[goal].defaultRateKgPerWeek;
   const weight = Number(profile.weightKg);
-  const maxRate = weight * 0.01;
-  const rateByWeight = clamp(requestedRate, -maxRate, maxRate);
+  // 减和增不是同一件事，用不同的上限（见 MAX_LOSS_RATE_PCT / MAX_GAIN_RATE_PCT）
+  const maxLossRate = weight * MAX_LOSS_RATE_PCT;
+  const maxGainRate = weight * MAX_GAIN_RATE_PCT;
+  const rateByWeight = clamp(requestedRate, -maxLossRate, maxGainRate);
 
   const hasDynamicTdee = dynamic?.tdee > 0;
   const hasDeviceContribution = hasDynamicTdee

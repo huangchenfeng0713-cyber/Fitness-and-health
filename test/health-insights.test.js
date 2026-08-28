@@ -308,3 +308,25 @@ test('概览与解读的日均睡眠是同一个数，不会因两次取整差�
     `概览 ${summary.sleepHours} 小时 与解读 ${insight.metric} 小时对不上`);
   assert.equal(summary.sleepHours, 6.7);
 });
+
+test('「涨得太快」的门槛比「掉得太快」严：两者受的限制不是一回事', () => {
+  /*
+   * 减重那条 1%/周 约束的是脂肪能被动员多快；增重受的是另一个限制 ——
+   * 肌肉本身长多快，每周 0.25%~0.5% 体重就到顶，再快多出来的按比例是脂肪。
+   * 原先两个方向都用 1%：计划那头只允许 +0.5%/周，实测涨到 0.9% 却一声不吭，
+   * 同一个应用的两处对「多快算快」给出两个答案。
+   */
+  const series = (pctPerWeek, w = 70) => Array.from({ length: 30 }, (_, i) => ({
+    date: `2026-08-${String(i + 1).padStart(2, '0')}`,
+    weightKg: Number((w + (w * pctPerWeek / 100) * (i / 7)).toFixed(2)),
+  }));
+  const fastTip = (days, goal) => (healthInsights(days, { rateKgPerWeek: goal }) || [])
+    .find((x) => x.key === 'weight' && x.title.includes('偏快'));
+
+  assert.ok(fastTip(series(0.9), 0.25), '每周涨 0.9% 体重没有被判为偏快');
+  assert.ok(fastTip(series(0.6), 0.25), '每周涨 0.6% 体重没有被判为偏快');
+  assert.ok(!fastTip(series(0.3), 0.25), '每周涨 0.3% 体重是正常的增肌速度，不该报警');
+
+  assert.ok(fastTip(series(-1.2), -0.5), '每周掉 1.2% 体重没有被判为偏快');
+  assert.ok(!fastTip(series(-0.9), -0.5), '每周掉 0.9% 体重仍在 1% 以内，不该报警');
+});

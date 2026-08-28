@@ -241,3 +241,25 @@ test('序列不是数组时不炸卡片', () => {
   assert.equal(analyzeSeries(undefined), null);
   assert.equal(typeof trendReading('kcal', null, { target: 2000 }), 'string');
 });
+
+test('体重解读：涨太快也要说，而且门槛比掉太快严', () => {
+  const pts = (v) => v.map((y, i) => ({ x: `2026-08-${String(i + 1).padStart(2, '0')}`, y }));
+  const say = (kgPerWeek, goalRate, latest) => trendReading('weight',
+    pts([latest - kgPerWeek * 2, latest - kgPerWeek, latest, latest]),
+    { kgPerWeek, goalRate, records: 4, spanDays: 14 });
+
+  // 70kg 的人每周涨 0.6kg = 0.86% 体重，超过 0.5%
+  assert.match(say(0.6, 0.25, 70), /多出来的按比例主要是脂肪/, say(0.6, 0.25, 70));
+  // 每周涨 0.3kg = 0.43%，在范围内
+  assert.doesNotMatch(say(0.3, 0.25, 70), /主要是脂肪/, say(0.3, 0.25, 70));
+  // 减重仍是 1% 的门槛：0.6kg/70kg = 0.86%，不该报
+  assert.doesNotMatch(say(-0.6, -0.5, 70), /掉的往往不只是脂肪/, say(-0.6, -0.5, 70));
+  assert.match(say(-1.0, -0.5, 70), /掉的往往不只是脂肪/, say(-1.0, -0.5, 70));
+});
+
+test('调用方没给称重次数时不把 undefined 印出来', () => {
+  const pts = [{ x: '2026-08-01', y: 80 }, { x: '2026-08-02', y: 79.8 }, { x: '2026-08-03', y: 79.5 }];
+  const text = trendReading('weight', pts, {});
+  assert.doesNotMatch(text, /undefined/, text);
+  assert.match(text, /3 次记录/, text);
+});
