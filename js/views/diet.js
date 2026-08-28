@@ -13,7 +13,7 @@ import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
-  allFoods, findFood, addCustomFood, removeCustomFood,
+  allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
@@ -21,6 +21,7 @@ import {
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal } from '../core/advisor.js';
+import { initialPortion } from '../core/portion.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 
@@ -239,11 +240,22 @@ function feedbackLink(query) {
 function selectFood(food) {
   ui.selected = food;
   refreshAdvice();
-  ui.unitIdx = 0;
   ui.qty = 1;
   ui.sugar = DEFAULT_SUGAR_LEVEL;
   ui.mix = hasFoodMix(food) ? defaultFoodMix(food) : {};
-  ui.grams = food.s?.[0]?.[1] || 100;
+
+  /*
+   * 上次记的是多少，这次就默认多少。
+   *
+   * 库里那个「一碗 250g」是通用估值，各人的碗差得远；而克数是乘数，
+   * 估错一倍热量就差一倍。改过一次之后按你的数来，比让应用继续猜要实在。
+   *
+   * 如果记住的量正好等于某个常用份量，就把那一档选中（显示「1 碗」比
+   * 显示「250 克」好读）；对不上就落到按克输入那一档。
+   */
+  const start = initialPortion(food, portionMemory());
+  ui.unitIdx = start.unitIdx;
+  ui.grams = start.grams;
   refreshPortion();
 }
 

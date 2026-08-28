@@ -13,12 +13,19 @@ import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/ex
 import { BODY_BASE, REGIONS, VIEW_LABEL } from '../data/body-map.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import {
-  exercisesForGroup, findOverlaps, coverage, planAdvice, starterCombo,
+  exercisesForGroup, exercisesForSplit, SPLITS, findOverlaps, coverage, planAdvice, starterCombo,
   sessionVolume, recentExercises, weeklyVolume,
   overlapScore, overlapLevel,
 } from '../core/training.js';
 
 let activeGroup = 'chest';
+/*
+ * 挑动作有两种思路：「今天练胸」按部位，「今天是推的日子」按动作模式。
+ * 分化训练用的是后者 —— 推的动作共用三角肌前束和肱三头肌，分开练等于
+ * 让这些小肌肉连着两天挨累。两种都留着，用分段控件切。
+ */
+let pickMode = 'group';     // 'group' 按部位 | 'split' 按推拉腿
+let activeSplit = 'push';
 // 展开着记组数的那个动作；纯界面状态，不落库
 let expanded = null;
 /*
@@ -80,13 +87,14 @@ function bodyMap(rerender) {
   }
   const ns = 'http://www.w3.org/2000/svg';
   const draw = (spec, className) => {
-    const node = document.createElementNS(ns, spec.shape === 'circle' ? 'circle' : 'rect');
-    if (spec.shape === 'circle') {
-      node.setAttribute('cx', spec.cx); node.setAttribute('cy', spec.cy); node.setAttribute('r', spec.r);
+    let node;
+    if (spec.shape === 'ellipse') {
+      node = document.createElementNS(ns, 'ellipse');
+      node.setAttribute('cx', spec.cx); node.setAttribute('cy', spec.cy);
+      node.setAttribute('rx', spec.rx); node.setAttribute('ry', spec.ry);
     } else {
-      node.setAttribute('x', spec.x); node.setAttribute('y', spec.y);
-      node.setAttribute('width', spec.w); node.setAttribute('height', spec.h);
-      node.setAttribute('rx', spec.rx ?? 4);
+      node = document.createElementNS(ns, 'path');
+      node.setAttribute('d', spec.d);
     }
     node.setAttribute('class', className);
     return node;
@@ -94,7 +102,7 @@ function bodyMap(rerender) {
 
   const view = (side) => {
     const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 100 182');
+    svg.setAttribute('viewBox', '0 0 100 196');
     svg.setAttribute('class', 'body-view');
     for (const base of BODY_BASE) svg.append(draw(base, 'body-base'));
     for (const r of REGIONS.filter((x) => x.view === side)) {
@@ -123,6 +131,23 @@ function groupTabs(rerender) {
       class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
       onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
     }, g.label)));
+}
+
+/** 按部位 / 按推拉腿 —— 两种挑法之间切换 */
+function modeTabs(rerender) {
+  return h('div.range-switch', null,
+    [['group', '按部位'], ['split', '推拉腿']].map(([key, label]) => h('button', {
+      class: `chip-btn${pickMode === key ? ' active' : ''}`,
+      onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
+    }, label)));
+}
+
+function splitTabs(rerender) {
+  return h('div.range-switch', null,
+    SPLITS.map((sp) => h('button', {
+      class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
+      onclick: () => { activeSplit = sp.key; showAllExercises = false; rerender(); },
+    }, sp.label)));
 }
 
 /** 已选动作里，和这个动作重合度最高的那一个（用来在列表上直接标出来） */
@@ -183,10 +208,13 @@ function pickerCard(rerender) {
     recentExercises(state.trainingDays, { limit: 200, before: state.day })
       .map((r) => [r.exercise.id, r.date]),
   );
-  const all = exercisesForGroup(activeGroup);
+  const byGroup = pickMode === 'group';
+  const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
   const filter = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
   const list = all.filter(filter.match);
   const group = GROUPS.find((g) => g.key === activeGroup);
+  const split = SPLITS.find((sp) => sp.key === activeSplit);
+  const scopeLabel = byGroup ? group.label : `${split.label}的动作`;
   /*
    * 收起时也不能把已选的动作藏掉：这一行的 ✓ 就是取消选择的入口，
    * 藏起来等于选了就撤不掉。排在第 8 个之后的已选项直接接到末尾，
@@ -199,13 +227,15 @@ function pickerCard(rerender) {
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '动作选择'),
-      h('span.card-tag', null, `${group.label} · ${list.length} 个`)),
-    bodyMap(rerender),
-    groupTabs(rerender),
+      h('span.card-tag', null, `${scopeLabel} · ${list.length} 个`)),
+    // 部位图只在按部位挑的时候有意义：推拉腿是跨部位的
+    byGroup ? bodyMap(rerender) : null,
+    modeTabs(rerender),
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
     equipTabs(rerender, all),
     list.length
       ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
-      : h('p.empty-hint', null, `${group.label}下没有${filter.label}动作，换个器械档位看看。`),
+      : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
     list.length > LIST_PREVIEW ? h('button.more-btn', {
       onclick: () => { showAllExercises = !showAllExercises; rerender(); },
     }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null);

@@ -10,6 +10,7 @@ import {
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
 import { normalizeSession } from '../core/training.js';
+import { nextPortionMemory } from '../core/portion.js';
 import {
   computeBaseline, repairMisscaledEnergy, findMisscaledEnergyDays,
   findImplausibleDays, clearImplausibleValues, implausibleFields, isPlausibleHealthValue,
@@ -51,6 +52,7 @@ export const state = {
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
   favorites: [],         // 常吃食物 id
+  portionMemory: {},     // { foodId: 克数 } —— 用户自己改过的份量
   lastImport: null,
   derived: null,
 };
@@ -96,9 +98,10 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, favorites, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
+  const [profile, favorites, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', []),
+    db.getSetting('portionMemory', {}),
     db.getSetting('lastImport', null),
     db.getAll(db.STORES.customFoods),
     db.getAll(db.STORES.health),
@@ -118,6 +121,7 @@ async function hydrateStore({ notify = false } = {}) {
     }
   }
   state.favorites = favorites || [];
+  state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
   state.customFoods = customFoods || [];
   state.trainingDays = (training || []).map(normalizeSession).filter((s) => s.date);
@@ -428,6 +432,7 @@ export async function addEntry({
   entry.id = id;
   state.dietEntries = [...state.dietEntries, entry];
   await touchFavorite(food.id);
+  await rememberPortion(food, entry.grams);
   await refreshDietDaily();
   recompute();
   emit();
@@ -501,6 +506,18 @@ async function touchFavorite(foodId) {
   const next = [foodId, ...state.favorites.filter((f) => f !== foodId)].slice(0, 24);
   await db.setSetting('favorites', next);
   state.favorites = next;
+}
+
+// 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
+export function portionMemory() {
+  return state.portionMemory;
+}
+
+async function rememberPortion(food, grams) {
+  const next = nextPortionMemory(state.portionMemory, food, grams);
+  if (!next) return;
+  await db.setSetting('portionMemory', next);
+  state.portionMemory = next;
 }
 
 export async function addCustomFood(food) {
@@ -623,6 +640,7 @@ export async function clearAllData() {
   state.dietDaily = [];
   state.customFoods = [];
   state.favorites = [];
+  state.portionMemory = {};
   state.lastImport = null;
   recompute();
   emit();

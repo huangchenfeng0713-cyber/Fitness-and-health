@@ -72,9 +72,12 @@ function metricRow(m) {
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, m.label),
       h('strong.metric-row-value', null, `${value}${m.unit}`),
-      h('span.metric-row-note', null, st.note)),
-    st.markerPct != null
-      ? rangeBar({ markerPct: st.markerPct, color: KIND_COLOR[m.key], level: st.level })
+      h('span.metric-row-note', null, st.range ? `${st.note} · ${st.range}` : st.note)),
+    st.zoneStart != null
+      ? rangeBar({
+        fillPct: st.fillPct, zoneStart: st.zoneStart, zoneEnd: st.zoneEnd,
+        color: KIND_COLOR[m.key], level: st.level,
+      })
       : macroBar({
         value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
         // 只有真上限会画成红色，下限和余数不会

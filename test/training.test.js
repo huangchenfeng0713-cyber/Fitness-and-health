@@ -7,6 +7,7 @@ import {
   overlapScore, overlapLevel, findOverlaps, coverage,
   replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice, starterCombo,
   normalizeSession, sessionVolume, weeklyVolume, recentExercises,
+  splitOf, exercisesForSplit, SPLITS,
 } from '../js/core/training.js';
 
 test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
@@ -352,4 +353,45 @@ test('最近练过按日期倒序，且不含当天', () => {
   assert.deepEqual(recent.map((r) => r.exercise.id), ['bench_press_bb', 'squat_bb']);
   assert.equal(recent[0].date, '2026-08-25');
   assert.equal(recent[1].date, '2026-08-25', '同一动作应取最近那次的日期');
+});
+
+/* -------------------------- 推 / 拉 / 腿 / 核心 -------------------------- */
+
+test('每个动作都归得进推拉腿核心，一个不落', () => {
+  const missed = EXERCISES.filter((e) => !splitOf(e));
+  assert.equal(missed.length, 0,
+    `没归类的动作模式：${[...new Set(missed.map((e) => e.pattern))].join('、')}`);
+  const total = SPLITS.reduce((n, s) => n + exercisesForSplit(s.key).length, 0);
+  assert.equal(total, EXERCISES.length, '归类之后总数对不上，说明有动作被算了两次');
+});
+
+test('髋铰链按主动肌再分一次：硬拉和背伸展在拉日，罗马尼亚硬拉在腿日', () => {
+  /*
+   * 这一类里既有竖脊肌主导的，也有腘绳肌臀大肌主导的。一律归腿的话，
+   * 练拉日的人在「拉」里找不到硬拉和背伸展 —— 而 PPL 的惯例里它们就在拉日。
+   */
+  const by = (name) => EXERCISES.find((e) => e.name === name);
+  for (const name of ['硬拉', '架上拉', '山羊挺身', '器械背伸展']) {
+    assert.equal(splitOf(by(name)), 'pull', `${name} 应当在拉日`);
+  }
+  for (const name of ['罗马尼亚硬拉', '早安式体前屈']) {
+    assert.equal(splitOf(by(name)), 'legs', `${name} 应当在腿日`);
+  }
+});
+
+test('推日里不该混进拉的动作，反之亦然', () => {
+  // 推和拉共用的协同肌不同（三头 vs 二头），混进去就失去了分化的意义
+  for (const e of exercisesForSplit('push')) {
+    assert.ok(!/pull|shrug|rear_delt|elbow_flexion/.test(e.pattern), `${e.name} 不该在推日`);
+  }
+  for (const e of exercisesForSplit('pull')) {
+    assert.ok(!/push|fly|dip|elbow_extension|lateral_raise/.test(e.pattern), `${e.name} 不该在拉日`);
+  }
+});
+
+test('四类都有足够多的动作，凑得出一次训练', () => {
+  for (const s of SPLITS) {
+    const n = exercisesForSplit(s.key).length;
+    assert.ok(n >= 12, `${s.label}只有 ${n} 个动作，排不出一次完整训练`);
+  }
 });

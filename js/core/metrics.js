@@ -17,7 +17,12 @@ export const KIND = {
   ceiling: 'ceiling',
   /** 区间：落在里面就是照计划在走（热量、脂肪） */
   range: 'range',
-  /** 余数：由其它项算出来的结果，本来就不是目标（碳水） */
+  /**
+   * 余数：由其它项算出来的结果，本来就不是目标。
+   * 碳水曾经归在这里，措辞是「按剩余热量分配，不必吃满」—— 说的是对的，
+   * 但那是开发者视角的解释，用户看不懂。现在碳水改用 AMDR 区间（45~65% 供能），
+   * 有出处、能对照。这一档留着，别的指标要是也变成纯余数还用得上。
+   */
   remainder: 'remainder',
   /** 记录：只是记下来，没有达标一说（饮水） */
   log: 'log',
@@ -72,6 +77,9 @@ const pctOf = (value, base) => (base > 0 ? (value / base) * 100 : 0);
  */
 export function metricState({
   kind, eaten = 0, target = 0, lo = null, hi = null, unit = 'g', decimals = 0,
+  // 区间是谁定的：热量那条是「你的计划」（目标 ±10%），
+  // 脂肪碳水那两条是「文献建议」（IOM AMDR）。措辞不能混。
+  rangeWord = '建议',
 }) {
   const n = (v) => `${round(v, decimals)}${unit}`;
 
@@ -124,12 +132,12 @@ export function metricState({
     const inside = eaten >= low && eaten <= high;
     return {
       level: inside ? LEVEL.met : LEVEL.near,
-      note: inside ? '在计划范围内'
-        : eaten < low ? `低于计划 ${n(low - eaten)}`
-          : `高于计划 ${n(eaten - high)}`,
-      // 区间图上填到哪不重要，重要的是落点相对区间在哪儿
-      fillPct: Math.min(100, Math.max(0, pctOf(eaten, high))),
-      markerPct: rangePosition(eaten, low, high),
+      note: inside ? `在${rangeWord}范围内`
+        : eaten < low ? `低于${rangeWord} ${n(low - eaten)}`
+          : `高于${rangeWord} ${n(eaten - high)}`,
+      // 单位只写一次：「281g–406g」读起来像两个独立的数
+      range: `${round(low, decimals)}–${round(high, decimals)}${unit}`,
+      ...rangeScale(eaten, low, high),
     };
   }
 
@@ -137,22 +145,31 @@ export function metricState({
 }
 
 /**
- * 落点在区间里的位置，映射到 0~100。
+ * 区间指标怎么画：从左往右填到你的量，建议区间画成一段罩子盖在上面。
  *
- * 区间本身占中间的 20%~80%，两边各留 20% 画「低了 / 高了」——
- * 否则刚好卡在边界的点会贴着轴端，看不出是在里面还是外面。
+ * 之前是「中间一段浅色 + 一根竖线」，有三个毛病：
+ *  1. 罩子的颜色跟着你的位置变 —— 可区间是固定的建议，凭什么因为你吃多了就换色；
+ *  2. 和上下几行（都是从左往右填）读法不一样，扫的时候要切换两次；
+ *  3. 区间被压在 20%~80%，两头各留 20% 表示「低了/高了」——
+ *     吃 10g 和吃 30g 标记位置差不了多少，图在压缩事实。
+ *
+ * 现在整条是线性的：轴顶取「建议上界的 1.35 倍」和「已摄入的 1.08 倍」里的大者，
+ * 这样区间大致落在中段，超出多少也看得见。
+ *
+ * @returns {{ fillPct, zoneStart, zoneEnd, axisMax }} 都是 0~100 的百分比
  */
-export function rangePosition(value, lo, hi) {
-  if (!(hi > lo)) return 50;
-  if (value <= lo) {
-    const span = lo * 0.5 || 1;
-    return Math.max(0, 20 - (Math.min(lo - value, span) / span) * 20);
-  }
-  if (value >= hi) {
-    const span = hi * 0.5 || 1;
-    return Math.min(100, 80 + (Math.min(value - hi, span) / span) * 20);
-  }
-  return 20 + ((value - lo) / (hi - lo)) * 60;
+export function rangeScale(eaten, lo, hi) {
+  const low = Math.max(0, Number(lo) || 0);
+  const high = Math.max(low, Number(hi) || 0);
+  const value = Math.max(0, Number(eaten) || 0);
+  const axisMax = Math.max(high * 1.35, value * 1.08, 1);
+  const pct = (v) => Math.max(0, Math.min(100, (v / axisMax) * 100));
+  return {
+    fillPct: pct(value),
+    zoneStart: pct(low),
+    zoneEnd: pct(high),
+    axisMax: round(axisMax),
+  };
 }
 
 /**
@@ -168,6 +185,7 @@ export function dailyMetrics(targets, gaps, water = null) {
     {
       key: 'kcal', label: '热量', unit: ' kcal', kind: KIND.range,
       eaten: gaps.kcal.eaten, target: targets.kcal, lo: kcalLo, hi: kcalHi,
+      rangeWord: '计划',   // 这条区间是用户自己的计划，不是文献建议
     },
     {
       key: 'protein', label: '蛋白质', unit: 'g', kind: KIND.floor,
@@ -179,8 +197,9 @@ export function dailyMetrics(targets, gaps, water = null) {
       lo: targets.fatLower ?? targets.fat, hi: targets.fatUpper ?? targets.fat,
     },
     {
-      key: 'carb', label: '碳水', unit: 'g', kind: KIND.remainder,
+      key: 'carb', label: '碳水', unit: 'g', kind: KIND.range,
       eaten: gaps.carb.eaten, target: targets.carb,
+      lo: targets.carbLower ?? targets.carb, hi: targets.carbUpper ?? targets.carb,
     },
     {
       key: 'fiber', label: '膳食纤维', unit: 'g', kind: KIND.floor,

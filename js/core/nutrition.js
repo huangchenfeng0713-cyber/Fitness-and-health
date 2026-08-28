@@ -429,6 +429,22 @@ export function dailyTargets(profile, dynamic = null) {
   const fatLower = round((kcal * 0.20) / ATWATER.fat);
   const carbRounded = round(Math.max(0,
     (kcal - proteinRounded * ATWATER.protein - fatRounded * ATWATER.fat) / ATWATER.carb), 1);
+  /*
+   * 碳水的区间不是照抄 AMDR 的 45%~65%，而是拿今天这些热量和脂肪 AMDR 的两端联立解出来的：
+   * 脂肪吃到上界，碳水就落到下界；脂肪吃到下界，碳水才顶到上界。
+   * 区间说的是「多吃的脂肪得从碳水里扣」这件事本身，而不是凭空给一个该吃多少的靶子。
+   *
+   * 直接搬 AMDR 会自相矛盾：高蛋白减脂档里蛋白就占掉四成供能，照方案吃到的碳水（76g）
+   * 远在 45% 供能（184g）以下，卡片会写「低于建议 108g」—— 应用在指责用户
+   * 执行了它自己开的方案。碳水真低到有生理风险时另有 carbBelowRda（IOM 130g RDA）说话，
+   * 不该由这条区间兼职。末尾夹住 carbRounded 是因为碳水撞到 50g 护栏时脂肪会被反算下去，
+   * 那种情况下计划值可能落在联立解之外。
+   */
+  const carbAtFat = (f) => (kcal - proteinRounded * ATWATER.protein - f * ATWATER.fat) / ATWATER.carb;
+  // 取整只许把区间放宽：四舍五入过的下界曾经比计划值本身还高 0.2g，
+  // 卡片于是对着照方案吃的人写「低于建议」。
+  const carbLower = Math.max(0, Math.floor(Math.min(carbAtFat(fatUpper), carbRounded)));
+  const carbUpper = Math.ceil(Math.max(carbAtFat(fatLower), carbRounded));
 
   return {
     goal,
@@ -460,6 +476,8 @@ export function dailyTargets(profile, dynamic = null) {
     fatUpper,
     fatLower,
     carb: carbRounded,
+    carbLower,
+    carbUpper,
     fiber: round(clamp((kcal / 1000) * 14, 25, 30)),
     sodium: 2000,       // mg，约等于 5g 食盐
     sugar: round((kcal * 0.1) / ATWATER.carb), // WHO 游离糖 < 10% 供能

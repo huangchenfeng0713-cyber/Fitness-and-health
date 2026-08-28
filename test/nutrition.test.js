@@ -334,6 +334,47 @@ test('脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）', () =
   }
 });
 
+test('碳水区间由当天热量预算解出，照方案吃绝不会被判成「低于建议」', () => {
+  /*
+   * 这条挡的是「碳水区间直接搬 AMDR 45%~65%」那版：
+   * 高蛋白减脂档蛋白占掉四成供能，方案给的碳水（76g）远在 45% 供能（184g）以下，
+   * 卡片会对着照方案吃的人写「低于建议 108g」—— 应用在指责用户执行它自己开的方案。
+   */
+  let checked = 0;
+  for (const sex of ['male', 'female']) {
+    for (const goal of ['cut', 'maintain', 'bulk']) {
+      for (const activity of ['sedentary', 'light', 'moderate', 'active', 'athlete']) {
+        for (const weightKg of [42, 55, 70, 80, 95, 120]) {
+          for (const proteinPerKg of [undefined, 1.2, 1.6, 2.0, 2.4, 2.8]) {
+            const t = dailyTargets({
+              sex, age: 30, heightCm: sex === 'male' ? 175 : 162, weightKg, activity, goal, proteinPerKg,
+            });
+            const who = `${sex}/${goal}/${activity}/${weightKg}kg/${proteinPerKg}`;
+            assert.ok(t.carbLower <= t.carb && t.carb <= t.carbUpper,
+              `${who}：方案碳水 ${t.carb}g 掉在自己的建议区间 ${t.carbLower}–${t.carbUpper}g 外`);
+            assert.ok(t.fatLower <= t.fat && t.fat <= t.fatUpper,
+              `${who}：方案脂肪 ${t.fat}g 掉在 AMDR ${t.fatLower}–${t.fatUpper}g 外`);
+            checked += 1;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(checked > 1000, '组合太少，扫不出边角');
+});
+
+test('碳水区间的两端就是脂肪吃到 AMDR 两端时的余数', () => {
+  // 区间讲的是「多吃的脂肪要从碳水里扣」，两端必须能被这条式子解释，
+  // 否则又变回了凭空给的靶子。
+  const t = dailyTargets({ sex: 'male', age: 30, heightCm: 178, weightKg: 80, activity: 'moderate', goal: 'cut' });
+  const carbAtFat = (f) => (t.kcal - t.protein * 4 - f * 9) / 4;
+  assert.ok(Math.abs(t.carbLower - carbAtFat(t.fatUpper)) <= 1,
+    `下界 ${t.carbLower} 对不上脂肪吃满 ${t.fatUpper}g 时的余数 ${carbAtFat(t.fatUpper).toFixed(1)}`);
+  assert.ok(Math.abs(t.carbUpper - carbAtFat(t.fatLower)) <= 1,
+    `上界 ${t.carbUpper} 对不上脂肪只吃 ${t.fatLower}g 时的余数 ${carbAtFat(t.fatLower).toFixed(1)}`);
+  assert.ok(t.carbLower < t.carb && t.carb < t.carbUpper, '计划值该落在区间中间');
+});
+
 test('碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过', () => {
   assert.equal(CARB_RDA_G, 130);
   // 高蛋白 + 低热量的组合最容易把碳水挤到 130g 以下
