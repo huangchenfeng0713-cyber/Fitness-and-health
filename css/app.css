@@ -862,6 +862,21 @@ body.sheet-open {
  * 多选条：钉在滚动容器底部，饮食页和健身页共用。
  * 钉在 .view 上而不是视口上 —— 视口底部是 tab 栏的位置。
  */
+/* 一周小结：一行一项，值和说明左右分栏 */
+.week-rows { display: flex; flex-direction: column; }
+.week-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--hairline);
+}
+.week-row:last-child { border-bottom: 0; }
+.week-row-label { flex: none; width: 68px; font-size: var(--fs-small); color: var(--muted); }
+.week-row-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.week-row-value { flex: none; font-size: var(--fs-body); font-weight: 600; }
+.week-row-note { flex: 1 1 auto; font-size: var(--fs-caption); color: var(--faint); }
+/* 只有两档着色：做到了给绿，该留意给橙。小结不是体检报告，不上红色 */
+.week-row.good .week-row-value { color: var(--ok, var(--accent)); }
+.week-row.warn .week-row-value { color: var(--warn); }
+
 /* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
 .chip-focus { color: var(--accent); font-weight: 600; }
 .chip-focus.active { color: var(--card); background: var(--accent); border-color: var(--accent); }
