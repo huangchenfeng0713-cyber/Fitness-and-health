@@ -980,12 +980,15 @@ test('多选：勾选只改页面内存，按确认才落库', () => {
   }
   assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
 
-  // 饮食：＋ 进篮子，不开弹层；只有 recordBasket 里才 addEntry
-  assert.match(diet, /function addToBasket\(food\)/, '饮食页没有待记录篮子');
-  assert.match(diet, /async function recordBasket\(\)/, '篮子不能一次性记录');
+  // 饮食：份量面板只往备选里放，落库只发生在 recordBasket 里
+  assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
+  assert.match(diet, /async function recordBasket\(\)/, '备选不能一次性记录');
   assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
   const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
-  assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入篮子时不该落库，也不该弹出份量面板');
+  assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入备选时不该落库，也不该弹出份量面板');
+  // 落库只有这一处：份量面板按下去只是进备选
+  const addEntryCalls = strip(diet).match(/addEntry\(/g) || [];
+  assert.equal(addEntryCalls.length, 1, `饮食页有 ${addEntryCalls.length} 处直接落库，应当只剩批量记录那一处`);
 
   // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
   assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
@@ -1321,4 +1324,63 @@ test('睡眠和锻炼写成小时加分钟，不写小数小时', () => {
   assert.match(sleep, /7~9 小时的常见建议/, '参考区间不该改写');
   assert.match(sleep, /不足 6\.5 小时/, '门槛不该改写');
   assert.match(sleep, /日均 \$\{hm\(s\.avg\)\}/, '日均没有改成小时加分钟');
+});
+
+/*
+ * 安全区只能算一次。
+ *
+ * .tabbar 已经把底部安全区吃掉了；长在滚动容器里的东西（多选条）再加一次，
+ * 真机上就是凭空多出 34px 空白顶在按钮下面 —— 卡片里空出一大块。
+ * 只有真正盖住整个视口的 .sheet 才需要它。
+ */
+test('底部安全区只在盖住视口的那一层算，别处不许再加一遍', () => {
+  const css = read('css/app.css');
+  // 裸 env() 只许出现在 token 定义里：iOS 独立运行时首帧 env() 常常还是 0，
+  // 布局要用的是 app.js 每次重排写回来的 --safe-*
+  const raw = [...css.matchAll(/^[^\n{]*\{[^}]*env\(safe-area-inset/gm)]
+    .map((m) => m[0].split('{')[0].trim())
+    .filter((sel) => sel !== ':root');
+  assert.deepEqual(raw, [], `这些规则绕过了 --safe-* 直接用 env()：${raw.join('、')}`);
+
+  const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
+  assert.ok(!/safe/.test(bar), '多选条又把底部安全区算了一遍');
+  // 弹层是盖住整个视口的那一层，它需要
+  assert.match(css.slice(css.indexOf('.sheet {')), /padding: 8px 16px calc\(20px \+ var\(--safe-bottom\)\)/);
+});
+
+/*
+ * 记账时经常先随手记下来，事后才发现该算在别的餐里。
+ * 原先只能删掉重记一遍，而重记要重新搜、重新填克数。
+ */
+test('饮食记录编辑态能改餐次', () => {
+  const diet = strip(read('js/views/diet.js'));
+  assert.match(diet, /function mealSelect\(entry\)/, '编辑态没有改餐次的入口');
+  assert.match(diet, /updateEntry\(entry\.id, \{ meal \}\)/, '改了餐次没有落库');
+  /*
+   * value 要在节点建好之后再设：给还没挂进 <select> 的 <option> 设 selected，
+   * 浏览器会在插入时按 selectedIndex 重算，那一下就把选中项打回第一项。
+   */
+  assert.match(diet, /select\.value = entry\.meal;/, '选中项没有在建好之后再设一次');
+  assert.ok(!/option', \{ value: m\.key, selected:/.test(diet), '又回到给 option 设 selected 了');
+});
+
+/*
+ * ＋ 和点行本身都开份量面板：加进备选之前先看一眼这次记多少。
+ * 记住的份量只是上一次的克数，而克数是乘数，差一倍热量就差一倍。
+ */
+test('搜索结果的 ＋ 也开份量面板，面板只往备选里放', () => {
+  const diet = strip(read('js/views/diet.js'));
+  const addBtn = diet.slice(diet.indexOf("h('button.search-item-add'"), diet.indexOf('all.length > results.length'));
+  assert.match(addBtn, /selectFood\(f\)/, '＋ 没有打开份量面板');
+  assert.match(addBtn, /if \(chosen\) \{[\s\S]*?removeFromBasket\(f\.id\)/, '已在备选里的那一行要能点掉');
+
+  // 面板上的主按钮是「加进备选」，不是「记录到某餐」
+  assert.ok(!/primary-btn', null, `记录到/.test(diet), '份量面板的主按钮还是「记录到某餐」');
+  const adds = diet.match(/'添加到饮食备选'/g) || [];
+  assert.equal(adds.length, 2, `普通食物和复合甜品两处都要改，实际 ${adds.length} 处`);
+
+  // 确认键是一个勾；记到哪一餐写在摘要里，否则按钮上看不出来
+  assert.match(diet, /actionLabel: \(\) => '✓'/, '确认键不是勾');
+  assert.match(diet, /actionAriaLabel: \(\) => `确认记录到/, '只有一个符号的按钮要给读屏软件说法');
+  assert.match(diet, /记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/, '摘要里没写会记到哪一餐');
 });

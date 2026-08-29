@@ -983,7 +983,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   max-height: min(80vh, 660px);
   overflow-y: auto; -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+  /* 走 --safe-bottom 而不是裸 env()：iOS 独立运行时首帧 env() 常常还是 0，
+     app.js 每次重排都会把量到的真值写到 <html> 上（见顶部 token 那段注释） */
+  padding: 8px 16px calc(20px + var(--safe-bottom));
   background: var(--card); border-radius: 18px 18px 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
@@ -1100,7 +1102,13 @@ body.sheet-open {
   position: sticky; bottom: 0; z-index: 3;
   /* 顶到卡片的内边距外面，让它横贯整张卡 */
   margin: 10px -16px -17px;
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  /*
+   * 底部不加安全区。这一条钉的是**滚动容器**的底边，而滚动容器下面还有 tab 栏，
+   * 安全区已经由 .tabbar 的 padding-bottom 吃掉了 —— 这里再加一次就是双算：
+   * 真机上多出 34px 的空白顶在按钮下面，卡片里凭空空出一大块。
+   * 真正盖住整个视口的是 .sheet，那一层才需要安全区。
+   */
+  padding: 8px 16px;
   background: var(--card);
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
@@ -1148,7 +1156,7 @@ body.sheet-open {
  */
 .sheet-action {
   position: sticky; bottom: 0; z-index: 1;
-  margin: 0 -16px; padding: 10px 16px calc(4px + env(safe-area-inset-bottom));
+  margin: 0 -16px; padding: 10px 16px calc(4px + var(--safe-bottom));
   background: linear-gradient(to bottom, transparent, var(--card) 18%);
 }
 .sheet-action .primary-btn { margin-top: 0; }
@@ -1313,6 +1321,12 @@ body.sheet-open {
 .meal-icon { width: 15px; height: 15px; flex: none; color: var(--faint); }
 .meal-group-head span { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
 .entry-row { display: flex; align-items: center; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+/* 改餐次：这一行已经挤了克数、单位和删除，餐次只能是个窄下拉 */
+.entry-meal {
+  flex: none; max-width: 78px; padding: 5px 4px;
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  background: var(--card-2); color: var(--muted); font-size: var(--fs-caption);
+}
 .entry-row:last-child { border-bottom: 0; }
 .entry-main { flex: 1; min-width: 0; }
 .entry-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 550; }
@@ -1330,6 +1344,12 @@ body.sheet-open {
   font-size: 11.5px; color: var(--faint); margin-top: 1px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/*
+ * 编辑态那一行还挂着克数输入、餐次下拉和删除，留给营养那行的宽度只剩 152px，
+ * 而「223 kcal · 蛋 7.0 · 脂 1.1 · 碳 47.0 g」要 207px —— 再省也省不出来，
+ * 所以这时候让它折行。多一行总比把碳水那截吞掉强。
+ */
+.entry-row.editing .entry-meta { white-space: normal; overflow: visible; }
 .entry-meta strong { color: var(--muted); font-weight: 600; }
 .entry-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .entry-grams {
