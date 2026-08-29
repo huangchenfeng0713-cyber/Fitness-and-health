@@ -37,6 +37,9 @@ const TAB_ICON = {
  * 用一条描边路径：弯回去的形状认得出是「回到」，和左右两个 ‹ › 也分得开。
  */
 const RETURN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.5 4.5 10 9 14.5M4.5 10h9.5a4.8 4.8 0 0 1 0 9.6h-1.6"/></svg>';
+const PREV_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7"/></svg>';
+const NEXT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7"/></svg>';
+const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 let current = 'today';
 let viewRoot = null;
@@ -59,7 +62,8 @@ function ensureSettingsDrawer() {
   },
   h('div.settings-drawer-head', null,
     h('h2#settings-drawer-title', null, '设置'),
-    h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' }, '×')),
+    h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' },
+      h('span', { html: CLOSE_ICON }))),
   settingsRoot);
 
   drawer.addEventListener('click', (event) => {
@@ -104,8 +108,46 @@ function closeSettings({ restoreHash = true } = {}) {
 }
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && settingsOpen) closeSettings();
+  if (!settingsOpen) return;
+  if (event.key === 'Escape') {
+    closeSettings();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  /*
+   * inert 会挡住背景，却不会自动把 Tab 留在对话框里。键盘用户如果一路按 Tab，
+   * 焦点仍可能跑到浏览器地址栏；把首尾接起来，抽屉才是完整的模态对话框。
+   */
+  const focusable = [...settingsOverlay.querySelectorAll(
+    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), '
+    + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter((el) => !el.hidden && el.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
+
+function syncContextNote() {
+  const at = new Date(state.lastImport?.at || '');
+  if (Number.isNaN(at.getTime()) || todayKey(at) !== todayKey()) return '今日未同步';
+  return `已同步 ${at.toLocaleTimeString('zh-CN', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })}`;
+}
+
+function trainingContextNote() {
+  const row = state.trainingDays?.find((day) => day.date === todayKey());
+  const count = Array.isArray(row?.items) ? row.items.length : 0;
+  return count ? `今日 ${count} 个动作` : '今日未记录';
+}
 
 /**
  * 顶栏。
@@ -132,9 +174,7 @@ function renderTopbar() {
      * 这两页都不跟今日 / 饮食的日期走，所以副标题里不许出现「数据截至 X」——
      * 那句话会让人以为翻回昨天，数据页和健身页也跟着翻。
      */
-    const noteText = tab.key === 'training'
-      ? '动作记录与训练建议'
-      : '今天同步了什么，这些天在往哪走';
+    const noteText = tab.key === 'training' ? trainingContextNote() : syncContextNote();
     context.append(
       h('h1', null, tab.label),
       h('span.topbar-context-note', null, noteText),
@@ -153,7 +193,7 @@ function renderTopbar() {
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
       'aria-label': '前一天',
-    }, '‹'),
+    }, h('span', { html: PREV_ICON })),
     h('button.topbar-day', {
       onclick: () => !heading.isToday && setDay(todayKey()),
       title: heading.isToday ? '' : '回到今天',
@@ -166,7 +206,7 @@ function renderTopbar() {
       onclick: () => setDay(shiftDay(state.day, 1)),
       disabled: heading.isToday,
       'aria-label': '后一天',
-    }, '›'),
+    }, h('span', { html: NEXT_ICON })),
   );
   bar.append(context, settingsButton);
 }

@@ -187,7 +187,7 @@ export { formatDuration } from '../core/duration.js';
 
 /** 轻量提示条 */
 let toastTimer = null;
-export function toast(message, kind = 'info') {
+export function toast(message, kind = 'info', action = null) {
   let el = document.getElementById('toast');
   if (!el) {
     el = h('div.toast', {
@@ -199,12 +199,30 @@ export function toast(message, kind = 'info') {
     document.body.append(el);
   }
   const text = String(message ?? '');
-  el.textContent = text;
+  clearEl(el);
+  el.append(h('span.toast-message', null, text));
+  if (action?.label && typeof action.onClick === 'function') {
+    el.append(h('button.toast-action', {
+      type: 'button',
+      onclick: async () => {
+        clearTimeout(toastTimer);
+        el.className = 'toast';
+        try {
+          await action.onClick();
+        } catch (error) {
+          console.error('撤销失败', error);
+          toast('撤销失败，请刷新后重试', 'error');
+        }
+      },
+    }, action.label));
+  }
   el.dataset.long = text.length > 42 ? 'true' : 'false';
-  el.className = `toast show ${kind}`;
+  el.className = `toast show ${kind}${action ? ' with-action' : ''}`;
   clearTimeout(toastTimer);
   // 短提示停留 2.8 秒；较长的错误说明多留一点阅读时间，但不再把整份导入报告塞进提示框。
-  const duration = Math.min(6000, Math.max(2800, 1800 + text.length * 38));
+  const duration = action
+    ? Math.max(6000, Number(action.duration) || 0)
+    : Math.min(6000, Math.max(2800, 1800 + text.length * 38));
   toastTimer = setTimeout(() => { el.className = 'toast'; }, duration);
 }
 

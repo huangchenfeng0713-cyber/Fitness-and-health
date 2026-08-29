@@ -61,7 +61,29 @@ const picked = () => session().items.map((i) => i.id);
 async function updateSession(mutate) {
   const current = session();
   const next = mutate(current.items.map((i) => ({ ...i, sets: i.sets.map((x) => ({ ...x })) })));
-  await saveTraining(trainingDay(), { items: next });
+  return saveTraining(trainingDay(), { items: next });
+}
+
+const cloneTrainingItem = (item) => ({
+  ...item,
+  sets: (item.sets || []).map((set) => ({ ...set })),
+});
+
+async function removeExerciseWithUndo(exercise) {
+  const current = session().items;
+  const index = current.findIndex((item) => item.id === exercise.id);
+  if (index < 0) return;
+  const removed = cloneTrainingItem(current[index]);
+  await updateSession((items) => items.filter((item) => item.id !== exercise.id));
+  toast(`已移除「${exercise.name}」`, 'info', {
+    label: '撤销',
+    onClick: () => updateSession((items) => {
+      if (items.some((item) => item.id === removed.id)) return items;
+      const next = [...items];
+      next.splice(Math.min(index, next.length), 0, cloneTrainingItem(removed));
+      return next;
+    }),
+  });
 }
 /* 器械档位定义搬去了 core/training.js —— 推荐和动作列表得筛在同一个范围里 */
 let equipFilter = 'all';
@@ -165,10 +187,10 @@ function exerciseRow(e, rerender, lastDone) {
     class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
     type: 'button',
     'aria-pressed': String(chosen || marked),
-    onclick: () => {
+    onclick: async () => {
       // 已在计划里的：点一下就撤掉。撤销不常做，重绘一次可以接受。
       if (chosen) {
-        updateSession((items) => items.filter((i) => i.id !== e.id));
+        await removeExerciseWithUndo(e);
         return;
       }
       /*
@@ -233,23 +255,6 @@ function equipTabs(rerender, all) {
     }));
 }
 
-/*
- * 挑动作分成两块：先定范围（部位 / 模式 + 器械档位），再看这个范围里有什么。
- *
- * 拆开是为了让「动作推荐」能插在中间。推荐是被这几个开关控制的，
- * 挨着开关摆，换一下就看见推荐跟着变；隔着一整列动作的话，
- * 推荐看起来就像和这一屏无关的另一件事。
- */
-function scopeCard(rerender) {
-  const byGroup = pickMode === 'group';
-  const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
-  return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '挑动作')),
-    modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender),
-    equipTabs(rerender, all));
-}
-
 function pickerCard(rerender) {
   const lastDoneAt = new Map(
     recentExercises(state.trainingDays, { limit: 200, before: trainingDay() })
@@ -272,30 +277,33 @@ function pickerCard(rerender) {
     ? list
     : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
 
-  /*
-   * 推荐是这张卡的另一个视图，不是另一张卡。点「推荐」切过去，再点一下切回来。
-   * 两边共用同一组开关（部位 / 模式 + 器械档位），所以换了范围两边一起变。
-   */
+  /* 全部动作与推荐组合是两种并列视图，文字直接说出当前选择，避免只写“推荐”。 */
   const rec = showRecommend ? recommendFor({
     mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
     selection: picked(), equip: equipFilter,
   }) : null;
-  const toggle = h('button', {
-    class: `chip-btn rec-toggle${showRecommend ? ' active' : ''}`,
-    type: 'button',
-    'aria-pressed': String(showRecommend),
-    onclick: () => { showRecommend = !showRecommend; rerender(); },
-  }, '推荐');
+  const viewTabs = h('div.range-switch.picker-view-switch', null,
+    [['all', '全部动作'], ['recommend', '推荐组合']].map(([key, label]) => {
+      const active = (key === 'recommend') === showRecommend;
+      return h('button', {
+        class: `chip-btn${active ? ' active' : ''}`,
+        type: 'button', 'aria-pressed': String(active),
+        onclick: () => { showRecommend = key === 'recommend'; rerender(); },
+      }, label);
+    }));
 
-  return h('section.card', null,
+  return h('section.card.exercise-picker-card', null,
     h('div.card-head', null,
-      h('h3', null, showRecommend ? '动作推荐' : '动作列表'),
+      h('h3', null, '挑动作'),
       h('div.card-head-actions', null,
         h('span.card-tag', null, showRecommend
           ? `${scopeLabel} · ${rec.items.length} 个`
           : `${scopeLabel} · ${list.length} 个`),
-        showRecommend ? recommendTip() : null,
-        toggle)),
+        showRecommend ? recommendTip() : null)),
+    modeTabs(rerender),
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    equipTabs(rerender, all),
+    viewTabs,
     showRecommend
       ? recommendBody(rec)
       : [
@@ -370,8 +378,20 @@ function setRow(item, index, set) {
     numberInput('reps', '次数', '1'),
     h('span.set-unit', null, '次'),
     h('button.text-btn.danger', {
-      onclick: () => updateSession((items) => items.map((i) => (i.id === item.id
-        ? { ...i, sets: i.sets.filter((_, k) => k !== index) } : i))),
+      onclick: async () => {
+        const removed = { ...set };
+        await updateSession((items) => items.map((i) => (i.id === item.id
+          ? { ...i, sets: i.sets.filter((_, k) => k !== index) } : i)));
+        toast('已删除这一组', 'info', {
+          label: '撤销',
+          onClick: () => updateSession((items) => items.map((i) => {
+            if (i.id !== item.id) return i;
+            const sets = [...i.sets];
+            sets.splice(Math.min(index, sets.length), 0, { ...removed });
+            return { ...i, sets };
+          })),
+        });
+      },
       'aria-label': '删除这一组',
     }, '×'));
 }
@@ -395,7 +415,7 @@ function planRow(exercise, index) {
         onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
       }, setSummary),
       h('button.text-btn.danger', {
-        onclick: () => updateSession((items) => items.filter((i) => i.id !== exercise.id)),
+        onclick: () => removeExerciseWithUndo(exercise),
       }, '移除')),
     open ? h('div.set-editor', null,
       item.sets.length
@@ -428,7 +448,13 @@ function planCard() {
     // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
     return h('section.card', null,
       h('div.card-head', null, h('h3', null, dayLabel)),
-      h('p.empty-hint', null, '请添加训练动作'));
+      h('p.empty-hint', null, '还没有动作，从下面按身体部位或动作模式挑选。'),
+      h('button.secondary-btn.plan-start', {
+        type: 'button',
+        onclick: () => document.querySelector('.exercise-picker-card')?.scrollIntoView({
+          behavior: 'smooth', block: 'start',
+        }),
+      }, '开始挑选'));
   }
   const volume = sessionVolume(session());
   return h('section.card', null,
@@ -438,7 +464,16 @@ function planCard() {
         h('span.card-tag', null, volume.sets
           ? `${list.length} 个动作 · ${volume.sets} 组${volume.tonnage ? ` · ${num(volume.tonnage)} kg` : ''}`
           : `${list.length} 个动作`),
-        h('button.text-btn', { onclick: () => updateSession(() => []) }, '清空'))),
+        h('button.text-btn', {
+          onclick: async () => {
+            const removed = session().items.map(cloneTrainingItem);
+            await updateSession(() => []);
+            toast('已清空今日动作', 'info', {
+              label: '撤销',
+              onClick: () => updateSession(() => removed.map(cloneTrainingItem)),
+            });
+          },
+        }, '清空'))),
     h('div.plan-list', null, list.map((e, i) => planRow(e, i))));
 }
 
@@ -603,7 +638,6 @@ export function renderTraining(root) {
    */
   mount(root,
     planCard(),
-    scopeCard(rerender),
     pickerCard(rerender),
     adviceCard(rerender),
     weeklyCard(rerender),

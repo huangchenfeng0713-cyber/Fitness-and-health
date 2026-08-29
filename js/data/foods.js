@@ -133,6 +133,11 @@ const SOURCE_KFC_CN_EST = Object.freeze({
   ref: '肯德基中国官方产品宣传核对品名；中国食物成分表肯德基条目、FatSecret 品牌条目及公开称重拆解交叉核对营养',
   accessed: '2026-08-27',
 });
+const SOURCE_MINNAN = Object.freeze({
+  type: 'recipe',
+  ref: '央广网厦门地方名小吃资料与厦门旅游网闽南古早味资料核对品名和主要原料；营养按通用配方与常见成品重量估算',
+  accessed: '2026-08-29',
+});
 const META_RECIPE_READY = Object.freeze({
   source: SOURCE_RECIPE, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
@@ -171,6 +176,9 @@ const META_KFC_EST = Object.freeze({
 });
 const META_KFC_DRINK_EST = Object.freeze({
   source: SOURCE_KFC_CN_EST, basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+});
+const META_MINNAN_READY = Object.freeze({
+  source: SOURCE_MINNAN, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
 });
 
 function brandedBbqFood({
@@ -219,7 +227,15 @@ export const FOODS = [
   { id: 'pork_lean', name: '猪瘦肉', alias: 'zhushourou lean pork', cat: 'meat', n: [143, 20.3, 6.2, 1.5, 0, 0, 57], s: [['一份', 100]], f: ['cook'] },
   { id: 'pork_belly', name: '五花肉', alias: 'wuhuarou pork belly', cat: 'meat', n: [518, 9.0, 53.0, 2.4, 0, 0, 60], s: [['一份', 100]], f: [] },
   { id: 'beef_lean', name: '瘦牛肉（生）', alias: 'niurou lean beef 牛肉 瘦牛肉 牛腱', cat: 'meat', n: [160, 21.5, 7.5, 1.2, 0, 0, 62], s: [['一份可食部', 100]], note: '通用瘦牛肉代表值；牛腱可作近似搜索，但不同部位脂肪含量会有差异', f: ['cook'] },
-  { id: 'beef_steak', name: '西冷牛排', alias: 'niupai steak', cat: 'meat', n: [212, 24.0, 12.8, 0, 0, 0, 70], s: [['一块', 200]], f: [] },
+  { id: 'beef_steak', name: '西冷牛排（煎/烤）', alias: 'niupai steak sirloin striploin xileng 西冷 纽约客', cat: 'meat', n: [212, 24.0, 12.8, 0, 0, 0, 70], s: [['一块可食部', 200]], ...META_USDA_COOKED, note: '按煎烤熟牛排可食部计，不含额外黄油、酱汁和配菜；不同修脂程度会改变脂肪含量', f: [] },
+  { id: 'beef_tenderloin_steak', name: '菲力牛排（煎/烤）', alias: 'feili niupai tenderloin filet mignon 牛柳', cat: 'meat', n: [218, 28.5, 11.0, 0, 0, 0, 55], s: [['一块可食部', 180]], ...META_USDA_COOKED, note: '按煎烤熟里脊可食部计，不含额外黄油、酱汁和配菜', f: [] },
+  { id: 'beef_ribeye_steak', name: '肉眼牛排（煎/烤）', alias: 'rouyan niupai ribeye steak 肋眼', cat: 'meat', n: [291, 24.9, 21.8, 0, 0, 0, 60], s: [['一块可食部', 220]], ...META_USDA_COOKED, note: '按煎烤熟肋眼可食部计，不含额外黄油、酱汁和配菜；大理石脂肪差异较大', f: [] },
+  { id: 'beef_tbone_steak', name: 'T骨牛排（煎/烤）', alias: 'T gu niupai t-bone porterhouse steak 红屋', cat: 'meat', n: [247, 25.5, 15.7, 0, 0, 0, 58], s: [['一块去骨可食部', 250]], ...META_USDA_COOKED, note: '营养按去骨熟可食部计；若按整块带骨称重，应先扣除骨头，不含黄油与酱汁', f: [] },
+  { id: 'beef_flat_iron_steak', name: '板腱牛排（煎/烤）', alias: 'banjian niupai flat iron oyster blade steak', cat: 'meat', n: [225, 27.0, 12.5, 0, 0, 0, 60], s: [['一块可食部', 200]], ...META_USDA_COOKED, note: '按煎烤熟板腱可食部计，不含额外黄油、酱汁和配菜', f: [] },
+  { id: 'beef_short_rib_steak', name: '牛小排（煎/烤）', alias: 'niuxiaopai short rib steak boneless', cat: 'meat', n: [310, 23.0, 24.0, 0, 0, 0, 65], s: [['一份可食部', 200]], ...META_USDA_COOKED, note: '按去骨煎烤熟可食部计；牛小排脂肪差异明显，不含额外酱汁', f: [] },
+  { id: 'beef_tomahawk_steak', name: '战斧牛排（可食部）', alias: 'zhanfu niupai tomahawk steak', cat: 'meat', n: [291, 24.9, 21.8, 0, 0, 0, 60], s: [['一人份去骨可食部', 300]], ...META_USDA_COOKED, note: '战斧本质为带长骨肋眼；营养按去骨熟可食部计，不能把整块带骨重量直接作为食用量', f: [] },
+  { id: 'steak_pan_fried_butter', name: '黄油煎牛排（通用）', alias: 'huangyou jian niupai butter steak homemade', cat: 'dish', n: [258, 25.0, 17.5, 1.0, 0, 0.5, 350], s: [['一份', 220]], ...META_RECIPE_READY, note: '按一块中等脂肪牛排、少量黄油和盐估算；实际用油、修脂与熟度会明显影响数值', f: ['est'] },
+  { id: 'steak_black_pepper_restaurant', name: '黑椒牛排（餐厅，含酱）', alias: 'heijiao niupai black pepper steak restaurant', cat: 'dish', n: [228, 21.0, 14.0, 8.0, 0.5, 4.0, 720], s: [['一份牛排和酱', 250]], ...META_RECIPE_READY, note: '只计牛排和常见黑椒酱，不含意面、鸡蛋、薯条等配菜；酱量与腌制会显著影响钠和糖', f: ['est'] },
   { id: 'lamb', name: '羊肉（瘦）', alias: 'yangrou lamb', cat: 'meat', n: [203, 19.0, 14.1, 0, 0, 0, 69], s: [['一份', 100]], f: [] },
   { id: 'duck', name: '烤鸭（带皮）', alias: 'kaoya duck', cat: 'meat', n: [436, 16.6, 38.4, 6.0, 0, 1.0, 83], s: [['一份去骨可食部', 100]], f: [] },
   { id: 'sausage', name: '中式香肠 / 腊肠', alias: 'xiangchang lachang sausage', cat: 'meat', n: [508, 12.0, 48.0, 6.0, 0, 3.0, 1300], s: [['一根', 60]], f: ['processed', 'quick'] },
@@ -1240,6 +1256,26 @@ export const FOODS = [
   { id: 'fujian_guobianhu', name: '福州锅边糊', alias: 'fuzhou guobianhu 鼎边糊 福建小吃', cat: 'dish', n: [68, 2.8, 1.8, 9.8, 0.4, 0.4, 550], s: [['一碗（含汤）', 400]], ...META_RECIPE_READY, note: '按米浆片、海鲜或肉末配料及整碗汤估算；汤底和配料随店家变化', f: ['breakfast', 'est'] },
   { id: 'fuzhou_rouyan', name: '福州肉燕', alias: 'fuzhou rouyan 太平燕 肉燕汤 福建小吃', cat: 'dish', n: [99, 9.5, 3, 8.5, 0.2, 0.3, 600], s: [['一碗（含汤）', 350], ['一只', 20]], ...META_RECIPE_READY, note: '按肉燕、少量配菜及整碗汤估算；若不喝汤，实际钠摄入通常更低', f: ['est'] },
   { id: 'shaxian_bianrou', name: '沙县扁肉', alias: 'shaxian bianrou 扁食 馄饨 福建小吃', cat: 'dish', n: [85, 7.5, 2.5, 8.2, 0.2, 0.3, 560], s: [['一碗（含汤）', 350], ['一只', 18]], ...META_RECIPE_READY, note: '按扁肉及整碗清汤估算；馅料、汤底和调味随店家变化', f: ['est'] },
+  { id: 'minnan_shacha_noodle', name: '厦门沙茶面', alias: 'xiamen shachamian shacha noodle satay noodles 闽南沙茶面 沙嗲面', cat: 'dish', n: [128, 6.5, 5.5, 13.5, 0.7, 1.4, 650], s: [['一碗（含汤和常见配料）', 500]], nfs: 0.6, ...META_MINNAN_READY, note: '按面、沙茶汤底、豆制品、肉片与少量海鲜的常见整碗搭配估算；加料种类、花生酱与汤底浓度会使热量和钠显著变化，不喝完汤时钠通常更低', f: ['est'] },
+  { id: 'xiamen_shrimp_noodle', name: '厦门虾面', alias: 'xiamen xiamian shrimp noodle 闽南虾面 虾汤面', cat: 'dish', n: [93, 5.2, 2.2, 13.0, 0.5, 1.5, 520], s: [['一碗（含汤）', 500]], nfs: 0.8, ...META_MINNAN_READY, note: '按面条、虾汤、虾仁、肉片和常见配料估算；汤底用油与调味差异较大，不喝完汤时钠通常更低', f: ['est'] },
+  { id: 'minnan_mianxianhu', name: '闽南面线糊', alias: 'minnan mianxianhu quanzhou mianxian hu 泉州面线糊 糊面线', cat: 'dish', n: [72, 3.2, 2.0, 9.5, 0.4, 0.5, 520], s: [['一碗（含汤）', 400]], nfs: 0.2, ...META_MINNAN_READY, note: '按细面线、淀粉汤底及少量海鲜或肉末估算；若另加大肠、醋肉、卤蛋或油条，应分别记录', f: ['breakfast', 'est'] },
+  { id: 'minnan_oyster_omelette', name: '闽南海蛎煎', alias: 'minnan hailijian oyster omelette 蚵仔煎 海蛎煎蛋', cat: 'dish', n: [190, 8.5, 11.5, 15.0, 0.8, 2.0, 620], s: [['一盘', 220]], nfs: 0.8, ...META_MINNAN_READY, note: '按海蛎、鸡蛋、地瓜粉、蒜苗与煎制用油估算；粉浆和用油量会明显改变热量', f: ['fried', 'est'] },
+  { id: 'minnan_five_spice_roll', name: '闽南炸五香', alias: 'minnan zhawuxiang wujian five spice roll 五香卷 石码五香', cat: 'dish', n: [285, 12.0, 18.0, 20.0, 1.2, 3.0, 720], s: [['一条', 120], ['一份切盘', 180]], nfs: 0.6, ...META_MINNAN_READY, note: '按猪肉、荸荠或洋葱、豆皮和地瓜粉卷制后油炸估算；馅料比例和吸油量差异较大', f: ['fried', 'est'] },
+  { id: 'xiamen_tusundong', name: '厦门土笋冻（含蘸汁）', alias: 'xiamen tusundong earthworm jelly 土笋冻 沙虫冻', cat: 'dish', n: [48, 6.8, 0.6, 4.0, 0.2, 2.0, 420], s: [['一份', 150]], nfs: 1.0, ...META_MINNAN_READY, note: '按凝冻本体及常见酱油、蒜蓉、醋蘸汁估算；不蘸汁时钠和糖会更低', f: ['est'] },
+  { id: 'xiamen_roast_pork_zongzi', name: '厦门烧肉粽', alias: 'xiamen shaorouzong rouzong 闽南肉粽 烧肉粽', cat: 'staple', n: [235, 7.5, 10.5, 31.0, 1.2, 2.0, 620], s: [['一个', 200]], nfs: 0.6, ...META_MINNAN_READY, note: '按糯米、五花肉、香菇、虾米与常见卤料估算；咸蛋黄、板栗和花生等馅料会改变数值', f: ['est'] },
+  { id: 'minnan_runbing', name: '闽南润饼 / 薄饼', alias: 'minnan runbing baobing spring roll 闽南春卷 麦仔煎皮', cat: 'dish', n: [155, 7.0, 6.0, 19.0, 2.0, 3.0, 500], s: [['一卷', 250]], nfs: 1.5, ...META_MINNAN_READY, note: '按薄饼皮、包菜、胡萝卜、豆干、肉丝与少量花生糖粉的常见搭配估算；各家馅料和甜咸口差异明显', f: ['est'] },
+  { id: 'minnan_fried_mianxian', name: '闽南炒面线', alias: 'minnan chaomianxian fried mee sua 炒米线 面线', cat: 'dish', n: [185, 7.0, 8.0, 23.0, 1.2, 1.5, 600], s: [['一盘', 350]], nfs: 0.7, ...META_MINNAN_READY, note: '按熟面线、肉丝、海鲜、蔬菜与炒制用油估算；用油和调味差异较大', f: ['est'] },
+  { id: 'minnan_fried_kwayteow', name: '闽南炒粿条', alias: 'minnan chaoguotiao fried kway teow 粿仔 炒河粉', cat: 'dish', n: [178, 7.5, 7.5, 21.0, 1.2, 2.0, 680], s: [['一盘', 350]], nfs: 0.8, ...META_MINNAN_READY, note: '按粿条、蛋、肉或海鲜、豆芽和酱油炒制估算；用油、酱料与配料差异较大', f: ['est'] },
+  { id: 'minnan_youcicngguo', name: '闽南油葱粿', alias: 'minnan youcongguo yam cake radish cake 油葱糕 碗仔粿', cat: 'staple', n: [180, 5.0, 7.0, 25.0, 1.0, 0.8, 500], s: [['一块', 150]], nfs: 0.4, ...META_MINNAN_READY, note: '按米浆、油葱酥、肉末或虾米蒸制估算；浇酱和煎制会额外增加钠与脂肪', f: ['est'] },
+  { id: 'xiamen_taro_bun', name: '厦门芋包', alias: 'xiamen yubao taro bun 闽南芋包 芋仔包', cat: 'staple', n: [150, 6.0, 5.5, 20.0, 2.0, 1.5, 480], s: [['一个', 180]], nfs: 0.8, ...META_MINNAN_READY, note: '按芋泥外皮、肉丁、笋干、香菇与虾米蒸制估算；个头和馅料比例差异较大', f: ['est'] },
+  { id: 'tongan_fengrou', name: '同安封肉', alias: 'tongan fengrou xiamen braised pork 厦门封肉 闽南封肉', cat: 'dish', n: [305, 13.5, 25.0, 6.0, 0.8, 3.0, 680], s: [['一份可食部', 180]], nfs: 1.0, ...META_MINNAN_READY, note: '按五花肉、香菇、板栗和酱汁焖制估算；肥瘦比例与酱汁摄入量会显著改变热量和钠', f: ['est'] },
+  { id: 'quanzhou_ginger_duck', name: '泉州姜母鸭', alias: 'quanzhou jiangmuya ginger duck xiamen 姜母鸭', cat: 'dish', n: [235, 18.0, 17.0, 3.0, 0.4, 1.0, 650], s: [['一份去骨可食部', 250]], nfs: 0.3, ...META_MINNAN_READY, note: '按带皮鸭肉、老姜、麻油和米酒焖制后的可食部估算；皮脂、麻油和酱汁摄入量差异较大', f: ['est'] },
+  { id: 'quanzhou_cu_pork', name: '泉州醋肉', alias: 'quanzhou curou vinegar pork 闽南醋肉 炸醋肉', cat: 'dish', n: [310, 15.0, 18.0, 24.0, 0.5, 2.0, 800], s: [['一份', 150]], nfs: 0.5, ...META_MINNAN_READY, note: '按腌制猪肉裹地瓜粉油炸估算；肉的肥瘦、裹粉与吸油量差异明显', f: ['fried', 'est'] },
+  { id: 'xiamen_peanut_soup', name: '厦门花生汤', alias: 'xiamen huashengtang peanut soup 闽南花生汤', cat: 'snack', n: [116, 4.2, 5.6, 13.2, 1.2, 9.5, 10], s: [['一碗', 300]], nfs: 0.7, ...META_MINNAN_READY, note: '按去皮花生和加糖汤水估算；甜度与花生浓度会显著改变热量和游离糖', f: ['est'] },
+  { id: 'quanzhou_four_fruit_soup', name: '泉州四果汤', alias: 'quanzhou siguotang four fruit soup 闽南四果汤 石花膏甜汤', cat: 'snack', n: [78, 1.2, 0.5, 18.5, 1.0, 12.0, 25], s: [['一碗', 350]], nfs: 4.0, ...META_MINNAN_READY, note: '按石花膏、豆类、莲子、芋圆或水果与糖水的常见组合估算；自选配料和糖水量差异很大', f: ['est'] },
+  { id: 'minnan_shihuagao', name: '闽南石花膏（糖水）', alias: 'minnan shihuagao agar jelly 石花冻 海石花', cat: 'snack', n: [42, 0.2, 0.1, 10.3, 0.6, 9.0, 8], s: [['一碗', 300]], nfs: 0, ...META_MINNAN_READY, note: '按石花凝胶与清糖水估算；不加糖或另加水果、蜂蜜时应按实际调整', f: ['est'] },
+  { id: 'minnan_salty_rice', name: '闽南咸饭', alias: 'minnan xianfan salty rice mustard rice 芥菜饭 咸肉饭', cat: 'staple', n: [168, 6.5, 6.5, 21.0, 1.2, 1.5, 520], s: [['一碗', 250]], nfs: 0.5, ...META_MINNAN_READY, note: '按米饭、五花肉或腊肉、芥菜、香菇与虾米焖制估算；肉量和调味差异较大', f: ['est'] },
+  { id: 'quanzhou_beef_soup', name: '泉州牛肉羹', alias: 'quanzhou niurougeng beef soup 闽南牛肉汤 牛肉羹汤', cat: 'dish', n: [82, 8.5, 1.8, 8.0, 0.3, 0.5, 580], s: [['一碗（含汤）', 350]], nfs: 0.2, ...META_MINNAN_READY, note: '按牛肉片裹少量地瓜粉与整碗清汤估算；若不喝完汤，实际钠通常更低', f: ['est'] },
   { id: 'curry_fish_balls', name: '咖喱鱼蛋 / 咖喱鱼丸', alias: 'gali yudan curry fish ball 鱼蛋 街边小吃', cat: 'snack', n: [164, 10, 7, 15, 1, 2, 700], s: [['一串 4 颗', 80], ['一份 8 颗', 160]], ...META_RECIPE_READY, note: '按鱼丸和附着咖喱酱估算，不包含饮用余下酱汁', f: ['processed', 'quick', 'est'] },
   { id: 'street_chicken_cutlet', name: '街边炸鸡排', alias: 'jipai fried chicken cutlet 正新鸡排 大鸡排', cat: 'snack', n: [293, 21, 15, 19, 1, 1, 780], s: [['一块', 180]], ...META_RECIPE_READY, note: '按裹粉鸡胸肉、吸油和撒料估算；厚度、裹粉和吸油量差异较大', f: ['fried', 'processed', 'quick', 'est'] },
   { id: 'egg_waffle', name: '鸡蛋仔', alias: 'jidanzi egg waffle 香港小吃', cat: 'snack', n: [325, 7.5, 12.5, 46, 1, 18, 260], s: [['一份', 150], ['半份', 75]], ...META_RECIPE_READY, note: '按原味鸡蛋仔估算；加巧克力、奶油或冰淇淋需另记', f: ['refined', 'quick', 'est'] },

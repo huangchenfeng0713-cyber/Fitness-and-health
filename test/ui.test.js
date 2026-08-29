@@ -242,8 +242,10 @@ test('图表 key 认不出来时退回第一张，不让整张卡消失', () => 
 test('趋势卡标题固定，不跟着下拉变', () => {
   // 同一张卡的名字每切一次就换一个，找不到锚点；下拉第一项本来就写着看的是什么
   const charts = read('js/views/cards/trend-charts.js');
-  assert.match(charts, /h\('h3', null, '健康趋势图'\)/);
+  assert.match(charts, /h\('h3', null, '趋势'\)/);
   assert.ok(!/h\('h3', null, spec\.title\)/.test(charts), '标题仍在跟着下拉变');
+  assert.match(charts, /h\('p\.trend-summary', null, spec\.tag\)/,
+    '当前图的日均或达标摘要应靠近选择器，而不是挤在卡片标题右侧');
 });
 
 test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
@@ -320,7 +322,9 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
    * 那句话会让人以为翻回昨天，动作记录也跟着翻。
    */
   const app = strip(read('js/app.js'));
-  assert.match(app, /'动作记录与训练建议'/, '健身页副标题应说明这一页做什么');
+  assert.match(app, /return count \? `今日 \$\{count\} 个动作` : '今日未记录'/,
+    '健身页副标题应显示今天真正记录了几个动作');
+  assert.match(app, /return '今日未同步'/, '数据页副标题应明确今天是否同步');
   assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
   assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
@@ -353,22 +357,20 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
   assert.match(training, /selection: picked\(\)/, '推荐没有把已选动作算进去');
   assert.match(training, /equip: equipFilter/, '推荐没跟着器械档位走');
 
-  /*
-   * 推荐是「动作列表」那张卡的另一个视图，不再单独占一张卡：
-   * 它和列表回答的是同一个问题的两半，共用同一组开关，点一下切过去、再点一下切回来。
-   * 原先它单独一张卡夹在中间，把真正要用的那列动作往下推了整整一屏。
-   */
+  // 范围选择与动作内容合成一张卡，避免先看一张“挑动作”空壳再滑到下一张列表。
   const mounted = training.slice(training.indexOf('mount(root,'));
-  const order = ['planCard()', 'scopeCard(rerender)', 'pickerCard(rerender)',
+  const order = ['planCard()', 'pickerCard(rerender)',
     'adviceCard(rerender)', 'weeklyCard(rerender)'];
   const at = order.map((k) => mounted.indexOf(k));
   assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
   assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
   assert.ok(!/recommendCard\(/.test(training), '推荐又单独占了一张卡');
 
-  // 同一个按钮切过去、切回来
-  assert.match(training, /showRecommend = !showRecommend/, '推荐没有做成可以再点一次取消的开关');
-  assert.match(training, /'aria-pressed': String\(showRecommend\)/, '开关没有按下态');
+  assert.ok(!/function scopeCard\(/.test(training), '范围选择又被拆成了独立卡片');
+  assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
+  assert.match(training, /\['all', '全部动作'\], \['recommend', '推荐组合'\]/,
+    '列表 / 推荐仍是语义含糊的单个开关');
+  assert.match(training, /'aria-pressed': String\(active\)/, '两段式切换没有按下态');
   assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
 
   const core = strip(read('js/core/training.js'));
@@ -963,7 +965,7 @@ test('每个 store 都要同步到导入上限、备份校验和云同步三处'
   }
 });
 
-test('多选：勾选只改页面内存，按确认才落库', () => {
+test('多选：单项可直接记，多项仍先放清单再一次落库', () => {
   /*
    * 两处原先都是「点一个 → 立刻落库 → 整页重绘」。健身页量得出来：
    * 连点三个动作，页面每次自己滚一段，同一行的 y 从 813 跳到 201 又跳到 897 ——
@@ -980,15 +982,16 @@ test('多选：勾选只改页面内存，按确认才落库', () => {
   }
   assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
 
-  // 饮食：份量面板只往备选里放，落库只发生在 recordBasket 里
+  // 饮食：单项是高频路径，可确认份量后直接记；多项仍保留清单批量确认
   assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
   assert.match(diet, /async function recordBasket\(\)/, '备选不能一次性记录');
+  assert.match(diet, /async function recordOne\(/, '单项记录仍被迫先进入批量清单');
   assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
   const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
   assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入备选时不该落库，也不该弹出份量面板');
-  // 落库只有这一处：份量面板按下去只是进备选
+  // 落库恰好两条路径：单项确认和批量确认，搜索结果本身不应落库
   const addEntryCalls = strip(diet).match(/addEntry\(/g) || [];
-  assert.equal(addEntryCalls.length, 1, `饮食页有 ${addEntryCalls.length} 处直接落库，应当只剩批量记录那一处`);
+  assert.equal(addEntryCalls.length, 2, `饮食页有 ${addEntryCalls.length} 处落库，应当只有单项和批量两处`);
 
   // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
   assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
@@ -1365,22 +1368,52 @@ test('饮食记录编辑态能改餐次', () => {
 });
 
 /*
- * ＋ 和点行本身都开份量面板：加进备选之前先看一眼这次记多少。
- * 记住的份量只是上一次的克数，而克数是乘数，差一倍热量就差一倍。
+ * 误删是高频且代价明确的操作：不能只靠确认框，也不能用重新 add 的方式伪装撤销，
+ * 否则原日期、营养快照和复合配料都会变。
  */
-test('搜索结果的 ＋ 也开份量面板，面板只往备选里放', () => {
+test('饮食与训练的轻量删除都能原样撤销', () => {
+  const utils = strip(read('js/lib/utils.js'));
+  const store = strip(read('js/lib/store.js'));
   const diet = strip(read('js/views/diet.js'));
-  const addBtn = diet.slice(diet.indexOf("h('button.search-item-add'"), diet.indexOf('all.length > results.length'));
-  assert.match(addBtn, /selectFood\(f\)/, '＋ 没有打开份量面板');
-  assert.match(addBtn, /if \(chosen\) \{[\s\S]*?removeFromBasket\(f\.id\)/, '已在备选里的那一行要能点掉');
+  const training = strip(read('js/views/training.js'));
+  const css = read('css/app.css');
 
-  // 面板上的主按钮是「加进备选」，不是「记录到某餐」
-  assert.ok(!/primary-btn', null, `记录到/.test(diet), '份量面板的主按钮还是「记录到某餐」');
-  const adds = diet.match(/'添加到饮食备选'/g) || [];
-  assert.equal(adds.length, 2, `普通食物和复合甜品两处都要改，实际 ${adds.length} 处`);
+  assert.match(utils, /export function toast\(message, kind = 'info', action = null\)/,
+    '提示条没有可选操作入口');
+  assert.match(utils, /button\.toast-action[\s\S]*?await action\.onClick\(\)/,
+    '提示条的撤销按钮没有真正执行回调');
+  assert.match(css, /\.toast\.with-action[\s\S]*?pointer-events: auto/,
+    '带操作的提示条仍不可点击');
 
-  // 确认键是一个勾；记到哪一餐写在摘要里，否则按钮上看不出来
-  assert.match(diet, /actionLabel: \(\) => '✓'/, '确认键不是勾');
-  assert.match(diet, /actionAriaLabel: \(\) => `确认记录到/, '只有一个符号的按钮要给读屏软件说法');
-  assert.match(diet, /记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/, '摘要里没写会记到哪一餐');
+  assert.match(store, /export async function restoreEntry\(entry\)/, '没有原样恢复饮食记录的方法');
+  assert.match(store, /db\.put\(db\.STORES\.diet, restored\)/,
+    '撤销饮食删除必须保留原 id 与完整快照，不能重新生成记录');
+  assert.match(diet, /removeEntry\(e\.id\)[\s\S]*?label: '撤销'[\s\S]*?restoreEntry\(e\)/,
+    '删除饮食记录后没有接上原样撤销');
+
+  assert.match(training, /function removeExerciseWithUndo\(exercise\)/,
+    '训练动作移除没有统一撤销路径');
+  assert.match(training, /已删除这一组[\s\S]*?label: '撤销'/,
+    '删除训练组后没有撤销入口');
+  assert.match(training, /已清空今日动作[\s\S]*?label: '撤销'/,
+    '清空今日动作后没有撤销入口');
+});
+
+/*
+ * 搜索结果整行就是一个入口；右侧再放一个 ＋ 做同一件事，会让人猜两者的区别。
+ */
+test('搜索结果整行开份量面板，份量确认后可直接记录或继续添加', () => {
+  const diet = strip(read('js/views/diet.js'));
+  const row = diet.slice(diet.indexOf("h('button.search-item'"), diet.indexOf('all.length > results.length'));
+  assert.match(row, /onclick: \(\) => selectFood\(f\)/, '整行没有打开份量面板');
+  assert.ok(!diet.includes('button.search-item-add'), '右侧还留着与整行重复的 ＋ 入口');
+  assert.match(row, /button\.search-item-remove[\s\S]*?removeFromBasket\(f\.id\)/,
+    '已在本餐清单里的项要有明确的移出入口');
+
+  assert.match(diet, /`记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/,
+    '主按钮没有直接说清记录到哪一餐');
+  assert.match(diet, /'继续添加'/, '缺少进入多项清单的次要入口');
+  assert.match(diet, /recordOne\(directBtn, item\(\)\)/, '普通与复合食物没有接到单项记录路径');
+  assert.match(diet, /actionLabel: \(\) => `记录\$\{ui\.basket\.length\}样到/,
+    '批量确认仍使用含糊的符号，没有写清动作结果');
 });

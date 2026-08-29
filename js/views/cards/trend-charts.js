@@ -271,11 +271,11 @@ export function trendCharts(rerender) {
         data: kcalTimeline, color: 'var(--accent)', target: targets.kcal,
         targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
-        overIsBad: true, emptyText: '还没有饮食记录', ...pick,
+        overIsBad: false, emptyText: '还没有饮食记录', ...pick,
       }),
       note: trendReading('kcal', kcalSeries, { target: targets.kcal }),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
-      tip: `参考线使用${targetContext}，不代表区间内各历史日期当时的目标；超过 5% 的日子会标红。`,
+      tip: `参考线使用${targetContext}，不代表区间内各历史日期当时的目标。单日高于参考线不等于做错，需结合多日体重与收支趋势判断。`,
     }),
     protein: () => ({
       title: '每日蛋白摄入',
@@ -355,7 +355,7 @@ export function trendCharts(rerender) {
       title: '静息心率',
       tag: avgHR != null ? `已结束日平均 ${avgHR} bpm` : null,
       chart: lineChart({
-        data: hrSeries, color: 'var(--danger)', unit: 'bpm', domain: axisDomain, ...pick,
+        data: hrSeries, color: 'var(--water)', unit: 'bpm', domain: axisDomain, ...pick,
         target: avgHR, targetLabel: avgHR != null ? `平均 ${avgHR}` : '',
         emptyText: '还没有静息心率记录',
       }),
@@ -401,9 +401,8 @@ export function trendCharts(rerender) {
          * 于是同一张卡的名字每切一次就换一个，找不到锚点；
          * 而下拉第一项本来就写着当前看的是什么，标题再说一遍是重复。
          */
-        h('h3', null, '健康趋势图'),
+        h('h3', null, '趋势'),
         h('div.card-head-actions', null,
-          spec.tag ? h('span.card-tag', null, spec.tag) : null,
           infoTip('查看这张图的统计口径',
             h('p', null, spec.tip),
             h('p', null, `统计到 ${endDay} 为止；${todayNote || '所选日期当天不计入。'}`)))),
@@ -426,6 +425,8 @@ export function trendCharts(rerender) {
           options: RANGES.map((r) => ({ key: r.key, label: r.label })),
           onPick: (key) => { range = key === 'all' ? 'all' : Number(key); rerender(); },
         })),
+
+      spec.tag ? h('p.trend-summary', null, spec.tag) : null,
 
       h('div.chart-wrap', null, spec.chart),
       spec.readout,

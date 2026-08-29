@@ -505,6 +505,25 @@ export async function removeEntry(id) {
   emit();
 }
 
+/**
+ * 恢复刚删除的一条饮食记录。
+ *
+ * 保留原 id、日期、时间、配料快照和营养值；重新走 addEntry 会生成新时间，
+ * 复合食物还可能按当前食物库重算，撤销就不再是撤销原记录了。
+ */
+export async function restoreEntry(entry) {
+  if (!entry || entry.id == null || !entry.date) throw new TypeError('缺少可恢复的饮食记录');
+  const restored = { ...entry };
+  await db.put(db.STORES.diet, restored);
+  if (restored.date === state.day && !state.dietEntries.some((e) => e.id === restored.id)) {
+    state.dietEntries = [...state.dietEntries, restored];
+  }
+  await refreshDietDaily();
+  recompute();
+  emit();
+  return restored;
+}
+
 /** 把某一天的记录整批复制到当前日期（"和昨天一样"） */
 export async function copyDay(fromDate) {
   const rows = await db.getDietByDate(fromDate);
