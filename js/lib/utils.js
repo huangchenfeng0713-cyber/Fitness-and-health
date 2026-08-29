@@ -176,24 +176,14 @@ export const num = (v, d = 0) => {
   return d > 0 ? n.toFixed(d) : String(Math.round(n));
 };
 
-/**
- * 睡眠这类按小时衡量更自然的时长。
- * 「5小时42分」在窄表格里会被截断成「5小时」，反而看不出差别；
- * 小数小时既短又能比较，一眼看出 5.7 和 6.9 的差距。
- * unit: false 用于本身就带单位槽位的地方，避免出现「5.7 小时 小时」。
+/*
+ * 时长的写法搬去了 core/duration.js —— 主卡的提示和数据页的卡片要说同一句话，
+ * 而 core 里的 buildInsights 不能 import lib。这里再导出一遍。
+ *
+ * 小数小时（`6.7 小时`）那个写法已经删掉：它只在图表纵轴上说得通，
+ * 摆到卡片上就得让人把 0.7 乘回 60 才知道是多久。
  */
-export function formatHours(mins, { unit = true } = {}) {
-  const v = Number(mins);
-  if (!Number.isFinite(v)) return '—';
-  const h = Math.round((v / 60) * 10) / 10;
-  return unit ? `${h} 小时` : String(h);
-}
-
-export function formatMinutes(mins) {
-  if (!Number.isFinite(Number(mins))) return '—';
-  const m = Math.round(Number(mins));
-  return m >= 60 ? `${Math.floor(m / 60)}小时${m % 60 ? `${m % 60}分` : ''}` : `${m}分钟`;
-}
+export { formatDuration } from '../core/duration.js';
 
 /** 轻量提示条 */
 let toastTimer = null;

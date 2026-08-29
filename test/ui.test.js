@@ -354,15 +354,22 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
   assert.match(training, /equip: equipFilter/, '推荐没跟着器械档位走');
 
   /*
-   * 推荐紧挨着控制它的开关：中间隔着一整列动作的话，换了档位也看不出是它在变。
-   * 只看挂载那一段——函数定义里也有同样的字样。
+   * 推荐是「动作列表」那张卡的另一个视图，不再单独占一张卡：
+   * 它和列表回答的是同一个问题的两半，共用同一组开关，点一下切过去、再点一下切回来。
+   * 原先它单独一张卡夹在中间，把真正要用的那列动作往下推了整整一屏。
    */
   const mounted = training.slice(training.indexOf('mount(root,'));
-  const order = ['planCard()', 'scopeCard(rerender)', 'recommendCard()', 'pickerCard(rerender)',
+  const order = ['planCard()', 'scopeCard(rerender)', 'pickerCard(rerender)',
     'adviceCard(rerender)', 'weeklyCard(rerender)'];
   const at = order.map((k) => mounted.indexOf(k));
   assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
   assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
+  assert.ok(!/recommendCard\(/.test(training), '推荐又单独占了一张卡');
+
+  // 同一个按钮切过去、切回来
+  assert.match(training, /showRecommend = !showRecommend/, '推荐没有做成可以再点一次取消的开关');
+  assert.match(training, /'aria-pressed': String\(showRecommend\)/, '开关没有按下态');
+  assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
 
   const core = strip(read('js/core/training.js'));
   assert.match(core, /overlapLevel\(overlapScore\(e, c\)\) === 'high'/, '没有排除与已选高度重合的动作');
@@ -1288,4 +1295,30 @@ test('设置里展开的折叠块不会被一次落库收回去', () => {
    * 翻一天就换一个键，昨天展开的那一节今天又是收着的。
    */
   assert.ok(!/openSections\.(has|add)\(title\)/.test(dm), '拿标题当键了');
+});
+
+/*
+ * 时长写成「6小时42分」，不写「6.7 小时」。
+ * 小数小时是给图表纵轴用的——轴上要一排等距刻度；可一个具体的睡眠时长是人要读的数，
+ * 「6.7 小时」得在脑子里把 0.7 乘回 60 才知道是多久。
+ */
+test('睡眠和锻炼写成小时加分钟，不写小数小时', () => {
+  const core = strip(read('js/core/duration.js'));
+  assert.match(core, /export function formatDuration/, '没有统一的时长写法');
+  // Number(null) 是 0，只判 isFinite 会把「没记到」显示成「0分钟」
+  assert.match(core, /mins == null \|\| mins === ''/, '没先剔掉空值就转数字');
+
+  // 小数小时那个写法要彻底撤掉，别留一处漏网的
+  for (const path of ['js/lib/utils.js', 'js/views/cards/health-metrics.js',
+    'js/views/cards/trend-charts.js', 'js/core/advisor.js', 'js/core/trend-reading.js']) {
+    assert.ok(!/formatHours/.test(strip(read(path))), `${path} 还在用小数小时`);
+  }
+  assert.match(strip(read('js/core/health-card.js')), /kind: 'duration'/, '睡眠没有走时长写法');
+  assert.match(strip(read('js/views/cards/health-metrics.js')), /formatDuration\(cell\.value\)/);
+
+  // 参考区间和门槛照原样写：那是文献给的数，不是量出来的时长
+  const sleep = strip(read('js/core/trend-reading.js'));
+  assert.match(sleep, /7~9 小时的常见建议/, '参考区间不该改写');
+  assert.match(sleep, /不足 6\.5 小时/, '门槛不该改写');
+  assert.match(sleep, /日均 \$\{hm\(s\.avg\)\}/, '日均没有改成小时加分钟');
 });

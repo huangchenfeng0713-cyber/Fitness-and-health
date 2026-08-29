@@ -36,6 +36,8 @@ let expanded = null;
  */
 const LIST_PREVIEW = 8;
 let showAllExercises = false;
+// 动作列表那张卡现在看的是列表还是推荐。纯界面状态，不落库
+let showRecommend = false;
 /*
  * 待加入计划的一批动作。
  *
@@ -269,16 +271,42 @@ function pickerCard(rerender) {
   const visible = showAllExercises
     ? list
     : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
+
+  /*
+   * 推荐是这张卡的另一个视图，不是另一张卡。点「推荐」切过去，再点一下切回来。
+   * 两边共用同一组开关（部位 / 模式 + 器械档位），所以换了范围两边一起变。
+   */
+  const rec = showRecommend ? recommendFor({
+    mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
+    selection: picked(), equip: equipFilter,
+  }) : null;
+  const toggle = h('button', {
+    class: `chip-btn rec-toggle${showRecommend ? ' active' : ''}`,
+    type: 'button',
+    'aria-pressed': String(showRecommend),
+    onclick: () => { showRecommend = !showRecommend; rerender(); },
+  }, '推荐');
+
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '动作列表'),
-      h('span.card-tag', null, `${scopeLabel} · ${list.length} 个`)),
-    list.length
-      ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
-      : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
-    list.length > LIST_PREVIEW ? h('button.more-btn', {
-      onclick: () => { showAllExercises = !showAllExercises; rerender(); },
-    }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
+      h('h3', null, showRecommend ? '动作推荐' : '动作列表'),
+      h('div.card-head-actions', null,
+        h('span.card-tag', null, showRecommend
+          ? `${scopeLabel} · ${rec.items.length} 个`
+          : `${scopeLabel} · ${list.length} 个`),
+        showRecommend ? recommendTip() : null,
+        toggle)),
+    showRecommend
+      ? recommendBody(rec)
+      : [
+        list.length
+          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
+          : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
+        list.length > LIST_PREVIEW ? h('button.more-btn', {
+          onclick: () => { showAllExercises = !showAllExercises; rerender(); },
+        }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
+      ],
+    // 待记录的那一批在两个视图里都留着，切过去不会让人以为勾的东西没了
     pickerBar.el);
 }
 
@@ -492,39 +520,29 @@ function weeklyCard(rerender) {
 }
 
 /**
- * 当前范围的动作推荐。
+ * 动作推荐：作为「动作列表」那张卡的一个可选视图，不再单独占一张卡。
  *
- * 它紧挨着「身体部位 / 动作模式」和器械档位 —— 换了范围推荐就跟着换，
- * 用户看得见「为什么推荐变了」。原先它长在页面最上面、还只在一个动作都没选时
- * 才出现，于是选了第一个动作之后就再也见不到，而那正是最需要「接下来练什么」的时候。
+ * 它和列表回答的是同一个问题的两半——「这个范围里有什么」和「这个范围里挑哪几个」，
+ * 所以共用一张卡、共用同一组开关（部位 / 模式 + 器械档位），点一下切过去，
+ * 再点一下切回来。原先它单独占一张卡，夹在挑动作和动作列表中间，
+ * 把真正要用的那列动作往下推了整整一屏。
  *
  * 挑什么、为什么挑、重复了该换成什么，全在 core/training.js 的 recommendFor 里。
  */
-function recommendCard() {
-  const rec = recommendFor({
-    mode: pickMode,
-    groupKey: activeGroup,
-    splitKey: activeSplit,
-    selection: picked(),
-    equip: equipFilter,
-  });
-  if (!rec.items.length && !rec.replacements.length) return null;
-  const byGroup = pickMode === 'group';
-  const scopeLabel = byGroup
-    ? GROUPS.find((g) => g.key === activeGroup)?.label
-    : SPLITS.find((sp) => sp.key === activeSplit)?.label;
+function recommendTip() {
+  return infoTip('这几个是怎么挑的',
+    h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
+      + '复合动作排在前面。'),
+    h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
+      + '否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。'),
+    h('p', null, '这只是可编辑的起手参考，不是「必须练满」的清单。'));
+}
 
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('h3', null, '动作推荐'),
-      h('div.card-head-actions', null,
-        h('span.card-tag', null, `${scopeLabel} · ${rec.items.length} 个`),
-        infoTip('这几个是怎么挑的',
-          h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
-            + '复合动作排在前面。'),
-          h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
-            + '否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。'),
-          h('p', null, '这只是可编辑的起手参考，不是「必须练满」的清单。')))),
+function recommendBody(rec) {
+  if (!rec.items.length && !rec.replacements.length) {
+    return h('p.empty-hint', null, '这个范围里已经没有和已选动作不重复的推荐了，换个部位或器械档位看看。');
+  }
+  return [
     /*
      * 已经选了高度重合的一对时，把「换掉哪个」直接摆成按钮。
      * 只说最重的那一对：一次列五对，等于把选择的负担又推回去。
@@ -560,7 +578,8 @@ function recommendCard() {
         ...rec.items.filter((r) => !items.some((i) => i.id === r.id))
           .map((r) => ({ id: r.id, sets: [], done: false })),
       ]),
-    }, '全部加入') : null);
+    }, '全部加入') : null,
+  ];
 }
 
 /*
@@ -585,7 +604,6 @@ export function renderTraining(root) {
   mount(root,
     planCard(),
     scopeCard(rerender),
-    recommendCard(),
     pickerCard(rerender),
     adviceCard(rerender),
     weeklyCard(rerender),

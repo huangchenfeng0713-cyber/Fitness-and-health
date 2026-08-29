@@ -17,7 +17,8 @@ const FIELDS = [
   { key: 'steps', label: '步数', unit: '', decimals: 0 },
   { key: 'activeEnergy', label: '活动', unit: 'kcal', decimals: 0 },
   { key: 'exerciseMinutes', label: '锻炼', unit: '分钟', decimals: 0 },
-  { key: 'sleepMinutes', label: '睡眠', unit: '小时', kind: 'hours' },
+  // 睡眠写成「6小时42分」，值本身就带着单位，不再占单位槽
+  { key: 'sleepMinutes', label: '睡眠', unit: '', kind: 'duration' },
   { key: 'restingHR', label: '静息心率', unit: 'bpm', decimals: 0 },
   { key: 'weightKg', label: '体重', unit: 'kg', decimals: 1 },
   /*

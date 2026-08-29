@@ -712,6 +712,11 @@ html, body { height: 100%; overflow: hidden; }
   font-size: 17px; font-weight: 600; line-height: 1.15;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+/*
+ * 四列时每格只有 78px（390px 的机子上），而「6小时42分」在 17px 下要 82px。
+ * nowrap 让它直接把格子撑破——密一档的排布得配密一档的字号。
+ */
+.metric-grid.cols-4 .metric-value { font-size: 15px; }
 .metric-unit { font-size: 11.5px; font-weight: 500; color: var(--muted); margin-left: 2px; }
 .metric-label { font-size: 11.5px; color: var(--faint); margin-top: 3px; white-space: nowrap; }
 /* 缺数据那格整体压暗：那道杠不该和真实数字一样醒目 */
@@ -832,6 +837,18 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .stat strong { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
 .stat span { font-size: 11.5px; color: var(--faint); }
+
+/*
+ * 「推荐」是动作列表那张卡的另一个视图，按下去是选中态，再按一下切回列表。
+ *
+ * 按下时用淡色底 + 强调色字，不用实心药丸：这只是「我现在看哪一半」，属于导航，
+ * 不该比下面那列内容还抢眼 —— 卡里真正的主要动作是「全部加入」。
+ */
+.rec-toggle { flex: none; }
+.rec-toggle.active {
+  background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent);
+}
 
 /* 动作推荐：一行一个动作，理由压成三个短标签 */
 .rec-picks { display: flex; flex-direction: column; }
