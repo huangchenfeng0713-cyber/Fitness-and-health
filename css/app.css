@@ -199,6 +199,13 @@ html, body { height: 100%; overflow: hidden; }
 }
 .topbar-day strong { font-size: 17px; font-weight: 700; letter-spacing: 0; }
 .topbar-date { display: block; font-size: 11px; color: var(--faint); margin-top: 1px; }
+/* 返回箭头是画出来的，不是打出来的：和底栏、健康数据那几个图标同一套描边参数 */
+.topbar-date.back { display: flex; align-items: center; justify-content: center; gap: 3px; }
+.topbar-back-icon { display: inline-flex; }
+.topbar-back-icon svg {
+  width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+}
 .nav-arrow {
   width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
   border: 0; background: none; color: var(--muted);

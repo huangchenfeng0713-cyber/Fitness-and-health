@@ -50,9 +50,14 @@ export function dayHeading(day, today) {
   }
   // 跨年才写年份：同一年里「2026年」每天都对、每天都一样，等于没说
   const sameYear = y === base.slice(0, 4);
+  /*
+   * 副标题只给文字，那个返回箭头由界面画成图标。
+   * 打出来的 ↩ 在不同系统上是三种字形、三种基线，和旁边的中文对不齐；
+   * 而且它是文字，跟着字号走，缩放起来和图标不是一回事。
+   */
   return {
     title: `${sameYear ? '' : `${y}年`}${m}月${d}日`,
-    sub: '回今天 ↩',
+    sub: '回今天',
     offset,
     isToday: false,
     backToToday: true,

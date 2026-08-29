@@ -32,10 +32,15 @@ test('今天和昨天：标题是词，副标题才是日期', () => {
 test('更远的日期：标题就是日期，副标题只留回今天的出口', () => {
   const h = dayHeading('2026-08-27', TODAY);
   assert.equal(h.title, '08月27日');
-  assert.equal(h.sub, '回今天 ↩');
+  assert.equal(h.sub, '回今天');
   assert.equal(h.backToToday, true);
   // 日期只印一次
   assert.doesNotMatch(h.sub, /\d/, `副标题又把日期印了一遍：${h.sub}`);
+  /*
+   * 那个返回箭头由界面画成图标，不塞进这里的字符串里 ——
+   * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐。
+   */
+  assert.doesNotMatch(h.sub, /[↩←⟲↺⬅]/, `箭头不该是打出来的字符：${h.sub}`);
 });
 
 test('跨年补上年份，同一年里不写', () => {

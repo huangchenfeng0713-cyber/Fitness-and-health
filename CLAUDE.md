@@ -365,6 +365,14 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
   走空状态，那不是「没测到」是「还没同步过」。
 - **日期的纯函数在 `core/day.js`，`lib/utils.js` 只是再导出一遍。**
   「顶栏这行字该怎么写」是判断，得能写测试。改措辞改 `dayHeading`，别在视图里拼。
+  措辞里只放文字：那个返回箭头由 `RETURN_ICON` 画成描边图标。
+  打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
+  粗细也没法和底栏、健康数据那几个图标统一。
+- **设置面板每次落库都会整个重建，`<details open>` 是 DOM 状态，重建一次就没了。**
+  `app.js` 的 `subscribe` 和 `subscribeAccount` 都会调 `renderSettings`，
+  于是「点一下同步，刚展开的那几节自己收了回去」——而同步恰恰是最会触发落库的操作。
+  `data-manager.js` 里的折叠块一律走 `rememberedDetails(key, ...)`，
+  **键要稳定**：拿标题当键的话，「手动补录 · 2026-08-29」翻一天就换一个键。
 - **`Number(null)` 是 0，而 `Number.isFinite(0)` 是 true。**
   `lineChart` 曾经用 `Number.isFinite(Number(d.y))` 直接过滤，漏记的那天就这么
   混成「吃了 0 kcal」的实点，把折线拽到地板上——而图下面那段解读用的是

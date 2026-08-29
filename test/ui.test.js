@@ -1246,3 +1246,46 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
   assert.match(strip(read('js/views/cards/weekly-summary.js')), /endDate: shiftDay\(todayKey\(\), -1\)/);
   assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => todayKey\(\)/);
 });
+
+/*
+ * 「回今天」后面那个返回箭头要画出来，不能打出来。
+ * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
+ * 而且它跟着字号走，粗细没法和别的图标统一。
+ */
+test('返回箭头是描边图标，不是打出来的字符', () => {
+  const app = strip(read('js/app.js'));
+  assert.match(app, /const RETURN_ICON = '<svg/, '返回箭头没有做成图标');
+  assert.match(app, /heading\.backToToday \? h\('span\.topbar-back-icon'/, '图标没有挂到顶栏上');
+  // 文案里不许再夹着箭头字符
+  assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(strip(read('js/core/day.js'))), '措辞里还夹着打出来的箭头');
+  assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(app));
+  // 和底栏、设置那几个图标同一套描边参数
+  const css = read('css/app.css');
+  assert.match(css, /\.topbar-back-icon svg \{[^}]*stroke: currentColor/s, '图标没有走描边样式');
+});
+
+/*
+ * 设置面板每次落库、每次账号状态刷新都会整个重建（app.js 的 subscribe），
+ * 而 <details open> 是 DOM 上的状态 —— 重建一次就全收起来了。
+ * 表现就是「点一下同步，刚展开的那几节自己收了回去」，
+ * 而同步恰恰是最会触发落库的那个操作。
+ */
+test('设置里展开的折叠块不会被一次落库收回去', () => {
+  const dm = strip(read('js/views/cards/data-manager.js'));
+  assert.match(dm, /const openSections = new Set\(\)/, '没有记住哪几节是展开的');
+  assert.match(dm, /function rememberedDetails\(key, spec/, '缺少记得住状态的 details 包装');
+  assert.match(dm, /open: openSections\.has\(key\)/, '重建时没有把展开状态还回去');
+  assert.match(dm, /ontoggle:/, '展开状态没有被记下来');
+
+  // 四大节和面板里的折叠块都要走这个包装，不能再裸写 details
+  for (const key of ['import', 'manual', 'backup', 'guide', 'paste', 'source-priority']) {
+    assert.ok(new RegExp(`'${key}'`).test(dm), `折叠块 ${key} 没有稳定的键`);
+  }
+  assert.ok(!/h\('details/.test(dm), `还有裸写的 details：${dm.match(/h\('details[^,]*/)?.[0]}`);
+
+  /*
+   * 键必须稳定，不能拿标题当键：「手动补录 · 2026-08-29」里带着日期，
+   * 翻一天就换一个键，昨天展开的那一节今天又是收着的。
+   */
+  assert.ok(!/openSections\.(has|add)\(title\)/.test(dm), '拿标题当键了');
+});
