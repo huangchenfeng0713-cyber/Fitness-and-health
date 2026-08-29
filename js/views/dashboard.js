@@ -16,7 +16,7 @@ import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
-import { FOCUS_LABEL } from '../core/advisor.js';
+import { FOCUS_LABEL, INSIGHT_PRIORITY } from '../core/advisor.js';
 import { setIntent } from '../lib/nav.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
@@ -360,18 +360,28 @@ function insightsCard(advice, rerender) {
        * 「吃得慢一些」当年就是这么混进来的：程序根本没有进餐时长数据，
        * 那句话没有依据，却和有依据的数字长得一模一样。
        */
-      const body = [
+      const main = [
         h('div.insight-title', null, i.title),
-        i.basis ? h('div.insight-basis', null, i.basis) : null,
         i.action ? h('div.insight-action', null, i.action) : null,
         focus ? h('div.insight-go', null, `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
       ];
-      if (!focus) return h(`div.insight.${i.type}`, null, ...body);
-      return h(`button.insight.${i.type}`, {
-        class: `insight ${i.type} insight-actionable`,
-        type: 'button',
-        onclick: () => { setIntent({ focus }); location.hash = 'diet'; },
-      }, ...body);
+      const primary = focus
+        ? h('button.insight-main.insight-actionable', {
+          type: 'button',
+          onclick: () => { setIntent({ focus }); location.hash = 'diet'; },
+        }, ...main)
+        : h('div.insight-main', null, ...main);
+      /*
+       * 卡面先回答「现在怎样、接下来做什么」。数据质量问题的依据必须立即可见，
+       * 因为它会影响下面所有结论；其余推导收进「为什么」，需要时再看。
+       */
+      const evidence = !i.basis ? null
+        : i.priority === INSIGHT_PRIORITY.data
+          ? h('div.insight-basis', null, i.basis)
+          : h('details.insight-why', null,
+            h('summary', null, '为什么'),
+            h('div.insight-basis', null, i.basis));
+      return h(`div.insight.${i.type}`, null, primary, evidence);
     })),
     moreToggle('insights', all.length, 3, rerender),
   );

@@ -8,7 +8,7 @@
  * 必须整屏摆出来，收进二级页面等于没提示。
  */
 
-import { h, clearEl, toast, mount, num, infoTip, confirmAction, field } from '../lib/utils.js';
+import { h, clearEl, toast, mount, num, infoTip, confirmAction, field, todayKey } from '../lib/utils.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
@@ -491,6 +491,8 @@ const SECTION_ICON = {
   calc: 'M6.4 3.6h11.2c.9 0 1.6.7 1.6 1.6v13.6c0 .9-.7 1.6-1.6 1.6H6.4c-.9 0-1.6-.7-1.6-1.6V5.2c0-.9.7-1.6 1.6-1.6ZM8 7.6h8M8 12h2.5M8 16.2h2.5M14 12h2M14 16.2h2',
   about: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5.5M12 7.4v.1',
 };
+const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7"/></svg>';
+const BACK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7"/></svg>';
 
 function sectionIcon(key) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -523,7 +525,16 @@ function sectionStatus(key, account) {
     const [text] = accountStatus(account);
     return text;
   }
-  if (key === 'data') return '备份、导入、补录';
+  if (key === 'data') {
+    const at = new Date(state.lastImport?.at || '');
+    if (Number.isNaN(at.getTime())) return '从未同步';
+    if (todayKey(at) === todayKey()) {
+      return `已同步 ${at.toLocaleTimeString('zh-CN', {
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      })}`;
+    }
+    return `最近同步 ${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
+  }
   if (key === 'calc') {
     return p.useAppleEnergy ? '跟随设备消耗' : '按公式估算';
   }
@@ -538,7 +549,7 @@ function sectionRow(section, account, rerender) {
   sectionIcon(section.key),
   h('span.set-title', null, section.label),
   h('span.set-status', null, sectionStatus(section.key, account)),
-  h('span.set-chevron', { 'aria-hidden': 'true' }, '›'));
+  h('span.set-chevron', { html: CHEVRON_ICON }));
 }
 
 const SECTIONS = [
@@ -554,7 +565,7 @@ function backBar(label, rerender) {
     h('button.set-back-btn', {
       type: 'button',
       onclick: () => { openSection = null; rerender(); },
-    }, '‹ 设置'),
+    }, h('span.set-back-icon', { html: BACK_ICON }), h('span', null, '设置')),
     h('strong', null, label));
 }
 

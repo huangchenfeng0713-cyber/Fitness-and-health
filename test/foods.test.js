@@ -35,6 +35,48 @@ test('v1.4 地方小吃与果汁扩充可直接搜索，液体单位和游离糖
   assert.equal(FOOD_BY_ID.get('coconut_water').basis, '100ml', '椰子水应按 ml 记录');
 });
 
+const MINNAN_IDS = [
+  'minnan_shacha_noodle', 'xiamen_shrimp_noodle', 'minnan_mianxianhu',
+  'minnan_oyster_omelette', 'minnan_five_spice_roll', 'xiamen_tusundong',
+  'xiamen_roast_pork_zongzi', 'minnan_runbing', 'minnan_fried_mianxian',
+  'minnan_fried_kwayteow', 'minnan_youcicngguo', 'xiamen_taro_bun',
+  'tongan_fengrou', 'quanzhou_ginger_duck', 'quanzhou_cu_pork',
+  'xiamen_peanut_soup', 'quanzhou_four_fruit_soup', 'minnan_shihuagao',
+  'minnan_salty_rice', 'quanzhou_beef_soup',
+];
+const STEAK_IDS = [
+  'beef_steak', 'beef_tenderloin_steak', 'beef_ribeye_steak', 'beef_tbone_steak',
+  'beef_flat_iron_steak', 'beef_short_rib_steak', 'beef_tomahawk_steak',
+  'steak_pan_fried_butter', 'steak_black_pepper_restaurant',
+];
+
+test('闽南小吃与牛排分部位收录，估算边界和可食重量不混用', () => {
+  assert.equal(MINNAN_IDS.length, 20);
+  for (const id of MINNAN_IDS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少闽南食物 ${id}`);
+    assert.equal(food.source?.type, 'recipe', `${food.name} 不应伪装成标准营养表`);
+    assert.equal(food.source?.accessed, '2026-08-29');
+    assert.ok(isEstimated(food) && food.note, `${food.name} 缺估算标记或配方边界`);
+  }
+  for (const term of ['沙茶面', '虾面', '面线糊', '海蛎煎', '炸五香', '土笋冻',
+    '烧肉粽', '姜母鸭', '四果汤', '牛肉羹']) {
+    assert.ok(searchFoods(term).some((food) => MINNAN_IDS.includes(food.id)), `搜不到闽南食物“${term}”`);
+  }
+
+  assert.equal(STEAK_IDS.length, 9);
+  for (const id of STEAK_IDS) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food?.note, `${id} 缺烹调、酱汁或可食部说明`);
+    assert.equal(food.basis, '100g');
+  }
+  assert.equal(FOOD_BY_ID.get('beef_tbone_steak').s[0][0], '一块去骨可食部');
+  assert.match(FOOD_BY_ID.get('beef_tomahawk_steak').note, /去骨熟可食部/);
+  for (const term of ['西冷牛排', '菲力牛排', '肉眼牛排', 'T骨牛排', '板腱牛排', '牛小排', '战斧牛排']) {
+    assert.ok(searchFoods(term).some((food) => STEAK_IDS.includes(food.id)), `搜不到“${term}”`);
+  }
+});
+
 test('清补凉原料可独立选择和调量，营养按实际配方逐项求和', () => {
   const food = FOOD_BY_ID.get('qingbuliang_custom');
   assert.equal(hasFoodMix(food), true);
