@@ -14,8 +14,8 @@ import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
-  starterCombo, starterSplitCombo,
-  sessionVolume, recentExercises, weeklyVolume,
+  recommendFor, EQUIP_FILTERS, equipFilterOf,
+  sessionVolume, recentExercises, recentTrainingRows,
   overlapScore, overlapLevel,
 } from '../core/training.js';
 
@@ -46,25 +46,22 @@ let showAllExercises = false;
 let pending = new Set();
 let pickerBar = null;
 
-const session = () => trainingFor(state.day);
+/*
+ * 健身页固定记**今天**，不跟今日 / 饮食页选的日期走。
+ * 那两页翻回昨天是为了补记饮食；训练跟着翻的话，勾一个动作会落到昨天那一天，
+ * 而页面上没有任何地方提示你正在记哪一天。历史训练去「近 7 日训练记录」看。
+ */
+const trainingDay = () => todayKey();
+const session = () => trainingFor(trainingDay());
 const picked = () => session().items.map((i) => i.id);
 
 /** 改一天的计划：写库 → store 触发重绘，不用自己调 rerender */
 async function updateSession(mutate) {
   const current = session();
   const next = mutate(current.items.map((i) => ({ ...i, sets: i.sets.map((x) => ({ ...x })) })));
-  await saveTraining(state.day, { items: next });
+  await saveTraining(trainingDay(), { items: next });
 }
-/*
- * 器械筛选。动作库到 100 多个之后，一个部位三十来个动作滑不完，
- * 而且「今天只有固定器械可用」是健身房里最常见的约束——按这个筛比按名字找快得多。
- */
-const EQUIP_FILTERS = [
-  { key: 'all', label: '全部', match: () => true },
-  { key: 'machine', label: '固定器械', match: (e) => e.equipment === 'machine' || e.equipment === 'cable' },
-  { key: 'free', label: '自由重量', match: (e) => e.equipment === 'barbell' || e.equipment === 'dumbbell' || e.equipment === 'kettlebell' },
-  { key: 'bodyweight', label: '徒手', match: (e) => e.equipment === 'bodyweight' || e.equipment === 'band' },
-];
+/* 器械档位定义搬去了 core/training.js —— 推荐和动作列表得筛在同一个范围里 */
 let equipFilter = 'all';
 
 const pickedExercises = () => picked().map((id) => EXERCISE_BY_ID.get(id)).filter(Boolean);
@@ -234,14 +231,31 @@ function equipTabs(rerender, all) {
     }));
 }
 
+/*
+ * 挑动作分成两块：先定范围（部位 / 模式 + 器械档位），再看这个范围里有什么。
+ *
+ * 拆开是为了让「动作推荐」能插在中间。推荐是被这几个开关控制的，
+ * 挨着开关摆，换一下就看见推荐跟着变；隔着一整列动作的话，
+ * 推荐看起来就像和这一屏无关的另一件事。
+ */
+function scopeCard(rerender) {
+  const byGroup = pickMode === 'group';
+  const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
+  return h('section.card', null,
+    h('div.card-head', null, h('h3', null, '挑动作')),
+    modeTabs(rerender),
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    equipTabs(rerender, all));
+}
+
 function pickerCard(rerender) {
   const lastDoneAt = new Map(
-    recentExercises(state.trainingDays, { limit: 200, before: state.day })
+    recentExercises(state.trainingDays, { limit: 200, before: trainingDay() })
       .map((r) => [r.exercise.id, r.date]),
   );
   const byGroup = pickMode === 'group';
   const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
-  const filter = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
+  const filter = equipFilterOf(equipFilter);
   const list = all.filter(filter.match);
   const group = GROUPS.find((g) => g.key === activeGroup);
   const split = SPLITS.find((sp) => sp.key === activeSplit);
@@ -257,12 +271,8 @@ function pickerCard(rerender) {
     : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '动作选择'),
+      h('h3', null, '动作列表'),
       h('span.card-tag', null, `${scopeLabel} · ${list.length} 个`)),
-    // 部位图只在按部位挑的时候有意义：推拉腿是跨部位的
-    modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender),
-    equipTabs(rerender, all),
     list.length
       ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
       : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
@@ -282,7 +292,14 @@ async function commitPending() {
 }
 
 function buildPickerBar() {
-  return selectBar({
+  /*
+   * 这一条紧贴动作列表，不留上边距。
+   *
+   * 公共横幅默认带 10px 上边距，那是给饮食页用的——那边它下面还接着别的内容。
+   * 健身页里它就长在列表末尾，10px 变成一条说不出理由的空白。
+   * 只给这一处加个修饰类，不动共用样式。
+   */
+  const bar = selectBar({
     summary: () => `已选 ${pending.size} 个动作`,
     detail: () => [...pending]
       .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、'),
@@ -295,6 +312,8 @@ function buildPickerBar() {
     onClear: () => { pending = new Set(); rerenderTraining?.(); },
     onConfirm: () => { commitPending(); },
   });
+  bar.el.classList.add('select-bar-tight');
+  return bar;
 }
 
 /*
@@ -375,7 +394,8 @@ function planRow(exercise, index) {
  */
 function planCard() {
   const list = pickedExercises();
-  const dayLabel = state.day === todayKey() ? '已选动作' : `${state.day} 的训练`;
+  // 固定记今天，标题就直说是今天，不再跟着日期变来变去
+  const dayLabel = '今日动作';
   if (!list.length) {
     // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
     return h('section.card', null,
@@ -426,52 +446,121 @@ function adviceCard(rerender) {
 }
 
 /**
- * 近 7 天各部位练了多少组。
+ * 近 7 日训练记录：一行一个动作。
  *
- * 只报数字，不给「每周该练几组」的结论——那要结合训练年限、恢复能力和目的，
- * 从「这周练了什么」里看不出来，给了也是拍脑袋。
+ * 原先这里是「近 7 天训练量」——各部位多少组的一排数字，外加一整段
+ * 「这里只报数，不给每周该练几组的结论」。那段话本身没错，可它比数字还长，
+ * 而人翻到这儿想看的是「我前天练了什么、上了多少重量」。
+ *
+ * 「训练量」这个词以后要留给「重量 × 次数」的容量，不能和训练记录混着用。
  */
-function weeklyCard() {
-  const week = weeklyVolume(state.trainingDays, state.day);
-  if (!week.sessions) return null;
-  const rows = GROUPS.map((g) => [g.label, week.byGroup[g.key] || 0]).filter(([, n]) => n > 0);
+let expandedRow = null;
+
+function weeklyCard(rerender) {
+  const rows = recentTrainingRows(state.trainingDays, trainingDay());
+  if (!rows.length) {
+    return h('section.card', null,
+      h('div.card-head', null, h('h3', null, '近 7 日训练记录')),
+      h('p.empty-hint', null, '记录后显示'));
+  }
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '近 7 天训练量'),
-      h('span.card-tag', null, `${week.sessions} 次 · ${week.sets} 组`)),
-    h('div.health-strip', null, rows.map(([label, n]) => h('div.health-cell', null,
-      h('div.health-value', null, String(n), h('span.health-unit', null, '组')),
-      h('div.health-label', null, label)))),
-    h('p.form-hint', { style: { marginTop: '10px' } },
-      `统计 ${week.start} 至 ${week.end} 记下来的组数。这里只报数，不给「每周该练几组」的结论——`
-      + '合适的量取决于训练年限、恢复情况和目的，从练了什么看不出来。'));
+      h('h3', null, '近 7 日训练记录'),
+      h('span.card-tag', null, `${new Set(rows.map((r) => r.date)).size} 天 · ${rows.length} 个动作`)),
+    h('div.log-list', null, rows.map((r, i) => {
+      const key = `${r.date}:${r.id}:${i}`;
+      const open = expandedRow === key;
+      const meta = [`${r.setCount} 组`, r.weightLabel, r.repsLabel].filter(Boolean).join(' · ');
+      return h('div.log-item', null,
+        h('button.log-row', {
+          type: 'button', 'aria-expanded': String(open),
+          // 每组的重量次数收在里面：一行摊开五组，列表就没法扫了
+          onclick: () => { expandedRow = open ? null : key; rerender(); },
+        },
+        h('span.log-date', null, r.date.slice(5)),
+        h('span.log-name', null, r.name),
+        h('span.log-meta', null, meta || '未记组数')),
+        open && r.sets.length
+          ? h('div.log-sets', null, r.sets.map((set, n) => h('div.log-set', null,
+            h('span', null, `第 ${n + 1} 组`),
+            h('span', null, [
+              set.weightKg > 0 ? `${set.weightKg} kg` : null,
+              set.reps > 0 ? `${set.reps} 次` : null,
+            ].filter(Boolean).join(' × ') || '未记'))))
+          : null);
+    })));
 }
 
-/** 没选动作时，给个「这个部位怎么练」的起手方案 */
-function starterCard(rerender) {
-  if (picked().length) return null;
+/**
+ * 当前范围的动作推荐。
+ *
+ * 它紧挨着「身体部位 / 动作模式」和器械档位 —— 换了范围推荐就跟着换，
+ * 用户看得见「为什么推荐变了」。原先它长在页面最上面、还只在一个动作都没选时
+ * 才出现，于是选了第一个动作之后就再也见不到，而那正是最需要「接下来练什么」的时候。
+ *
+ * 挑什么、为什么挑、重复了该换成什么，全在 core/training.js 的 recommendFor 里。
+ */
+function recommendCard() {
+  const rec = recommendFor({
+    mode: pickMode,
+    groupKey: activeGroup,
+    splitKey: activeSplit,
+    selection: picked(),
+    equip: equipFilter,
+  });
+  if (!rec.items.length && !rec.replacements.length) return null;
   const byGroup = pickMode === 'group';
-  const group = GROUPS.find((g) => g.key === activeGroup);
-  const split = SPLITS.find((s) => s.key === activeSplit);
-  const combo = byGroup ? starterCombo(activeGroup) : starterSplitCombo(activeSplit);
-  if (!combo.length) return null;
-  const scopeLabel = byGroup ? group.label : split.label;
+  const scopeLabel = byGroup
+    ? GROUPS.find((g) => g.key === activeGroup)?.label
+    : SPLITS.find((sp) => sp.key === activeSplit)?.label;
+
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '动作推荐'),
       h('div.card-head-actions', null,
-        h('span.card-tag', null, `${scopeLabel} · 参考组合`),
-        infoTip('查看这套怎么来的',
-          h('p', null, '按当前范围选出 4–5 个互补动作，优先覆盖不同动作模式并减少重复。它只是可编辑的起手模板，不是最低动作数量。')))),
-    h('div.plan-list', null, combo.map((e, i) => h('div.plan-row', null,
-      h('span.plan-index', null, String(i + 1)),
-      h('div.plan-main', null,
-        h('div.ex-name', null, h('strong', null, e.name)),
-        h('div.ex-muscle', null, `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`))))),
-    h('button.secondary-btn.full', {
+        h('span.card-tag', null, `${scopeLabel} · ${rec.items.length} 个`),
+        infoTip('这几个是怎么挑的',
+          h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
+            + '复合动作排在前面。'),
+          h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
+            + '否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。'),
+          h('p', null, '这只是可编辑的起手参考，不是「必须练满」的清单。')))),
+    /*
+     * 已经选了高度重合的一对时，把「换掉哪个」直接摆成按钮。
+     * 只说最重的那一对：一次列五对，等于把选择的负担又推回去。
+     */
+    rec.replacements.map((r) => h('div.rec-swap', null,
+      h('div.rec-swap-title', null, r.title),
+      h('div.tip-actions', null, r.options.map((o) => h('button.chip-btn.tip-action', {
+        type: 'button',
+        onclick: () => updateSession((items) => [
+          ...items.filter((i) => i.id !== r.dropId),
+          ...(items.some((i) => i.id === o.id) ? [] : [{ id: o.id, sets: [], done: false }]),
+        ]),
+      }, h('span', null, `换成 ${o.name}`)))))),
+    h('div.rec-picks', null, rec.items.map((item) => h('div.rec-pick', null,
+      h('div.rec-pick-main', null,
+        h('div.ex-name', null, h('strong', null, item.name)),
+        // 理由用短标签，不写长句：五条推荐写成五段话，读完比自己翻列表还慢
+        h('div.rec-pick-tags', null, item.tags.map((t) => h('span.rec-tag', null, t)))),
+      /*
+       * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
+       * 而这一屏真正的主要动作是下面那个「全部加入」。
+       */
+      h('button.rec-add', {
+        type: 'button', 'aria-label': `加入 ${item.name}`,
+        onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
+          ? items
+          : [...items, { id: item.id, sets: [], done: false }])),
+      }, '＋')))),
+    rec.items.length > 1 ? h('button.secondary-btn.full', {
       style: { marginTop: '12px' },
-      onclick: () => updateSession(() => combo.map((e) => ({ id: e.id, sets: [], done: false }))),
-    }, '用这套开始'));
+      onclick: () => updateSession((items) => [
+        ...items,
+        ...rec.items.filter((r) => !items.some((i) => i.id === r.id))
+          .map((r) => ({ id: r.id, sets: [], done: false })),
+      ]),
+    }, '全部加入') : null);
 }
 
 /*
@@ -486,11 +575,19 @@ export function renderTraining(root) {
   clearEl(root);
   // 整页重绘会把上一条的 DOM 丢掉，重新建一条；pending 本身是模块级的，留着
   pickerBar = buildPickerBar();
+  /*
+   * 顺序按「我今天练了什么 → 接下来练什么 → 这一套行不行 → 前几天练了什么」。
+   *
+   * 推荐紧跟在控制它的那几个开关后面：换一下部位或器械就看见推荐跟着变。
+   * 原先推荐长在页面最上面，和控制它的开关隔着一整列动作，
+   * 换了档位也不知道是它在变。
+   */
   mount(root,
     planCard(),
-    adviceCard(rerender),
-    weeklyCard(),
-    starterCard(rerender),
+    scopeCard(rerender),
+    recommendCard(),
     pickerCard(rerender),
+    adviceCard(rerender),
+    weeklyCard(rerender),
   );
 }

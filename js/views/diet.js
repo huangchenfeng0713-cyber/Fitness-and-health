@@ -73,7 +73,6 @@ const RESULT_PREVIEW = 10;
 function buildShell(root) {
   clearEl(root);
 
-  nodes.quick = h('div.slot');
   nodes.favRow = h('div.slot');
   nodes.categories = h('div.slot');
   nodes.results = h('div.slot');
@@ -141,27 +140,19 @@ function buildShell(root) {
 
   nodes.root = h('div.view-stack', null,
     // 喝水放最上面：它是「点两下就完事」的动作，不该压在记录列表下面
-    nodes.quick, nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
+    nodes.water, nodes.searchCard, nodes.entries, nodes.advice);
   mount(root, nodes.root);
 }
 
 /* ---------------------------------------------------------------- 各区块 */
 
-/** 顶部实时剩余额度，记账时随时能看到 */
-function refreshQuick() {
-  const d = state.derived;
-  clearEl(nodes.quick);
-  if (!d) return;
-  const { kcal, protein } = d.advice.gaps;
-  mount(nodes.quick, h('div.quick-strip', null,
-    h('div.qs-item', null, h('span', null, '热量余量'),
-      h('strong', { class: kcal.remaining < 0 ? 'neg' : '' }, `${num(kcal.remaining)} kcal`)),
-    h('div.qs-item', null, h('span', null, '蛋白还差'),
-      h('strong', { class: protein.remaining <= 0 ? 'pos' : '' }, `${num(Math.max(protein.remaining, 0), 1)} g`)),
-    h('div.qs-item', null, h('span', null, '下一餐'),
-      h('strong', null, `${MEAL_LABEL[d.advice.budget.meal.key]} ${num(d.advice.budget.kcal)} kcal`)),
-  ));
-}
+/*
+ * 顶部那条「热量余量 / 蛋白还差 / 下一餐预算」已删。
+ *
+ * 三个数在这一页各有更好的去处：份量面板本来就写着「记下这一笔会推进到哪」，
+ * 那才是做决定的时刻；而「今天整体怎么样」是今日页的问题。
+ * 摆在这儿只是把同一批数字提前念一遍，还把搜索框顶到了首屏之外。
+ */
 
 /*
  * 历史搜索：记过的食物，点一下直接回到份量面板。
@@ -913,6 +904,44 @@ function refreshCustomForm() {
 }
 
 
+/*
+ * 餐次图标。五个标题原先只有两个汉字，滑到一半分不出看的是哪一餐。
+ *
+ * 一律单色线条，不用彩色 emoji：emoji 在 iOS / Android / 桌面上是三套画风，
+ * 摆在一列灰字里像是从别的应用粘过来的。
+ */
+const MEAL_ICON = {
+  // 日出：地平线上半个太阳，加一支向上的箭头
+  breakfast: 'M3.5 19h17M7 19a5 5 0 0 1 10 0M12 3v5M9.4 5.6 12 3l2.6 2.6M3.5 15h2.2M18.3 15h2.2',
+  // 正午的太阳：整圈加八道光
+  lunch: 'M12 16.2a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4ZM12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7',
+  // 刀叉：晚饭是坐下来吃的那一顿
+  dinner: 'M7 3v6.5a2 2 0 0 0 2 2v9.5M7 3v6M9.6 3v6M16.8 3c-1.1 0-2 1.8-2 4.2s.9 4.2 2 4.2V21',
+  // 苹果：加餐多半是水果或一小份点心
+  snack: 'M12 8c-.9-1.4-2.4-2-3.7-1.5C6.5 7.2 5.6 9.3 6.3 12c.7 2.5 2.2 5.1 3.9 5.1.7 0 1.2-.4 1.8-.4s1.1.4 1.8.4c1.7 0 3.2-2.6 3.9-5.1.7-2.7-.2-4.8-2-5.5-1.3-.5-2.8.1-3.7 1.5ZM12 8V5.9c0-.9.7-1.6 1.8-1.8',
+  // 星星：夜宵
+  late: 'm12 3.8 2.3 4.7 5.2.8-3.8 3.6.9 5.2-4.6-2.5-4.6 2.5.9-5.2-3.8-3.6 5.2-.8L12 3.8Z',
+};
+
+function mealIcon(meal) {
+  const path = MEAL_ICON[meal];
+  if (!path) return null;
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = document.createElementNS(ns, 'svg');
+  el.setAttribute('viewBox', '0 0 24 24');
+  el.setAttribute('class', 'meal-icon');
+  el.setAttribute('aria-hidden', 'true');
+  const p = document.createElementNS(ns, 'path');
+  p.setAttribute('d', path);
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke', 'currentColor');
+  p.setAttribute('stroke-width', '1.6');
+  p.setAttribute('stroke-linecap', 'round');
+  p.setAttribute('stroke-linejoin', 'round');
+  el.append(p);
+  return el;
+}
+
 function refreshEntries() {
   clearEl(nodes.entries);
   const order = MEALS.map((m) => m.key);
@@ -945,6 +974,7 @@ function refreshEntries() {
         }, editing ? '完成' : '编辑'))),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
+        mealIcon(meal),
         h('strong', null, MEAL_LABEL[meal] || meal),
         h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
       list.map((e) => entryRow(e, editing)))),
@@ -1048,7 +1078,6 @@ export function renderDiet(root) {
     refreshResults();
     refreshPortion();
   }
-  refreshQuick();
   refreshEntries();
   refreshAdvice();
 

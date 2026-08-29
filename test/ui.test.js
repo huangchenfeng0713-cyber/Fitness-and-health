@@ -152,11 +152,19 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
   assert.match(card, /waterCount: next/, '次数没有落到 waterCount 字段上');
   assert.ok(!/MAX_ONE_TIME_ML|waterMl: Math\.max/.test(card), '还留着按毫升记录的老路');
   // 误触之后总得有办法改回来
-  assert.match(card, /'撤销一次'/, '点错了没法退回去');
+  /*
+   * 撤销只在刚点完那几秒出现。它一天里最多用上一次（误触），
+   * 常驻就是白占一个控件和四个字。
+   */
+  assert.match(card, /'撤销'/, '点错了没法退回去');
+  assert.match(card, /UNDO_WINDOW_MS/, '撤销没有时间窗，等于常驻');
+  assert.match(card, /const justLogged = Date\.now\(\) < undoUntil/, '撤销的显示条件没有跟着时间窗走');
+  // 次数写在那条状态里，标题右边不能再挂一个同样的数
+  assert.ok(!/card-tag[^\n]*已记录/.test(card), '同一个数在一张卡上写了两遍');
   assert.match(card, /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
 
   // Apple 健康同步来的毫升不能丢：那是设备数据，仍留在数据页
-  assert.match(read('js/views/cards/health-metrics.js'), /'waterMl'/, '数据页不该丢掉设备记录的饮水');
+  assert.match(read('js/core/health-card.js'), /key: 'waterMl'/, '数据页不该丢掉设备记录的饮水');
 
   // 说明里必须讲清楚这个数不代表全天水分
   assert.match(card, /饮料、汤、粥、水果和饭菜里的水分同样被人体吸收/, '没有说清这个数的口径');
@@ -190,14 +198,20 @@ test('缺数据的指标画一道杠，不是整格消失', () => {
    * 格子重新排布、每天长得都不一样，而且「没测到」和「这个应用不显示心率」
    * 从界面上分不出来。
    */
-  const metrics = read('js/views/cards/health-metrics.js');
+  const metrics = strip(read('js/views/cards/health-metrics.js'));
   assert.match(metrics, /const DASH = '—'/, '没有占位符');
-  assert.match(metrics, /value \?\? DASH/, '缺值时没有退回占位符');
-  assert.ok(!/\.filter\(\(\[, , v\]\) => v != null\)/.test(metrics), '仍在把缺值的项过滤掉');
-  // 体脂例外：多数人没有体脂秤，常年挂一道杠只是噪音
-  assert.match(metrics, /\.\.\.\(bodyFat \? \[cell\('bodyFatPct'/, '体脂应当只在记到过时出现');
+  assert.match(metrics, /cell\.value == null\) return DASH/, '缺值时没有退回占位符');
+  assert.ok(!/\.filter\(\(c\) => c\.value != null\)\.map\(\(c\) => c\)/.test(metrics),
+    '仍在把缺值的项过滤掉');
   // 一个数都没有时是「还没同步过」，不是一排杠
-  assert.match(metrics, /has\s*\n?\s*\? h\('div\.metric-grid'/, '空状态判断没有走「有没有任何数据」');
+  assert.match(metrics, /info\.hasAny\s*\n?\s*\? h\('div\.metric-grid'/, '空状态判断没有走「有没有任何数据」');
+
+  // 体脂和饮水例外：没有体脂秤 / 没同步过饮水的人，常年挂一道杠只是噪音
+  const core = strip(read('js/core/health-card.js'));
+  for (const key of ['bodyFatPct', 'waterMl']) {
+    assert.ok(new RegExp(`key: '${key}'[^}]*optIn: true`).test(core), `${key} 应当只在记到过时占一格`);
+  }
+  assert.match(core, /!f\.optIn \|\| seen\.has\(f\.key\)/, '可选项没有按「历史上有没有记到过」筛');
 });
 
 test('漏记的那天不能被当成 0 画进折线', () => {
@@ -252,11 +266,33 @@ test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
   const settings = page('settings');
   assert.ok(!settings.includes('syncWeightFromApple'), '身体数据只有一个来源，不该再留开关');
 
-  // 健康数据卡上的体重同样沿用最近一次，并把日期标在名字后面
-  const metrics = read('js/views/cards/health-metrics.js');
-  assert.match(metrics, /latestHealthEntry/, '体重应取最近一次记录而不是当天那条');
-  assert.match(metrics, /`体重 \$\{weight\.date\}`/, '沿用前几天的值要标出日期');
-  assert.ok(!/'饮水'/.test(metrics), '饮水已从健康数据卡撤掉');
+});
+
+/*
+ * 「今日健康数据」这张卡只说今天。
+ *
+ * 它以前干两件互相打架的事：跟着今日页选的日期走（于是翻回昨天，标题还写「今天」），
+ * 又把体重、体脂沿用最近一次（于是三天前称的数看着像今早刚称的）。
+ * 现在两条都改掉：日期钉死今天，缺的项就是一道杠，最近一次去感叹号里查。
+ */
+test('今日健康数据钉死今天，不沿用前几天的体重体脂', () => {
+  const metrics = strip(read('js/views/cards/health-metrics.js'));
+  assert.match(metrics, /const today = todayKey\(\);/, '这张卡还在跟着所选日期走');
+  assert.ok(!/state\.day/.test(metrics), `不该再读 state.day：${metrics.match(/.*state\.day.*/)?.[0]}`);
+  assert.match(metrics, /state\.healthByDate\?\.get\(today\)/, '取的不是今天那一行');
+
+  // 格子里不许再出现「体重 08-26」这种把旧日期挂在名字后面的写法
+  assert.ok(!/`体重 \$\{/.test(metrics), '又把沿用的日期标回格子里了');
+  // 最近一次仍然查得到，只是收进了说明层
+  assert.match(metrics, /function lastSeenLines\(/, '最近一次测量没有地方可查');
+  assert.match(metrics, /infoTip\(/, '同步情况和最近一次测量要收在感叹号里');
+
+  // 「已同步」说的是今天同步过没有，不是「有没有缺项」
+  const core = strip(read('js/core/health-card.js'));
+  assert.match(core, /localDay\(at\) === today/, '同步状态没有按「今天有没有同步」判定');
+  assert.ok(!/synced[^\n]*missing\.length/.test(core), '又拿缺项去判定同步状态了');
+  // 主界面上不再出现「同步＋补录」「手动录入」这类来源字样
+  assert.ok(!/同步＋补录|手动录入/.test(metrics), '来源字样应收进说明层，不占卡面');
 });
 
 test('挑动作的两种入口都在，部位标签标出今天已练到的组', () => {
@@ -279,8 +315,13 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
 
   assert.match(training, /\['group', '身体部位'\].*\['split', '动作模式'\]/s,
     '两种选择入口应使用“身体部位 / 动作模式”');
-  assert.match(read('js/app.js'), /按身体部位或动作模式挑选，记下组数与重量/,
-    '健身页副标题仍只说按部位，和实际两种选择方式不一致');
+  /*
+   * 顶栏副标题不许写「数据截至 X」：健身页不跟今日 / 饮食页的日期走，
+   * 那句话会让人以为翻回昨天，动作记录也跟着翻。
+   */
+  const app = strip(read('js/app.js'));
+  assert.match(app, /'动作记录与训练建议'/, '健身页副标题应说明这一页做什么');
+  assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
   assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
 });
@@ -302,10 +343,31 @@ test('摞在一起的分段控件之间要留缝，器械档位不借趋势卡�
     '分段控件按内容分宽，不能等宽');
 });
 
-test('动作推荐跟随当前选择方式，不会永远按身体部位生成', () => {
-  const training = read('js/views/training.js');
-  assert.match(training, /byGroup \? starterCombo\(activeGroup\) : starterSplitCombo\(activeSplit\)/);
-  assert.match(training, /4–5 个互补动作/);
+/*
+ * 动作推荐要跟着控制它的那几个开关走，而且得认得已经选了什么 ——
+ * 否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。
+ */
+test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () => {
+  const training = strip(read('js/views/training.js'));
+  assert.match(training, /recommendFor\(\{[\s\S]*?mode: pickMode/, '推荐没跟着选择方式走');
+  assert.match(training, /selection: picked\(\)/, '推荐没有把已选动作算进去');
+  assert.match(training, /equip: equipFilter/, '推荐没跟着器械档位走');
+
+  /*
+   * 推荐紧挨着控制它的开关：中间隔着一整列动作的话，换了档位也看不出是它在变。
+   * 只看挂载那一段——函数定义里也有同样的字样。
+   */
+  const mounted = training.slice(training.indexOf('mount(root,'));
+  const order = ['planCard()', 'scopeCard(rerender)', 'recommendCard()', 'pickerCard(rerender)',
+    'adviceCard(rerender)', 'weeklyCard(rerender)'];
+  const at = order.map((k) => mounted.indexOf(k));
+  assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
+  assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
+
+  const core = strip(read('js/core/training.js'));
+  assert.match(core, /overlapLevel\(overlapScore\(e, c\)\) === 'high'/, '没有排除与已选高度重合的动作');
+  // 理由是短标签，不是一段话
+  assert.match(core, /export function exerciseTags/, '推荐理由没有压成短标签');
 });
 
 test('动作行默认只给一行：练哪儿、什么模式', () => {
@@ -564,7 +626,8 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
-  assert.ok(trends.includes("'当前设置估算目标'"));
+  // 目标线画的是现在这套设置算出来的目标，历史那几天当时未必是这个数
+  assert.ok(trends.includes("targetContext = '当前目标'"));
 });
 
 
@@ -596,8 +659,14 @@ test('趋势图统计到前一天为止，当天不画也不计入', () => {
   // 一天没过完，活动能量和摄入都还在累加，画出来是个必然偏低的点，
   // 会被误读成「今天掉下去了」。区间本身就止于前一天，图与平均用同一批数据。
   const trends = page('health');
-  assert.match(trends, /function lastEndedDay\(\)[\s\S]*?shiftDay\(state\.day, -1\)/,
+  assert.match(trends, /function lastEndedDay\(\)[\s\S]*?shiftDay\(todayKey\(\), -1\)/,
     '缺少「区间止于前一天」的实现');
+  /*
+   * 而且是**真正的昨天**，不跟今日 / 饮食页选的日期走：
+   * 跟着翻的话，「近 7 日」在不同页面上会指不同的七天。
+   */
+  assert.ok(!/state\.day/.test(strip(read('js/views/cards/trend-charts.js'))),
+    '趋势图仍在跟着所选日期走');
   assert.match(trends, /let d = lastEndedDay\(\);/, 'dateRange 仍从今天往回数');
   for (const gone of ['ended(', 'endedKcal', 'endedSleep', 'todayHasDiet', 'viewingToday']) {
     assert.ok(!trends.includes(gone), `还残留旧的当天过滤逻辑：${gone}`);
@@ -606,10 +675,10 @@ test('趋势图统计到前一天为止，当天不画也不计入', () => {
   assert.match(trends, /const avgActive = average\(activeSeries\)/);
 });
 
-test('区间档位是 7 天 / 近一个月 / 近六个月 / 全部', () => {
+test('区间档位是 近 7 日 / 近 30 日 / 近 90 日 / 全部', () => {
   const trends = page('health');
   const labels = [...trends.matchAll(/label: '([^']+)', days:/g)].map((m) => m[1]);
-  assert.deepEqual(labels, ['7 天', '近一个月', '近六个月', '全部']);
+  assert.deepEqual(labels, ['近 7 日', '近 30 日', '近 90 日', '全部']);
 });
 
 test('只有 7 天视图开逐日标注与点选', () => {
@@ -980,7 +1049,8 @@ test('「已选动作」只记录选了什么，不在这里给建议', () => {
    */
   const training = read('js/views/training.js');
   const card = training.slice(training.indexOf('function planCard()'), training.indexOf('function tipAction'));
-  assert.match(card, /'已选动作' : `\$\{state\.day\} 的训练`/, '卡片标题没改成「已选动作」');
+  // 健身页固定记今天，标题就直说是今天，不再跟着日期变来变去
+  assert.match(card, /dayLabel = '今日动作'/, '卡片标题没改成「今日动作」');
   assert.ok(!card.includes('覆盖部位'), '记录卡里还留着覆盖部位的分析');
   assert.ok(!card.includes('没有明显重复'), '记录卡里还留着重复度的结论');
   assert.ok(!/findOverlaps|coverage\(/.test(card), '记录卡还在调分析函数');
@@ -1048,13 +1118,26 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
 
   assert.match(code, /macroSplit\(targets, gaps\)/, '主卡没有算碳水脂肪的结构比例');
   assert.match(code, /splitBar\(/, '合用的那一条没有画出来');
-  assert.match(code, /markPct: split\.planCarbPct/, '条上要标出计划的分界线');
-  assert.match(code, /split-grams-plan.*split\.note/, '条上那根竖标得有说明');
+
+  /*
+   * 是刻度不是进度条：一段参考区间 + 一个当前位置的点。
+   * 原先画的是「两段按比例分」加一根计划分界线 —— 那样看着像在说
+   * 「分界线就是标准答案」，可结构本来就有二十个百分点的合理区间。
+   */
+  assert.match(code, /pointPct: split\.carbPct/, '当前比例没有画成指针');
+  assert.match(code, /bandLo: split\.bandLo, bandHi: split\.bandHi/, '没有画出参考区间');
+  assert.ok(!/markPct|planCarbPct/.test(code), '又退回「一个计划点」了');
+  assert.match(code, /split-grams-plan.*split\.note/, '参考区间得有文字说明');
 
   // 比例说不出吃了多少，克数得一起给
   assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
   assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
   assert.match(code, /split\.carbPct\}% : \$\{split\.fatPct\}%/, '缺少两者的比例');
+
+  // 结构偏移只用中性色：橙和红留给真正的上限
+  const barCss = read('css/app.css').slice(read('css/app.css').indexOf('.split-bar {'));
+  const barBlock = barCss.slice(0, barCss.indexOf('.hero-rate-note'));
+  assert.ok(!/--warn|--danger/.test(barBlock), '结构条用上了警告色');
 
   // 不能再各画各的：一旦回到两行，那 796 kcal 的自由度就又回来了
   assert.ok(!/metricRow\(by\.carb\)|metricRow\(by\.fat\)/.test(code),
@@ -1063,7 +1146,8 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
 
   const splitCode = read('js/lib/charts.js');
   assert.match(strip(splitCode), /export function splitBar/, 'splitBar 得住在 charts.js 里');
-  assert.match(read('css/app.css'), /\.split-bar-carb/, '合用那条没有样式');
+  assert.match(read('css/app.css'), /\.split-bar-band/, '参考区间没有样式');
+  assert.match(read('css/app.css'), /\.split-bar-point/, '指针没有样式');
 });
 
 /*
@@ -1104,4 +1188,61 @@ test('填目标速率时给出即时判断，离谱的存不下去', () => {
   // 提示要靠改一个节点更新，不能重绘表单：重绘会把正在输入的框连根换掉
   const hint = profile.slice(profile.indexOf('const syncRateHint'), profile.indexOf('const rate = h('));
   assert.ok(!/rerender\(/.test(hint), '刷新提示时重绘了整张表单');
+});
+
+/*
+ * 设置主页是一张分组列表，不再把五张表单一次全铺开。
+ * 原先想改一个体重，要先滑过身体信息的十个输入框、账号表单、数据管理和一整段关于。
+ */
+test('设置主页只列五组，点进去才是表单', () => {
+  const settings = strip(read('js/views/settings.js'));
+  const keys = [...settings.matchAll(/\{ key: '(\w+)', label: '([^']+)' \}/g)].map((m) => m[2]);
+  assert.deepEqual(keys, ['身体与目标', '账号与同步', '数据管理', '计算与显示', '关于与反馈']);
+
+  // 每行右边那句「现在设成什么了」：不点进去也知道
+  assert.match(settings, /function sectionStatus\(/, '分组行没有当前状态');
+  assert.match(settings, /`v\$\{APP_VERSION\}`/, '关于那一组没显示版本号');
+  assert.match(settings, /function backBar\(/, '二级页面没有返回入口');
+  assert.match(read('css/app.css'), /\.set-row \{/, '分组列表没有样式');
+
+  /*
+   * 账号冲突、待确认归属、锁定这几种必须整屏摆出来。
+   * 它们说的是「你的数据现在有风险」，收进二级页面等于没提示。
+   */
+  const guard = settings.slice(settings.indexOf('const protectedAccountData'));
+  assert.match(guard, /openSection = null;\s*\n\s*mount\(root, slot\);\s*\n\s*return;/,
+    '出风险时没有强制回到整屏提示');
+});
+
+/*
+ * 顶栏日期：标题和副标题不许说同一件事。
+ * 原先大标题写「昨天」，下面又写「08-28 · 回今天」—— 日期印了两遍。
+ */
+test('顶栏日期只印一次，不跟日期走的页面也不写「数据截至」', () => {
+  const app = strip(read('js/app.js'));
+  assert.match(app, /dayHeading\(state\.day, todayKey\(\)\)/, '顶栏没有走统一的日期措辞');
+  assert.ok(!/state\.day\.slice\(5\)/.test(app), '副标题又自己拼了一遍日期');
+  assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
+
+  // 只有今日和饮食两页跟着日期走
+  const dated = [...app.matchAll(/key: '(\w+)',[^}]*dated: true/g)].map((m) => m[1]);
+  assert.deepEqual(dated, ['today', 'diet']);
+});
+
+/*
+ * 数据页、趋势和健身页都不跟今日 / 饮食页选的日期走。
+ * 跟着翻的话，「今日健康数据」「近 7 日」这些说法在不同页面上会指不同的日子。
+ */
+test('数据页、趋势和健身页都不跟所选日期走', () => {
+  for (const path of [
+    'js/views/cards/health-metrics.js',
+    'js/views/cards/weekly-summary.js',
+    'js/views/cards/trend-charts.js',
+    'js/views/training.js',
+  ]) {
+    assert.ok(!/state\.day/.test(strip(read(path))), `${path} 仍在读 state.day`);
+  }
+  // 近 7 日速览统计到昨天：今天还没过完，算进来会把日均拉低
+  assert.match(strip(read('js/views/cards/weekly-summary.js')), /endDate: shiftDay\(todayKey\(\), -1\)/);
+  assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => todayKey\(\)/);
 });

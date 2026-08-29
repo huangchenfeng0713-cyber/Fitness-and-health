@@ -7,6 +7,7 @@
 
 import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
 import { clamp, round, ATWATER } from './nutrition.js';
+import { macroSplit } from './metrics.js';
 
 /** 餐次定义：时间窗 + 该餐在全天热量中的默认占比 */
 export const MEALS = [
@@ -384,6 +385,9 @@ export function buildAdvice(input) {
     health = {},
     baseline = {},
     now = new Date(),
+    // 看历史日期时「今天还没同步」「今天还没记饮水」这类提醒都不该出现
+    isToday = true,
+    waterCount = null,
   } = input;
 
   const gaps = {};
@@ -445,7 +449,10 @@ export function buildAdvice(input) {
   const status = judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake });
 
   // ---- 洞察 ----
-  const insights = buildInsights({ gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries });
+  const insights = buildInsights({
+    gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
+    isToday, waterCount,
+  });
 
   return {
     generatedAt: now.toISOString(),
@@ -500,12 +507,16 @@ export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake =
     // 全天的一半。那适合内部排预算，却不适合直接叫人一餐补回；空记录时只展示
     // 当前餐原本的日占比，避免出现「13:30 午餐建议 975 kcal」这种过量暗示。
     const normalMealKcal = round(Math.min(budget.kcal, targets.kcal * budget.meal.share));
+    /*
+     * 这一段只说热量。「漏记了就先补记」是数据质量的事，归今日提示第一条，
+     * 在这儿再说一遍就是同一屏里写两次。
+     */
     return {
       level: late ? 'warn' : 'good',
       headline: `还有 ${kcalLeft} kcal 热量余量`,
       detail: late
-        ? '今天还没有饮食记录。若只是漏记，请先补记；若确实尚未进食，也不建议在夜间一次补完全天缺口。'
-        : `今天还没有饮食记录。若只是漏记，请先补记；若确实还没吃，${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
+        ? `按计划今天要吃到 ${gaps.kcal.target} kcal。夜里不建议一次补完全天缺口，明天回到正常节奏即可。`
+        : `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
     };
   }
   if (kcalPct < expected - 30 && dayProgress > 0.5) {
@@ -516,12 +527,21 @@ export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake =
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
+  /*
+   * 天还没亮的时候不拿「时间参考」说事。
+   *
+   * 6:00 之前 expected 是 0%，于是清早吃了顿早饭就会读到
+   * 「记录量高于当前时间参考（0%）」—— 那句话没有任何信息，
+   * 只是把一个必然成立的算术结果念了一遍。
+   */
   const pace = kcalPct - expected;
-  const paceText = Math.abs(pace) <= 12
-    ? `记录量与当前时间参考（${expected}%）大致接近`
-    : pace > 0
-      ? `记录量高于当前时间参考（${expected}%），后面餐次按剩余量安排即可`
-      : `记录量低于当前时间参考（${expected}%），先确认是否漏记，别把缺口全留到晚上`;
+  const paceText = dayProgress < 0.15
+    ? '一天才刚开始，按平时的节奏吃就行'
+    : Math.abs(pace) <= 12
+      ? `记录量与当前时间参考（${expected}%）大致接近`
+      : pace > 0
+        ? `记录量高于当前时间参考（${expected}%），后面餐次按剩余量安排即可`
+        : `记录量低于当前时间参考（${expected}%），先确认是否漏记，别把缺口全留到晚上`;
   return {
     level: 'good',
     headline: `还有 ${kcalLeft} kcal 热量余量`,
@@ -529,10 +549,56 @@ export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake =
   };
 }
 
-/** 结构化洞察条目 */
-export function buildInsights({ gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries }) {
+/**
+ * 今日提示的优先级。数字小的排前面。
+ *
+ * 一屏默认只放得下三条，所以「先说哪一条」本身就是判断：
+ *  1 数据本身有问题 —— 漏记、没同步、数值不可信。它排最前面是因为
+ *    下面每一条的可信度都取决于它：漏记半天的人，「热量还差 900」是假的。
+ *  2 热量和蛋白 —— 今天真正要执行的两件事。
+ *  3 明确的门槛 —— 钠、游离糖的上限，纤维的下限，都有公开出处。
+ *  4 碳水脂肪的结构 —— 有很宽的合理区间，偏一点不是错误，所以排在门槛之后。
+ *  5 活动、睡眠、饮水这类记录 —— 提醒性质，最后说。
+ */
+export const INSIGHT_PRIORITY = {
+  data: 1, energy: 2, threshold: 3, split: 4, habit: 5,
+};
+
+/**
+ * 结构化洞察条目。
+ *
+ * 每条都是三段：**当前情况**（title）、**判断依据**（basis）、**可执行建议**（action）。
+ * 分开三段是因为原先它们糊在一句话里，读的人分不清哪句是事实、哪句是程序的推断 ——
+ * 「吃得慢一些」当年就是这么混进来的：程序根本没有进餐时长数据，
+ * 那句话没有任何依据，却和有依据的数字长得一模一样。
+ */
+export function buildInsights({
+  gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
+  isToday = true, waterCount = null,
+}) {
   const list = [];
-  const add = (type, title, text) => list.push({ type, title, text });
+  const add = (type, priority, title, basis, action = '') => list.push({
+    type,
+    priority,
+    title,
+    basis,
+    action,
+    // text 是三段拼起来的整句，给只需要一段文字的地方用
+    text: [basis, action].filter(Boolean).join(''),
+  });
+  const hour = now.getHours();
+
+  /* ---------------- 1 数据本身有没有问题 ---------------- */
+
+  /*
+   * 漏记排在所有结论前面：下面每一条的分母都是它。
+   * 半天没记的人看到「热量还差 900 kcal」，只会照着去多吃。
+   */
+  if (!entries.length && gaps.kcal.eaten <= 0 && hour >= 12) {
+    add('warn', INSIGHT_PRIORITY.data, '今天尚无饮食记录',
+      '下面所有的完成度都是从 0 算起的，漏记会让每一条建议都失真。',
+      '若只是漏记，请先补记；若确实还没进食，下一餐按正常份量安排，不必一次补齐全天缺口。');
+  }
 
   /*
    * 活动能量不可信时先把话说清楚，再谈预算。
@@ -541,11 +607,18 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
    * 用户只会看到一个正常的目标，不知道自己的快捷指令一直在取错数据。
    */
   if (targets.activeCapped) {
-    add('warn', '今天的活动能量数值不可信',
+    add('warn', INSIGHT_PRIORITY.data, '今天的活动能量数值不可信',
       `健康数据里今天的活动能量是 ${round(targets.activeReported || 0)} kcal，`
       + `按现在的时间点算不可能达到（近期日均 ${round(baseline.activeEnergy || 0)} kcal）。`
-      + '热量目标已改按平时的活动节奏估算。'
-      + '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，建议去「数据」页核对一下。');
+      + '热量目标已改按平时的活动节奏估算。',
+      '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，去「数据」页核对一下。');
+  }
+
+  // 没同步到活动能量，热量目标就退回公式估算——这件事得让人知道，而不是静默降级
+  if (isToday && !targets.activeCapped && targets.tdeeSource !== 'apple') {
+    add('warn', INSIGHT_PRIORITY.data, '今天还没有同步到活动能量',
+      '热量目标暂时按活动系数估算，不是按设备记录算的。',
+      '到设置的「数据管理」同步一次，目标会按今天实际的活动重新估。');
   }
 
   /*
@@ -553,18 +626,36 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
    * 年龄差 10 岁在 Mifflin-St Jeor 里就是 50 kcal，静默用兜底值等于悄悄编数据。
    */
   if (targets.ageEstimated) {
-    add('warn', '年龄按 30 岁估算',
-      '到设置里补上生日会更准——年龄每差 10 岁就是 50 kcal。');
-  }
-  if (targets.carbBelowRda) {
-    add('info', `碳水目标 ${targets.carb}g，低于 IOM 推荐的 130g`,
-      '蛋白和脂肪占得较多，把碳水挤到了这个水平以下。长期是否合适因人而异。');
+    add('warn', INSIGHT_PRIORITY.data, '年龄按 30 岁估算',
+      '没有生日，静息能量只能用默认年龄算——年龄每差 10 岁就是 50 kcal。',
+      '到设置里补上生日会更准。');
   }
 
-  // 动态热量预算：把"今天比平时多动/少动"和"预算调整了多少"讲成同一件事
+  /* ---------------- 2 热量和蛋白 ---------------- */
+
+  const proteinShort = gaps.protein.remaining;
+  const kcalLeft = gaps.kcal.remaining;
+  if (proteinShort > 0 && proteinShort * ATWATER.protein > kcalLeft + 1) {
+    const need = round(proteinShort * ATWATER.protein);
+    const minimumOver = Math.max(1, Math.ceil(need - kcalLeft));
+    add('protein', INSIGHT_PRIORITY.energy, `剩下的热量补不齐这 ${round(proteinShort)}g 蛋白`,
+      `蛋白质本身带热量：这些蛋白即使一点脂肪和碳水都不带也要 ${need} kcal，`
+      + `而今天只剩 ${round(kcalLeft)} kcal。`,
+      `可以守住热量余量，也可以优先补蛋白并接受大约 ${minimumOver} kcal 的超出；`
+      + '不必为了凑数强行进食，明天把蛋白提前分到前几餐更省事。');
+  } else if (proteinShort > 10) {
+    const eq = proteinEquivalent(proteinShort);
+    add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,
+      `目标依据：${targets.proteinBasis}。`,
+      `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。`);
+  } else if (gaps.protein.pct >= 100) {
+    add('good', INSIGHT_PRIORITY.energy, '蛋白已达标',
+      `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);
+  }
+
+  // 动态热量预算：把「今天的目标是按什么算的」讲清楚
   if (targets.tdeeSource === 'apple' && targets.staticTdee > 0) {
     const budgetDelta = round(targets.tdee - targets.staticTdee);
-    const activeDelta = baseline.activeEnergy > 0 ? round((health.activeEnergy || 0) - baseline.activeEnergy) : null;
     const sourceText = targets.activeSource === 'formula-fallback'
       ? '按设备静息记录并用活动系数补足缺失活动'
       : targets.activeSource === 'device-baseline'
@@ -572,78 +663,94 @@ export function buildInsights({ gaps, targets, health, baseline, profile, now, i
         : '按 Apple 设备记录外推';
     if (Math.abs(budgetDelta) >= 80) {
       const up = budgetDelta > 0;
-      /*
-       * 目标现在按近期节奏算、一天之内不变，所以这条不必再解释「为什么又变了」，
-       * 只要说清今天这个数是按什么来的。原文四句话讲一件事。
-       */
-      add(
-        up ? 'up' : 'down',
+      add(up ? 'up' : 'down', INSIGHT_PRIORITY.energy,
         `热量目标比公式估算${up ? '高' : '低'} ${Math.abs(budgetDelta)} kcal`,
-        `${sourceText}：${round(targets.tdee)} kcal，公式估算是 ${round(targets.staticTdee)} kcal。`,
-      );
+        `${sourceText}：${round(targets.tdee)} kcal，公式估算是 ${round(targets.staticTdee)} kcal。`);
     }
   }
 
+  if (targets.carbBelowRda) {
+    add('info', INSIGHT_PRIORITY.energy, `碳水目标 ${targets.carb}g，低于 IOM 推荐的 130g`,
+      '蛋白和脂肪占得较多，把碳水挤到了这个水平以下。',
+      '长期是否合适因人而异，可以适当把脂肪让出一些给碳水。');
+  }
+
+  /* ---------------- 3 明确的门槛 ---------------- */
+
+  if (gaps.sodium.pct > 100) {
+    add('warn', INSIGHT_PRIORITY.threshold,
+      `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`,
+      'WHO 成人钠摄入建议低于 2000 mg/天，约合 5g 食盐。',
+      '余下餐次少选腌制品、加工肉和重口味汤汁。');
+  }
+  if (gaps.sugar.pct > 100) {
+    add('warn', INSIGHT_PRIORITY.threshold,
+      `游离糖已超出建议上限（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`,
+      'WHO 建议游离糖低于总能量的 10%。',
+      '先看含糖饮料、果汁和甜点。');
+  }
+  if (gaps.fiber.remaining > gaps.fiber.target * 0.5 && hour >= 14) {
+    add('fiber', INSIGHT_PRIORITY.threshold,
+      `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`,
+      '中国成人参考 25–30g，现在过了大半天还不到一半。',
+      '加一份蔬菜、完整水果或全谷物。');
+  }
+
+  /* ---------------- 4 碳水脂肪的结构 ---------------- */
+
+  /*
+   * 结构偏移不是错误，所以它排在门槛之后，也不用警告色。
+   * 只在这一天真吃了不少东西之后才说：早饭一碗粥就判「偏碳水」，
+   * 说的是那一顿，不是这一天。
+   */
+  const split = macroSplit(targets, gaps);
+  if (split.structure === 'carb' || split.structure === 'fat') {
+    const enough = split.kcal >= Math.max(400, (Number(targets.kcal) || 0) * 0.3);
+    if (enough) {
+      const heavy = split.structure === 'carb' ? '碳水' : '脂肪';
+      const light = split.structure === 'carb' ? '脂肪' : '碳水';
+      add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
+        `碳水和脂肪按热量算是 ${split.carbPct}% : ${split.fatPct}%，`
+        + `计划里是 ${split.planCarbPct}% : ${split.planFatPct}%。`,
+        `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
+    }
+  }
+
+  /* ---------------- 5 活动、睡眠、饮水 ---------------- */
+
   if (isTrainingDay) {
-    add('info', '今天是训练日',
+    add('info', INSIGHT_PRIORITY.habit, '今天是训练日',
       `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
       + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
-      + '。全天总量够的前提下，可把 20–40g 蛋白安排在训练前后。');
+      + '。',
+      '全天总量够的前提下，可把 20–40g 蛋白安排在训练前后。');
+  }
+
+  // 睡眠：只在设备真的记到的时候说，缺数据不等于没睡
+  const sleep = Number(health.sleepMinutes);
+  if (Number.isFinite(sleep) && sleep > 0 && sleep < 390) {
+    add('info', INSIGHT_PRIORITY.habit, `昨晚睡了 ${round(sleep / 60, 1)} 小时`,
+      '成人参考 7–9 小时（AASM / SRS 共识），这一晚在参考区间之下。',
+      '睡眠不足会让食欲和训练表现一起变差，今天别再叠加大强度训练。');
   }
 
   /*
-   * 蛋白。「补不齐了」这条以前长在主卡最上面那一段里，可那一段只该说热量；
-   * 而且它和下面这条「蛋白还差 Xg」讲的是同一个缺口，一屏里说了两遍。
+   * 饮水这条说的是「记录」，不是「你水喝少了」。
+   * 次数只代表主动饮水的行为，饮料、汤、粥里的水分同样被吸收，
+   * 拿它当水分是否充足的判据是错的 —— 所以措辞只能停在「还没记过」。
    */
-  const proteinShort = gaps.protein.remaining;
-  const kcalLeft = gaps.kcal.remaining;
-  if (proteinShort > 0 && proteinShort * ATWATER.protein > kcalLeft + 1) {
-    const need = round(proteinShort * ATWATER.protein);
-    const minimumOver = Math.max(1, Math.ceil(need - kcalLeft));
-    add('protein', `剩下的热量补不齐这 ${round(proteinShort)}g 蛋白`,
-      `蛋白质本身带热量：这些蛋白即使一点脂肪和碳水都不带也要 ${need} kcal，`
-      + `而今天只剩 ${round(kcalLeft)} kcal。可以守住热量余量，也可以优先补蛋白并接受大约 ${minimumOver} kcal 的超出；`
-      + '不必为了凑数强行进食，明天把蛋白提前分到前几餐更省事。');
-  } else if (proteinShort > 10) {
-    const eq = proteinEquivalent(proteinShort);
-    add('protein', `蛋白还差 ${round(proteinShort)}g`, `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。目标依据：${targets.proteinBasis}。`);
-  } else if (gaps.protein.pct >= 100) {
-    add('good', '蛋白已达标', `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);
-  }
-
-  // 纤维
-  if (gaps.fiber.remaining > gaps.fiber.target * 0.5 && now.getHours() >= 14) {
-    add('fiber', `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`, '加一份蔬菜、完整水果或全谷物。');
-  }
-
-  // 糖
-  if (gaps.sugar.pct > 100) {
-    add('warn', `游离糖已超出建议上限（${gaps.sugar.eaten}g / ${gaps.sugar.target}g）`, '先看含糖饮料、果汁和甜点。');
-  }
-
-  // 钠
-  if (gaps.sodium.pct > 100) {
-    add('warn', `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`, '余下餐次少选腌制品、加工肉和重口味汤汁。');
+  if (isToday && hour >= 18 && Number(waterCount || 0) <= 0) {
+    add('info', INSIGHT_PRIORITY.habit, '今天还没有记录饮水',
+      '这里只数主动喝水的次数，不代表你今天没喝——汤、粥、饮料里的水分同样被吸收。',
+      '喝了就在饮食页点一下，攒够几天才看得出自己的节奏。');
   }
 
   /*
    * 「近 N 天日均摄入」「蛋白达标几天」「体重趋势 x kg/周」原先都在这里出现一次，
-   * 数据页的热量 / 蛋白 / 体重三张图下面又各说了一遍，而且图那边说得更全
-   * （超标几天、后半段比前半段多吃多少、掉得快不快）。
-   *
-   * 今日提示只回答「今天怎么样」，走势归数据页——同一个结论在两页各写一遍，
-   * 不会让人更明白，只会让今日页变长。
-   *
-   * 注意：「样本不足就不下结论」这条口径也跟着搬了过去，
-   * 由 core/trend-reading.js 的 MIN_POINTS_FOR_CLAIM 把关。
+   * 数据页的热量 / 蛋白 / 体重三张图下面又各说了一遍，而且图那边说得更全。
+   * 今日提示只回答「今天怎么样」，走势归数据页。
    */
 
-  // 饮水
-
-
-  if (!entries.length && gaps.kcal.eaten <= 0 && now.getHours() >= 12) {
-    add('warn', '今天还没有记录任何饮食', '漏记会让所有建议失真。哪怕只是大致估个份量，也比不记准确得多。');
-  }
-
-  return list;
+  // 同优先级保持写下来的顺序：sort 在这里是稳定的
+  return list.sort((a, b) => a.priority - b.priority);
 }

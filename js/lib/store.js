@@ -308,6 +308,8 @@ export function recompute(now = new Date()) {
       proteinHitDays: countProteinHitDays(targets.protein, baseline.windowDays),
     },
     now: isToday ? now : pinnedNow(state.day, now),
+    isToday,
+    waterCount: health.waterCount,
   });
 
   state.derived = {

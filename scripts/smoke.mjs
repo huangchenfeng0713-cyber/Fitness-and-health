@@ -137,6 +137,8 @@ try {
       label: c.querySelector('.micro-label')?.textContent || '',
       level: /\b(met|near|over|plain)\b/.exec(c.className)?.[1] || 'plain',
     }));
+    const chipText = [...document.querySelectorAll('.micro-chip')]
+      .map((c) => c.innerText.replace(/\n/g, ' ')).join('｜');
     const ring = document.querySelector('.ring circle:nth-of-type(2)');
     const foot = document.querySelector('.hero-ring-note')?.textContent || '';
     /*
@@ -144,19 +146,26 @@ try {
      * 段宽是 JS 写进 style 的百分比，写错了不会报错，只会画出半条 —— 得量。
      */
     const splitEl = document.querySelector('.split-row');
-    const seg = (sel) => splitEl?.querySelector(sel)?.getBoundingClientRect().width || 0;
     const noteEl = splitEl?.querySelector('.metric-row-note');
+    const barEl = splitEl?.querySelector('.split-bar');
+    const bandEl = splitEl?.querySelector('.split-bar-band');
+    const pointEl = splitEl?.querySelector('.split-bar-point');
+    const barBox = barEl?.getBoundingClientRect();
     const split = splitEl ? {
-      barWidth: splitEl.querySelector('.split-bar')?.getBoundingClientRect().width || 0,
-      carbWidth: seg('.split-bar-carb'),
-      fatWidth: seg('.split-bar-fat'),
-      hasMark: !!splitEl.querySelector('.split-bar-mark'),
+      barWidth: barBox?.width || 0,
+      bandWidth: bandEl?.getBoundingClientRect().width || 0,
+      hasPoint: !!pointEl,
+      // 指针必须落在条子里：left 是百分比，写错了会跑到卡片外面
+      pointInside: pointEl && barBox
+        ? pointEl.getBoundingClientRect().left >= barBox.left - 8
+          && pointEl.getBoundingClientRect().right <= barBox.right + 8
+        : false,
       text: splitEl.innerText.replace(/\n/g, ' '),
       // 这一行的说明比别的长，nowrap + ellipsis 很容易把它截掉
       noteClipped: noteEl ? noteEl.scrollWidth > noteEl.clientWidth + 1 : false,
     } : null;
     return {
-      rows, chips, foot, split,
+      rows, chips, chipText, foot, split,
       splitCount: document.querySelectorAll('.split-row').length,
       ringStroke: ring ? getComputedStyle(ring).stroke : null,
     };
@@ -173,13 +182,21 @@ try {
      */
     semantics.rows.some((r) => r.label === '碳水' || r.label === '脂肪')
       && '碳水或脂肪又单独占了一行',
-    split && Math.abs(split.carbWidth + split.fatWidth - split.barWidth) > 2
-      && `合用那条没铺满：${split.carbWidth.toFixed(0)}+${split.fatWidth.toFixed(0)} ≠ ${split.barWidth.toFixed(0)}`,
-    split && !split.hasMark && '条上没有画计划的分界线',
+    /*
+     * 它是一根刻度：一段参考区间 + 一个当前位置的点。
+     * 区间宽度是 JS 写进 style 的百分比，写错了不会报错，只会画出空条子。
+     */
+    split && !(split.bandWidth > 8) && `参考区间没画出来：${split.bandWidth.toFixed(0)}px`,
+    split && split.bandWidth >= split.barWidth - 2 && '参考区间铺满了整条，等于什么都没说',
+    split && !split.hasPoint && '条上没有当前比例的指针',
+    split && !split.pointInside && '指针跑到条子外面去了',
     split && split.noteClipped && `结构说明被截断了：${split.text}`,
     // 比例说不出吃了多少，克数得跟着一起给
     split && !/碳水 \d+(\.\d+)?g/.test(split.text) && `合用那条没写克数：${split.text}`,
-    semantics.chips.length !== 3 && `门槛类指标应有三个方框，实际 ${semantics.chips.length}`,
+    // 纤维、钠、游离糖、饮水四个方框。饮水只有一个数，不该长出分母
+    semantics.chips.length !== 4 && `门槛类指标应有四个方框，实际 ${semantics.chips.length}`,
+    !/饮水\s*\d+\s*次/.test(semantics.chipText) && `饮水那格不对：${semantics.chipText}`,
+    /饮水[^｜]*\//.test(semantics.chipText) && `饮水凭空长出了一个分母：${semantics.chipText}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
     !/多|超/.test(semantics.foot) && `没吃超，圆环颜色这条没测到（${semantics.foot}）`,
@@ -332,8 +349,26 @@ try {
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
   await page.waitForTimeout(700);
-  const drawer = await page.$$eval('.settings-drawer .card h3', (h) => h.map((x) => x.textContent.trim()));
-  check('设置抽屉能打开', drawer.length >= 4, drawer.join(' / '));
+  /*
+   * 设置主页是一张分组列表：每组一行，点进去才是那张表单。
+   * 光看得见五行不算数——真正会坏的是「点进去里面是空的」，所以逐个点开看。
+   */
+  const drawer = await page.$$eval('.settings-drawer .set-row .set-title', (h) => h.map((x) => x.textContent.trim()));
+  const opened = [];
+  for (let i = 0; i < drawer.length; i += 1) {
+    await page.evaluate((n) => document.querySelectorAll('.settings-drawer .set-row')[n]?.click(), i);
+    await page.waitForTimeout(250);
+    const inner = await page.evaluate(() => ({
+      back: !!document.querySelector('.settings-drawer .set-back-btn'),
+      body: document.querySelector('.settings-drawer .set-back')?.nextElementSibling?.childElementCount || 0,
+    }));
+    opened.push(`${drawer[i]}${inner.back && inner.body > 0 ? '' : '（空）'}`);
+    await page.evaluate(() => document.querySelector('.settings-drawer .set-back-btn')?.click());
+    await page.waitForTimeout(200);
+  }
+  check('设置分组列表每组都点得开',
+    drawer.length === 5 && !opened.some((x) => x.includes('（空）')),
+    opened.join(' / ') || '(一行都没有)');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
 

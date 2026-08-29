@@ -162,36 +162,13 @@ export async function copyText(text) {
   }
 }
 
-/** YYYY-MM-DD（本地时区） */
-export function todayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-export function shiftDay(key, delta) {
-  const [y, m, d] = key.split('-').map(Number);
-  const date = new Date(y, m - 1, d + delta);
-  return todayKey(date);
-}
-
-export function formatDayLabel(key) {
-  const today = todayKey();
-  if (key === today) return '今天';
-  if (key === shiftDay(today, -1)) return '昨天';
-  if (key === shiftDay(today, 1)) return '明天';
-  const [y, m, d] = key.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const week = '日一二三四五六'[date.getDay()];
-  const sameYear = y === new Date().getFullYear();
-  return `${sameYear ? '' : `${y}年`}${m}月${d}日 周${week}`;
-}
-
-/** 一天已过去的比例，用于实时预算分配 */
-export function dayFraction(now = new Date()) {
-  return (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
-}
+/*
+ * 日期那几个纯函数搬去了 core/day.js —— 顶栏那行字该怎么写是「判断」，
+ * 得能写测试。这里原样再导出一遍，免得几十处 import 全要改。
+ */
+export {
+  todayKey, shiftDay, dayFraction, dayOffset, dayHeading,
+} from '../core/day.js';
 
 export const num = (v, d = 0) => {
   const n = Number(v);

@@ -449,3 +449,87 @@ test('起手组合每个都覆盖到该部位的主要肌肉，且不含高度�
     for (const e of combo) assert.equal(splitOf(e), s.key, `${e.name} 出现在「${s.label}」的推荐里，但它属于 ${splitOf(e)}`);
   }
 });
+
+/*
+ * 推荐要认得已经选了什么。选完杠铃卧推，第一个推荐还是哑铃卧推的话，
+ * 等于劝人把同一件事做两遍。
+ */
+test('动作推荐避开已选动作，也避开和已选高度重合的', async () => {
+  const { recommendFor, overlapScore, overlapLevel } = await import('../js/core/training.js');
+  const picked = ['bench_press_bb'];
+  const rec = recommendFor({ mode: 'group', groupKey: 'chest', selection: picked });
+  const ids = rec.items.map((i) => i.id);
+  assert.ok(!ids.includes('bench_press_bb'), '已选的动作又被推荐了一遍');
+  for (const id of ids) {
+    const level = overlapLevel(overlapScore(EXERCISE_BY_ID.get(id), EXERCISE_BY_ID.get('bench_press_bb')));
+    assert.notEqual(level, 'high', `推荐了和杠铃卧推高度重合的 ${EXERCISE_BY_ID.get(id).name}`);
+  }
+  // 数量：按部位 3–5 个，按推拉腿 4–6 个
+  assert.ok(rec.items.length >= 3 && rec.items.length <= 5, `按部位推荐了 ${rec.items.length} 个`);
+  const split = recommendFor({ mode: 'split', splitKey: 'push' });
+  assert.ok(split.items.length >= 4 && split.items.length <= 6, `按模式推荐了 ${split.items.length} 个`);
+
+  // 一套里动作模式要散开，不能五个都练同一个角度
+  const patterns = new Set(split.items.map((i) => EXERCISE_BY_ID.get(i.id).pattern));
+  assert.ok(patterns.size >= 4, `推日六个动作只覆盖了 ${patterns.size} 种模式`);
+});
+
+test('器械档位也管着推荐，不然列表和推荐说的不是一件事', async () => {
+  const { recommendFor } = await import('../js/core/training.js');
+  for (const [equip, ok] of [['bodyweight', (e) => ['bodyweight', 'band'].includes(e.equipment)],
+    ['machine', (e) => ['machine', 'cable'].includes(e.equipment)]]) {
+    const rec = recommendFor({ mode: 'group', groupKey: 'chest', equip });
+    assert.ok(rec.items.length > 0, `${equip} 档位一个都没推荐`);
+    for (const i of rec.items) {
+      assert.ok(ok(EXERCISE_BY_ID.get(i.id)), `${equip} 档位推荐了 ${i.name}`);
+    }
+  }
+});
+
+test('选了高度重合的一对就直接给替换按钮', async () => {
+  const { recommendFor } = await import('../js/core/training.js');
+  const rec = recommendFor({ mode: 'group', groupKey: 'chest', selection: ['bench_press_bb', 'bench_press_db'] });
+  assert.equal(rec.replacements.length, 1, '一次只说最重的那一对，列五对等于把负担推回去');
+  const swap = rec.replacements[0];
+  assert.match(swap.title, /杠铃卧推和哑铃卧推|哑铃卧推和杠铃卧推/);
+  assert.ok(['bench_press_bb', 'bench_press_db'].includes(swap.dropId));
+  assert.ok(swap.options.length >= 1 && swap.options.length <= 2);
+  for (const o of swap.options) {
+    assert.ok(EXERCISE_BY_ID.get(o.id), `替换选项 ${o.id} 不在动作库里`);
+    assert.ok(!['bench_press_bb', 'bench_press_db'].includes(o.id), '把已选的那两个又推回来了');
+  }
+});
+
+/*
+ * 「近 7 天训练量」原先是各部位多少组的一排数字加一整段说明。
+ * 翻到这儿的人想看的是「我前天练了什么、上了多少重量」。
+ */
+test('近 7 日训练记录：一行一个动作，数字全来自实际记录', async () => {
+  const { recentTrainingRows } = await import('../js/core/training.js');
+  const days = [
+    { date: '2026-08-29', items: [
+      { id: 'bench_press_bb', sets: [{ weightKg: 50, reps: 12 }, { weightKg: 55, reps: 10 }, { weightKg: 60, reps: 8 }] },
+    ] },
+    { date: '2026-08-27', items: [{ id: 'squat_bb', sets: [{ weightKg: 70, reps: 8 }] }] },
+    // 窗口外的不该出现
+    { date: '2026-08-10', items: [{ id: 'squat_bb', sets: [{ weightKg: 60, reps: 8 }] }] },
+  ];
+  const rows = recentTrainingRows(days, '2026-08-29');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].date, '2026-08-29', '新的排前面');
+  assert.equal(rows[0].setCount, 3);
+  // 递减组、爬坡加重是真实练法，压成一个平均数会把这件事抹掉
+  assert.equal(rows[0].weightLabel, '50–60kg');
+  assert.equal(rows[0].repsLabel, '8–12次');
+  assert.equal(rows[1].weightLabel, '70kg', '只有一组时不写成区间');
+  assert.equal(rows[1].repsLabel, '8次');
+
+  // 没记重量就不写：数字必须来自实际记录
+  const bare = recentTrainingRows([{ date: '2026-08-29', items: [{ id: 'squat_bb', sets: [{ reps: 10 }, {}] }] }], '2026-08-29');
+  assert.equal(bare[0].weightLabel, null);
+  assert.equal(bare[0].repsLabel, '10次');
+  assert.equal(bare[0].setCount, 2);
+
+  assert.deepEqual(recentTrainingRows([], '2026-08-29'), []);
+  assert.deepEqual(recentTrainingRows(days, ''), []);
+});

@@ -18,9 +18,9 @@ import { trendReading } from '../../core/trend-reading.js';
  * 只留三个图表档位：7 天用来看这周、一个月看近况、六个月看长期走势。
  */
 const RANGES = [
-  { key: 7, label: '7 天', days: 7 },
-  { key: 30, label: '近一个月', days: 30 },
-  { key: 180, label: '近六个月', days: 180 },
+  { key: 7, label: '近 7 日', days: 7 },
+  { key: 30, label: '近 30 日', days: 30 },
+  { key: 90, label: '近 90 日', days: 90 },
   { key: 'all', label: '全部', days: null },
 ];
 // 默认看这一周；更长的区间另外选
@@ -33,13 +33,16 @@ let range = 7;
 let selectedDay = null;
 
 /**
- * 图表统计到哪一天为止。
+ * 图表统计到哪一天为止：**永远是昨天**。
  *
  * 当天不画：一天没过完，活动能量、摄入都还在累加，画出来是个必然偏低的点，
- * 看趋势时会误以为“今天掉下去了”。统一只到前一天，第二天再补上。
+ * 看趋势时会误以为「今天掉下去了」。
+ *
+ * 也不跟今日 / 饮食页选的日期走。那两页翻回前几天是为了补记饮食，
+ * 趋势图跟着翻只会让「近 7 日」这个说法在不同页面上指不同的七天。
  */
 function lastEndedDay() {
-  return state.day === todayKey() ? shiftDay(state.day, -1) : state.day;
+  return shiftDay(todayKey(), -1);
 }
 
 /** 最早一条记录的日期（健康与饮食取更早的那个） */
@@ -223,7 +226,8 @@ export function trendCharts(rerender) {
     return Math.round(eaten - (Number(hd.restingEnergy) + Number(hd.activeEnergy)));
   });
 
-  const targetContext = state.day === todayKey() ? '当前目标' : '当前设置估算目标';
+  // 图上的目标线画的是**现在这套设置**算出来的目标，历史那几天当时未必是这个数
+  const targetContext = '当前目标';
   const proteinThreshold = targets.protein * 0.9;
   const proteinHit = proteinSeries.filter((p) => p.y >= proteinThreshold).length;
   const avgKcal = average(kcalSeries);
@@ -386,7 +390,7 @@ export function trendCharts(rerender) {
    */
   if (typeof SPEC[activeChart] !== 'function') activeChart = CHARTS[0].key;
   const spec = SPEC[activeChart]();
-  const todayNote = state.day === todayKey() ? '当天数据要等这一天过完才会出现。' : '';
+  const todayNote = '统计到昨天为止：当天数据要等这一天过完才会出现。';
 
   return [
     // 选择器和图合成一张卡：它们本来就是一件事，分成两块只是多一道分隔线

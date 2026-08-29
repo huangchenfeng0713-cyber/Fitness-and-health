@@ -186,10 +186,28 @@ export function rangeScale(eaten, lo, hi) {
 
 
 /**
- * 结构判定的宽容带：碳水供能占比和计划差几个百分点以内算「跟着计划走」。
- * 纯工程取值，没有生理含义 —— 份量估算本身的误差就不止这么点。
+ * 碳水 / 脂肪的参考区间是拿脂肪 AMDR 反解出来的。
+ *
+ * 脂肪占总能量 20%~35%（IOM AMDR）。热量目标和蛋白定下来之后，
+ * 剩给碳水和脂肪的那块热量（下面叫「这块热量」）是固定的，
+ * 于是脂肪吃到 AMDR 上界时碳水占这块热量的比例最低，吃到下界时最高——
+ * 两端都能被这一句话解释，不是随手划的。
+ *
+ * 它是**长期饮食结构的参考**，不是每天必须命中的靶子：区间本身就有二十个
+ * 百分点宽，落在里面说明结构没跑偏，不落在里面也只是偏了，不是错了。
  */
-export const SPLIT_BALANCED_PP = 8;
+export const FAT_AMDR = { lo: 0.20, hi: 0.35 };
+
+/**
+ * 吃到多少才谈得上「今天的结构」。
+ *
+ * 早饭一碗粥就判「偏碳水」，说的是那一顿，不是这一天。
+ * 取计划里这块热量的四分之一，并且至少 300 kcal —— 纯工程取值。
+ */
+export const MIN_SPLIT_KCAL = 300;
+export const MIN_SPLIT_SHARE = 0.25;
+
+const clampPct = (v) => Math.max(0, Math.min(100, v));
 
 /**
  * 碳水和脂肪合成一条：它们分的是同一块热量。
@@ -198,67 +216,92 @@ export const SPLIT_BALANCED_PP = 8;
  * 2660 kcal 的计划上实测有 796 kcal（30%）的自由度，两条各自说自己没问题。
  * 而且那时卡片会对着照计划吃的人写「碳水低于建议 74g」——热量明明已经吃满了。
  *
- * 合起来之后要回答的问题也变了，从「碳水够不够」变成「剩下这部分热量偏哪边」。
+ * 合起来之后要回答的问题也变了，从「碳水够不够」变成「这块热量偏碳水还是偏脂肪」。
  * 比例按 4 / 9 kcal 每克算（就是界面上说的「按热量算」），
  * 不做纤维那 2 kcal 的细扣：那点差别不到 2%，写进去只会让人对不上手算的数。
  *
- * @returns {{carbG, fatG, kcal, carbPct, fatPct, planCarbPct, planFatPct,
- *            diffPp, structure, label, level, note}}
+ * @returns {{carbG, fatG, kcal, carbPct, fatPct, bandLo, bandHi,
+ *            structure, label, level, note}}
+ *  - structure: none 还没吃 / low 吃得还不多 / balanced 在区间里 / carb / fat
  */
 export function macroSplit(targets = {}, gaps = {}) {
   const pos = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
-  const share = (carbG, fatG) => {
-    const carbKcal = carbG * ATWATER.carb;
-    const total = carbKcal + fatG * ATWATER.fat;
-    if (!(total > 0)) return null;
-    // 两个百分比必须凑成 100：各自四舍五入会印出「58% : 43%」
-    const carbPct = Math.round((carbKcal / total) * 100);
-    return { carbPct, fatPct: 100 - carbPct, kcal: Math.round(total) };
-  };
-
   const carbG = round(pos(gaps.carb?.eaten), 1);
   const fatG = round(pos(gaps.fat?.eaten), 1);
-  const now = share(carbG, fatG);
-  const plan = share(pos(targets.carb), pos(targets.fat));
+  const carbKcal = carbG * ATWATER.carb;
+  const fatKcal = fatG * ATWATER.fat;
+  const kcal = Math.round(carbKcal + fatKcal);
+
+  const band = referenceBand(targets);
+  const note = band ? `参考 ${band.lo}–${band.hi}%` : '';
   const base = {
-    carbG, fatG, kcal: now?.kcal || 0,
-    planCarbPct: plan?.carbPct ?? null, planFatPct: plan?.fatPct ?? null,
+    carbG, fatG, kcal, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null, note,
   };
 
-  if (!now) {
+  if (!(kcal > 0)) {
+    return {
+      ...base, carbPct: null, fatPct: null, structure: 'none', label: '还没有记录', level: LEVEL.plain,
+    };
+  }
+  // 两个百分比必须凑成 100：各自四舍五入会印出「58% : 43%」
+  const carbPct = Math.round((carbKcal / (carbKcal + fatKcal)) * 100);
+  const fatPct = 100 - carbPct;
+
+  // 吃得还不多的时候只报数，不下结论
+  const planPool = poolKcal(targets);
+  const enough = kcal >= Math.max(MIN_SPLIT_KCAL, planPool * MIN_SPLIT_SHARE);
+  if (!enough || !band) {
     return {
       ...base,
-      carbPct: null,
-      fatPct: null,
-      diffPp: null,
-      structure: 'none',
-      label: '还没有记录',
+      carbPct,
+      fatPct,
+      structure: 'low',
+      label: band ? '吃得还不多，先不评价结构' : '结构比例',
       level: LEVEL.plain,
-      note: plan ? `计划 ${plan.carbPct}% : ${plan.fatPct}%` : '',
     };
   }
 
-  const diffPp = plan ? now.carbPct - plan.carbPct : 0;
-  const structure = !plan || Math.abs(diffPp) <= SPLIT_BALANCED_PP
-    ? 'balanced' : diffPp > 0 ? 'carb' : 'fat';
-  const label = structure === 'balanced'
-    ? '结构接近计划'
-    : `${structure === 'carb' ? '偏碳水' : '偏脂肪'} ${Math.abs(diffPp)} 个百分点`;
+  const structure = carbPct < band.lo ? 'fat' : carbPct > band.hi ? 'carb' : 'balanced';
   return {
     ...base,
-    carbPct: now.carbPct,
-    fatPct: now.fatPct,
-    diffPp,
+    carbPct,
+    fatPct,
     structure,
-    label,
+    label: structure === 'balanced' ? '结构适中' : structure === 'carb' ? '偏碳水' : '偏脂肪',
     /*
-     * 偏一点不是错误，所以没有橙和红。
-     * 三大营养素怎么分配本来就有很宽的合理区间，把「今天多吃了米饭」
-     * 画成警告色，等于把一个偏好问题说成了健康问题。
+     * 只有绿和灰，没有橙和红。三大营养素怎么分本来就有很宽的合理区间，
+     * 把「今天多吃了米饭」画成警告色，是把偏好问题说成健康问题。
      */
     level: structure === 'balanced' ? LEVEL.met : LEVEL.plain,
-    note: plan ? `计划 ${plan.carbPct}% : ${plan.fatPct}%` : '',
   };
+}
+
+/** 计划里留给碳水和脂肪的那块热量 */
+function poolKcal(targets) {
+  const kcal = Number(targets.kcal);
+  const protein = Number(targets.protein);
+  if (!(kcal > 0)) return 0;
+  const pool = kcal - (Number.isFinite(protein) ? Math.max(0, protein) : 0) * ATWATER.protein;
+  return Math.max(0, pool);
+}
+
+/**
+ * 碳水占「这块热量」的参考区间，两端由脂肪 AMDR 反解。
+ * 蛋白吃得特别高时这块热量会很小，区间可能退化——退化了就不画，
+ * 硬给一个 0–100% 的区间等于什么都没说。
+ */
+export function referenceBand(targets = {}) {
+  const kcal = Number(targets.kcal);
+  const pool = poolKcal(targets);
+  if (!(kcal > 0) || !(pool > 0)) return null;
+  // 脂肪吃到 AMDR 上界 → 碳水占比最低；吃到下界 → 最高
+  const lo = clampPct(((pool - kcal * FAT_AMDR.hi) / pool) * 100);
+  const hi = clampPct(((pool - kcal * FAT_AMDR.lo) / pool) * 100);
+  // 取整只许放宽：四舍五入过的边界会把刚好照计划吃的人判到区间外
+  const loFloor = Math.floor(lo);
+  const hiCeil = Math.ceil(hi);
+  if (hiCeil - loFloor < 5) return null;
+  return { lo: loFloor, hi: hiCeil };
 }
 
 /**
