@@ -68,23 +68,44 @@ export function recommendCard(rerender) {
 }
 
 /*
- * 一键喝水。
+ * 喝水：一行就够。
  *
- * 卡面上只有四个杯量按钮，点哪个都先弹一层确认：里面画着「记到多少」，
- * 按下「记录喝水」才真的落库。原先是点一下直接就记，口袋里误触一次
- * 就多出 250ml，而且这个数会连着覆盖 Apple 健康那边的饮水。
+ * 记的是「主动喝了几次」，不是毫升。饮料、汤、粥、水果和饭菜里的水分同样
+ * 被人体吸收，单算白水没法代表全天水分够不够 ——「125 / 1700 ml」那根条
+ * 会被读成「今天只完成了 7%」，而那个人可能刚喝完两碗汤。
  *
- * 落在健康数据的 waterMl 字段上，和 Apple 健康导入的饮水是同一个数。
+ * 撤销不常驻。它一天里最多用上一次（误触），却要一直占着一个控件和四个字；
+ * 改成刚点完那几秒钟内出现，过了就收起来。
  */
 const MAX_WATER_TAPS = 40;
+/** 刚记完那几秒钟里把「撤销」露出来。再长就成了常驻控件 */
+const UNDO_WINDOW_MS = 5000;
 
 /** 今天点了几次。旧记录没有这个字段时按 0 起算 */
 const waterTaps = () => Math.max(0, Math.round(Number(state.derived?.health?.waterCount) || 0));
+
+let undoUntil = 0;
+let undoTimer = null;
 
 async function bumpWater(delta) {
   const next = Math.max(0, Math.min(MAX_WATER_TAPS, waterTaps() + delta));
   if (next === waterTaps()) return;
   await saveHealthDay(state.day, { waterCount: next, source: 'manual' });
+}
+
+/*
+ * 提示窗口挂在模块上，不挂在节点上：这张卡每次落库都会整个重建，
+ * 挂在节点上的状态会跟着一起没。
+ */
+function openUndoWindow(rerender) {
+  undoUntil = Date.now() + UNDO_WINDOW_MS;
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => { undoUntil = 0; rerender(); }, UNDO_WINDOW_MS);
+}
+
+function closeUndoWindow() {
+  undoUntil = 0;
+  clearTimeout(undoTimer);
 }
 
 const dropletIcon = () => {
@@ -105,41 +126,44 @@ export function waterCard(rerender) {
   const taps = waterTaps();
   const goal = Number(d.targets?.waterMl) || 0;
   const deviceMl = Number(d.health?.waterMl) || 0;
+  const justLogged = Date.now() < undoUntil;
 
   return h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '喝水'),
-      h('div.card-head-actions', null,
-        h('span.card-tag', null, `已记录 ${taps} 次`),
-        infoTip('查看饮水说明',
-          h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— '
-            + '饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，'
-            + '单算白水没法代表全天水分够不够。'),
-          h('p', null, `一般成人每天**直接饮水**参考约 ${goal || 1700} ml（女性约 1500 ml），`
-            + '把食物和汤水算进去，全天总水分约 2700–3000 ml。运动、高温和出汗会明显改变需要量。'),
-          h('p', null, '真正好用的判断是口渴感、尿色和一天下来的整体状态，'
-            + '不是有没有恰好喝满某个数字。'),
-          deviceMl > 0
-            ? h('p', null, `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。`)
-            : null))),
-    h('div.water-tap-row', null,
-      // 一个大点击区：点一下就是「刚喝了一次」，不问多少
-      h('button.water-tap', {
+      // 次数已经写在下面那条里了，标题右边再挂一个「已记录 5 次」是同一个数写两遍
+      infoTip('查看饮水说明',
+        h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— '
+          + '饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，'
+          + '单算白水没法代表全天水分够不够。'),
+        h('p', null, `一般成人每天**直接饮水**参考约 ${goal || 1700} ml（女性约 1500 ml），`
+          + '把食物和汤水算进去，全天总水分约 2700–3000 ml。运动、高温和出汗会明显改变需要量。'),
+        h('p', null, '次数只代表主动饮水这个行为，不代表精确的总水分摄入。'
+          + '真正好用的判断是口渴感、尿色和一天下来的整体状态，不是有没有恰好喝满某个数字。'),
+        deviceMl > 0
+          ? h('p', null, `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。`)
+          : null)),
+    h('div.water-row', null,
+      h('div.water-pill', { role: 'status', 'aria-live': 'polite' },
+        dropletIcon(),
+        justLogged
+          ? [
+            h('span', null, '已记录一次饮水'),
+            h('span.water-sep', { 'aria-hidden': 'true' }, '·'),
+            h('button.water-undo', {
+              type: 'button',
+              onclick: async (ev) => {
+                const r = await runLocalAction(ev.currentTarget, () => bumpWater(-1), '撤销');
+                if (r.ok) { closeUndoWindow(); rerender(); }
+              },
+            }, '撤销'),
+          ]
+          : h('span', null, `已记录 ${taps} 次饮水`)),
+      h('button.water-add', {
         type: 'button', 'aria-label': `记录一次饮水，当前 ${taps} 次`,
         onclick: async (ev) => {
           const r = await runLocalAction(ev.currentTarget, () => bumpWater(1), '记录饮水');
-          if (r.ok) rerender();
+          if (r.ok) { openUndoWindow(rerender); rerender(); }
         },
-      }, dropletIcon(), h('span.water-tap-label', null, '记一次')),
-      h('div.water-count', null,
-        h('strong', null, String(taps)),
-        h('span', null, '次')),
-      // 误触之后总得有办法改回来
-      taps > 0 ? h('button.text-btn.water-undo', {
-        type: 'button',
-        onclick: async (ev) => {
-          const r = await runLocalAction(ev.currentTarget, () => bumpWater(-1), '撤销');
-          if (r.ok) rerender();
-        },
-      }, '撤销一次') : null));
+      }, '＋饮水')));
 }

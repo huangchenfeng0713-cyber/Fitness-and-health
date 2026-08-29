@@ -123,3 +123,75 @@ test('脏数据不该让小结抛异常', () => {
     assert.doesNotMatch(String(r.note), /NaN|undefined|null/, `${r.label} 的说明是 ${r.note}`);
   }
 });
+
+/*
+ * 累计收支只算「配对日」：那一天既有饮食记录，又有设备记录的消耗。
+ *
+ * 少了任何一半都算不出那天的盈亏。把漏记的日子当成 0 kcal 摄入，
+ * 会造出「近 7 日累计缺口 12000 kcal」这种并不存在的结论。
+ */
+test('累计收支只算同时有摄入和消耗的日子', () => {
+  const days = ['2026-08-22', '2026-08-23', '2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28'];
+  const s = weeklySummary({
+    endDate: '2026-08-28',
+    // 七天里只记了四天饮食
+    dietDaily: days.slice(0, 4).map((date) => ({ date, kcal: 2000, protein: 100 })),
+    // 七天都有设备消耗
+    healthDays: days.map((date) => ({ date, restingEnergy: 1500, activeEnergy: 700, steps: 8000, exerciseMinutes: 30 })),
+    targets: { kcal: 2200, protein: 110 },
+  });
+  const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
+  assert.equal(s.pairedDays, 4, '配对日应当只有四天');
+  // 每个配对日 2000 − 2200 = −200，四天共 −800
+  assert.match(by.balance.value, /缺口 800 kcal/);
+  assert.match(by.balance.note, /依据 4 个完整日/);
+  // 漏记那三天绝不能按 0 kcal 摄入计入（否则会变成 −7400）
+  assert.doesNotMatch(by.balance.value, /7400|6600/);
+});
+
+test('配对数据不足时直说不足，不硬凑一个数', () => {
+  const s = weeklySummary({
+    endDate: '2026-08-28',
+    dietDaily: [{ date: '2026-08-27', kcal: 2000, protein: 100 }],
+    // 有饮食的那天缺设备消耗，有消耗的那天没饮食
+    healthDays: [{ date: '2026-08-26', restingEnergy: 1500, activeEnergy: 600 }],
+    targets: { kcal: 2200, protein: 110 },
+  });
+  const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
+  assert.equal(s.pairedDays, 0);
+  assert.equal(by.balance.value, '—');
+  assert.match(by.balance.note, /配对数据不足/);
+});
+
+/*
+ * 「日均锻炼」读 Apple 健康的锻炼分钟，「力量训练」是健身页记的次数。
+ * 两个数完全不是一回事：练了 40 分钟和「训练 1 次」说的不是同一件事。
+ */
+test('日均锻炼取设备分钟，不拿力量训练次数顶替', () => {
+  const days = ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28'];
+  const s = weeklySummary({
+    endDate: '2026-08-28',
+    dietDaily: [],
+    healthDays: days.map((date, i) => ({ date, exerciseMinutes: 20 + i * 10, steps: 6000 })),
+    trainingDays: [{ date: '2026-08-25', items: [{ sets: [{}, {}, {}] }] }],
+    targets: { kcal: 2200, protein: 110 },
+  });
+  const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
+  assert.equal(by.exercise.value, '40 分钟', '20/30/40/50/60 的均值是 40');
+  assert.match(by.exercise.note, /Apple 健康/);
+  assert.equal(by.training.value, '1 次');
+  assert.match(by.training.label, /力量训练/, '两个数得叫不同的名字');
+  assert.notEqual(by.exercise.label, by.training.label);
+});
+
+test('设备数据太少时不给日均，缺测的日子不进分母', () => {
+  const s = weeklySummary({
+    endDate: '2026-08-28',
+    dietDaily: [],
+    healthDays: [{ date: '2026-08-27', exerciseMinutes: 45, steps: 9000 }],
+    targets: { kcal: 2200, protein: 110 },
+  });
+  const keys = s.rows.map((r) => r.key);
+  assert.ok(!keys.includes('exercise'), '只有一天数据不该报「日均锻炼」');
+  assert.ok(!keys.includes('steps'));
+});

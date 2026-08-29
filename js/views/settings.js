@@ -1,9 +1,18 @@
-/** 设置：身体信息、账号、数据管理（同步/备份/补录）与计算偏好。 */
+/**
+ * 设置：一张分组列表，五组各自点进去。
+ *
+ * 原先五张表单一次全铺开，想改一个体重要先滑过一整屏跟这次无关的东西。
+ * 现在每组只留一行：图标、标题、当前状态、箭头。
+ *
+ * 只有一种情况例外：账号冲突 / 待确认归属 / 锁定 —— 那说的是「你的数据现在有风险」，
+ * 必须整屏摆出来，收进二级页面等于没提示。
+ */
 
-import { h, clearEl, toast, mount, infoTip, confirmAction, field } from '../lib/utils.js';
+import { h, clearEl, toast, mount, num, infoTip, confirmAction, field } from '../lib/utils.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
+import { GOALS } from '../core/nutrition.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
   resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
@@ -461,6 +470,94 @@ function feedbackCard({ about = null } = {}) {
   );
 }
 
+/* ---------------------------------------------------------------- 分组列表 */
+
+/*
+ * 设置主页是一张分组列表，不再把五张表单一次全铺开。
+ *
+ * 原先一进来就是身体信息的十个输入框、账号表单、数据管理、开关和关于——
+ * 想改一个体重要先滑过一整屏跟这次无关的东西，而每一块都带着自己的说明文字。
+ * 现在每组只留一行：图标、标题、当前状态、箭头；点进去才是那张表单。
+ *
+ * 状态那一列不是装饰：它让「不用点进去也知道现在设成什么了」成立，
+ * 这正是分组列表比一堆折叠面板好用的地方。
+ */
+let openSection = null;
+
+const SECTION_ICON = {
+  body: 'M12 3.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4ZM12 8.4v7M8 10.5l4-1.4 4 1.4M9.5 20.4 12 15.4l2.5 5',
+  account: 'M12 12.4a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20.4c.8-3.4 3.8-5.4 7.5-5.4s6.7 2 7.5 5.4',
+  data: 'M12 3.6c4.1 0 7.4 1.2 7.4 2.7S16.1 9 12 9 4.6 7.8 4.6 6.3 7.9 3.6 12 3.6ZM4.6 6.3v11.4c0 1.5 3.3 2.7 7.4 2.7s7.4-1.2 7.4-2.7V6.3M4.6 12c0 1.5 3.3 2.7 7.4 2.7s7.4-1.2 7.4-2.7',
+  calc: 'M6.4 3.6h11.2c.9 0 1.6.7 1.6 1.6v13.6c0 .9-.7 1.6-1.6 1.6H6.4c-.9 0-1.6-.7-1.6-1.6V5.2c0-.9.7-1.6 1.6-1.6ZM8 7.6h8M8 12h2.5M8 16.2h2.5M14 12h2M14 16.2h2',
+  about: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5.5M12 7.4v.1',
+};
+
+function sectionIcon(key) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = document.createElementNS(ns, 'svg');
+  el.setAttribute('viewBox', '0 0 24 24');
+  el.setAttribute('class', 'set-icon');
+  el.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', SECTION_ICON[key] || SECTION_ICON.about);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.6');
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  el.append(path);
+  return el;
+}
+
+/** 每行右边那句「现在设成什么了」。不用点进去就知道 */
+function sectionStatus(key, account) {
+  const p = state.profile;
+  if (key === 'body') {
+    const weight = state.derived?.effectiveProfile?.weightKg ?? p.weightKg;
+    const goal = GOALS[p.goal]?.label || '维持';
+    return weight > 0 ? `${goal} · ${num(weight, 1)} kg` : goal;
+  }
+  if (key === 'account') {
+    if (!account.configured) return '本地模式';
+    if (!account.user) return '未登录';
+    const [text] = accountStatus(account);
+    return text;
+  }
+  if (key === 'data') return '备份、导入、补录';
+  if (key === 'calc') {
+    return p.useAppleEnergy ? '跟随设备消耗' : '按公式估算';
+  }
+  return `v${APP_VERSION}`;
+}
+
+function sectionRow(section, account, rerender) {
+  return h('button.set-row', {
+    type: 'button',
+    onclick: () => { openSection = section.key; rerender(); },
+  },
+  sectionIcon(section.key),
+  h('span.set-title', null, section.label),
+  h('span.set-status', null, sectionStatus(section.key, account)),
+  h('span.set-chevron', { 'aria-hidden': 'true' }, '›'));
+}
+
+const SECTIONS = [
+  { key: 'body', label: '身体与目标' },
+  { key: 'account', label: '账号与同步' },
+  { key: 'data', label: '数据管理' },
+  { key: 'calc', label: '计算与显示' },
+  { key: 'about', label: '关于与反馈' },
+];
+
+function backBar(label, rerender) {
+  return h('div.set-back', null,
+    h('button.set-back-btn', {
+      type: 'button',
+      onclick: () => { openSection = null; rerender(); },
+    }, '‹ 设置'),
+    h('strong', null, label));
+}
+
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
   clearEl(root);
@@ -468,11 +565,16 @@ export function renderSettings(root) {
   renderAccountSlot(slot);
   ensureAccountSubscription(slot);
   const account = getAccountState();
+  /*
+   * 账号冲突、待确认归属、锁定这几种情况必须整屏摆出来，不能收进某一组里：
+   * 它们说的是「你的数据现在有风险」，藏在二级页面等于没提示。
+   */
   const protectedAccountData = account.ownershipPending === true
     || account.status === 'locked'
     || (account.status === 'loading' && !account.user)
     || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
   if (protectedAccountData) {
+    openSection = null;
     mount(root, slot);
     return;
   }
@@ -481,17 +583,24 @@ export function renderSettings(root) {
     : account.configured
       ? '未登录时数据只保存在当前设备；登录后可同步到账号专属云端空间。'
       : '当前为本地模式，数据只保存在这台设备的浏览器里。';
-  mount(root,
-    // 身体信息排最上面：它是一切目标计算的输入，改它的频率也最高
-    profileCard(rerender),
-    slot,
-    dataManagerCard(rerender),
-    toggleCard(),
-    feedbackCard({
-      about: h('div.about-block', null,
-        h('p', null, `版本 v${APP_VERSION}`),
-        h('p', null, accountCopy),
-        h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。')),
-    }),
-  );
+
+  const section = SECTIONS.find((x) => x.key === openSection);
+  if (section) {
+    const body = {
+      body: () => profileCard(rerender),
+      account: () => slot,
+      data: () => dataManagerCard(rerender),
+      calc: () => toggleCard(),
+      about: () => feedbackCard({
+        about: h('div.about-block', null,
+          h('p', null, `版本 v${APP_VERSION}`),
+          h('p', null, accountCopy),
+          h('p', null, '营养建议仅用于日常参考，不能替代医生或注册营养师。')),
+      }),
+    }[section.key];
+    mount(root, backBar(section.label, rerender), body());
+    return;
+  }
+
+  mount(root, h('div.set-list', null, SECTIONS.map((x) => sectionRow(x, account, rerender))));
 }

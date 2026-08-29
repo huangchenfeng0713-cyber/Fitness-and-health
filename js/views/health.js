@@ -93,7 +93,7 @@ export function renderHealth(root) {
     repairCard(rerender),
     implausibleCard(rerender),
     healthMetricsCard(),
-    // 小结在趋势图上面：先回答「这一周整体怎么样」，想看某项怎么走再往下翻
+    // 速览在趋势图上面：先回答「这七天整体怎么样」，想看某项怎么走再往下翻
     weeklySummaryCard(),
     ...(trendCharts(rerender) || []),
   );

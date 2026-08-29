@@ -66,7 +66,7 @@ const KIND_COLOR = {
  * 照计划吃的人还会看到「碳水低于建议 74g」。它们分的本来就是同一块热量，
  * 所以合成一条，说的也换成真正有意义的那件事：这块热量偏碳水还是偏脂肪。
  */
-const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
+const CHIP_KEYS = ['fiber', 'sodium', 'sugar', 'water'];
 
 function metricRow(m) {
   const { state: st } = m;
@@ -97,35 +97,45 @@ function metricRow(m) {
 /**
  * 碳水 / 脂肪合用的那一行。
  *
- * 上面一行是比例（这决定结构偏哪边），下面一行是各自的克数——
+ * 上面是当前比例和一句结论，中间那根刻度画出参考区间和今天落在哪儿，
+ * 下面把克数摆在各自那一端 —— 左端偏脂肪就把脂肪放左边，
+ * 位置本身就说明了「往这边是什么意思」。
+ *
  * 只给比例的话，「58% : 42%」既说不出吃了多少，也没法和食物对上。
  */
 function splitRow(split) {
-  const empty = split.structure === 'none';
+  const known = split.carbPct != null;
   return h('div', { class: `metric-row split-row ${split.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, '碳水 / 脂肪'),
-      h('strong.metric-row-value', null, empty ? '—' : `${split.carbPct}% : ${split.fatPct}%`),
+      h('strong.metric-row-value', null, known ? `${split.carbPct}% : ${split.fatPct}%` : '—'),
       h('span.metric-row-note', null, split.label)),
-    splitBar({ carbPct: split.carbPct || 0, markPct: split.planCarbPct, empty }),
-    /*
-     * 中间那格是条上那根竖标的说明。合计热量原先摆在这儿，可它和圆环里的
-     * 数字是同一件事；而竖标不解释的话，没人知道那道线是什么。
-     */
+    splitBar({
+      pointPct: split.carbPct, bandLo: split.bandLo, bandHi: split.bandHi, level: split.level,
+    }),
     h('div.split-grams', null,
-      h('span', null, `碳水 ${num(split.carbG)}g`),
+      h('span.split-end', null, `脂肪 ${num(split.fatG)}g`),
       h('span.split-grams-plan', null, split.note),
-      h('span', null, `脂肪 ${num(split.fatG)}g`)));
+      h('span.split-end', null, `碳水 ${num(split.carbG)}g`)));
 }
 
-/** 门槛类指标：方框里两个数，够不够 / 超没超一眼看完 */
+/**
+ * 门槛类指标：方框里两个数，够不够 / 超没超一眼看完。
+ *
+ * 饮水也在这一排，但它只有一个数。它是记录类（KIND.log）：
+ * 「5 / 8 次」那个分母根本不存在 —— 一天该主动喝几次水没有任何依据，
+ * 而写成分数就等于给了一个要填满的目标。
+ */
 function metricChip(m) {
   const { state: st } = m;
   const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
-  return h('div', { class: `micro-chip ${st.level}` },
+  const unit = m.unit.trim();
+  return h('div', { class: `micro-chip ${st.level}${m.kind === KIND.log ? ' log' : ''}` },
     h('span.micro-label', null, m.label),
     h('span.micro-val', null, value),
-    h('span.micro-target', null, `/${num(m.target)}${m.unit.trim()}`));
+    m.kind === KIND.log
+      ? h('span.micro-unit', null, unit)
+      : h('span.micro-target', null, `/${num(m.target)}${unit}`));
 }
 
 function heroCard(advice, targets, derived) {
@@ -177,8 +187,7 @@ function heroCard(advice, targets, derived) {
 
     h('div.metric-list', null,
       metricRow(by.protein),
-      splitRow(macroSplit(targets, gaps)),
-      metricRow(by.water)),
+      splitRow(macroSplit(targets, gaps))),
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
@@ -344,9 +353,17 @@ function insightsCard(advice, rerender) {
     h('div.card-head', null, h('h3', null, '今日提示')),
     h('div.insight-list', null, list.map((i) => {
       const focus = INSIGHT_FOCUS[i.type];
+      /*
+       * 三段分开写：当前情况、判断依据、可执行建议。
+       *
+       * 原先依据和建议糊在一句话里，读的人分不清哪句是事实、哪句是程序的推断——
+       * 「吃得慢一些」当年就是这么混进来的：程序根本没有进餐时长数据，
+       * 那句话没有依据，却和有依据的数字长得一模一样。
+       */
       const body = [
         h('div.insight-title', null, i.title),
-        h('div.insight-text', null, i.text),
+        i.basis ? h('div.insight-basis', null, i.basis) : null,
+        i.action ? h('div.insight-action', null, i.action) : null,
         focus ? h('div.insight-go', null, `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
       ];
       if (!focus) return h(`div.insight.${i.type}`, null, ...body);

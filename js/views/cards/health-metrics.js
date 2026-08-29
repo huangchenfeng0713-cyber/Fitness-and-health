@@ -1,15 +1,21 @@
 /**
- * 健康数据卡：所选日期从 Apple 健康同步上来的原始数值。
+ * 今日健康数据卡：**今天**从 Apple 健康同步上来的原始数值。
  *
  * 挂在数据页最顶上。下面那张趋势卡画的就是这几项的走势——
  * 「今天多少」和「这些天在往哪走」放在同一页，才不用来回切。
  *
+ * 它不跟今日 / 饮食页选的日期走。那两页翻回昨天是为了补记饮食；
+ * 这张卡跟着翻的话，「今日健康数据」这个标题就成了假的。
+ *
  * 图标不是装饰：六项数值排在一起时，全是数字加两个汉字，
  * 扫一眼分不出哪个是哪个；图标是那个能先被认出来的锚点。
+ *
+ * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
  */
 
-import { h, num, formatHours, todayKey } from '../../lib/utils.js';
+import { h, num, formatHours, todayKey, infoTip } from '../../lib/utils.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
+import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
 
 const svg = (path, { fill = false } = {}) => {
   const ns = 'http://www.w3.org/2000/svg';
@@ -38,9 +44,14 @@ const ICONS = {
   steps: 'M9 4.5c1.6 0 2.4 1.2 2.4 3 0 1.4-.4 2.6-.4 4 0 1.2.6 2 .6 3.2 0 1.5-.9 2.3-2.3 2.3s-2.3-.9-2.3-2.4c0-1.4.5-2.4.5-3.6 0-1.5-.6-2.3-.6-3.6 0-1.7.8-2.9 2.1-2.9ZM7.6 19.5h3.4M16.5 8c1.3 0 2 1 2 2.5 0 1.2-.4 2.2-.4 3.3 0 1 .5 1.7.5 2.7 0 1.2-.7 1.9-1.9 1.9s-1.9-.8-1.9-2c0-1.2.4-2 .4-3 0-1.2-.5-1.9-.5-3 0-1.4.6-2.4 1.8-2.4Z',
   activeEnergy: 'M12 3s1 3.2 3 5.2 3.3 3.2 3.3 5.8A6.3 6.3 0 0 1 12 20.5a6.3 6.3 0 0 1-6.3-6.5c0-2.2 1.4-3.6 2.4-5.3M12 20.5c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.4 2.4-4.2.9 1.5 3.2 2.5 3.2 4.2 0 1.6-1.2 2.8-2.8 2.8Z',
   exerciseMinutes: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3.2 2',
-  sleepMinutes: 'M20 14.3A8.2 8.2 0 0 1 9.7 4 8.5 8.5 0 1 0 20 14.3Z',
+  /*
+   * 睡眠画 Zzz，不画月亮。月亮那个形和「夜间模式」「勿扰」撞得太狠，
+   * 在一排身体指标里会被读成一个开关；Zzz 只表示睡觉这一件事。
+   */
+  sleepMinutes: 'M4.5 6.5h5l-5 6h5M12.5 3.5h4l-4 5h4M12 14.5h7l-7 6h7',
   weightKg: 'M5.6 8h12.8l1.6 11.5a1.4 1.4 0 0 1-1.4 1.5H5.4A1.4 1.4 0 0 1 4 19.5L5.6 8ZM12 3.5A2.6 2.6 0 0 1 14.6 6c0 .8-.3 1.4-.8 2h-3.6c-.5-.6-.8-1.2-.8-2A2.6 2.6 0 0 1 12 3.5Z',
   bodyFatPct: 'M12 3.5c3.4 3.3 5.5 5.9 5.5 8.7a5.5 5.5 0 0 1-11 0c0-2.8 2.1-5.4 5.5-8.7Z',
+  waterMl: 'M12 3.2c3.4 4 5.4 6.7 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-2.5 2-5.2 5.4-9.2Z',
   restingHR: 'M3.5 12.5h3l1.8-4 2.7 8 2.4-6 1.6 3.4h5',
 };
 
@@ -65,73 +76,88 @@ function dataCenterBtn() {
   }, '去同步健康数据');
 }
 
+const fmt = (cell) => {
+  if (cell.value == null) return DASH;
+  if (cell.kind === 'hours') return formatHours(cell.value, { unit: false });
+  return num(cell.value, cell.decimals || 0);
+};
+
+/** 「最近一次 X 是哪天量的」收进感叹号，不再摆到格子里冒充今天的数 */
+function lastSeenLines(today) {
+  return ['weightKg', 'bodyFatPct', 'restingHR'].map((key) => {
+    const hit = latestHealthEntry(key, today);
+    if (!hit) return null;
+    const value = key === 'restingHR' ? num(hit.value) : num(hit.value, 1);
+    const unit = key === 'weightKg' ? ' kg' : key === 'bodyFatPct' ? '%' : ' bpm';
+    return h('li', null, h('strong', null, `${FIELD_LABEL[key]}：`),
+      `最近一次 ${hit.date} 记到 ${value}${unit}`);
+  }).filter(Boolean);
+}
+
 export function healthMetricsCard() {
-  const d = state.derived;
-  if (!d) return null;
-  const health = d.health || {};
-  const metricKeys = [
-    'steps', 'activeEnergy', 'restingEnergy', 'exerciseMinutes', 'sleepMinutes',
-    'weightKg', 'bodyFatPct', 'restingHR', 'waterMl',
-  ];
-  const has = metricKeys.some((key) => health[key] != null && Number.isFinite(Number(health[key])));
-  const isToday = state.day === todayKey();
-  // 今天没数据、或者有数据但缺了活动能量（热量预算就靠它动态调整），都值得提示导入
-  const needsImport = isToday && (!has || health.activeEnergy == null);
-  /*
-   * 体重和体脂用「所选日期之前最近一次」，不是当天那条。
-   *
-   * 其余几项每天都有，体重却是几天才称一次——按当天取的话这一格大部分日子
-   * 都是空的，而空着并不代表体重未知。沿用最近一次读到的值，
-   * 同时把日期标在名字后面，免得把前几天的数当成今天刚称的。
-   */
-  const carried = (key) => {
-    const today = Number(health[key]);
-    if (Number.isFinite(today) && today > 0) return { value: today, date: null };
-    const hit = latestHealthEntry(key, state.day);
-    return hit ? { value: hit.value, date: hit.date.slice(5) } : null;
-  };
-  const weight = carried('weightKg');
-  const bodyFat = carried('bodyFatPct');
-  /*
-   * 缺的那项画一道杠，不要整格消失。
-   *
-   * 原先是「没有值就不出现」，于是手表哪天没记静息心率，这一格就凭空少一个，
-   * 格子重新排布、每天长得都不一样；而且「没测到」和「这个应用不显示心率」
-   * 从界面上分不出来。一道杠说的是「这项应该有，今天没有」——
-   * 这跟一整张卡都空着（下面那个空状态）不是一回事。
-   *
-   * 体脂例外：多数人根本没有体脂秤，常年挂一道杠只是噪音。
-   * 它只在真的记到过的时候才出现。
-   */
-  const cell = (key, label, value, unit) => [key, label, value ?? DASH, value == null ? '' : unit];
-  const cells = [
-    cell('steps', '步数', health.steps != null ? num(health.steps) : null, ''),
-    cell('activeEnergy', '活动', health.activeEnergy != null ? num(health.activeEnergy) : null, 'kcal'),
-    cell('exerciseMinutes', '锻炼', health.exerciseMinutes != null ? num(health.exerciseMinutes) : null, '分钟'),
-    cell('sleepMinutes', '睡眠', health.sleepMinutes != null ? formatHours(health.sleepMinutes, { unit: false }) : null, '小时'),
-    cell('restingHR', '静息心率', health.restingHR != null ? num(health.restingHR) : null, 'bpm'),
-    cell('weightKg', weight?.date ? `体重 ${weight.date}` : '体重', weight ? num(weight.value, 1) : null, 'kg'),
-    ...(bodyFat ? [cell('bodyFatPct', bodyFat.date ? `体脂 ${bodyFat.date}` : '体脂', num(bodyFat.value, 1), '%')] : []),
-  ];
-  const sourceLabel = health.source === 'manual'
-    ? '手动录入' : health.source === 'mixed' ? '同步＋补录' : '已同步';
-  const cols = metricColumns(cells.length);
+  const today = todayKey();
+  const seen = new Set();
+  for (const row of state.healthDays) {
+    for (const key of Object.keys(row)) {
+      if (Number.isFinite(Number(row[key]))) seen.add(key);
+    }
+  }
+  const info = healthCardState({
+    health: state.healthByDate?.get(today) || null,
+    lastImport: state.lastImport,
+    today,
+    everSeen: [...seen],
+  });
+  const cols = metricColumns(info.cells.length);
+  // 有数据但缺了活动能量时也值得再同步一次：热量预算就靠它动态调整
+  const needsImport = !info.hasAny || info.missing.includes('activeEnergy');
+  const syncedClock = info.syncedAt
+    ? new Date(info.syncedAt).toLocaleString('zh-CN', {
+      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    })
+    : null;
+
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '健康数据'),
-      h('span.card-tag', null, has ? sourceLabel : '未同步')),
-    has
-      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } }, cells.map(([key, label, value, unit]) => h('div.metric-cell', { class: `metric-cell${value === DASH ? ' empty' : ''}` },
-        svg(ICONS[key] || ICONS.steps),
-        h('div.metric-body', null,
-          h('div.metric-value', null, value, unit && h('span.metric-unit', null, unit)),
-          h('div.metric-label', null, label)))))
+      h('h3', null, '今日健康数据'),
+      h('div.card-head-actions', null,
+        h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
+          info.synced ? '已同步' : '未同步'),
+        infoTip('查看同步情况',
+          h('p', null, syncedClock
+            ? `最近一次同步：${syncedClock}${info.synced ? '（今天）' : ''}。`
+            : '还没有同步过健康数据。'),
+          info.present.length
+            ? h('p', null, `今天读到了：${info.present.map((k) => FIELD_LABEL[k]).join('、')}。`)
+            : null,
+          info.missing.length
+            ? [
+              h('p', null, `今天没读到：${info.missing.map((k) => FIELD_LABEL[k]).join('、')}。常见原因——`),
+              h('ul', null, MISSING_REASONS.map((r) => h('li', null, r))),
+            ]
+            : null,
+          /*
+           * 体重、体脂、静息心率不是每天都测。以前卡面上直接沿用最近一次的值，
+           * 三天前称的数看着就像今早刚称的；现在缺就是缺，最近一次在这儿查。
+           */
+          h('p', null, '这张卡只说今天。体重、体脂、静息心率不会沿用前几天的记录：'),
+          h('ul', null, lastSeenLines(today).length
+            ? lastSeenLines(today)
+            : h('li', null, '这三项都还没有过记录。')),
+          info.sourceNote ? h('p', null, info.sourceNote) : null))),
+    info.hasAny
+      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } },
+        info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
+          svg(ICONS[cell.key] || ICONS.steps),
+          h('div.metric-body', null,
+            h('div.metric-value', null, fmt(cell),
+              cell.value != null && cell.unit ? h('span.metric-unit', null, cell.unit) : null),
+            h('div.metric-label', null, cell.label)))))
       // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
-      : h('p.empty-hint', null, isToday
-        ? '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'
-        : '这一天还没有健康数据。到设置里的「数据管理」同步，或手动补录当天字段。'),
+      : h('p.empty-hint', null,
+        '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'),
     needsImport && dataCenterBtn(),
-    needsImport && has && h('p.form-hint', { style: { marginTop: '6px' } },
+    needsImport && info.hasAny && h('p.form-hint', { style: { marginTop: '6px' } },
       '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
   );
 }

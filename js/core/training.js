@@ -278,6 +278,103 @@ export function starterSplitCombo(splitKey, size = null) {
   return comboForPatterns(list, patterns, size ?? patterns.length);
 }
 
+/*
+ * 器械筛选。动作库到 100 多个之后，一个部位三十来个动作滑不完，
+ * 而且「今天只有固定器械可用」是健身房里最常见的约束。
+ *
+ * 定义放 core，是因为推荐和动作列表要用**同一份**：
+ * 两边各写一份的话，筛到「徒手」时列表里全是徒手动作，
+ * 推荐位却还在推杠铃卧推 —— 推荐就成了和这一屏无关的东西。
+ */
+export const EQUIP_FILTERS = [
+  { key: 'all', label: '全部', match: () => true },
+  { key: 'machine', label: '固定器械', match: (e) => e.equipment === 'machine' || e.equipment === 'cable' },
+  { key: 'free', label: '自由重量', match: (e) => e.equipment === 'barbell' || e.equipment === 'dumbbell' || e.equipment === 'kettlebell' },
+  { key: 'bodyweight', label: '徒手', match: (e) => e.equipment === 'bodyweight' || e.equipment === 'band' },
+];
+
+export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) || EQUIP_FILTERS[0];
+
+/**
+ * 当前范围里该推荐哪几个动作。
+ *
+ * 和 starterCombo 的区别是它**认得已经选了什么**：
+ * 已选的不再推荐，和已选动作高度重合的也不推荐 ——
+ * 否则选完杠铃卧推，推荐位第一个还是哑铃卧推，等于劝人把同一件事做两遍。
+ *
+ * 挑的顺序仍然是「先覆盖不同的动作模式，复合动作优先」，
+ * 这样一套下来角度是散开的，而不是五个动作练同一个角度。
+ *
+ * 数量：按部位 3–5 个，按推拉腿 4–6 个。部位窄，四五个就够铺开；
+ * 推 / 拉 / 腿跨的部位多，少了盖不住。
+ *
+ * @returns {{items, replacements, scopeKey}}
+ *  - items        [{ id, name, tags }]，tags 是短标签，不写长句
+ *  - replacements 已选里有高度重合的一对时，给出「换掉哪个、换成什么」
+ */
+export function recommendFor({
+  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all',
+} = {}) {
+  const byGroup = mode !== 'split';
+  const scopeKey = byGroup ? groupKey : splitKey;
+  const inScope = byGroup ? exercisesForGroup(groupKey) : exercisesForSplit(splitKey);
+  // 器械档位也得算进去：列表里全是徒手动作、推荐位却在推杠铃，那不叫推荐
+  const pool = inScope.filter(equipFilterOf(equip).match);
+  if (!pool.length) return { items: [], replacements: [], scopeKey };
+
+  const chosen = toExercises(selection);
+  const chosenIds = new Set(chosen.map((e) => e.id));
+  const patterns = (byGroup ? GROUP_STARTER_PATTERNS[groupKey] : SPLIT_STARTER_PATTERNS[splitKey])
+    || [...new Set(pool.map((e) => e.pattern))];
+  const size = byGroup ? RECOMMEND_SIZE.group : RECOMMEND_SIZE.split;
+
+  // 已选的、以及和已选高度重合的，都不再推荐
+  const candidates = pool.filter((e) => !chosenIds.has(e.id)
+    && !chosen.some((c) => overlapLevel(overlapScore(e, c)) === 'high'));
+  const combo = comboForPatterns(candidates, patterns, Math.min(size, candidates.length));
+
+  /*
+   * 已经选了高度重合的一对时，直接把「换掉哪个」摆出来。
+   * 只报最重的那一对：一次列五对，等于把选择的负担又推回去。
+   */
+  const replacements = [];
+  const worst = findOverlaps(chosen).filter((o) => o.level === 'high')[0];
+  if (worst) {
+    const drop = worst.b || worst.a;
+    const keep = drop === worst.b ? worst.a : worst.b;
+    const options = replacementsFor(drop, chosen, 2);
+    if (options.length) {
+      replacements.push({
+        dropId: drop.id,
+        title: `${keep.name}和${drop.name}刺激高度重叠`,
+        options: options.map((e) => ({ id: e.id, name: e.name })),
+      });
+    }
+  }
+
+  return {
+    scopeKey,
+    items: combo.map((e) => ({ id: e.id, name: e.name, tags: exerciseTags(e) })),
+    replacements,
+  };
+}
+
+/** 推荐几个。按部位窄、按推拉腿宽，见 recommendFor 的注释 */
+export const RECOMMEND_SIZE = Object.freeze({ group: 5, split: 6 });
+
+/**
+ * 推荐理由压成三个短标签：动作模式 · 主练哪儿 · 复合还是孤立。
+ * 写成整句的话，五条推荐就是五段话，读完比自己翻列表还慢。
+ */
+export function exerciseTags(exercise) {
+  if (!exercise) return [];
+  return [
+    PATTERNS[exercise.pattern],
+    exercise.primary?.[0] ? `主练${MUSCLES[exercise.primary[0]]}` : null,
+    exercise.compound ? '复合动作' : '孤立动作',
+  ].filter(Boolean);
+}
+
 /**
  * 整套训练的建议。
  *
@@ -522,6 +619,54 @@ export function recentExercises(sessions = [], { limit = 12, before = null } = {
  * 只报数字，不给「每周该练几组」的结论——那要结合训练年限、恢复能力和目的，
  * 从「这周练了什么」里看不出来。
  */
+/**
+ * 近 7 日训练记录：一行一个动作，日期 + 名字 + 组数 / 重量 / 次数。
+ *
+ * 原先这里是「近 7 天训练量」——各部位练了多少组的一排数字，加一段
+ * 「这里只报数，不给每周该练几组的结论」的说明。那段说明是对的，
+ * 可它占的地方比数字还大，而人翻到这儿想看的是「我前天练了什么」。
+ *
+ * 重量和次数按组去重后写成区间：递减组、爬坡加重是真实练法，
+ * 压成一个平均数会把这件事抹掉。所有数字都来自实际记录，没记就不写。
+ */
+export function recentTrainingRows(sessions = [], endDate, days = 7) {
+  const end = String(endDate || '');
+  if (!end) return [];
+  const start = new Date(Date.parse(`${end}T00:00:00Z`) - (days - 1) * 86400000)
+    .toISOString().slice(0, 10);
+  const rows = [];
+  for (const raw of sessions) {
+    if (!raw?.date || raw.date < start || raw.date > end) continue;
+    const session = normalizeSession(raw);
+    for (const item of session.items) {
+      const exercise = EXERCISE_BY_ID.get(item.id);
+      if (!exercise) continue;
+      rows.push({
+        date: session.date,
+        id: item.id,
+        name: exercise.name,
+        setCount: item.sets.length,
+        weightLabel: spanLabel(item.sets.map((x) => x.weightKg), 'kg'),
+        repsLabel: spanLabel(item.sets.map((x) => x.reps), '次'),
+        sets: item.sets,
+        done: item.done,
+      });
+    }
+  }
+  // 新的排前面；同一天里保持记录时的顺序
+  return rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+/** 一组数写成「50kg」或「50–60kg」；一个都没记就不写 */
+function spanLabel(values, unit) {
+  const nums = values.filter((v) => Number.isFinite(v) && v > 0);
+  if (!nums.length) return null;
+  const lo = Math.min(...nums);
+  const hi = Math.max(...nums);
+  const fmt = (v) => String(Math.round(v * 10) / 10);
+  return lo === hi ? `${fmt(lo)}${unit}` : `${fmt(lo)}–${fmt(hi)}${unit}`;
+}
+
 export function weeklyVolume(sessions = [], endDate, days = 7) {
   const end = String(endDate || '');
   const start = end ? new Date(Date.parse(`${end}T00:00:00Z`) - (days - 1) * 86400000)

@@ -129,25 +129,71 @@ test('空腹开局：状态良好，推荐非空且份量合理', () => {
   }
 });
 
-test('半天没有饮食记录时不评价“吃得慢”，而是说明尚未记录', () => {
+test('半天没有饮食记录时不评价“吃得慢”，也不把重分配的大额预算摆出来', () => {
   const a = advise({}, { now: at('13:30') });
   const normalLunch = Math.round(targets.kcal * 0.35);
   assert.equal(a.status.level, 'good');
-  assert.match(a.status.detail, /还没有饮食记录/);
   assert.match(a.status.detail, /午餐/);
   assert.match(a.status.detail, new RegExp(`约 ${normalLunch} kcal`));
   assert.match(a.status.detail, /不必在这一餐补完当天缺口/);
   assert.ok(a.budget.kcal > normalLunch, '这个用例必须覆盖剩余预算被重分配的情况');
   assert.doesNotMatch(a.status.detail, new RegExp(`约 ${a.budget.kcal} kcal`),
     '空腹午餐不应直接展示重新分配后的大额预算');
-  assert.doesNotMatch(a.status.detail, /吃得慢|当前时间进度/);
+  /*
+   * 程序没有进餐时长数据，「吃得慢」这句话没有任何依据。
+   * 现在整套提示都是「当前情况 / 判断依据 / 可执行建议」三段，
+   * 没有依据的话根本填不进第二段。
+   */
+  const everything = `${a.status.headline}${a.status.detail}`
+    + a.insights.map((i) => `${i.title}${i.basis}${i.action}`).join('');
+  assert.doesNotMatch(everything, /吃得慢|吃得快|吃慢一点|当前时间进度/);
+
+  // 「漏记了就先补记」归今日提示第一条，主卡首段不再重复
+  assert.doesNotMatch(a.status.detail, /漏记/, '同一屏里说了两遍');
+  const miss = a.insights.find((i) => /尚无饮食记录/.test(i.title));
+  assert.ok(miss, `没有生成漏记提示：${a.insights.map((i) => i.title).join(' / ')}`);
+  assert.equal(miss.priority, 1, '数据质量的提示必须排在所有结论前面');
+  assert.match(miss.action, /若只是漏记，请先补记；若确实还没进食，下一餐按正常份量安排，不必一次补齐全天缺口。/);
 });
 
 test('深夜仍无记录时不鼓励一次补完全天缺口', () => {
   const a = advise({}, { now: at('22:30') });
   assert.equal(a.status.level, 'warn');
-  assert.match(a.status.detail, /漏记/);
   assert.match(a.status.detail, /不建议.*一次补完/);
+  assert.ok(a.insights.some((i) => /尚无饮食记录/.test(i.title)));
+});
+
+/*
+ * 一屏默认只放得下三条，所以「先说哪一条」本身就是判断。
+ * 数据有问题排最前面，因为下面每一条的可信度都取决于它：
+ * 漏记半天的人，「热量还差 900」是假的。
+ */
+test('今日提示按优先级排：数据问题在前，结构和习惯在后', () => {
+  const a = buildAdvice({
+    targets: { ...targets, activeCapped: true, activeReported: 2010, ageEstimated: true },
+    profile,
+    intake: { ...zero, kcal: 1800, protein: 40, fat: 95, carb: 120, sodium: 3400, sugar: 90 },
+    entries: [{ foodId: 'x' }],
+    health: { sleepMinutes: 320 },
+    baseline: { activeEnergy: 310 },
+    now: at('20:00'),
+    waterCount: 0,
+  });
+  const ps = a.insights.map((i) => i.priority);
+  assert.deepEqual([...ps].sort((x, y) => x - y), ps, `优先级没有排序：${ps.join(',')}`);
+
+  const by = (title) => a.insights.find((i) => title.test(i.title));
+  assert.equal(by(/活动能量数值不可信/).priority, 1);
+  assert.equal(by(/蛋白/).priority, 2);
+  assert.equal(by(/钠已超出/).priority, 3);
+  assert.equal(by(/结构偏/).priority, 4);
+  assert.equal(by(/睡了/).priority, 5);
+
+  // 三段式：每条都得说清「凭什么这么讲」
+  for (const i of a.insights) {
+    assert.ok(i.title && i.basis, `「${i.title}」缺少判断依据`);
+    assert.equal(i.text, `${i.basis}${i.action}`);
+  }
 });
 
 test('推荐不会让人一顿吃掉全天剩余热量', () => {

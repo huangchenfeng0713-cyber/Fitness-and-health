@@ -1,6 +1,6 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey, toast, formatDayLabel, shiftDay } from './lib/utils.js';
+import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay } from './lib/utils.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -118,14 +118,14 @@ function renderTopbar() {
   }, h('span', { html: TAB_ICON.settings }));
 
   if (!tab.dated) {
-    const cutoff = state.day === todayKey()
-      ? `今天 · ${state.day.slice(5)}`
-      : formatDayLabel(state.day);
     context.classList.add('topbar-page-context');
-    // 健身页不按日期统计，标「数据截至」只会让人以为动作库跟日期有关
+    /*
+     * 这两页都不跟今日 / 饮食的日期走，所以副标题里不许出现「数据截至 X」——
+     * 那句话会让人以为翻回昨天，数据页和健身页也跟着翻。
+     */
     const noteText = tab.key === 'training'
-      ? '按身体部位或动作模式挑选，记下组数与重量'
-      : `数据截至 ${cutoff}`;
+      ? '动作记录与训练建议'
+      : '今天同步了什么，这些天在往哪走';
     context.append(
       h('h1', null, tab.label),
       h('span.topbar-context-note', null, noteText),
@@ -134,21 +134,27 @@ function renderTopbar() {
     return;
   }
 
-  const isToday = state.day === todayKey();
+  /*
+   * 标题和副标题不许说同一件事。原先大标题写「昨天」，下面又写
+   * 「08-28 · 回今天」—— 日期上下各印一遍，而「回今天」在标题已经点明
+   * 是哪天的时候才有用。措辞判断在 core/day.js，这里只负责摆。
+   */
+  const heading = dayHeading(state.day, todayKey());
   context.append(
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
       'aria-label': '前一天',
     }, '‹'),
     h('button.topbar-day', {
-      onclick: () => !isToday && setDay(todayKey()),
-      title: isToday ? '' : '回到今天',
+      onclick: () => !heading.isToday && setDay(todayKey()),
+      title: heading.isToday ? '' : '回到今天',
     },
-    h('strong', null, formatDayLabel(state.day)),
-    h('span.topbar-date', null, isToday ? state.day.slice(5) : `${state.day.slice(5)} · 回今天`)),
+    h('strong', null, heading.title),
+    h('span.topbar-date', { class: heading.backToToday ? 'topbar-date back' : 'topbar-date' },
+      heading.sub)),
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, 1)),
-      disabled: isToday,
+      disabled: heading.isToday,
       'aria-label': '后一天',
     }, '›'),
   );
