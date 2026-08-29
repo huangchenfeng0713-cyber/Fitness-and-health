@@ -13,7 +13,7 @@
  * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
  */
 
-import { h, num, formatHours, todayKey, infoTip } from '../../lib/utils.js';
+import { h, num, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
 
@@ -78,7 +78,7 @@ function dataCenterBtn() {
 
 const fmt = (cell) => {
   if (cell.value == null) return DASH;
-  if (cell.kind === 'hours') return formatHours(cell.value, { unit: false });
+  if (cell.kind === 'duration') return formatDuration(cell.value);
   return num(cell.value, cell.decimals || 0);
 };
 
@@ -146,7 +146,12 @@ export function healthMetricsCard() {
             : h('li', null, '这三项都还没有过记录。')),
           info.sourceNote ? h('p', null, info.sourceNote) : null))),
     info.hasAny
-      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } },
+      /*
+       * 列数也写成 class：四列时格子只有 78px 宽，而「6小时42分」在 17px 下要 82px，
+       * 会把格子撑破（scripts/smoke.mjs 里那条 1~8 项的检查就是拦这个的）。
+       * 密一档的排布配密一档的字号，不是所有列数都用同一个 17px。
+       */
+      ? h('div.metric-grid', { class: `metric-grid cols-${cols}`, style: { '--metric-cols': String(cols) } },
         info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
           svg(ICONS[cell.key] || ICONS.steps),
           h('div.metric-body', null,

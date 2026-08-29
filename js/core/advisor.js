@@ -8,6 +8,7 @@
 import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
 import { clamp, round, ATWATER } from './nutrition.js';
 import { macroSplit } from './metrics.js';
+import { formatDuration } from './duration.js';
 
 /** 餐次定义：时间窗 + 该餐在全天热量中的默认占比 */
 export const MEALS = [
@@ -729,7 +730,7 @@ export function buildInsights({
   // 睡眠：只在设备真的记到的时候说，缺数据不等于没睡
   const sleep = Number(health.sleepMinutes);
   if (Number.isFinite(sleep) && sleep > 0 && sleep < 390) {
-    add('info', INSIGHT_PRIORITY.habit, `昨晚睡了 ${round(sleep / 60, 1)} 小时`,
+    add('info', INSIGHT_PRIORITY.habit, `昨晚睡了 ${formatDuration(sleep)}`,
       '成人参考 7–9 小时（AASM / SRS 共识），这一晚在参考区间之下。',
       '睡眠不足会让食欲和训练表现一起变差，今天别再叠加大强度训练。');
   }

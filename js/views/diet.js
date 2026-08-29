@@ -113,13 +113,17 @@ function buildShell(root) {
   }, '+ 自定义');
 
   nodes.basketBar = selectBar({
-    summary: () => `已选 ${ui.basket.length} 样 · ${basketTotals().kcal} kcal`,
-    detail: () => `蛋白 ${basketTotals().protein}g`,
-    actionLabel: () => `记录到${MEAL_LABEL[guessMeal()]}`,
+    /*
+     * 摘要里带上「记到哪一餐」：确认键上只有一个勾，落到哪一餐得在别处说清楚。
+     */
+    summary: () => `饮食备选 ${ui.basket.length} 样 · ${basketTotals().kcal} kcal`,
+    detail: () => `蛋白 ${basketTotals().protein}g · 记录到${MEAL_LABEL[guessMeal()]}`,
+    actionLabel: () => '✓',
+    actionAriaLabel: () => `确认记录到${MEAL_LABEL[guessMeal()]}`,
     items: () => ui.basket.map((b) => ({
       key: b.food.id,
       label: b.food.name,
-      note: `${b.grams}${b.food.basis === '100ml' ? 'ml' : 'g'} · ${Math.round(Number(nutrientsFor(b.food, b.grams, b.sugarLevel || undefined).kcal))} kcal`,
+      note: `${b.grams}${b.food.basis === '100ml' ? 'ml' : 'g'} · ${Math.round(Number((b.nutrients || nutrientsFor(b.food, b.grams, b.sugarLevel || undefined)).kcal))} kcal`,
     })),
     onRemove: (id) => { removeFromBasket(id); refreshResults(); },
     onClear: () => { ui.basket = []; refreshResults(); },
@@ -222,16 +226,16 @@ function refreshCategories() {
 
 const inBasket = (id) => ui.basket.some((b) => b.food.id === id);
 
-/** 往篮子里放一样。份量用这个人自己记过的量，没记过就用库里第一档 */
-function addToBasket(food) {
+/**
+ * 往备选里放一样。份量、糖度、配料都由份量面板定好了才进来 ——
+ * 这里不再自己猜一个量。
+ *
+ * `nutrients` / `composition` 只有复合甜品（清补凉那类）会带：
+ * 它们的营养是按实际选中的原料算出来的，回头再按食物库反算会把选择丢掉。
+ */
+function addToBasket({ food, grams, sugarLevel = null, nutrients = null, composition = null }) {
   if (inBasket(food.id)) return;
-  const start = initialPortion(food, portionMemory());
-  ui.basket = [...ui.basket, {
-    food,
-    grams: start.grams,
-    // 茶饮的糖度在篮子里不逐项问，按默认；要改糖度就点开份量面板单独记
-    sugarLevel: hasSugarLevel(food) ? DEFAULT_SUGAR_LEVEL : null,
-  }];
+  ui.basket = [...ui.basket, { food, grams, sugarLevel, nutrients, composition }];
 }
 
 const removeFromBasket = (id) => { ui.basket = ui.basket.filter((b) => b.food.id !== id); };
@@ -240,7 +244,8 @@ const removeFromBasket = (id) => { ui.basket = ui.basket.filter((b) => b.food.id
 function basketTotals() {
   const total = { kcal: 0, protein: 0 };
   for (const b of ui.basket) {
-    const n = nutrientsFor(b.food, b.grams, b.sugarLevel || undefined);
+    // 复合甜品自带算好的营养：按食物库反算会把「选了哪几样原料」丢掉
+    const n = b.nutrients || nutrientsFor(b.food, b.grams, b.sugarLevel || undefined);
     total.kcal += Number(n.kcal) || 0;
     total.protein += Number(n.protein) || 0;
   }
@@ -262,6 +267,8 @@ async function recordBasket() {
         sugarLevel: b.sugarLevel,
         name: b.food.name + levelLabel,
         custom: b.food.custom ? b.food : null,
+        ...(b.nutrients ? { nutrients: b.nutrients } : {}),
+        ...(b.composition ? { composition: b.composition } : {}),
       });
       ok += 1;
     } catch (err) {
@@ -315,10 +322,13 @@ function refreshResults() {
     const basis = f.basis === '100ml' ? '100ml' : '100g';
     const chosen = inBasket(f.id);
     /*
-     * 一行两个入口：
-     *   点行本身  → 开份量面板，改完克数单独记（要调份量、选糖度时走这条）
-     *   点右边的 ＋ → 直接进篮子，用你上次记的份量，不开弹层
-     * 记一顿饭的时候按的都是 ＋，弹层一次都不用开。
+     * ＋ 和点行本身都开份量面板：加进备选之前先让人看一眼这次记多少。
+     *
+     * 原先 ＋ 是「直接进备选，用记住的份量，不开弹层」——按操作次数算那样更少，
+     * 但记住的份量只是上一次的克数，同一样东西这顿吃多吃少它不知道，
+     * 而克数是乘数，差一倍热量就差一倍。现在多一步确认，多的那一步正是要确认的。
+     *
+     * 已经在备选里的那一行，＋ 变成 ✓，点一下移出去——总得有条退路。
      */
     return h('div.search-item-wrap', null,
       h('button.search-item', { type: 'button', onclick: () => selectFood(f) },
@@ -336,9 +346,13 @@ function refreshResults() {
         'aria-label': chosen ? `把 ${f.name} 移出待记录` : `把 ${f.name} 加入待记录`,
         'aria-pressed': String(chosen),
         onclick: () => {
-          if (chosen) removeFromBasket(f.id); else addToBasket(f);
-          refreshResults();
-          refreshBasket();
+          if (chosen) {
+            removeFromBasket(f.id);
+            refreshResults();
+            refreshBasket();
+            return;
+          }
+          selectFood(f);
         },
       }, chosen ? '✓' : '＋'));
     })),
@@ -403,16 +417,12 @@ function refreshMixedPortion(food) {
   const totalAmount = h('strong.mix-total-value');
   const totalKcal = h('strong.mix-total-value');
   const selectedCount = h('span.mix-selected-count');
-  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+  const addBtn = h('button.primary-btn', null, '添加到饮食备选');
 
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
-      onclick: () => {
-        ui.meal = m.key;
-        refreshMealChips();
-        addBtn.textContent = `记录到${m.label}`;
-      },
+      onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
     }, m.label)));
   };
 
@@ -498,21 +508,17 @@ function refreshMixedPortion(food) {
     return row;
   });
 
-  addBtn.onclick = async () => {
+  addBtn.onclick = () => {
     if (currentMix.grams <= 0) {
       toast('至少选择一种配料', 'warn');
       return;
     }
-    const result = await runLocalAction(addBtn, () => addEntry({
-      foodId: food.id,
+    addToBasket({
+      food,
       grams: currentMix.grams,
-      meal: guessMeal(),
-      name: food.name,
       nutrients: currentMix.nutrients,
       composition: currentMix.components,
-    }), '记录食物');
-    if (!result.ok) return;
-    toast(`已记录 ${food.name}，${currentMix.components.length} 种配料`, 'ok');
+    });
     ui.selected = null;
     ui.mix = {};
     ui.query = '';
@@ -520,6 +526,7 @@ function refreshMixedPortion(food) {
     refreshResults();
     refreshPortion();
     refreshAdvice();
+    refreshBasket();
   };
 
   refreshMealChips();
@@ -699,7 +706,12 @@ function refreshPortion() {
 
   nodes.preview = h('div.preview-slot');
   nodes.mealRow = h('div.portion-meal', null);
-  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+  /*
+   * 份量面板不再直接落库，改成「加进备选」。
+   * 落库是备选条上那一下勾 —— 一顿饭挑三四样，中间任何一样填错都还能撤，
+   * 而每样都直接落库的话，撤销就得靠删记录。
+   */
+  const addBtn = h('button.primary-btn', null, '添加到饮食备选');
 
   // 茶饮的糖度：同一杯全糖和三分糖能差 100 多千卡，必须能选
   const sugarRow = hasSugarLevel(food) ? h('div.sugar-row') : null;
@@ -713,30 +725,30 @@ function refreshPortion() {
   };
   refreshSugarChips();
 
+  /*
+   * 餐次是**整批**的选择，不是每样各选一次：备选里这几样按一次勾一起落库。
+   * 所以这里选的是「这一批记到哪一餐」，备选条上也写着同一个答案。
+   */
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
-      onclick: () => { ui.meal = m.key; refreshMealChips(); addBtn.textContent = `记录到${m.label}`; },
+      onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
     }, m.label)));
   };
 
-  addBtn.onclick = async () => {
-    const levelLabel = hasSugarLevel(food) && ui.sugar !== 'full'
-      ? `（${sugarLevel(ui.sugar).label}）` : '';
-    const result = await runLocalAction(addBtn, () => addEntry({
-      foodId: food.id, grams: ui.grams, meal: guessMeal(),
+  addBtn.onclick = () => {
+    addToBasket({
+      food,
+      grams: ui.grams,
       sugarLevel: hasSugarLevel(food) ? ui.sugar : null,
-      name: food.name + levelLabel,
-      custom: food.custom ? food : null,
-    }), '记录食物');
-    if (!result.ok) return;
-    toast(`已记录 ${food.name}${levelLabel} ${ui.grams}${isLiquid ? 'ml' : 'g'}`, 'ok');
+    });
     ui.selected = null;
     ui.query = '';
     nodes.searchInput.value = '';
     refreshResults();
     refreshPortion();
     refreshAdvice();
+    refreshBasket();
   };
 
   refreshMealChips();
@@ -988,10 +1000,33 @@ function refreshEntries() {
  * 原先每行都挂着可输入的框和一个红叉：这张卡大部分时候是拿来核对
  * 「今天吃了什么」的，滑动列表时很容易蹭到，而删掉一条没有撤销。
  */
+/*
+ * 改餐次的下拉。
+ *
+ * value 要在节点建好之后再设：给还没挂进 <select> 的 <option> 设 selected，
+ * 浏览器会在插入时按 selectedIndex 重算，那一下就把选中项打回第一项 ——
+ * 表现是记录明明已经移到晚餐，下拉里还写着早餐。
+ */
+function mealSelect(entry) {
+  const select = h('select.entry-meal', {
+    'aria-label': `${entry.name} 属于哪一餐`,
+    onchange: async (ev) => {
+      const node = ev.currentTarget;
+      const meal = node.value;
+      if (meal === entry.meal) return;
+      const result = await runLocalAction(node, () => updateEntry(entry.id, { meal }), '更改餐次');
+      if (result.ok) toast(`已移到${MEAL_LABEL[meal] || meal}`, 'ok');
+      else node.value = entry.meal;
+    },
+  }, MEALS.map((m) => h('option', { value: m.key }, m.label)));
+  select.value = entry.meal;
+  return select;
+}
+
 function entryRow(e, editing) {
   const isLiquid = findFood(e.foodId)?.basis === '100ml';
   const unit = isLiquid ? 'ml' : 'g';
-  return h('div.entry-row', null,
+  return h('div.entry-row', { class: `entry-row${editing ? ' editing' : ''}` },
     h('div.entry-main', null,
       h('div.entry-name', null, e.name,
         e.note && infoTip('查看配料与记录说明', h('p', null, e.note))),
@@ -1016,6 +1051,14 @@ function entryRow(e, editing) {
         },
       }),
       h('span.unit', null, unit),
+      /*
+       * 餐次也能改。记账时经常先随手记下来，事后才发现该算在别的餐里——
+       * 原先只能删掉重记一遍，而重记要重新搜、重新填克数。
+       *
+       * 用 select 而不是五个 chip：这一行本来就挤（克数输入 + 单位 + 删除），
+       * 再塞五个按钮会把动作名挤没。
+       */
+      mealSelect(e),
       h('button.icon-btn.danger', {
         'aria-label': `删除 ${e.name}`,
         onclick: async (ev) => {

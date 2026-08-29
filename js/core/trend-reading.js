@@ -9,6 +9,7 @@
  */
 
 import { MAX_LOSS_RATE_PCT, MAX_GAIN_RATE_PCT } from './nutrition.js';
+import { formatDuration } from './duration.js';
 
 const round = (v, d = 0) => {
   const m = 10 ** d;
@@ -193,16 +194,22 @@ function readSleep(points) {
   const s = analyzeSeries(points, 1);
   if (!s) return '这段时间还没有睡眠记录。';
   const short = countDays(points, (y) => y < 6.5);
+  /*
+   * 具体时长写成「6小时42分」。序列本身是小时（图的纵轴要小数刻度才排得齐），
+   * 但读给人看的那句话不该让人把 0.7 乘回 60。
+   * 「7~9 小时」「不足 6.5 小时」是文献给的参考区间和门槛，照原样写。
+   */
+  const hm = (hours) => formatDuration(hours * 60);
   return join([
-    s.avg < 6.5 ? `日均 ${s.avg} 小时，明显低于成人 7~9 小时的常见建议。`
-      : s.avg < 7 ? `日均 ${s.avg} 小时，离 7 小时还差一点。`
-        : `日均 ${s.avg} 小时，落在常见建议区间里。`,
+    s.avg < 6.5 ? `日均 ${hm(s.avg)}，明显低于成人 7~9 小时的常见建议。`
+      : s.avg < 7 ? `日均 ${hm(s.avg)}，离 7 小时还差一点。`
+        : `日均 ${hm(s.avg)}，落在常见建议区间里。`,
     short ? `其中 ${short} 天不足 6.5 小时。` : '',
-    s.spread >= 2.5 ? `最长和最短差 ${s.spread} 小时，作息不太稳定——固定起床时间通常比固定入睡时间更容易做到。`
+    s.spread >= 2.5 ? `最长和最短差 ${hm(s.spread)}，作息不太稳定——固定起床时间通常比固定入睡时间更容易做到。`
       : s.enoughForTrend ? '曲线比较平稳，作息基本规律。' : '',
     s.enoughForTrend && Math.abs(s.drift) >= 0.6
-      ? (s.drift > 0 ? `后半段比前半段多睡约 ${Math.abs(s.drift)} 小时，在往好的方向走。`
-        : `后半段比前半段少睡约 ${Math.abs(s.drift)} 小时，注意别继续往下掉。`)
+      ? (s.drift > 0 ? `后半段比前半段多睡约 ${hm(Math.abs(s.drift))}，在往好的方向走。`
+        : `后半段比前半段少睡约 ${hm(Math.abs(s.drift))}，注意别继续往下掉。`)
       : '',
     s.avg < 7 ? '先把每晚的睡眠机会稳定增加 30 分钟，比周末补觉更有用。' : '',
   ]);

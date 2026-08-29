@@ -14,6 +14,7 @@
  */
 
 import { MIN_POINTS_FOR_CLAIM } from './trend-reading.js';
+import { formatDuration } from './duration.js';
 
 const round = (v, d = 0) => {
   const m = 10 ** d;
@@ -155,7 +156,7 @@ export function weeklySummary({
   };
   const exercise = avgOf('exerciseMinutes');
   if (exercise) {
-    rows.push(row('exercise', '日均锻炼', `${exercise.value} 分钟`,
+    rows.push(row('exercise', '日均锻炼', formatDuration(exercise.value),
       `Apple 健康记录，按有数据的 ${exercise.n} 天算`, 'plain'));
   }
 

@@ -138,7 +138,7 @@ function lastSyncPanel(last) {
     h('div.sync-result-head', null,
       h('div', null, h('strong', null, `已同步 ${num(last.days)} 天`), h('span', null, range)),
       h('time', null, at)),
-    details.length && h('details.sync-details', null,
+    details.length && rememberedDetails('sync-details', 'details.sync-details',
       h('summary', null, '导入详情'),
       h('ul', null, details.map((item) => h('li', null, item))),
       sources.length && h('p', null, `识别来源：${sources.slice(0, 6).join('、')}${sources.length > 6 ? '等' : ''}`)));
@@ -502,7 +502,7 @@ function importPanel(rerender) {
     placeholder: 'Apple Watch\niPhone\n第三方 App',
     value: (state.profile.appleSourcePriority || []).join('\n'),
   });
-  const priorityEditor = h('details.paste-block', null,
+  const priorityEditor = rememberedDetails('source-priority', 'details.paste-block',
     h('summary', null, '高级：统一数据来源优先级'),
     h('p.form-hint', { style: { margin: '4px 0 8px' } },
       '每行一个 export.xml 中的 sourceName，越靠上越优先；不确定时请留空，应用会自动处理。'),
@@ -527,7 +527,7 @@ function importPanel(rerender) {
     drop,
     progressEl,
     clipboardBtn,
-    h('details.paste-block', null,
+    rememberedDetails('paste', 'details.paste-block',
       h('summary', null, '手动粘贴快捷指令输出'),
       h('p.form-hint', { style: { margin: '4px 0 8px' } },
         '支持一条或多条 JSON / CSV。每条数据都要有 date；完整应用备份请在“本应用备份与恢复”中选择。'),
@@ -576,10 +576,10 @@ function guidePanel() {
     h('div.method', null,
       h('div.method-head', null, h('span.method-badge.fast', null, '推荐'), h('strong', null, '快捷指令自动上传')),
       h('p', null, '上传直接进入当前账号，不需要复制粘贴，也不要求网页在后台常驻。'),
-      h('details', null,
+      rememberedDetails('recipe-shortcut', 'details',
         h('summary', null, '创建自动上传快捷指令'),
         h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
-      h('details', null,
+      rememberedDetails('recipe-automation', 'details',
         h('summary', null, '设置定时自动运行'),
         h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 
@@ -635,8 +635,30 @@ function manualPanel(rerender) {
   );
 }
 
-function managerSection(icon, title, subtitle, content, open = false) {
-  return h('details.manager-section', { open },
+/*
+ * 哪几节是展开的，记在模块级。
+ *
+ * 设置面板每次落库、每次账号状态刷新都会整个重建（见 app.js 的 subscribe），
+ * 而 `<details open>` 是 DOM 上的状态，重建一次就没了 —— 表现就是
+ * 「点一下同步，刚展开的那几节自己收了起来」，而同步恰恰是最会触发落库的操作。
+ *
+ * 键必须稳定，不能拿标题当键：「手动补录 · 2026-08-29」里带着日期，翻一天就换一个键。
+ */
+const openSections = new Set();
+
+/** 记得住展开状态的 <details>。设置面板里的折叠块一律走这个 */
+function rememberedDetails(key, spec, ...children) {
+  return h(spec, {
+    open: openSections.has(key),
+    ontoggle: (ev) => {
+      if (ev.currentTarget.open) openSections.add(key);
+      else openSections.delete(key);
+    },
+  }, ...children);
+}
+
+function managerSection(key, icon, title, subtitle, content) {
+  return rememberedDetails(key, 'details.manager-section',
     h('summary', null,
       h('span.manager-icon', null, icon),
       h('span.manager-summary-copy', null,
@@ -670,11 +692,11 @@ export function dataManagerCard(rerender) {
             ? '文件在当前设备读取；解析或恢复后的数据会同步到当前登录账号。'
             : '文件只在当前设备读取；未登录时不会上传个人数据。')))),
     h('div.manager-list', null,
-      managerSection('↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
-      managerSection('＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
-      managerSection('↺', '本应用备份与恢复', connected
+      managerSection('import', '↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
+      managerSection('manual', '＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
+      managerSection('backup', '↺', '本应用备份与恢复', connected
         ? '导出、恢复或清空当前账号数据'
         : '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
-      managerSection('?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
+      managerSection('guide', '?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
   );
 }

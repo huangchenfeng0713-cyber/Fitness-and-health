@@ -6,7 +6,7 @@
  * 上面一排按钮选看哪一张，选中的那张给出走势解读。
  */
 
-import { h, num, shiftDay, formatHours, formatMinutes, todayKey, infoTip } from '../../lib/utils.js';
+import { h, num, shiftDay, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
@@ -141,8 +141,8 @@ function fullTable(days, dietByDate) {
     ['步数', (r) => (r.h?.steps != null ? num(r.h.steps) : '—')],
     ['活动', (r) => (r.h?.activeEnergy != null ? num(r.h.activeEnergy) : '—')],
     ['静息', (r) => (r.h?.restingEnergy != null ? num(r.h.restingEnergy) : '—')],
-    ['锻炼', (r) => (r.h?.exerciseMinutes != null ? formatMinutes(r.h.exerciseMinutes) : '—')],
-    ['睡眠', (r) => (r.h?.sleepMinutes != null ? formatHours(r.h.sleepMinutes) : '—')],
+    ['锻炼', (r) => formatDuration(r.h?.exerciseMinutes)],
+    ['睡眠', (r) => formatDuration(r.h?.sleepMinutes)],
     ['体重', (r) => (r.h?.weightKg != null ? num(r.h.weightKg, 1) : '—')],
   ];
   return h('section.card', null,
@@ -318,14 +318,14 @@ export function trendCharts(rerender) {
     }),
     exercise: () => ({
       title: '锻炼时间',
-      tag: avgExercise != null ? `已结束日平均 ${formatMinutes(avgExercise)}` : null,
+      tag: avgExercise != null ? `已结束日平均 ${formatDuration(avgExercise)}` : null,
       chart: lineChart({
         data: exerciseSeries, color: 'var(--accent)', unit: '分钟', domain: axisDomain, ...pick,
         target: 150 / 7, targetLabel: '建议 每周 150 分钟',
         emptyText: '还没有锻炼记录',
       }),
       note: trendReading('exercise', exerciseSeries, {}),
-      readout: readoutRow(valueAt((v) => formatMinutes(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
+      readout: readoutRow(valueAt((v) => formatDuration(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
       tip: '参考线是 WHO 每周 150 分钟中等强度活动折算到每天（约 21 分钟）。只统计设备记录到的时长。',
     }),
     active: () => ({
@@ -341,13 +341,13 @@ export function trendCharts(rerender) {
     }),
     sleep: () => ({
       title: '睡眠',
-      tag: avgSleep != null ? `已结束日平均 ${formatHours(avgSleep * 60)}` : null,
+      tag: avgSleep != null ? `已结束日平均 ${formatDuration(avgSleep * 60)}` : null,
       chart: lineChart({
         data: sleepSeries, color: 'var(--protein)', target: 7, targetLabel: '建议 7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
       note: trendReading('sleep', sleepSeries, {}),
-      readout: readoutRow(valueAt((v) => formatHours(v * 60))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes / 60 : null))),
+      readout: readoutRow(valueAt((v) => formatDuration(v * 60))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes / 60 : null))),
       tip: '虚线是成人 7~9 小时建议区间的下沿，不是这段时间的平均——平均写在卡片右上角。'
         + '睡眠归到醒来那天，只统计真正入睡的片段；这里只看时长，不代表睡眠质量。',
     }),

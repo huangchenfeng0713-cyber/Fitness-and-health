@@ -177,7 +177,7 @@ test('日均锻炼取设备分钟，不拿力量训练次数顶替', () => {
     targets: { kcal: 2200, protein: 110 },
   });
   const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
-  assert.equal(by.exercise.value, '40 分钟', '20/30/40/50/60 的均值是 40');
+  assert.equal(by.exercise.value, '40分钟', '20/30/40/50/60 的均值是 40');
   assert.match(by.exercise.note, /Apple 健康/);
   assert.equal(by.training.value, '1 次');
   assert.match(by.training.label, /力量训练/, '两个数得叫不同的名字');

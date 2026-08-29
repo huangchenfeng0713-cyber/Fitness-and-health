@@ -354,15 +354,22 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
   assert.match(training, /equip: equipFilter/, '推荐没跟着器械档位走');
 
   /*
-   * 推荐紧挨着控制它的开关：中间隔着一整列动作的话，换了档位也看不出是它在变。
-   * 只看挂载那一段——函数定义里也有同样的字样。
+   * 推荐是「动作列表」那张卡的另一个视图，不再单独占一张卡：
+   * 它和列表回答的是同一个问题的两半，共用同一组开关，点一下切过去、再点一下切回来。
+   * 原先它单独一张卡夹在中间，把真正要用的那列动作往下推了整整一屏。
    */
   const mounted = training.slice(training.indexOf('mount(root,'));
-  const order = ['planCard()', 'scopeCard(rerender)', 'recommendCard()', 'pickerCard(rerender)',
+  const order = ['planCard()', 'scopeCard(rerender)', 'pickerCard(rerender)',
     'adviceCard(rerender)', 'weeklyCard(rerender)'];
   const at = order.map((k) => mounted.indexOf(k));
   assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
   assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
+  assert.ok(!/recommendCard\(/.test(training), '推荐又单独占了一张卡');
+
+  // 同一个按钮切过去、切回来
+  assert.match(training, /showRecommend = !showRecommend/, '推荐没有做成可以再点一次取消的开关');
+  assert.match(training, /'aria-pressed': String\(showRecommend\)/, '开关没有按下态');
+  assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
 
   const core = strip(read('js/core/training.js'));
   assert.match(core, /overlapLevel\(overlapScore\(e, c\)\) === 'high'/, '没有排除与已选高度重合的动作');
@@ -973,12 +980,15 @@ test('多选：勾选只改页面内存，按确认才落库', () => {
   }
   assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
 
-  // 饮食：＋ 进篮子，不开弹层；只有 recordBasket 里才 addEntry
-  assert.match(diet, /function addToBasket\(food\)/, '饮食页没有待记录篮子');
-  assert.match(diet, /async function recordBasket\(\)/, '篮子不能一次性记录');
+  // 饮食：份量面板只往备选里放，落库只发生在 recordBasket 里
+  assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
+  assert.match(diet, /async function recordBasket\(\)/, '备选不能一次性记录');
   assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
   const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
-  assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入篮子时不该落库，也不该弹出份量面板');
+  assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入备选时不该落库，也不该弹出份量面板');
+  // 落库只有这一处：份量面板按下去只是进备选
+  const addEntryCalls = strip(diet).match(/addEntry\(/g) || [];
+  assert.equal(addEntryCalls.length, 1, `饮食页有 ${addEntryCalls.length} 处直接落库，应当只剩批量记录那一处`);
 
   // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
   assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
@@ -1245,4 +1255,132 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
   // 近 7 日速览统计到昨天：今天还没过完，算进来会把日均拉低
   assert.match(strip(read('js/views/cards/weekly-summary.js')), /endDate: shiftDay\(todayKey\(\), -1\)/);
   assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => todayKey\(\)/);
+});
+
+/*
+ * 「回今天」后面那个返回箭头要画出来，不能打出来。
+ * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
+ * 而且它跟着字号走，粗细没法和别的图标统一。
+ */
+test('返回箭头是描边图标，不是打出来的字符', () => {
+  const app = strip(read('js/app.js'));
+  assert.match(app, /const RETURN_ICON = '<svg/, '返回箭头没有做成图标');
+  assert.match(app, /heading\.backToToday \? h\('span\.topbar-back-icon'/, '图标没有挂到顶栏上');
+  // 文案里不许再夹着箭头字符
+  assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(strip(read('js/core/day.js'))), '措辞里还夹着打出来的箭头');
+  assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(app));
+  // 和底栏、设置那几个图标同一套描边参数
+  const css = read('css/app.css');
+  assert.match(css, /\.topbar-back-icon svg \{[^}]*stroke: currentColor/s, '图标没有走描边样式');
+});
+
+/*
+ * 设置面板每次落库、每次账号状态刷新都会整个重建（app.js 的 subscribe），
+ * 而 <details open> 是 DOM 上的状态 —— 重建一次就全收起来了。
+ * 表现就是「点一下同步，刚展开的那几节自己收了回去」，
+ * 而同步恰恰是最会触发落库的那个操作。
+ */
+test('设置里展开的折叠块不会被一次落库收回去', () => {
+  const dm = strip(read('js/views/cards/data-manager.js'));
+  assert.match(dm, /const openSections = new Set\(\)/, '没有记住哪几节是展开的');
+  assert.match(dm, /function rememberedDetails\(key, spec/, '缺少记得住状态的 details 包装');
+  assert.match(dm, /open: openSections\.has\(key\)/, '重建时没有把展开状态还回去');
+  assert.match(dm, /ontoggle:/, '展开状态没有被记下来');
+
+  // 四大节和面板里的折叠块都要走这个包装，不能再裸写 details
+  for (const key of ['import', 'manual', 'backup', 'guide', 'paste', 'source-priority']) {
+    assert.ok(new RegExp(`'${key}'`).test(dm), `折叠块 ${key} 没有稳定的键`);
+  }
+  assert.ok(!/h\('details/.test(dm), `还有裸写的 details：${dm.match(/h\('details[^,]*/)?.[0]}`);
+
+  /*
+   * 键必须稳定，不能拿标题当键：「手动补录 · 2026-08-29」里带着日期，
+   * 翻一天就换一个键，昨天展开的那一节今天又是收着的。
+   */
+  assert.ok(!/openSections\.(has|add)\(title\)/.test(dm), '拿标题当键了');
+});
+
+/*
+ * 时长写成「6小时42分」，不写「6.7 小时」。
+ * 小数小时是给图表纵轴用的——轴上要一排等距刻度；可一个具体的睡眠时长是人要读的数，
+ * 「6.7 小时」得在脑子里把 0.7 乘回 60 才知道是多久。
+ */
+test('睡眠和锻炼写成小时加分钟，不写小数小时', () => {
+  const core = strip(read('js/core/duration.js'));
+  assert.match(core, /export function formatDuration/, '没有统一的时长写法');
+  // Number(null) 是 0，只判 isFinite 会把「没记到」显示成「0分钟」
+  assert.match(core, /mins == null \|\| mins === ''/, '没先剔掉空值就转数字');
+
+  // 小数小时那个写法要彻底撤掉，别留一处漏网的
+  for (const path of ['js/lib/utils.js', 'js/views/cards/health-metrics.js',
+    'js/views/cards/trend-charts.js', 'js/core/advisor.js', 'js/core/trend-reading.js']) {
+    assert.ok(!/formatHours/.test(strip(read(path))), `${path} 还在用小数小时`);
+  }
+  assert.match(strip(read('js/core/health-card.js')), /kind: 'duration'/, '睡眠没有走时长写法');
+  assert.match(strip(read('js/views/cards/health-metrics.js')), /formatDuration\(cell\.value\)/);
+
+  // 参考区间和门槛照原样写：那是文献给的数，不是量出来的时长
+  const sleep = strip(read('js/core/trend-reading.js'));
+  assert.match(sleep, /7~9 小时的常见建议/, '参考区间不该改写');
+  assert.match(sleep, /不足 6\.5 小时/, '门槛不该改写');
+  assert.match(sleep, /日均 \$\{hm\(s\.avg\)\}/, '日均没有改成小时加分钟');
+});
+
+/*
+ * 安全区只能算一次。
+ *
+ * .tabbar 已经把底部安全区吃掉了；长在滚动容器里的东西（多选条）再加一次，
+ * 真机上就是凭空多出 34px 空白顶在按钮下面 —— 卡片里空出一大块。
+ * 只有真正盖住整个视口的 .sheet 才需要它。
+ */
+test('底部安全区只在盖住视口的那一层算，别处不许再加一遍', () => {
+  const css = read('css/app.css');
+  // 裸 env() 只许出现在 token 定义里：iOS 独立运行时首帧 env() 常常还是 0，
+  // 布局要用的是 app.js 每次重排写回来的 --safe-*
+  const raw = [...css.matchAll(/^[^\n{]*\{[^}]*env\(safe-area-inset/gm)]
+    .map((m) => m[0].split('{')[0].trim())
+    .filter((sel) => sel !== ':root');
+  assert.deepEqual(raw, [], `这些规则绕过了 --safe-* 直接用 env()：${raw.join('、')}`);
+
+  const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
+  assert.ok(!/safe/.test(bar), '多选条又把底部安全区算了一遍');
+  // 弹层是盖住整个视口的那一层，它需要
+  assert.match(css.slice(css.indexOf('.sheet {')), /padding: 8px 16px calc\(20px \+ var\(--safe-bottom\)\)/);
+});
+
+/*
+ * 记账时经常先随手记下来，事后才发现该算在别的餐里。
+ * 原先只能删掉重记一遍，而重记要重新搜、重新填克数。
+ */
+test('饮食记录编辑态能改餐次', () => {
+  const diet = strip(read('js/views/diet.js'));
+  assert.match(diet, /function mealSelect\(entry\)/, '编辑态没有改餐次的入口');
+  assert.match(diet, /updateEntry\(entry\.id, \{ meal \}\)/, '改了餐次没有落库');
+  /*
+   * value 要在节点建好之后再设：给还没挂进 <select> 的 <option> 设 selected，
+   * 浏览器会在插入时按 selectedIndex 重算，那一下就把选中项打回第一项。
+   */
+  assert.match(diet, /select\.value = entry\.meal;/, '选中项没有在建好之后再设一次');
+  assert.ok(!/option', \{ value: m\.key, selected:/.test(diet), '又回到给 option 设 selected 了');
+});
+
+/*
+ * ＋ 和点行本身都开份量面板：加进备选之前先看一眼这次记多少。
+ * 记住的份量只是上一次的克数，而克数是乘数，差一倍热量就差一倍。
+ */
+test('搜索结果的 ＋ 也开份量面板，面板只往备选里放', () => {
+  const diet = strip(read('js/views/diet.js'));
+  const addBtn = diet.slice(diet.indexOf("h('button.search-item-add'"), diet.indexOf('all.length > results.length'));
+  assert.match(addBtn, /selectFood\(f\)/, '＋ 没有打开份量面板');
+  assert.match(addBtn, /if \(chosen\) \{[\s\S]*?removeFromBasket\(f\.id\)/, '已在备选里的那一行要能点掉');
+
+  // 面板上的主按钮是「加进备选」，不是「记录到某餐」
+  assert.ok(!/primary-btn', null, `记录到/.test(diet), '份量面板的主按钮还是「记录到某餐」');
+  const adds = diet.match(/'添加到饮食备选'/g) || [];
+  assert.equal(adds.length, 2, `普通食物和复合甜品两处都要改，实际 ${adds.length} 处`);
+
+  // 确认键是一个勾；记到哪一餐写在摘要里，否则按钮上看不出来
+  assert.match(diet, /actionLabel: \(\) => '✓'/, '确认键不是勾');
+  assert.match(diet, /actionAriaLabel: \(\) => `确认记录到/, '只有一个符号的按钮要给读屏软件说法');
+  assert.match(diet, /记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/, '摘要里没写会记到哪一餐');
 });

@@ -29,6 +29,15 @@ const TAB_ICON = {
   settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>',
 };
 
+/*
+ * 「回今天」后面那个返回箭头，画出来而不是打出来。
+ *
+ * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
+ * 而且它跟着字号走、粗细也没法和别的图标统一。和底栏、健康数据那几个一样，
+ * 用一条描边路径：弯回去的形状认得出是「回到」，和左右两个 ‹ › 也分得开。
+ */
+const RETURN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.5 4.5 10 9 14.5M4.5 10h9.5a4.8 4.8 0 0 1 0 9.6h-1.6"/></svg>';
+
 let current = 'today';
 let viewRoot = null;
 let settingsOverlay = null;
@@ -151,7 +160,8 @@ function renderTopbar() {
     },
     h('strong', null, heading.title),
     h('span.topbar-date', { class: heading.backToToday ? 'topbar-date back' : 'topbar-date' },
-      heading.sub)),
+      heading.sub,
+      heading.backToToday ? h('span.topbar-back-icon', { html: RETURN_ICON }) : null)),
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, 1)),
       disabled: heading.isToday,
