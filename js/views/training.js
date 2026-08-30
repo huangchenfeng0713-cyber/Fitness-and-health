@@ -348,7 +348,7 @@ function buildPickerBar() {
     onClear: () => { pending = new Set(); rerenderTraining?.(); },
     onConfirm: () => { commitPending(); },
   });
-  bar.el.classList.add('select-bar-tight');
+  bar.el.classList.add('select-bar-tight', 'select-bar-wide');
   return bar;
 }
 

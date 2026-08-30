@@ -189,6 +189,13 @@ test('今日提示按优先级排：数据问题在前，结构和习惯在后',
   assert.equal(by(/结构偏/).priority, 4);
   assert.equal(by(/睡了/).priority, 5);
 
+  const split = by(/结构偏/);
+  assert.match(split.basis, /\d+% \/ \d+%/, '碳水 / 脂肪比例仍使用冒号');
+  assert.match(split.basis, /碳水参考区间是 \d+–\d+%/,
+    '结构建议应说明宽泛区间，不能引用不存在的单一计划点');
+  assert.doesNotMatch(split.basis, /undefined|计划里是/,
+    '结构建议引用了 macroSplit 不存在的计划比例字段');
+
   // 三段式：每条都得说清「凭什么这么讲」
   for (const i of a.insights) {
     assert.ok(i.title && i.basis, `「${i.title}」缺少判断依据`);

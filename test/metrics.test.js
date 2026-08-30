@@ -217,7 +217,7 @@ test('两个百分比凑成 100，落在区间里叫「结构适中」', () => {
     assert.ok([LEVEL.plain, LEVEL.met].includes(s.level), `结构偏移不该是警告色：${s.level}`);
   }
 
-  // 凑整不能凑出 58% : 43% 这种加起来不是 100 的数
+  // 凑整不能凑出 58% / 43% 这种加起来不是 100 的数
   for (let carb = 0; carb <= 400; carb += 7) {
     for (let fat = 1; fat <= 140; fat += 11) {
       const s = splitAt(carb, fat);

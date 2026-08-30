@@ -38,6 +38,7 @@
   --safe-bottom: var(--env-bottom);
   --safe-left: var(--env-left);
   --safe-right: var(--env-right);
+  --view-inline-pad: 14px;
   --view-bottom-pad: 18px;
 
   /*
@@ -228,7 +229,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 .view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
-  padding: 14px calc(14px + var(--safe-right)) var(--view-bottom-pad) calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
+  padding: 14px calc(var(--view-inline-pad) + var(--safe-right)) var(--view-bottom-pad) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
 
@@ -529,12 +530,12 @@ html, body { height: 100%; overflow: hidden; }
 /*
  * 碳水 / 脂肪合用的那一条：一根刻度，不是进度条。
  *
- * 横轴是碳水占这块热量的百分比，左端偏脂肪、右端偏碳水；
+ * 横轴与标题保持同一顺序：左端偏碳水、右端偏脂肪；
  * 浅色那段是参考区间，三角是今天落在哪儿。
  * 整条不填色 —— 填色会把它读成「完成了多少」，而这里没有完成一说。
  */
 .split-bar {
-  position: relative; height: 10px; border-radius: 999px;
+  position: relative; height: 6px; border-radius: 999px;
   background: var(--track); margin-top: 2px;
 }
 .split-bar-band {
@@ -551,7 +552,7 @@ html, body { height: 100%; overflow: hidden; }
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
 }
 
-/* 克数摆在各自那一端：左端偏脂肪，右端偏碳水，位置本身就在说明方向 */
+/* 标题写碳水 / 脂肪，克数和横轴也必须按相同的左右顺序。 */
 .split-grams {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
   margin-top: 7px; font-size: var(--fs-caption); color: var(--faint);
@@ -1153,6 +1154,17 @@ body.sheet-open {
 }
 /* 健身页里它就长在动作列表末尾，10px 上边距成了一条说不出理由的空白。 */
 .select-bar.select-bar-tight { margin-top: 0; }
+/*
+ * 健身页的待选动作是屏幕级操作，不属于白色动作卡本身。
+ * 背景跨过卡片和页面两层内边距铺满屏幕，内容仍与卡片正文对齐。
+ */
+.select-bar.select-bar-wide {
+  margin-left: calc(0px - 16px - var(--view-inline-pad) - var(--safe-left));
+  margin-right: calc(0px - 16px - var(--view-inline-pad) - var(--safe-right));
+  padding-left: calc(16px + var(--view-inline-pad) + var(--safe-left));
+  padding-right: calc(16px + var(--view-inline-pad) + var(--safe-right));
+  border-radius: 0;
+}
 .select-bar[hidden] { display: none; }
 .select-bar-main { display: flex; align-items: center; gap: 8px; }
 .select-bar-summary {
@@ -1843,8 +1855,8 @@ body.sheet-open {
 
 @media (min-width: 640px) {
   body { font-size: 17px; }
-  :root { --view-bottom-pad: 28px; }
-  .view { padding: 18px 18px var(--view-bottom-pad); gap: 16px; }
+  :root { --view-inline-pad: 18px; --view-bottom-pad: 28px; }
+  .view { padding-top: 18px; gap: 16px; }
   .card { padding: 16px; }
 }
 
@@ -1855,8 +1867,14 @@ body.sheet-open {
 }
 
 @media (max-width: 380px) {
-  .view { padding-left: calc(11px + var(--safe-left)); padding-right: calc(11px + var(--safe-right)); }
+  :root { --view-inline-pad: 11px; }
   .card { padding: 14px; }
+  .select-bar.select-bar-wide {
+    margin-left: calc(0px - 14px - var(--view-inline-pad) - var(--safe-left));
+    margin-right: calc(0px - 14px - var(--view-inline-pad) - var(--safe-right));
+    padding-left: calc(14px + var(--view-inline-pad) + var(--safe-left));
+    padding-right: calc(14px + var(--view-inline-pad) + var(--safe-right));
+  }
   .card-head { gap: 7px; }
   .card-tag { max-width: 40%; font-size: 11px; }
   .data-action { grid-template-columns: 34px minmax(0, 1fr); }

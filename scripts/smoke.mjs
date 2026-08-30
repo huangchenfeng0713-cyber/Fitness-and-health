@@ -151,10 +151,26 @@ try {
     const bandEl = splitEl?.querySelector('.split-bar-band');
     const pointEl = splitEl?.querySelector('.split-bar-point');
     const barBox = barEl?.getBoundingClientRect();
+    const ratioText = splitEl?.querySelector('.metric-row-value')?.textContent || '';
+    const ratio = /(\d+)%\s*\/\s*(\d+)%/.exec(ratioText);
+    const ends = [...(splitEl?.querySelectorAll('.split-end') || [])]
+      .map((el) => el.textContent.trim());
+    const proteinRow = [...document.querySelectorAll('.metric-row')]
+      .find((row) => row.querySelector('.metric-row-label')?.textContent === '蛋白质');
+    const proteinBar = proteinRow?.querySelector('.macro-bar');
     const split = splitEl ? {
       barWidth: barBox?.width || 0,
+      barHeight: barBox?.height || 0,
+      proteinBarHeight: proteinBar?.getBoundingClientRect().height || 0,
       bandWidth: bandEl?.getBoundingClientRect().width || 0,
+      bandLeftPct: Number.parseFloat(bandEl?.style.left || ''),
+      bandWidthPct: Number.parseFloat(bandEl?.style.width || ''),
       hasPoint: !!pointEl,
+      pointLeftPct: Number.parseFloat(pointEl?.style.left || ''),
+      carbPct: ratio ? Number(ratio[1]) : null,
+      fatPct: ratio ? Number(ratio[2]) : null,
+      ratioText,
+      ends,
       // 指针必须落在条子里：left 是百分比，写错了会跑到卡片外面
       pointInside: pointEl && barBox
         ? pointEl.getBoundingClientRect().left >= barBox.left - 8
@@ -190,6 +206,19 @@ try {
     split && split.bandWidth >= split.barWidth - 2 && '参考区间铺满了整条，等于什么都没说',
     split && !split.hasPoint && '条上没有当前比例的指针',
     split && !split.pointInside && '指针跑到条子外面去了',
+    split && Math.abs(split.barHeight - split.proteinBarHeight) > 0.5
+      && `蛋白条与结构条粗细不一致：${split.proteinBarHeight}px / ${split.barHeight}px`,
+    split && (split.carbPct == null || split.fatPct == null)
+      && `比例没有使用斜杠：${split.ratioText}`,
+    split && split.carbPct + split.fatPct !== 100
+      && `碳水 / 脂肪比例没有合计 100%：${split.ratioText}`,
+    split && (split.ends[0]?.startsWith('碳水') !== true || split.ends[1]?.startsWith('脂肪') !== true)
+      && `左右端点和标题顺序不一致：${split.ends.join(' / ')}`,
+    split && Math.abs(split.pointLeftPct - (100 - split.carbPct)) > 0.5
+      && `圆点方向没有镜像：碳水 ${split.carbPct}%，位置却是 ${split.pointLeftPct}%`,
+    split && (!(split.bandLeftPct >= 0) || !(split.bandWidthPct > 0)
+      || split.bandLeftPct + split.bandWidthPct > 100.5)
+      && `参考区间坐标无效：${split.bandLeftPct}% + ${split.bandWidthPct}%`,
     split && split.noteClipped && `结构说明被截断了：${split.text}`,
     // 比例说不出吃了多少，克数得跟着一起给
     split && !/碳水 \d+(\.\d+)?g/.test(split.text) && `合用那条没写克数：${split.text}`,
@@ -406,6 +435,9 @@ try {
     return {
       viewGap: Math.round((vr.bottom - br.bottom) * 10) / 10,
       tabGap: Math.round((tr.top - br.bottom) * 10) / 10,
+      leftGap: Math.round(br.left * 10) / 10,
+      rightGap: Math.round((window.innerWidth - br.right) * 10) / 10,
+      horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
       visible: br.top < vr.bottom && br.bottom > vr.top,
     };
   });
@@ -416,8 +448,13 @@ try {
       && `多选条离内容区底边还有 ${pickerEdge.viewGap}px`,
     pickerEdge && Math.abs(pickerEdge.tabGap) > 2
       && `多选条离 tab 栏还有 ${pickerEdge.tabGap}px`,
+    pickerEdge && Math.abs(pickerEdge.leftGap) > 2
+      && `多选条左边没有铺满屏幕：${pickerEdge.leftGap}px`,
+    pickerEdge && Math.abs(pickerEdge.rightGap) > 2
+      && `多选条右边没有铺满屏幕：${pickerEdge.rightGap}px`,
+    pickerEdge && pickerEdge.horizontalOverflow && '全宽多选条造成了横向滚动',
   ].filter(Boolean);
-  check('健身多选条紧贴底部栏', pickerProblems.length === 0, pickerProblems.join('；'));
+  check('健身多选条横跨屏幕并紧贴底部栏', pickerProblems.length === 0, pickerProblems.join('；'));
 
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());

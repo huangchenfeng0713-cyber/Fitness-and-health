@@ -1141,15 +1141,17 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
    * 原先画的是「两段按比例分」加一根计划分界线 —— 那样看着像在说
    * 「分界线就是标准答案」，可结构本来就有二十个百分点的合理区间。
    */
-  assert.match(code, /pointPct: split\.carbPct/, '当前比例没有画成指针');
-  assert.match(code, /bandLo: split\.bandLo, bandHi: split\.bandHi/, '没有画出参考区间');
+  assert.match(code, /carbPct: split\.carbPct/, '当前比例没有画成指针');
+  assert.match(code, /carbBandLo: split\.bandLo[\s\S]*carbBandHi: split\.bandHi/, '没有画出参考区间');
   assert.ok(!/markPct|planCarbPct/.test(code), '又退回「一个计划点」了');
   assert.match(code, /split-grams-plan.*split\.note/, '参考区间得有文字说明');
 
   // 比例说不出吃了多少，克数得一起给
   assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
   assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
-  assert.match(code, /split\.carbPct\}% : \$\{split\.fatPct\}%/, '缺少两者的比例');
+  assert.match(code, /split\.carbPct\}% \/ \$\{split\.fatPct\}%/, '比例应使用与标题一致的斜杠');
+  assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
+    '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
 
   // 结构偏移只用中性色：橙和红留给真正的上限
   const barCss = read('css/app.css').slice(read('css/app.css').indexOf('.split-bar {'));
@@ -1165,6 +1167,17 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   assert.match(strip(splitCode), /export function splitBar/, 'splitBar 得住在 charts.js 里');
   assert.match(read('css/app.css'), /\.split-bar-band/, '参考区间没有样式');
   assert.match(read('css/app.css'), /\.split-bar-point/, '指针没有样式');
+  assert.match(read('css/app.css'), /\.macro-bar \{ height: 6px/,
+    '蛋白质进度条的粗细基准变了');
+  assert.match(read('css/app.css'), /\.split-bar \{[\s\S]*?height: 6px/,
+    '碳水 / 脂肪刻度没有和蛋白质条统一粗细');
+
+  // 横轴从左到右也必须是碳水 → 脂肪；不能只交换端点文字。
+  const splitCodePlain = strip(splitCode);
+  assert.match(splitCodePlain, /band\.style\.left = `\$\{100 - hi\}%`/,
+    '参考区间没有随横轴方向镜像');
+  assert.match(splitCodePlain, /mark\.style\.left = `\$\{100 - pct\(carbPct\)\}%`/,
+    '当前比例的圆点没有随横轴方向镜像');
 });
 
 /*
@@ -1360,11 +1373,20 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
 
 test('健身多选条跨过内容区底部留白，紧邻底栏', () => {
   const css = read('css/app.css');
+  const training = strip(read('js/views/training.js'));
   const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
   assert.match(bar, /bottom: calc\(0px - var\(--view-bottom-pad\)\)/,
     '多选条仍停在内容区底部 padding 上方');
   assert.match(css, /\.view \{[\s\S]*?padding:[^;]*var\(--view-bottom-pad\)/,
     '内容区底部留白和多选条没有共用同一尺寸');
+  assert.match(training, /classList\.add\('select-bar-tight', 'select-bar-wide'\)/,
+    '健身待选横幅没有启用全屏样式');
+  const wide = css.slice(css.indexOf('.select-bar.select-bar-wide {'), css.indexOf('.select-bar[hidden]'));
+  assert.match(wide, /margin-left: calc\(0px - 16px - var\(--view-inline-pad\) - var\(--safe-left\)\)/,
+    '横幅左边没有跨过卡片和页面留白');
+  assert.match(wide, /margin-right: calc\(0px - 16px - var\(--view-inline-pad\) - var\(--safe-right\)\)/,
+    '横幅右边没有跨过卡片和页面留白');
+  assert.match(wide, /border-radius: 0/, '全屏横幅仍长得像卡片的一部分');
 });
 
 /*
