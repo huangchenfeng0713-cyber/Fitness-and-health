@@ -114,7 +114,7 @@ test('同一批数字不在两页各写一遍', () => {
   }
 });
 
-test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下', () => {
+test('份量面板正文独立滚动，记录按钮固定在不留假占位的底栏', () => {
   /*
    * 原先它长在搜索结果下面：选完一个食物要往下滚过整列结果才看得见，
    * 手机上这一滚就是大半屏。
@@ -125,13 +125,17 @@ test('份量面板是底部弹层，记录按钮不会被顶到折叠线以下',
   assert.match(diet, /openSheet\(nodes\.portion/, '份量面板没有走公共弹层');
   assert.match(diet, /if \(!food\) \{ closeSheet\(\); return; \}/, '取消选中时没有关掉弹层');
   assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
-  assert.match(css, /\.sheet-action \{[\s\S]*?position: sticky/, '记录按钮没有钉住');
+  assert.match(sheet, /scrollArea = h\('div\.sheet-scroll'\)/, '弹层正文没有独立滚动区');
+  assert.match(sheet, /footer = h\('div\.sheet-footer'/, '弹层没有独立底栏');
+  assert.match(diet, /setSheetFooter\(action\)/, '记录按钮没有装进独立底栏');
+  const actionCss = css.slice(css.lastIndexOf('.sheet-action {'), css.indexOf('.sheet-action .primary-btn'));
+  assert.ok(!/position:\s*sticky/.test(actionCss), '记录按钮仍靠 sticky 假吸底，会继续留下原位空白');
 
   /*
    * 滚动穿透：弹层内部滚到头之后手指继续滑，会带着背后的页面跑，
    * 表现就是「点不中弹层里的东西」。两道都要有，缺一道 iOS 上都会漏。
    */
-  assert.match(css, /\.sheet \{[\s\S]*?overscroll-behavior: contain/, '弹层没有拦住滚动链');
+  assert.match(css, /\.sheet-scroll \{[\s\S]*?overscroll-behavior: contain/, '弹层正文没有拦住滚动链');
   assert.match(css, /body\.sheet-open \{[\s\S]*?position: fixed/, 'iOS 上只有 overflow:hidden 拦不住拖动');
   assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
   assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
@@ -1347,8 +1351,20 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
 
   const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
   assert.ok(!/safe/.test(bar), '多选条又把底部安全区算了一遍');
-  // 弹层是盖住整个视口的那一层，它需要
-  assert.match(css.slice(css.indexOf('.sheet {')), /padding: 8px 16px calc\(20px \+ var\(--safe-bottom\)\)/);
+  // 弹层底栏接触屏幕底边，它需要；正文有底栏时不再重复计算。
+  assert.match(css, /\.sheet-footer \{[\s\S]*?var\(--safe-bottom\)/);
+  assert.match(css, /\.sheet\.has-footer \.sheet-scroll \{ padding-bottom: 12px; \}/);
+  const action = css.slice(css.lastIndexOf('.sheet-action {'), css.indexOf('.sheet-action .primary-btn'));
+  assert.ok(!/safe-bottom/.test(action), '操作按钮内部又重复算了一遍安全区');
+});
+
+test('健身多选条跨过内容区底部留白，紧邻底栏', () => {
+  const css = read('css/app.css');
+  const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
+  assert.match(bar, /bottom: calc\(0px - var\(--view-bottom-pad\)\)/,
+    '多选条仍停在内容区底部 padding 上方');
+  assert.match(css, /\.view \{[\s\S]*?padding:[^;]*var\(--view-bottom-pad\)/,
+    '内容区底部留白和多选条没有共用同一尺寸');
 });
 
 /*

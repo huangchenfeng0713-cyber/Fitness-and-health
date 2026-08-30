@@ -16,6 +16,8 @@ import { h, clearEl, mount } from './utils.js';
 
 let wrap = null;
 let panel = null;
+let scrollArea = null;
+let footer = null;
 let onClose = null;
 let lockedScrollY = 0;
 
@@ -25,7 +27,9 @@ function build() {
     role: 'dialog', 'aria-modal': 'true',
     // 弹层里的点击不该冒到背景那层去，否则点自己就把自己关了
     onclick: (ev) => ev.stopPropagation(),
-  });
+  },
+  scrollArea = h('div.sheet-scroll'),
+  footer = h('div.sheet-footer', { hidden: true }));
   wrap = h('div.sheet-wrap', { hidden: true },
     h('div.sheet-backdrop', { onclick: () => closeSheet() }),
     panel);
@@ -82,18 +86,44 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   build();
   onClose = close;
   panel.setAttribute('aria-label', label);
-  clearEl(panel);
-  mount(panel, content);
+  clearEl(scrollArea);
+  clearEl(footer);
+  footer.hidden = true;
+  panel.classList.remove('has-footer');
+  mount(scrollArea, content);
   wrap.hidden = false;
-  panel.scrollTop = 0;
+  scrollArea.scrollTop = 0;
   lockBody();
   return closeSheet;
+}
+
+/**
+ * 把主操作放进弹层自己的固定底栏，而不是让正文里的 sticky 元素假装吸底。
+ *
+ * sticky 元素仍会在普通文档流里占位置：长份量面板中，它会提前浮到视口底部，
+ * 同时把原位置留成一大块白边，甚至盖住后面的「记到哪一餐」。正文和底栏分开后，
+ * 两边各自只有一种布局职责，也只需在底栏计算一次 iPhone 安全区。
+ */
+export function setSheetFooter(content) {
+  build();
+  clearEl(footer);
+  if (content) {
+    mount(footer, content);
+    footer.hidden = false;
+    panel.classList.add('has-footer');
+  } else {
+    footer.hidden = true;
+    panel.classList.remove('has-footer');
+  }
 }
 
 export function closeSheet() {
   if (!wrap || wrap.hidden) return;
   wrap.hidden = true;
-  clearEl(panel);
+  clearEl(scrollArea);
+  clearEl(footer);
+  footer.hidden = true;
+  panel.classList.remove('has-footer');
   unlockBody();
   const fn = onClose;
   onClose = null;

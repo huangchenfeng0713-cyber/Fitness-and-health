@@ -10,7 +10,7 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText,
 } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
-import { openSheet, closeSheet, sheetIsOpen } from '../lib/sheet.js';
+import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
   restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
@@ -566,6 +566,10 @@ function refreshMixedPortion(food) {
   queueBtn.onclick = () => queueOne(item());
 
   refreshMealChips();
+  const action = h(`div.sheet-action${ui.basket.length ? '' : '.dual'}`, null,
+    ui.basket.length ? null : queueBtn,
+    directBtn);
+
   mount(nodes.portion, h('div.portion-panel.mix-picker', null,
     h('div.portion-head', null,
       h('div', null,
@@ -601,10 +605,8 @@ function refreshMixedPortion(food) {
 
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
-    nodes.mealRow,
-    h(`div.sheet-action${ui.basket.length ? '' : '.dual'}`, null,
-      ui.basket.length ? null : queueBtn,
-      directBtn)));
+    nodes.mealRow));
+  setSheetFooter(action);
 
   syncTotals();
 }
@@ -790,6 +792,10 @@ function refreshPortion() {
   refreshQuickChips();
   toggleGramInput();
 
+  const action = h(`div.sheet-action${ui.basket.length ? '' : '.dual'}`, null,
+    ui.basket.length ? null : queueBtn,
+    directBtn);
+
   mount(nodes.portion, h('div.portion-panel', null,
     h('div.portion-head', null,
       h('div', null,
@@ -826,10 +832,8 @@ function refreshPortion() {
 
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
-    nodes.mealRow,
-    h(`div.sheet-action${ui.basket.length ? '' : '.dual'}`, null,
-      ui.basket.length ? null : queueBtn,
-      directBtn)));
+    nodes.mealRow));
+  setSheetFooter(action);
 
   syncReadouts();
 }

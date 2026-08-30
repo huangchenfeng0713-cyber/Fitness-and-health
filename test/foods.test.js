@@ -144,6 +144,7 @@ test('品牌烤肉覆盖安又胖及主要连锁菜单，旧品牌名也能搜�
 });
 
 const FUNCTIONAL_DRINK_IDS = [
+  'nongfu_c100_lemon',
   'redbull_original_imported', 'redbull_sugarfree_imported', 'monster_original_green',
   'monster_ultra_zero', 'eastroc_energy_original', 'warhorse_energy_original',
   'lehu_energy_original', 'amino_energy_drink_generic', 'gatorade_thirst_quencher',
@@ -154,7 +155,7 @@ const FUNCTIONAL_DRINK_IDS = [
 ];
 
 test('功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因', () => {
-  assert.equal(FUNCTIONAL_DRINK_IDS.length, 22);
+  assert.equal(FUNCTIONAL_DRINK_IDS.length, 23);
   for (const id of FUNCTIONAL_DRINK_IDS) {
     const food = FOOD_BY_ID.get(id);
     assert.ok(food, `缺少功能饮料 ${id}`);
@@ -167,8 +168,19 @@ test('功能饮料覆盖能量、运动补水、维生素与无糖类型，并�
     assert.ok(FOOD_BY_ID.get(id).caffeineMg > 0, `${id} 缺咖啡因含量`);
   }
   const terms = ['红牛', '东鹏特饮', '战马', '乐虎', '魔爪', '佳得乐', '宝矿力',
-    '脉动', '尖叫', '外星人电解质', '维生素水', '咖啡因气泡水'];
+    '脉动', '尖叫', '水溶C100', 'c100', '外星人电解质', '维生素水', '咖啡因气泡水'];
   assert.deepEqual(terms.filter((term) => searchFoods(term).length === 0), []);
+
+  const c100 = FOOD_BY_ID.get('nongfu_c100_lemon');
+  const bottle = nutrientsFor(c100, 445);
+  assert.equal(c100.source.type, 'label');
+  assert.equal(c100.s[0][1], 445);
+  assert.equal(bottle.kcal, 170);
+  assert.equal(bottle.carb, 42);
+  assert.equal(bottle.totalSugar, 42);
+  assert.equal(bottle.sugar, 41.8,
+    '果汁和添加糖都属于游离糖；每100ml按一位小数换算后只允许标签舍入误差');
+  assert.equal(bottle.sodium, 128);
 });
 
 test('常见咖啡、茶、奶茶与可乐显式标记咖啡因，非茶叶饮品不误标', () => {

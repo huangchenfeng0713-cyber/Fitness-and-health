@@ -295,14 +295,42 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('饮食'))?.click());
   await page.waitForTimeout(500);
-  await page.fill('.search-input', '鸡');
+  // 顺便验新增的品牌饮料真能从用户会输入的名字打开。
+  await page.fill('.search-input', '水溶C100');
   await page.waitForTimeout(700);
   await page.evaluate(() => document.querySelector('main.view')?.scrollTo(0, 300));
   await page.waitForTimeout(250);
   const beforeY = await page.evaluate(() => document.querySelector('main.view')?.scrollTop ?? 0);
   await page.evaluate(() => document.querySelector('.search-item')?.click());
   await page.waitForTimeout(500);
-  await page.evaluate(() => { const el = document.querySelector('.sheet'); if (el) el.scrollTop = el.scrollHeight; });
+  await page.evaluate(() => {
+    const el = document.querySelector('.sheet-scroll');
+    if (el) el.scrollTop = el.scrollHeight;
+  });
+  const sheetLayout = await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet');
+    const scroll = document.querySelector('.sheet-scroll');
+    const footer = document.querySelector('.sheet-footer');
+    const action = footer?.querySelector('.sheet-action');
+    const meal = scroll?.querySelector('.portion-meal');
+    const buttons = [...(action?.querySelectorAll('button') || [])];
+    if (!sheet || !scroll || !footer || !action || !meal || !buttons.length) return null;
+    const sr = sheet.getBoundingClientRect();
+    const br = scroll.getBoundingClientRect();
+    const fr = footer.getBoundingClientRect();
+    const mr = meal.getBoundingClientRect();
+    const top = Math.min(...buttons.map((button) => button.getBoundingClientRect().top));
+    const bottom = Math.max(...buttons.map((button) => button.getBoundingClientRect().bottom));
+    return {
+      actionOutsideScroll: footer.contains(action) && !scroll.contains(action),
+      footerGap: Math.round((sr.bottom - fr.bottom) * 10) / 10,
+      seamGap: Math.round((fr.top - br.bottom) * 10) / 10,
+      topInset: Math.round((top - fr.top) * 10) / 10,
+      bottomInset: Math.round((fr.bottom - bottom) * 10) / 10,
+      mealAboveFooter: mr.bottom <= fr.top + 1,
+      product: scroll.querySelector('.portion-head strong')?.textContent || '',
+    };
+  });
   const sheetBox = await page.evaluate(() => {
     const el = document.querySelector('.sheet');
     if (!el) return null;
@@ -319,8 +347,8 @@ try {
   const sheetScroll = await page.evaluate(() => ({
     open: !document.querySelector('.sheet-wrap')?.hidden,
     duringY: document.querySelector('main.view')?.scrollTop ?? 0,
-    contain: document.querySelector('.sheet')
-      ? getComputedStyle(document.querySelector('.sheet')).overscrollBehaviorY : '',
+    contain: document.querySelector('.sheet-scroll')
+      ? getComputedStyle(document.querySelector('.sheet-scroll')).overscrollBehaviorY : '',
     // 真正在滚的是 main.view，弹层开着时它必须被锁住
     scrollerLocked: getComputedStyle(document.querySelector('main.view')).overflowY,
   }));
@@ -343,8 +371,53 @@ try {
       && `关掉弹层后页面跳了：${beforeY} → ${afterY}`,
   ].filter(Boolean);
   check('弹层不会把背后的页面带着滚', sheetProblems.length === 0, sheetProblems.join('；'));
+  const sheetLayoutProblems = [
+    !sheetLayout && '没量到弹层正文与底栏',
+    sheetLayout && !sheetLayout.product.includes('水溶C100')
+      && `搜索结果不是水溶C100：${sheetLayout.product}`,
+    sheetLayout && !sheetLayout.actionOutsideScroll && '操作按钮还留在滚动正文里',
+    sheetLayout && Math.abs(sheetLayout.footerGap) > 1
+      && `底栏没贴弹层底边：${sheetLayout.footerGap}px`,
+    sheetLayout && Math.abs(sheetLayout.seamGap) > 1
+      && `正文与底栏之间留了 ${sheetLayout.seamGap}px`,
+    sheetLayout && Math.abs(sheetLayout.topInset - sheetLayout.bottomInset) > 2
+      && `按钮上下留白不对称：${sheetLayout.topInset}px / ${sheetLayout.bottomInset}px`,
+    sheetLayout && !sheetLayout.mealAboveFooter && '餐次选择被底栏盖住了',
+  ].filter(Boolean);
+  check('份量弹层底栏贴边、不覆盖餐次选择',
+    sheetLayoutProblems.length === 0, sheetLayoutProblems.join('；'));
   await page.evaluate(() => { const el = document.querySelector('.search-input'); if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); } });
   await page.waitForTimeout(300);
+
+  // ---- 健身多选条要跨过 .view 自己的底部留白，紧贴 tab 栏 ----
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('健身'))?.click());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen)')?.click());
+  await page.waitForTimeout(300);
+  const pickerEdge = await page.evaluate(() => {
+    const view = document.querySelector('main.view');
+    const bar = document.querySelector('.exercise-picker-card .select-bar:not([hidden])');
+    const tabs = document.querySelector('.tabbar');
+    if (!view || !bar || !tabs) return null;
+    const vr = view.getBoundingClientRect();
+    const br = bar.getBoundingClientRect();
+    const tr = tabs.getBoundingClientRect();
+    return {
+      viewGap: Math.round((vr.bottom - br.bottom) * 10) / 10,
+      tabGap: Math.round((tr.top - br.bottom) * 10) / 10,
+      visible: br.top < vr.bottom && br.bottom > vr.top,
+    };
+  });
+  const pickerProblems = [
+    !pickerEdge && '选中动作后没有多选条',
+    pickerEdge && !pickerEdge.visible && '多选条没在可见区',
+    pickerEdge && Math.abs(pickerEdge.viewGap) > 2
+      && `多选条离内容区底边还有 ${pickerEdge.viewGap}px`,
+    pickerEdge && Math.abs(pickerEdge.tabGap) > 2
+      && `多选条离 tab 栏还有 ${pickerEdge.tabGap}px`,
+  ].filter(Boolean);
+  check('健身多选条紧贴底部栏', pickerProblems.length === 0, pickerProblems.join('；'));
 
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());
