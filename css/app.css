@@ -38,6 +38,7 @@
   --safe-bottom: var(--env-bottom);
   --safe-left: var(--env-left);
   --safe-right: var(--env-right);
+  --view-bottom-pad: 18px;
 
   /*
    * 一套比例，不是二十三个随手取的数。
@@ -227,7 +228,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 .view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
-  padding: 14px calc(14px + var(--safe-right)) 18px calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
+  padding: 14px calc(14px + var(--safe-right)) var(--view-bottom-pad) calc(14px + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
 
@@ -1006,15 +1007,27 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0;
   max-height: min(80vh, 660px);
-  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; overflow: hidden;
   overscroll-behavior: contain;
-  /* 走 --safe-bottom 而不是裸 env()：iOS 独立运行时首帧 env() 常常还是 0，
-     app.js 每次重排都会把量到的真值写到 <html> 上（见顶部 token 那段注释） */
-  padding: 8px 16px calc(20px + var(--safe-bottom));
+  padding: 8px 0 0;
   background: var(--card); border-radius: 18px 18px 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
 }
+.sheet-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  /* 没有固定底栏的普通弹层仍要避开 Home 指示条。 */
+  padding: 0 16px calc(20px + var(--safe-bottom));
+}
+.sheet.has-footer .sheet-scroll { padding-bottom: 12px; }
+.sheet-footer {
+  flex: none;
+  /* 只有这一层接触屏幕底边，所以安全区只在这里算一次。 */
+  padding: 10px 16px calc(10px + var(--safe-bottom));
+  background: var(--card); border-top: 1px solid var(--hairline);
+}
+.sheet-footer[hidden] { display: none; }
 /* 顶上那道小横杠：告诉人这层是能关掉的 */
 .sheet::before {
   content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
@@ -1124,7 +1137,7 @@ body.sheet-open {
 }
 
 .select-bar {
-  position: sticky; bottom: 0; z-index: 3;
+  position: sticky; bottom: calc(0px - var(--view-bottom-pad)); z-index: 3;
   /* 顶到卡片的内边距外面，让它横贯整张卡 */
   margin: 10px -16px -17px;
   /*
@@ -1138,7 +1151,7 @@ body.sheet-open {
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
 }
-/* 健身页里它就长在动作列表末尾，10px 上边距成了一条说不出理由的空白 */
+/* 健身页里它就长在动作列表末尾，10px 上边距成了一条说不出理由的空白。 */
 .select-bar.select-bar-tight { margin-top: 0; }
 .select-bar[hidden] { display: none; }
 .select-bar-main { display: flex; align-items: center; gap: 8px; }
@@ -1174,15 +1187,9 @@ body.sheet-open {
 .select-bar-item-note { display: block; font-size: var(--fs-caption); color: var(--muted); }
 
 .portion-panel { margin-top: 2px; }
-/*
- * 记录按钮钉在弹层底部。
- * 弹层最高只有 78vh，营养明细和「记录后·今日进度」加起来常常撑满，
- * 主操作被顶到折叠线以下——底部弹层最不该让人先滚一段才找得到确认键。
- */
+/* 记录按钮住在 .sheet-footer；这里仅负责按钮之间的布局，不再参与吸底。 */
 .sheet-action {
-  position: sticky; bottom: 0; z-index: 1;
-  margin: 0 -16px; padding: 10px 16px calc(4px + var(--safe-bottom));
-  background: linear-gradient(to bottom, transparent, var(--card) 18%);
+  margin: 0; padding: 0;
 }
 .sheet-action .primary-btn { margin-top: 0; }
 .sheet-action.dual { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; }
@@ -1836,7 +1843,8 @@ body.sheet-open {
 
 @media (min-width: 640px) {
   body { font-size: 17px; }
-  .view { padding: 18px 18px 28px; gap: 16px; }
+  :root { --view-bottom-pad: 28px; }
+  .view { padding: 18px 18px var(--view-bottom-pad); gap: 16px; }
   .card { padding: 16px; }
 }
 

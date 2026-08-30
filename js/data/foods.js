@@ -91,6 +91,11 @@ const SOURCE_POWERADE = Object.freeze({
   ref: 'Coca-Cola POWERADE 官方产品营养表代表口味',
   accessed: '2026-08-24',
 });
+const SOURCE_NONGFU_C100 = Object.freeze({
+  type: 'label',
+  ref: '农夫山泉水溶C100官方产品页及柠檬味445ml瓶身营养成分表（710kJ、碳水42g、钠128mg）',
+  accessed: '2026-08-30',
+});
 const SOURCE_AYP_BBQ = Object.freeze({
   type: 'recipe',
   ref: '安又胖（原安三胖）官网产品页、正大广场门店页及携程合生汇菜单核对品名；营养按同类原料与常见腌料估算',
@@ -1153,6 +1158,7 @@ export const FOODS = [
   { id: 'omelette_rice', name: '蛋包饭', alias: 'danbaofan omelette rice omurice', cat: 'dish', n: [181, 7.0, 7.0, 23.0, 1.0, 3.0, 500], s: [['一份', 450]], ...META_RECIPE_READY, note: '按番茄炒饭、蛋皮和少量酱汁估算', f: ['est'] },
 
   // ---------- 功能与运动饮料 ----------
+  { id: 'nongfu_c100_lemon', name: '农夫山泉 水溶C100（柠檬味）', alias: 'nongfu shuirong c100 水溶c100 水溶C C100 农夫山泉c100 柠檬味 复合果汁饮料', cat: 'drink', n: [38.1, 0, 0, 9.44, 0, 9.44, 28.76], s: [['一瓶', 445]], nfs: 0, ...drinkLabelMeta(SOURCE_NONGFU_C100), note: '按445ml柠檬味瓶身标签折算；标签未单列总糖，配料中的白砂糖、果葡糖浆及果汁糖均属于游离糖，因此按42g碳水计入游离糖；西柚、青皮桔等口味或新批次请以瓶身标签为准', f: ['sweetdrink', 'processed', 'quick', 'functional'] },
   { id: 'redbull_original_imported', name: 'Red Bull 红牛能量饮料（进口原味）', alias: 'red bull hongniu 红牛 奥地利红牛 功能饮料 energy drink', cat: 'drink', n: [46, 0, 0, 10.8, 0, 10.8, 40], s: [['一罐', 250]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_RED_BULL), note: '按国际版 250ml 罐装折算；中国不同系列配方并不相同，购买后应优先看罐身标签', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated'] },
   { id: 'redbull_sugarfree_imported', name: 'Red Bull 红牛无糖能量饮料', alias: 'red bull sugarfree zero hongniu wutang 红牛无糖 红牛0糖', cat: 'drink', n: [3, 0, 0, 0.8, 0, 0, 40], s: [['一罐', 250]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_RED_BULL), note: '无糖不等于无咖啡因；不同地区版本热量和钠可能略有差异，以罐身标签为准', f: ['processed', 'quick', 'functional', 'caffeinated'] },
   { id: 'monster_original_green', name: 'Monster 魔爪能量饮料（原味）', alias: 'monster mozhao 魔爪 怪兽 绿魔爪 energy drink', cat: 'drink', n: [46, 0, 0, 11.0, 0, 11.0, 75], s: [['一罐', 500]], caffeineMg: 32, ...drinkLabelMeta(SOURCE_MONSTER), note: '按官方 500ml Original Green 的糖和咖啡因折算；地区版本及罐装容量可能不同', f: ['sweetdrink', 'processed', 'quick', 'functional', 'caffeinated'] },
