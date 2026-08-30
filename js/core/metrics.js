@@ -233,7 +233,7 @@ export function macroSplit(targets = {}, gaps = {}) {
   const kcal = Math.round(carbKcal + fatKcal);
 
   const band = referenceBand(targets);
-  const note = band ? `参考 ${band.lo}–${band.hi}%` : '';
+  const note = band ? `碳水参考 ${band.lo}–${band.hi}%` : '';
   const base = {
     carbG, fatG, kcal, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null, note,
   };
@@ -243,7 +243,7 @@ export function macroSplit(targets = {}, gaps = {}) {
       ...base, carbPct: null, fatPct: null, structure: 'none', label: '还没有记录', level: LEVEL.plain,
     };
   }
-  // 两个百分比必须凑成 100：各自四舍五入会印出「58% : 43%」
+  // 两个百分比必须凑成 100：各自四舍五入会印出「58% / 43%」
   const carbPct = Math.round((carbKcal / (carbKcal + fatKcal)) * 100);
   const fatPct = 100 - carbPct;
 

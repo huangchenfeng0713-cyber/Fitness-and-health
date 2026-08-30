@@ -151,35 +151,38 @@ export function rangeBar({
 /**
  * 碳水 / 脂肪合用的一条：一根**刻度**，不是进度条。
  *
- * 横轴是「碳水占这块热量的百分之几」，从左到右 0→100：
- * 左端偏脂肪，右端偏碳水。浅色那段是参考区间（脂肪 AMDR 反解出来的），
- * 三角是今天落在哪儿。
+ * 标题顺序是「碳水 / 脂肪」，横轴也按这个顺序：左端全碳水，右端全脂肪。
+ * 传进来的仍是碳水占比，因此绘图坐标要用 100 − 碳水占比；浅色那段是
+ * 碳水参考区间（由脂肪 AMDR 反解），圆点是今天落在哪儿。
  *
  * 之前画的是「两段按比例分」加一根计划分界线。那样看着像在说
  * 「分界线就是标准答案」，可结构本来就有二十个百分点的合理区间 ——
  * 一个点会让人以为差一格都是没做好。
  *
- * @param {number|null} pointPct 当前碳水占比；null 就只画区间
- * @param {number|null} bandLo/bandHi 参考区间两端
+ * @param {number|null} carbPct 当前碳水占比；null 就只画区间
+ * @param {number|null} carbBandLo/carbBandHi 碳水参考区间两端
  */
 export function splitBar({
-  pointPct = null, bandLo = null, bandHi = null, level = 'plain',
+  carbPct = null, carbBandLo = null, carbBandHi = null, level = 'plain',
 }) {
   const wrap = document.createElement('div');
   wrap.className = `split-bar ${level}`;
+  const pct = (value) => Math.max(0, Math.min(100, Number(value)));
 
-  if (bandLo != null && bandHi != null && bandHi > bandLo) {
+  if (carbBandLo != null && carbBandHi != null && carbBandHi > carbBandLo) {
+    const lo = pct(carbBandLo);
+    const hi = pct(carbBandHi);
     const band = document.createElement('div');
     band.className = 'split-bar-band';
-    band.style.left = `${bandLo}%`;
-    band.style.width = `${bandHi - bandLo}%`;
+    band.style.left = `${100 - hi}%`;
+    band.style.width = `${Math.max(0, hi - lo)}%`;
     wrap.append(band);
   }
 
-  if (pointPct != null && Number.isFinite(Number(pointPct))) {
+  if (carbPct != null && Number.isFinite(Number(carbPct))) {
     const mark = document.createElement('div');
     mark.className = 'split-bar-point';
-    mark.style.left = `${Math.max(0, Math.min(100, Number(pointPct)))}%`;
+    mark.style.left = `${100 - pct(carbPct)}%`;
     wrap.append(mark);
   }
   return wrap;

@@ -98,25 +98,28 @@ function metricRow(m) {
  * 碳水 / 脂肪合用的那一行。
  *
  * 上面是当前比例和一句结论，中间那根刻度画出参考区间和今天落在哪儿，
- * 下面把克数摆在各自那一端 —— 左端偏脂肪就把脂肪放左边，
- * 位置本身就说明了「往这边是什么意思」。
+ * 标题、比例、横轴和克数始终使用同一个顺序：左边碳水，右边脂肪。
+ * splitBar 内部会把碳水占比换算成这条轴上的位置。
  *
- * 只给比例的话，「58% : 42%」既说不出吃了多少，也没法和食物对上。
+ * 只给比例的话，「58% / 42%」既说不出吃了多少，也没法和食物对上。
  */
 function splitRow(split) {
   const known = split.carbPct != null;
   return h('div', { class: `metric-row split-row ${split.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, '碳水 / 脂肪'),
-      h('strong.metric-row-value', null, known ? `${split.carbPct}% : ${split.fatPct}%` : '—'),
+      h('strong.metric-row-value', null, known ? `${split.carbPct}% / ${split.fatPct}%` : '—'),
       h('span.metric-row-note', null, split.label)),
     splitBar({
-      pointPct: split.carbPct, bandLo: split.bandLo, bandHi: split.bandHi, level: split.level,
+      carbPct: split.carbPct,
+      carbBandLo: split.bandLo,
+      carbBandHi: split.bandHi,
+      level: split.level,
     }),
     h('div.split-grams', null,
-      h('span.split-end', null, `脂肪 ${num(split.fatG)}g`),
+      h('span.split-end', null, `碳水 ${num(split.carbG)}g`),
       h('span.split-grams-plan', null, split.note),
-      h('span.split-end', null, `碳水 ${num(split.carbG)}g`)));
+      h('span.split-end', null, `脂肪 ${num(split.fatG)}g`)));
 }
 
 /**

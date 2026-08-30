@@ -711,8 +711,8 @@ export function buildInsights({
       const heavy = split.structure === 'carb' ? '碳水' : '脂肪';
       const light = split.structure === 'carb' ? '脂肪' : '碳水';
       add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
-        `碳水和脂肪按热量算是 ${split.carbPct}% : ${split.fatPct}%，`
-        + `计划里是 ${split.planCarbPct}% : ${split.planFatPct}%。`,
+        `碳水和脂肪按热量算是 ${split.carbPct}% / ${split.fatPct}%，`
+        + `碳水参考区间是 ${split.bandLo}–${split.bandHi}%。`,
         `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
     }
   }
