@@ -1,0 +1,35 @@
+name: Diagnose UI tests
+
+on:
+  push:
+    branches: [codex/v2.10.1-ui-usability]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture test output
+        run: |
+          set +e
+          npm test > test-run.txt 2>&1
+          status=$?
+          cat test-run.txt
+          echo "$status" > test-run.status
+          exit 0
+      - name: Commit diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f test-run.txt test-run.status
+          git commit -m "chore: capture UI test diagnostics"
+          git push origin HEAD:codex/v2.10.1-ui-usability
