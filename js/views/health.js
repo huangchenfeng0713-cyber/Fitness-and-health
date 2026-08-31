@@ -104,25 +104,21 @@ function healthSyncNudge() {
       type: 'button',
       onclick: () => {
         setIntent({ settingsSection: 'data' });
-        location.hash = 'settings';
+        document.querySelector('.topbar-settings-btn')?.click();
       },
     }, '去同步 / 导入'));
-}
-
-function healthMetricsWithSync() {
-  const card = healthMetricsCard();
-  const nudge = healthSyncNudge();
-  if (card && nudge) card.append(nudge);
-  return card;
 }
 
 export function renderHealth(root) {
   const rerender = () => renderHealth(root);
   clearEl(root);
+  const metrics = healthMetricsCard();
+  const nudge = healthSyncNudge();
+  if (metrics && nudge) metrics.append(nudge);
   mount(root,
     repairCard(rerender),
     implausibleCard(rerender),
-    healthMetricsWithSync(),
+    metrics,
     // 速览在趋势图上面：先回答「这七天整体怎么样」，想看某项怎么走再往下翻
     weeklySummaryCard(),
     ...(trendCharts(rerender) || []),

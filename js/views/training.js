@@ -242,7 +242,7 @@ function exerciseRow(e, rerender, lastDone) {
     const line = clashLine(e);
     // 保留 ex-clash-slot：整条 className 覆盖掉的话，提示消失之后
     // `:empty { display: none }` 就不再命中，行里会留一道空白
-    clashNode.className = line ? `ex-clash-slot clash-badge ${line.cls}` : 'ex-clash-slot';
+    clashNode.className = line ? `ex-clash-slot ${line.cls}` : 'ex-clash-slot';
     clashNode.textContent = line ? line.badge : '';
     clashNode.dataset.detail = line ? line.detail : '';
     clashNode.title = line ? line.detail : '';

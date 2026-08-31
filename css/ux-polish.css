@@ -216,7 +216,7 @@
 .equip-filter-check { color: var(--accent); text-align: center; font-weight: 700; }
 
 /* 重复原因本来就属于辅助信息：短标签常驻，点一下再看具体和谁冲突。 */
-.ex-clash-slot.clash-badge {
+.ex-clash-slot.ex-clash {
   display: inline-flex;
   width: fit-content;
   margin-top: 4px;
@@ -229,7 +229,7 @@
   line-height: 1.35;
   cursor: pointer;
 }
-.ex-clash-slot.clash-badge.soft {
+.ex-clash-slot.ex-clash.soft {
   color: var(--muted);
   background: var(--card-2);
 }

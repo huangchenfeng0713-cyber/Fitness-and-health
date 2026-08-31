@@ -109,9 +109,9 @@ test('同一批数字不在两页各写一遍', () => {
     assert.ok(new RegExp(`energyFreshness[\\s\\S]*${keep}`).test(dashboard),
       `出了问题的提示不能收进折叠面板：${keep}`);
   }
-  for (const keep of ['clampedByFloor', 'rateWasClamped']) {
-    assert.ok(dashboard.includes(keep), `「你填的数被改过了」这类提示不能丢：${keep}`);
-  }
+  // 热量计划被成人常用下限真正改写时仍要说明；单纯超过建议速率只在输入框旁提示。
+  assert.ok(dashboard.includes('clampedByFloor'), '热量计划被下限改写后的说明不能丢');
+  assert.ok(!dashboard.includes('rateWasClamped'), '速率提示不应常驻今日页');
 });
 
 test('份量面板正文独立滚动，记录按钮固定在不留假占位的底栏', () => {
@@ -833,8 +833,8 @@ test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', (
   const html = read('index.html');
   const config = read('js/config/cloud.js');
   const assignment = html.indexOf('window.__HEALTH_DIET_CLOUD_CONFIG__');
-  const appModule = html.indexOf('<script type="module" src="js/app.js"></script>');
-  assert.ok(assignment >= 0 && assignment < appModule, '云配置必须在 app.js 启动前注入');
+  const bootstrapModule = html.indexOf('<script type="module" src="js/bootstrap.js"></script>');
+  assert.ok(assignment >= 0 && assignment < bootstrapModule, '云配置必须在 bootstrap.js 启动前注入');
   assert.match(html, /supabaseUrl:\s*'https:\/\/[a-z0-9]+\.supabase\.co'/);
   assert.match(html, /supabasePublishableKey:\s*'sb_publishable_[A-Za-z0-9_-]+'/);
   assert.ok(!/sb_(?:secret|service_role)_/i.test(html), '生产页面不得包含 Secret/service-role key');
@@ -1184,26 +1184,15 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
  * 主卡顶上那一段只说热量，速率的代价也归它 —— 那是「吃多少」的事。
  * 蛋白、钠这些归下面的「今日提示」，见 advisor 那边的用例。
  */
-test('速率越线在主卡上说，不藏进感叹号', () => {
-  const dashboard = page('dashboard');
-  const code = strip(dashboard);
+test('速率越过建议只在输入时即时提示，不常驻今日主卡', () => {
+  const dashboard = strip(page('dashboard'));
+  const profile = strip(read('js/views/cards/profile.js'));
 
-  const heroInfo = code.slice(code.indexOf('function heroInfo('), code.indexOf('function rateNote('));
-  assert.ok(!heroInfo.includes('rateWasClamped'),
-    '「你填的数被改过了」还留在折叠面板里，藏起来等于没说');
-
-  const hero = code.slice(code.indexOf('function heroCard('), code.indexOf('function energyBalance('));
-  assert.match(hero, /rateNote\(targets\)/, '主卡上没有速率说明');
-
-  const note = code.slice(code.indexOf('function rateNote('));
-  assert.match(note, /rateOverAdvisory/, '越过建议上沿要说出来');
-  assert.match(note, /rateAdvisoryKg/, '要给出建议上沿到底是多少');
-  /*
-   * 只许点名最后真正起作用的那一条。原先那句「已按体重比例和每日热量
-   * 调整上限改为…」一口气点了两个机制，实测只有一条碰到了。
-   */
-  assert.match(note, /rateLimitedBy/, '截断原因得按实际起作用的那一条来说');
-  assert.ok(!/按体重比例和每日热量/.test(code), '又把两个机制写回同一句话里了');
+  assert.ok(!dashboard.includes('rateWasClamped'), '速率提示又常驻到今日页了');
+  assert.ok(!dashboard.includes('rateOverAdvisory'), '超过建议速率的提示又常驻到今日页了');
+  assert.ok(!dashboard.includes('function rateNote('), '今日页又恢复了单独的速率警告块');
+  assert.match(profile, /rateGuidance/, '速率输入框旁边没有即时判断');
+  assert.match(profile, /syncRateHint/, '速率判断没有跟着输入即时更新');
 });
 
 /*
@@ -1227,7 +1216,7 @@ test('填目标速率时给出即时判断，离谱的存不下去', () => {
 test('设置主页只列五组，点进去才是表单', () => {
   const settings = strip(read('js/views/settings.js'));
   const keys = [...settings.matchAll(/\{ key: '(\w+)', label: '([^']+)' \}/g)].map((m) => m[2]);
-  assert.deepEqual(keys, ['身体与目标', '账号与同步', '数据管理', '计算与显示', '关于与反馈']);
+  assert.deepEqual(keys, ['身体与目标', '账号与同步', '导入与备份', '计算与显示', '关于与反馈']);
 
   // 每行右边那句「现在设成什么了」：不点进去也知道
   assert.match(settings, /function sectionStatus\(/, '分组行没有当前状态');

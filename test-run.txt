@@ -6,4149 +6,3239 @@ TAP version 13
 # Subtest: 首次登录且本机来源不明时不自动上传，明确选择本机后才迁移
 ok 1 - 首次登录且本机来源不明时不自动上传，明确选择本机后才迁移
   ---
-  duration_ms: 9.412882
+  duration_ms: 8.080055
   type: 'test'
   ...
 # Subtest: 本机访客数据与既有云数据不会静默互相覆盖，可明确选择云端
 ok 2 - 本机访客数据与既有云数据不会静默互相覆盖，可明确选择云端
   ---
-  duration_ms: 5.621747
+  duration_ms: 4.894985
   type: 'test'
   ...
 # Subtest: 明确选择本机数据时仍使用 revision 条件更新，云端版本递增
 ok 3 - 明确选择本机数据时仍使用 revision 条件更新，云端版本递增
   ---
-  duration_ms: 3.102172
+  duration_ms: 3.551336
   type: 'test'
   ...
 # Subtest: 其他设备先更新 revision 时，本机修改进入冲突而不是覆盖云端
 ok 4 - 其他设备先更新 revision 时，本机修改进入冲突而不是覆盖云端
   ---
-  duration_ms: 5.539474
+  duration_ms: 4.113339
   type: 'test'
   ...
 # Subtest: 本机没有待上传修改时安全退出不依赖再次读取云端
 ok 5 - 本机没有待上传修改时安全退出不依赖再次读取云端
   ---
-  duration_ms: 2.703578
+  duration_ms: 2.83525
   type: 'test'
   ...
 # Subtest: 较新 schema 的云快照不会落地覆盖当前应用数据
 ok 6 - 较新 schema 的云快照不会落地覆盖当前应用数据
   ---
-  duration_ms: 1.019039
+  duration_ms: 3.213974
   type: 'test'
   ...
 # Subtest: 切换账号会先清空旧账号数据，再加载新账号快照
 ok 7 - 切换账号会先清空旧账号数据，再加载新账号快照
   ---
-  duration_ms: 6.314862
+  duration_ms: 3.934202
   type: 'test'
   ...
 # Subtest: 超过 8 MB 的快照拒绝上传且保留本机数据
 ok 8 - 超过 8 MB 的快照拒绝上传且保留本机数据
   ---
-  duration_ms: 256.176005
+  duration_ms: 286.731882
   type: 'test'
   ...
 # Subtest: 认证层同时支持邮箱密码、Google 登录、Google 关联和设置密码
 ok 9 - 认证层同时支持邮箱密码、Google 登录、Google 关联和设置密码
   ---
-  duration_ms: 3.3268
+  duration_ms: 3.600371
   type: 'test'
   ...
 # Subtest: 认证组件首次离线失败后可原地重试，并且只保留一个状态监听
 ok 10 - 认证组件首次离线失败后可原地重试，并且只保留一个状态监听
   ---
-  duration_ms: 1.134514
+  duration_ms: 1.489419
   type: 'test'
   ...
 # Subtest: 账号控制器在网络恢复后可重建认证和同步，不要求刷新页面
 ok 11 - 账号控制器在网络恢复后可重建认证和同步，不要求刷新页面
   ---
-  duration_ms: 1.955655
+  duration_ms: 2.262682
   type: 'test'
   ...
 # Subtest: 浏览器配置只接受 publishable key 或 role=anon 的可解码 JWT
 ok 12 - 浏览器配置只接受 publishable key 或 role=anon 的可解码 JWT
   ---
-  duration_ms: 1.110459
+  duration_ms: 0.855167
   type: 'test'
   ...
 # Subtest: 云端冲突未解决时安全退出会在 Supabase signOut 前终止并保留本机数据
 ok 13 - 云端冲突未解决时安全退出会在 Supabase signOut 前终止并保留本机数据
   ---
-  duration_ms: 5.130923
+  duration_ms: 4.62844
   type: 'test'
   ...
 # Subtest: localStorage 丢失后持久 owner A 的脏数据不会被新账号 B 清除或上传
 ok 14 - localStorage 丢失后持久 owner A 的脏数据不会被新账号 B 清除或上传
   ---
-  duration_ms: 1.781921
+  duration_ms: 1.553295
   type: 'test'
   ...
 # Subtest: 意外 SIGNED_OUT 保留并锁定未同步数据，不清库也不上传
 ok 15 - 意外 SIGNED_OUT 保留并锁定未同步数据，不清库也不上传
   ---
-  duration_ms: 20.462626
+  duration_ms: 25.541829
   type: 'test'
   ...
 # Subtest: 安全退出会先同步、只退出本设备，然后清除本地账号数据
 ok 16 - 安全退出会先同步、只退出本设备，然后清除本地账号数据
   ---
-  duration_ms: 3.118662
+  duration_ms: 2.908942
   type: 'test'
   ...
 # Subtest: 本机已同步时即使云端查询故障也能正常安全退出
 ok 17 - 本机已同步时即使云端查询故障也能正常安全退出
   ---
-  duration_ms: 1.731327
+  duration_ms: 1.104735
   type: 'test'
   ...
 # Subtest: 账号快照写入后只回传 revision 元数据，不把整份 payload 再下载一次
 ok 18 - 账号快照写入后只回传 revision 元数据，不把整份 payload 再下载一次
   ---
-  duration_ms: 1.762695
+  duration_ms: 3.027912
   type: 'test'
   ...
 # Subtest: 服务器已收下上次上传但客户端未记 revision 时自动恢复而不制造冲突
 ok 19 - 服务器已收下上次上传但客户端未记 revision 时自动恢复而不制造冲突
   ---
-  duration_ms: 1.295204
+  duration_ms: 1.096944
   type: 'test'
   ...
 # Subtest: 大快照上传使用独立宽限时限，超时时提示本次数据量并保留本地修改
 ok 20 - 大快照上传使用独立宽限时限，超时时提示本次数据量并保留本地修改
   ---
-  duration_ms: 8.396758
+  duration_ms: 12.491766
   type: 'test'
   ...
 # Subtest: 未同步记录遇到云端超时后可选择保留本机并退出
 ok 21 - 未同步记录遇到云端超时后可选择保留本机并退出
   ---
-  duration_ms: 8.860402
+  duration_ms: 10.044414
   type: 'test'
   ...
 # Subtest: 无 owner 的访客 dirty 数据在未登录启动时仍是可用本地模式
 ok 22 - 无 owner 的访客 dirty 数据在未登录启动时仍是可用本地模式
   ---
-  duration_ms: 0.500403
+  duration_ms: 0.622915
   type: 'test'
   ...
 # Subtest: 认证 SDK 不可用时 owner 或未完成归属锁都必须 fail closed
 ok 23 - 认证 SDK 不可用时 owner 或未完成归属锁都必须 fail closed
   ---
-  duration_ms: 0.44529
+  duration_ms: 0.466508
   type: 'test'
   ...
 # Subtest: 认证不可用且 durable 写锁 CAS 失败时仍 fail closed
 ok 24 - 认证不可用且 durable 写锁 CAS 失败时仍 fail closed
   ---
-  duration_ms: 0.262479
+  duration_ms: 0.42162
   type: 'test'
   ...
 # Subtest: 已确认同 owner 在云端断网时解锁本地使用，新写入仍持久 dirty
 ok 25 - 已确认同 owner 在云端断网时解锁本地使用，新写入仍持久 dirty
   ---
-  duration_ms: 0.466329
+  duration_ms: 0.481109
   type: 'test'
   ...
 # Subtest: 远程读取期间的本地写入进入冲突而不被覆盖
 ok 26 - 远程读取期间的本地写入进入冲突而不被覆盖
   ---
-  duration_ms: 0.605368
+  duration_ms: 0.721284
   type: 'test'
   ...
 # Subtest: 远程落地 guard 后发生的本地写入也不会被吞掉
 ok 27 - 远程落地 guard 后发生的本地写入也不会被吞掉
   ---
-  duration_ms: 0.802927
+  duration_ms: 0.955279
   type: 'test'
   ...
 # Subtest: 较旧远程 revision 绝不回退本地已确认快照
 ok 28 - 较旧远程 revision 绝不回退本地已确认快照
   ---
-  duration_ms: 0.617782
+  duration_ms: 0.783408
   type: 'test'
   ...
 # Subtest: 旧账号网络响应在 owner/epoch 切换后必须丢弃
 ok 29 - 旧账号网络响应在 owner/epoch 切换后必须丢弃
   ---
-  duration_ms: 0.751912
+  duration_ms: 0.689736
   type: 'test'
   ...
 # Subtest: 两个上下文同时首次认领不能互相接管或混合快照
 ok 30 - 两个上下文同时首次认领不能互相接管或混合快照
   ---
-  duration_ms: 1.16976
+  duration_ms: 1.271488
   type: 'test'
   ...
 # Subtest: 安全退出在网络同步前先冻结 epoch，旧上下文排队写入必须失败
 ok 31 - 安全退出在网络同步前先冻结 epoch，旧上下文排队写入必须失败
   ---
-  duration_ms: 0.859582
+  duration_ms: 0.767004
   type: 'test'
   ...
 # Subtest: 旧账号清库后的延迟 metadata.clear 不能清掉新账号 owner
 ok 32 - 旧账号清库后的延迟 metadata.clear 不能清掉新账号 owner
   ---
-  duration_ms: 1.038275
+  duration_ms: 0.889619
   type: 'test'
   ...
 # Subtest: 上传响应前另一上下文的新写入保持 dirty 且留待下次上传
 ok 33 - 上传响应前另一上下文的新写入保持 dirty 且留待下次上传
   ---
-  duration_ms: 2.086148
+  duration_ms: 1.779899
   type: 'test'
   ...
 # Subtest: 冲突解决请求失败后仍保留冲突选项、锁和本地数据，可重试
 ok 34 - 冲突解决请求失败后仍保留冲突选项、锁和本地数据，可重试
   ---
-  duration_ms: 1.116661
+  duration_ms: 1.184577
   type: 'test'
   ...
 # Subtest: 登录归属检查尚未完成时拒绝安全退出并发操作
 ok 35 - 登录归属检查尚未完成时拒绝安全退出并发操作
   ---
-  duration_ms: 0.613203
+  duration_ms: 0.699531
   type: 'test'
   ...
 # Subtest: USER_UPDATED 只刷新身份提供方，不重复 bootstrap/远程读取
 ok 36 - USER_UPDATED 只刷新身份提供方，不重复 bootstrap/远程读取
   ---
-  duration_ms: 0.69758
+  duration_ms: 0.853354
   type: 'test'
   ...
 # Subtest: 导入校验在事务前拒绝超量、重复主键、非有限数和过长字符串
 ok 37 - 导入校验在事务前拒绝超量、重复主键、非有限数和过长字符串
   ---
-  duration_ms: 67.515307
+  duration_ms: 77.618513
   type: 'test'
   ...
 # Subtest: 恶意云快照在 revision 比较前先校验，失败时本机数据保持原样
 ok 38 - 恶意云快照在 revision 比较前先校验，失败时本机数据保持原样
   ---
-  duration_ms: 1.086414
+  duration_ms: 1.057194
   type: 'test'
   ...
 # Subtest: 餐次按时间划分
 ok 39 - 餐次按时间划分
   ---
-  duration_ms: 1.399548
+  duration_ms: 1.328725
   type: 'test'
   ...
 # Subtest: 餐次预算按剩余餐次的份额分配，不是平均分
 ok 40 - 餐次预算按剩余餐次的份额分配，不是平均分
   ---
-  duration_ms: 0.416296
+  duration_ms: 0.407017
   type: 'test'
   ...
 # Subtest: 热量不足以承载蛋白缺口时，不生成物理上不可能的餐次目标
 ok 41 - 热量不足以承载蛋白缺口时，不生成物理上不可能的餐次目标
   ---
-  duration_ms: 17.585484
+  duration_ms: 15.848708
   type: 'test'
   ...
 # Subtest: 蛋白已经达标时不显示负数缺口
 ok 42 - 蛋白已经达标时不显示负数缺口
   ---
-  duration_ms: 18.698557
+  duration_ms: 18.287001
   type: 'test'
   ...
 # Subtest: 主卡首段只说热量，不说蛋白和钠
 ok 43 - 主卡首段只说热量，不说蛋白和钠
   ---
-  duration_ms: 50.557381
+  duration_ms: 68.822131
   type: 'test'
   ...
 # Subtest: 脂肪计划值与参考上限分开，超过计划值不会被误判为超上限
 ok 44 - 脂肪计划值与参考上限分开，超过计划值不会被误判为超上限
   ---
-  duration_ms: 9.282059
+  duration_ms: 11.979529
   type: 'test'
   ...
 # Subtest: 标签从营养数字推导
 ok 45 - 标签从营养数字推导
   ---
-  duration_ms: 0.375129
+  duration_ms: 0.475882
   type: 'test'
   ...
 # Subtest: 咖啡因可由含量或显式标记识别，草本茶和含“茶”菜名不误判
 ok 46 - 咖啡因可由含量或显式标记识别，草本茶和含“茶”菜名不误判
   ---
-  duration_ms: 0.314807
+  duration_ms: 0.298122
   type: 'test'
   ...
 # Subtest: 空腹开局：状态良好，推荐非空且份量合理
 ok 47 - 空腹开局：状态良好，推荐非空且份量合理
   ---
-  duration_ms: 4.316395
+  duration_ms: 9.636521
   type: 'test'
   ...
 # Subtest: 半天没有饮食记录时不评价“吃得慢”，也不把重分配的大额预算摆出来
 ok 48 - 半天没有饮食记录时不评价“吃得慢”，也不把重分配的大额预算摆出来
   ---
-  duration_ms: 4.445284
+  duration_ms: 7.133489
   type: 'test'
   ...
 # Subtest: 深夜仍无记录时不鼓励一次补完全天缺口
 ok 49 - 深夜仍无记录时不鼓励一次补完全天缺口
   ---
-  duration_ms: 2.375437
+  duration_ms: 4.451702
   type: 'test'
   ...
 # Subtest: 今日提示按优先级排：数据问题在前，结构和习惯在后
 ok 50 - 今日提示按优先级排：数据问题在前，结构和习惯在后
   ---
-  duration_ms: 2.385975
+  duration_ms: 3.841567
   type: 'test'
   ...
 # Subtest: 推荐不会让人一顿吃掉全天剩余热量
 ok 51 - 推荐不会让人一顿吃掉全天剩余热量
   ---
-  duration_ms: 6.10032
+  duration_ms: 9.483544
   type: 'test'
   ...
 # Subtest: 吸附到常用份量后仍不能越过分类份量上限
 ok 52 - 吸附到常用份量后仍不能越过分类份量上限
   ---
-  duration_ms: 5.256664
+  duration_ms: 8.005241
   type: 'test'
   ...
 # Subtest: 蛋白缺口大时优先推荐高蛋白密度食物
 ok 53 - 蛋白缺口大时优先推荐高蛋白密度食物
   ---
-  duration_ms: 7.264899
+  duration_ms: 12.190679
   type: 'test'
   ...
 # Subtest: 热量明显高于计划只做橙色提醒，不把计划误说成危险上限
 ok 54 - 热量明显高于计划只做橙色提醒，不把计划误说成危险上限
   ---
-  duration_ms: 2.160637
+  duration_ms: 2.735159
   type: 'test'
   ...
 # Subtest: 有饮食记录时也不再用“吃得快慢”描述记账进度
 ok 55 - 有饮食记录时也不再用“吃得快慢”描述记账进度
   ---
-  duration_ms: 8.999043
+  duration_ms: 18.071469
   type: 'test'
   ...
 # Subtest: 深夜不推荐需要现做的生鲜与高油食物
 ok 56 - 深夜不推荐需要现做的生鲜与高油食物
   ---
-  duration_ms: 6.772001
+  duration_ms: 16.068861
   type: 'test'
   ...
 # Subtest: 18:00 起排除含咖啡因推荐
 ok 57 - 18:00 起排除含咖啡因推荐
   ---
-  duration_ms: 12.341279
+  duration_ms: 16.856666
   type: 'test'
   ...
 # Subtest: 早餐时段偏向即食/早餐类食物
 ok 58 - 早餐时段偏向即食/早餐类食物
   ---
-  duration_ms: 4.928946
+  duration_ms: 8.029759
   type: 'test'
   ...
 # Subtest: 午餐和晚餐真正优先正餐，不推荐明确标为生的食材
 ok 59 - 午餐和晚餐真正优先正餐，不推荐明确标为生的食材
   ---
-  duration_ms: 15.019922
+  duration_ms: 27.31667
   type: 'test'
   ...
 # Subtest: 加餐只推荐方便少量食用的食物
 ok 60 - 加餐只推荐方便少量食用的食物
   ---
-  duration_ms: 8.38165
+  duration_ms: 21.451585
   type: 'test'
   ...
 # Subtest: 夜间不会把全天缺口一次补完，只给轻量候选
 ok 61 - 夜间不会把全天缺口一次补完，只给轻量候选
   ---
-  duration_ms: 9.533197
+  duration_ms: 13.133549
   type: 'test'
   ...
 # Subtest: 训练日会被识别并给出补给建议
 ok 62 - 训练日会被识别并给出补给建议
   ---
-  duration_ms: 9.517287
+  duration_ms: 17.234509
   type: 'test'
   ...
 # Subtest: 蛋白缺口换算成具体食物份量
 ok 63 - 蛋白缺口换算成具体食物份量
   ---
-  duration_ms: 9.662327
+  duration_ms: 10.715352
   type: 'test'
   ...
 # Subtest: 没有历史饮食记录时不会编造"近期平均摄入"
 ok 64 - 没有历史饮食记录时不会编造"近期平均摄入"
   ---
-  duration_ms: 9.468445
+  duration_ms: 10.810316
   type: 'test'
   ...
 # Subtest: 动态预算的洞察与目标数字一致
 ok 65 - 动态预算的洞察与目标数字一致
   ---
-  duration_ms: 16.068445
+  duration_ms: 21.193714
   type: 'test'
   ...
 # Subtest: 每个餐次都能给出可执行的建议
 ok 66 - 每个餐次都能给出可执行的建议
   ---
-  duration_ms: 37.932203
+  duration_ms: 39.025509
   type: 'test'
   ...
 # Subtest: 游离糖：完整水果与纯奶不计入上限，风味酸奶只计添加部分
 ok 67 - 游离糖：完整水果与纯奶不计入上限，风味酸奶只计添加部分
   ---
-  duration_ms: 0.483812
+  duration_ms: 0.475902
   type: 'test'
   ...
 # Subtest: 多日趋势归数据页的图，今日提示不再重复一遍
 ok 68 - 多日趋势归数据页的图，今日提示不再重复一遍
   ---
-  duration_ms: 7.595265
+  duration_ms: 5.168349
   type: 'test'
   ...
 # Subtest: 没填生日时会说明年龄是估算的
 ok 69 - 没填生日时会说明年龄是估算的
   ---
-  duration_ms: 5.711764
+  duration_ms: 5.07025
   type: 'test'
   ...
 # Subtest: 推荐份量始终是整数克，热量上限那一侧不会漏出浮点数
 ok 70 - 推荐份量始终是整数克，热量上限那一侧不会漏出浮点数
   ---
-  duration_ms: 922.205492
+  duration_ms: 837.98427
   type: 'test'
   ...
 # Subtest: 「补蛋白 / 补纤维」按每 100 kcal 含量排，且不推调味料和补剂
 ok 71 - 「补蛋白 / 补纤维」按每 100 kcal 含量排，且不推调味料和补剂
   ---
-  duration_ms: 7.542063
+  duration_ms: 11.596659
   type: 'test'
   ...
 # Subtest: 小量程不会产生重复刻度
 ok 72 - 小量程不会产生重复刻度
   ---
-  duration_ms: 2.059849
+  duration_ms: 1.496019
   type: 'test'
   ...
 # Subtest: 非负指标不会出现负刻度或负零
 ok 73 - 非负指标不会出现负刻度或负零
   ---
-  duration_ms: 0.524698
+  duration_ms: 0.439637
   type: 'test'
   ...
 # Subtest: 可以有负刻度的场景仍然保留（热量收支）
 ok 74 - 可以有负刻度的场景仍然保留（热量收支）
   ---
-  duration_ms: 0.285722
+  duration_ms: 0.258803
   type: 'test'
   ...
 # Subtest: 大量程用整数刻度，小量程自动加小数位
 ok 75 - 大量程用整数刻度，小量程自动加小数位
   ---
-  duration_ms: 0.47183
+  duration_ms: 0.38186
   type: 'test'
   ...
 # Subtest: 显式指定小数位时以调用方为准
 ok 76 - 显式指定小数位时以调用方为准
   ---
-  duration_ms: 0.358318
+  duration_ms: 0.341268
   type: 'test'
   ...
 # Subtest: 调用方给的小数位只是下限，量程太细时继续加位
 ok 77 - 调用方给的小数位只是下限，量程太细时继续加位
   ---
-  duration_ms: 0.253693
+  duration_ms: 0.230029
   type: 'test'
   ...
 # Subtest: 不给 domain 时横轴仍是「第一个到最后一个有数据的日子」
 ok 78 - 不给 domain 时横轴仍是「第一个到最后一个有数据的日子」
   ---
-  duration_ms: 0.531831
+  duration_ms: 0.52053
   type: 'test'
   ...
 # Subtest: 给了 domain 后横轴标的是区间两端，数据落在区间内的真实位置
 ok 79 - 给了 domain 后横轴标的是区间两端，数据落在区间内的真实位置
   ---
-  duration_ms: 0.302674
+  duration_ms: 0.305132
   type: 'test'
   ...
 # Subtest: 同一 domain 下不同数据的两张图，同一天落在同一个 x 上
 ok 80 - 同一 domain 下不同数据的两张图，同一天落在同一个 x 上
   ---
-  duration_ms: 0.704413
+  duration_ms: 0.650086
   type: 'test'
   ...
 # Subtest: 数据点超出 domain 时被夹住，不会画到画布外
 ok 81 - 数据点超出 domain 时被夹住，不会画到画布外
   ---
-  duration_ms: 0.666492
+  duration_ms: 0.635865
   type: 'test'
   ...
 # Subtest: 非法 domain 会被忽略而不是把图画坏
 ok 82 - 非法 domain 会被忽略而不是把图画坏
   ---
-  duration_ms: 0.740269
+  duration_ms: 0.616986
   type: 'test'
   ...
 # Subtest: 账号每日健康行映射到现有本地字段并保留同步版本
 ok 83 - 账号每日健康行映射到现有本地字段并保留同步版本
   ---
-  duration_ms: 3.116418
+  duration_ms: 2.963364
   type: 'test'
   ...
 # Subtest: 无效日期和全部越界的账号行不会进入本地数据库
 ok 84 - 无效日期和全部越界的账号行不会进入本地数据库
   ---
-  duration_ms: 0.621779
+  duration_ms: 0.48161
   type: 'test'
   ...
 # Subtest: 数据库迁移前的旧行仍可读取，并明确保留为 legacy 游标语义
 ok 85 - 数据库迁移前的旧行仍可读取，并明确保留为 legacy 游标语义
   ---
-  duration_ms: 0.451972
+  duration_ms: 0.33652
   type: 'test'
   ...
 # Subtest: 只合并比本地云版本更新的每日行
 ok 86 - 只合并比本地云版本更新的每日行
   ---
-  duration_ms: 0.858811
+  duration_ms: 0.768185
   type: 'test'
   ...
 # Subtest: 部分累计上传只下发真正变动的字段，不重放同一行里保留的旧值
 ok 87 - 部分累计上传只下发真正变动的字段，不重放同一行里保留的旧值
   ---
-  duration_ms: 1.79785
+  duration_ms: 1.927974
   type: 'test'
   ...
 # Subtest: 账号健康日期范围忽略坏日期并按日期排序
 ok 88 - 账号健康日期范围忽略坏日期并按日期排序
   ---
-  duration_ms: 0.394165
+  duration_ms: 0.360887
   type: 'test'
   ...
 # Subtest: 今天和昨天：标题是词，副标题才是日期
 ok 89 - 今天和昨天：标题是词，副标题才是日期
   ---
-  duration_ms: 1.832054
+  duration_ms: 1.513095
   type: 'test'
   ...
 # Subtest: 更远的日期：标题就是日期，副标题只留回今天的出口
 ok 90 - 更远的日期：标题就是日期，副标题只留回今天的出口
   ---
-  duration_ms: 0.311331
+  duration_ms: 0.24396
   type: 'test'
   ...
 # Subtest: 跨年补上年份，同一年里不写
 ok 91 - 跨年补上年份，同一年里不写
   ---
-  duration_ms: 0.320377
+  duration_ms: 0.409871
   type: 'test'
   ...
 # Subtest: 明天仍然是个词；坏日期退回今天，不印出 NaN
 ok 92 - 明天仍然是个词；坏日期退回今天，不印出 NaN
   ---
-  duration_ms: 2.272816
+  duration_ms: 1.861413
   type: 'test'
   ...
 # Subtest: 日期加减跨月跨年跨夏令时都对得上
 ok 93 - 日期加减跨月跨年跨夏令时都对得上
   ---
-  duration_ms: 0.549614
+  duration_ms: 0.459577
   type: 'test'
   ...
 # Subtest: 版本号与 package.json 一致
 ok 94 - 版本号与 package.json 一致
   ---
-  duration_ms: 2.733935
+  duration_ms: 2.852867
   type: 'test'
   ...
 # Subtest: 版本号在设置页、README 与离线缓存中同步标注
 ok 95 - 版本号在设置页、README 与离线缓存中同步标注
   ---
-  duration_ms: 1.157007
+  duration_ms: 1.040709
   type: 'test'
   ...
 # Subtest: 反馈类型齐全，未知 key 回落到第一个
 ok 96 - 反馈类型齐全，未知 key 回落到第一个
   ---
-  duration_ms: 1.28236
+  duration_ms: 1.174962
   type: 'test'
   ...
 # Subtest: 环境信息按白名单挑字段，不会把身体数据带出去
 ok 97 - 环境信息按白名单挑字段，不会把身体数据带出去
   ---
-  duration_ms: 0.333061
+  duration_ms: 0.325303
   type: 'test'
   ...
 # Subtest: 条数只认非负整数，脏数据不会写成 NaN
 ok 98 - 条数只认非负整数，脏数据不会写成 NaN
   ---
-  duration_ms: 0.254455
+  duration_ms: 0.223278
   type: 'test'
   ...
 # Subtest: 超长 UA 会被截断，免得挤占正文额度
 ok 99 - 超长 UA 会被截断，免得挤占正文额度
   ---
-  duration_ms: 0.277047
+  duration_ms: 0.201425
   type: 'test'
   ...
 # Subtest: 环境信息渲染成 markdown 列表，空字段不占行
 ok 100 - 环境信息渲染成 markdown 列表，空字段不占行
   ---
-  duration_ms: 0.559442
+  duration_ms: 0.454769
   type: 'test'
   ...
 # Subtest: 标题带类型前缀，取正文首行且不过长
 ok 101 - 标题带类型前缀，取正文首行且不过长
   ---
-  duration_ms: 0.356514
+  duration_ms: 0.284942
   type: 'test'
   ...
 # Subtest: 正文按类型给出不同的模板段落
 ok 102 - 正文按类型给出不同的模板段落
   ---
-  duration_ms: 0.847249
+  duration_ms: 0.815337
   type: 'test'
   ...
 # Subtest: issue 链接指向本仓库，参数编码正确
 ok 103 - issue 链接指向本仓库，参数编码正确
   ---
-  duration_ms: 1.560678
+  duration_ms: 1.320523
   type: 'test'
   ...
 # Subtest: 每种类型带上自己的 label
 ok 104 - 每种类型带上自己的 label
   ---
-  duration_ms: 0.987741
+  duration_ms: 0.915288
   type: 'test'
   ...
 # Subtest: 正文过长会截断到链接塞得下，并留提示
 ok 105 - 正文过长会截断到链接塞得下，并留提示
   ---
-  duration_ms: 5.808434
+  duration_ms: 5.82196
   type: 'test'
   ...
 # Subtest: 纯 ASCII 的超长正文同样能塞下（编码后长度差 9 倍）
 ok 106 - 纯 ASCII 的超长正文同样能塞下（编码后长度差 9 倍）
   ---
-  duration_ms: 8.092261
+  duration_ms: 8.021977
   type: 'test'
   ...
 # Subtest: 刚好不超长的正文不会被无谓截断
 ok 107 - 刚好不超长的正文不会被无谓截断
   ---
-  duration_ms: 0.361643
+  duration_ms: 0.327837
   type: 'test'
   ...
 # Subtest: 什么都不传也能拼出可用的链接
 ok 108 - 什么都不传也能拼出可用的链接
   ---
-  duration_ms: 0.250377
+  duration_ms: 0.198822
   type: 'test'
   ...
-# file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/food-extras.test.js:6
-#   findFood, searchFoods, hasFoodMix, defaultFoodMix, foodMixNutrition,
-#   ^^^^^^^^
-# SyntaxError: The requested module '../js/data/foods.js' does not provide an export named 'findFood'
-#     at ModuleJob._instantiate (node:internal/modules/esm/module_job:226:21)
-#     at async ModuleJob.run (node:internal/modules/esm/module_job:335:5)
-#     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
-#     at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)
-# Node.js v22.23.2
-# Subtest: test/food-extras.test.js
-not ok 7 - test/food-extras.test.js
+# Subtest: 响铃卷可搜索且带常用份量
+ok 109 - 响铃卷可搜索且带常用份量
   ---
-  duration_ms: 79.145626
+  duration_ms: 12.886915
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/food-extras.test.js:1:1'
-  failureType: 'testCodeFailure'
-  exitCode: 1
-  signal: ~
-  error: 'test failed'
-  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: 绝味水煮是可逐项调整的复合食物
+ok 110 - 绝味水煮是可逐项调整的复合食物
+  ---
+  duration_ms: 1.130795
+  type: 'test'
+  ...
+# Subtest: 绝味水煮食材可以单独搜索和记录
+ok 111 - 绝味水煮食材可以单独搜索和记录
+  ---
+  duration_ms: 26.342132
+  type: 'test'
   ...
 # Subtest: 食物库规模与索引完整
-ok 110 - 食物库规模与索引完整
+ok 112 - 食物库规模与索引完整
   ---
-  duration_ms: 2.476184
+  duration_ms: 1.999212
   type: 'test'
   ...
 # Subtest: v1.4 地方小吃与果汁扩充可直接搜索，液体单位和游离糖口径一致
-ok 111 - v1.4 地方小吃与果汁扩充可直接搜索，液体单位和游离糖口径一致
+ok 113 - v1.4 地方小吃与果汁扩充可直接搜索，液体单位和游离糖口径一致
   ---
-  duration_ms: 83.275506
+  duration_ms: 62.647185
   type: 'test'
   ...
 # Subtest: 闽南小吃与牛排分部位收录，估算边界和可食重量不混用
-ok 112 - 闽南小吃与牛排分部位收录，估算边界和可食重量不混用
+ok 114 - 闽南小吃与牛排分部位收录，估算边界和可食重量不混用
   ---
-  duration_ms: 66.967523
+  duration_ms: 57.819214
   type: 'test'
   ...
 # Subtest: 清补凉原料可独立选择和调量，营养按实际配方逐项求和
-ok 113 - 清补凉原料可独立选择和调量，营养按实际配方逐项求和
+ok 115 - 清补凉原料可独立选择和调量，营养按实际配方逐项求和
   ---
-  duration_ms: 2.707436
+  duration_ms: 2.366469
   type: 'test'
   ...
 # Subtest: 品牌烤肉覆盖安又胖及主要连锁菜单，旧品牌名也能搜索
-ok 114 - 品牌烤肉覆盖安又胖及主要连锁菜单，旧品牌名也能搜索
+ok 116 - 品牌烤肉覆盖安又胖及主要连锁菜单，旧品牌名也能搜索
   ---
-  duration_ms: 92.234701
+  duration_ms: 67.413495
   type: 'test'
   ...
 # Subtest: 功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因
-ok 115 - 功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因
+ok 117 - 功能饮料覆盖能量、运动补水、维生素与无糖类型，并披露咖啡因
   ---
-  duration_ms: 39.25684
+  duration_ms: 33.592529
   type: 'test'
   ...
 # Subtest: 常见咖啡、茶、奶茶与可乐显式标记咖啡因，非茶叶饮品不误标
-ok 116 - 常见咖啡、茶、奶茶与可乐显式标记咖啡因，非茶叶饮品不误标
+ok 118 - 常见咖啡、茶、奶茶与可乐显式标记咖啡因，非茶叶饮品不误标
   ---
-  duration_ms: 0.442735
+  duration_ms: 0.413637
   type: 'test'
   ...
 # Subtest: v1.3 常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索
-ok 117 - v1.3 常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索
+ok 119 - v1.3 常见食品扩充完整，糯米主食、饭团和街边小吃可直接搜索
   ---
-  duration_ms: 47.983253
+  duration_ms: 35.301481
   type: 'test'
   ...
 # Subtest: v1.2 扩充食物可搜索，复合菜和包装食品明确披露估算
-ok 118 - v1.2 扩充食物可搜索，复合菜和包装食品明确披露估算
+ok 120 - v1.2 扩充食物可搜索，复合菜和包装食品明确披露估算
   ---
-  duration_ms: 67.687565
+  duration_ms: 53.72237
   type: 'test'
   ...
 # Subtest: 每条记录字段齐全且合理
-ok 119 - 每条记录字段齐全且合理
+ok 121 - 每条记录字段齐全且合理
   ---
-  duration_ms: 7.711337
+  duration_ms: 5.783422
   type: 'test'
   ...
 # Subtest: 热量与三大宏量自洽（纤维按 2 kcal/g 计）
-ok 120 - 热量与三大宏量自洽（纤维按 2 kcal/g 计）
+ok 122 - 热量与三大宏量自洽（纤维按 2 kcal/g 计）
   ---
-  duration_ms: 1.093458
+  duration_ms: 1.467246
   type: 'test'
   ...
 # Subtest: 纤维不超过碳水，糖不超过碳水
-ok 121 - 纤维不超过碳水，糖不超过碳水
+ok 123 - 纤维不超过碳水，糖不超过碳水
   ---
-  duration_ms: 1.673047
+  duration_ms: 1.697314
   type: 'test'
   ...
 # Subtest: 每个分类都有份量参照，且每条食物都能取到
-ok 122 - 每个分类都有份量参照，且每条食物都能取到
+ok 124 - 每个分类都有份量参照，且每条食物都能取到
   ---
-  duration_ms: 0.576354
+  duration_ms: 0.578036
   type: 'test'
   ...
 # Subtest: 量词换算读起来通顺
-ok 123 - 量词换算读起来通顺
+ok 125 - 量词换算读起来通顺
   ---
-  duration_ms: 0.289579
+  duration_ms: 0.22448
   type: 'test'
   ...
 # Subtest: 搜索：中文、拼音、分类都能命中
-ok 124 - 搜索：中文、拼音、分类都能命中
+ok 126 - 搜索：中文、拼音、分类都能命中
   ---
-  duration_ms: 16.956662
+  duration_ms: 14.49877
   type: 'test'
   ...
 # Subtest: 常见食物搜得到（按用户会输入的词来测，而不是看名字里有没有这几个字）
-ok 125 - 常见食物搜得到（按用户会输入的词来测，而不是看名字里有没有这几个字）
+ok 127 - 常见食物搜得到（按用户会输入的词来测，而不是看名字里有没有这几个字）
   ---
-  duration_ms: 40.116432
+  duration_ms: 33.43501
   type: 'test'
   ...
 # Subtest: 份量换算：克数与营养线性对应
-ok 126 - 份量换算：克数与营养线性对应
+ok 128 - 份量换算：克数与营养线性对应
   ---
-  duration_ms: 0.409443
+  duration_ms: 0.299424
   type: 'test'
   ...
 # Subtest: 游离糖可按部分糖扣除，不再强迫乳品整项全算或全免
-ok 127 - 游离糖可按部分糖扣除，不再强迫乳品整项全算或全免
+ok 129 - 游离糖可按部分糖扣除，不再强迫乳品整项全算或全免
   ---
-  duration_ms: 2.79612
+  duration_ms: 3.033161
   type: 'test'
   ...
 # Subtest: 总糖与游离糖分开保存，且游离糖不超过总糖
-ok 128 - 总糖与游离糖分开保存，且游离糖不超过总糖
+ok 130 - 总糖与游离糖分开保存，且游离糖不超过总糖
   ---
-  duration_ms: 4.067761
+  duration_ms: 10.106178
   type: 'test'
   ...
 # Subtest: 新增中国常见食物可搜索，通用复合菜明确标为估算
-ok 129 - 新增中国常见食物可搜索，通用复合菜明确标为估算
+ok 131 - 新增中国常见食物可搜索，通用复合菜明确标为估算
   ---
-  duration_ms: 71.887767
+  duration_ms: 36.725721
   type: 'test'
   ...
 # Subtest: 连锁快餐品牌都收录了，且搜品牌名首条是主力单品
-ok 130 - 连锁快餐品牌都收录了，且搜品牌名首条是主力单品
+ok 132 - 连锁快餐品牌都收录了，且搜品牌名首条是主力单品
   ---
-  duration_ms: 57.292751
+  duration_ms: 33.30324
   type: 'test'
   ...
 # Subtest: 连锁快餐的份量就是品牌的标准份，不是 100g
-ok 131 - 连锁快餐的份量就是品牌的标准份，不是 100g
+ok 133 - 连锁快餐的份量就是品牌的标准份，不是 100g
   ---
-  duration_ms: 0.681289
+  duration_ms: 0.50107
   type: 'test'
   ...
 # Subtest: 搜索同分时按录入顺序，不按名称笔画
-ok 132 - 搜索同分时按录入顺序，不按名称笔画
+ok 134 - 搜索同分时按录入顺序，不按名称笔画
   ---
-  duration_ms: 4.389421
+  duration_ms: 2.079213
   type: 'test'
   ...
 # Subtest: 肯德基点名单品、现行别名与限时食品估算边界完整
-ok 133 - 肯德基点名单品、现行别名与限时食品估算边界完整
+ok 135 - 肯德基点名单品、现行别名与限时食品估算边界完整
   ---
-  duration_ms: 19.215341
+  duration_ms: 9.991524
   type: 'test'
   ...
 # Subtest: 茶饮连锁品牌与主力品类都收录了
-ok 134 - 茶饮连锁品牌与主力品类都收录了
+ok 136 - 茶饮连锁品牌与主力品类都收录了
   ---
-  duration_ms: 50.650434
+  duration_ms: 26.239256
   type: 'test'
   ...
 # Subtest: 糖度五档齐全，且包含常见别名
-ok 135 - 糖度五档齐全，且包含常见别名
+ok 137 - 糖度五档齐全，且包含常见别名
   ---
-  duration_ms: 0.652335
+  duration_ms: 0.48173
   type: 'test'
   ...
 # Subtest: 糖度换算：热量与糖随档位单调下降
-ok 136 - 糖度换算：热量与糖随档位单调下降
+ok 138 - 糖度换算：热量与糖随档位单调下降
   ---
-  duration_ms: 0.559191
+  duration_ms: 0.495061
   type: 'test'
   ...
 # Subtest: 点无糖时，奶的乳糖与配料自带的糖不会被归零
-ok 137 - 点无糖时，奶的乳糖与配料自带的糖不会被归零
+ok 139 - 点无糖时，奶的乳糖与配料自带的糖不会被归零
   ---
-  duration_ms: 0.233425
+  duration_ms: 0.1849
   type: 'test'
   ...
 # Subtest: 本来就没有加糖的饮品不提供糖度选项
-ok 138 - 本来就没有加糖的饮品不提供糖度选项
+ok 140 - 本来就没有加糖的饮品不提供糖度选项
   ---
-  duration_ms: 0.354531
+  duration_ms: 0.2836
   type: 'test'
   ...
 # Subtest: 缺省不传糖度时按全糖算，与显式全糖一致
-ok 139 - 缺省不传糖度时按全糖算，与显式全糖一致
+ok 141 - 缺省不传糖度时按全糖算，与显式全糖一致
   ---
-  duration_ms: 0.188752
+  duration_ms: 0.151019
   type: 'test'
   ...
 # Subtest: 茶饮不再按糖度重复录入（糖度是选项，不是多条记录）
-ok 140 - 茶饮不再按糖度重复录入（糖度是选项，不是多条记录）
+ok 142 - 茶饮不再按糖度重复录入（糖度是选项，不是多条记录）
   ---
-  duration_ms: 1.186301
+  duration_ms: 0.8045
   type: 'test'
   ...
 # Subtest: 茶饮均标为估算（品牌不公开营养表）
-ok 141 - 茶饮均标为估算（品牌不公开营养表）
+ok 143 - 茶饮均标为估算（品牌不公开营养表）
   ---
-  duration_ms: 0.594017
+  duration_ms: 0.392505
   type: 'test'
   ...
 # Subtest: 补剂、冰品、品牌方便面都能搜到
-ok 142 - 补剂、冰品、品牌方便面都能搜到
+ok 144 - 补剂、冰品、品牌方便面都能搜到
   ---
-  duration_ms: 72.877858
+  duration_ms: 60.602105
   type: 'test'
   ...
 # Subtest: 方便面按品牌区分，且钠都标得足够高
-ok 143 - 方便面按品牌区分，且钠都标得足够高
+ok 145 - 方便面按品牌区分，且钠都标得足够高
   ---
-  duration_ms: 0.845155
+  duration_ms: 0.666871
   type: 'test'
   ...
 # Subtest: 冰品的糖占比合理（糖应占碳水的大部分）
-ok 144 - 冰品的糖占比合理（糖应占碳水的大部分）
+ok 146 - 冰品的糖占比合理（糖应占碳水的大部分）
   ---
-  duration_ms: 0.65978
+  duration_ms: 0.588543
   type: 'test'
   ...
 # Subtest: 第二批 48 种中国常见食物完整录入且都带可审计元数据
-ok 145 - 第二批 48 种中国常见食物完整录入且都带可审计元数据
+ok 147 - 第二批 48 种中国常见食物完整录入且都带可审计元数据
   ---
-  duration_ms: 0.359971
+  duration_ms: 0.343581
   type: 'test'
   ...
 # Subtest: 可选食物元数据遵守稳定 schema，旧条目仍可不带元数据
-ok 146 - 可选食物元数据遵守稳定 schema，旧条目仍可不带元数据
+ok 148 - 可选食物元数据遵守稳定 schema，旧条目仍可不带元数据
   ---
-  duration_ms: 1.52896
+  duration_ms: 1.261172
   type: 'test'
   ...
 # Subtest: recipe 来源自动视为估算，并且新增配方显式保留 est 标记
-ok 147 - recipe 来源自动视为估算，并且新增配方显式保留 est 标记
+ok 149 - recipe 来源自动视为估算，并且新增配方显式保留 est 标记
   ---
-  duration_ms: 0.377634
+  duration_ms: 0.41543
   type: 'test'
   ...
 # Subtest: 营养、糖层级与语义标记在合理范围内
-ok 148 - 营养、糖层级与语义标记在合理范围内
+ok 150 - 营养、糖层级与语义标记在合理范围内
   ---
-  duration_ms: 6.640884
+  duration_ms: 10.207171
   type: 'test'
   ...
 # Subtest: 新增来源记录按声明的碳水口径复核能量
-ok 149 - 新增来源记录按声明的碳水口径复核能量
+ok 151 - 新增来源记录按声明的碳水口径复核能量
   ---
-  duration_ms: 1.053774
+  duration_ms: 1.024834
   type: 'test'
   ...
 # Subtest: 名称与 id 不重复，四个历史错配已纠正并补回原食物
-ok 150 - 名称与 id 不重复，四个历史错配已纠正并补回原食物
+ok 152 - 名称与 id 不重复，四个历史错配已纠正并补回原食物
   ---
-  duration_ms: 3.020619
+  duration_ms: 2.534233
   type: 'test'
   ...
 # Subtest: 高价值合并项已拆分，汤汁与带壳食物的估算边界明确
-ok 151 - 高价值合并项已拆分，汤汁与带壳食物的估算边界明确
+ok 153 - 高价值合并项已拆分，汤汁与带壳食物的估算边界明确
   ---
-  duration_ms: 0.493951
+  duration_ms: 0.345884
   type: 'test'
   ...
 # Subtest: 旧复合菜在数据层显式披露估算，不再只依赖界面兜底
-ok 152 - 旧复合菜在数据层显式披露估算，不再只依赖界面兜底
+ok 154 - 旧复合菜在数据层显式披露估算，不再只依赖界面兜底
   ---
-  duration_ms: 0.593746
+  duration_ms: 0.331753
   type: 'test'
   ...
 # Subtest: 连锁食品只有可复核 label 来源才允许不标估算
-ok 153 - 连锁食品只有可复核 label 来源才允许不标估算
+ok 155 - 连锁食品只有可复核 label 来源才允许不标估算
   ---
-  duration_ms: 0.422717
+  duration_ms: 0.264441
   type: 'test'
   ...
 # Subtest: 鲜干龙眼、甜咸豆花和近义但不同的名称已拆清
-ok 154 - 鲜干龙眼、甜咸豆花和近义但不同的名称已拆清
+ok 156 - 鲜干龙眼、甜咸豆花和近义但不同的名称已拆清
   ---
-  duration_ms: 10.045773
+  duration_ms: 6.033672
   type: 'test'
   ...
 # Subtest: 带骨壳旧条目按可食部记录，毛重比例不会再被当作可吃重量
-ok 155 - 带骨壳旧条目按可食部记录，毛重比例不会再被当作可吃重量
+ok 157 - 带骨壳旧条目按可食部记录，毛重比例不会再被当作可吃重量
   ---
-  duration_ms: 0.30009
+  duration_ms: 0.264341
   type: 'test'
   ...
 # Subtest: 完整谷薯、豆和坚果的内源糖不计入 WHO 游离糖
-ok 156 - 完整谷薯、豆和坚果的内源糖不计入 WHO 游离糖
+ok 158 - 完整谷薯、豆和坚果的内源糖不计入 WHO 游离糖
   ---
-  duration_ms: 0.16081
+  duration_ms: 0.148365
   type: 'test'
   ...
 # Subtest: 主要牛奶品牌可被搜到，且区分纯奶与含糖乳饮料
-ok 157 - 主要牛奶品牌可被搜到，且区分纯奶与含糖乳饮料
+ok 159 - 主要牛奶品牌可被搜到，且区分纯奶与含糖乳饮料
   ---
-  duration_ms: 35.473299
+  duration_ms: 31.902877
   type: 'test'
   ...
 # Subtest: 乳糖不计入 WHO 游离糖，加进去的糖才计入
-ok 158 - 乳糖不计入 WHO 游离糖，加进去的糖才计入
+ok 160 - 乳糖不计入 WHO 游离糖，加进去的糖才计入
   ---
-  duration_ms: 0.388213
+  duration_ms: 0.352254
   type: 'test'
   ...
 # Subtest: 同一杯纯奶与含糖乳饮料的蛋白密度拉得开
-ok 159 - 同一杯纯奶与含糖乳饮料的蛋白密度拉得开
+ok 161 - 同一杯纯奶与含糖乳饮料的蛋白密度拉得开
   ---
-  duration_ms: 0.171891
+  duration_ms: 0.114454
   type: 'test'
   ...
 # Subtest: 新增的品牌乳品都给出了常见规格
-ok 160 - 新增的品牌乳品都给出了常见规格
+ok 162 - 新增的品牌乳品都给出了常见规格
   ---
-  duration_ms: 0.451792
+  duration_ms: 0.300015
   type: 'test'
   ...
 # Subtest: 家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计
-ok 161 - 家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计
+ok 163 - 家常炒菜与汤覆盖常点的那几道，份量按家庭一盘计
   ---
-  duration_ms: 16.767692
+  duration_ms: 9.232834
   type: 'test'
   ...
 # Subtest: 下馆子常见菜覆盖一碗香、黄豆猪脚及不同做法，并说明估算边界
-ok 162 - 下馆子常见菜覆盖一碗香、黄豆猪脚及不同做法，并说明估算边界
+ok 164 - 下馆子常见菜覆盖一碗香、黄豆猪脚及不同做法，并说明估算边界
   ---
-  duration_ms: 25.335697
+  duration_ms: 19.944049
   type: 'test'
   ...
 # Subtest: 菜肴的游离糖只算加进去的那部分，食材自带的糖不计
-ok 163 - 菜肴的游离糖只算加进去的那部分，食材自带的糖不计
+ok 165 - 菜肴的游离糖只算加进去的那部分，食材自带的糖不计
   ---
-  duration_ms: 0.890871
+  duration_ms: 0.728495
   type: 'test'
   ...
 # Subtest: 乳糖和整食自带的糖不计入游离糖
-ok 164 - 乳糖和整食自带的糖不计入游离糖
+ok 166 - 乳糖和整食自带的糖不计入游离糖
   ---
-  duration_ms: 0.352917
+  duration_ms: 0.313816
   type: 'test'
   ...
 # Subtest: 带甜味做法的菜不能被当成完全不加糖
-ok 165 - 带甜味做法的菜不能被当成完全不加糖
+ok 167 - 带甜味做法的菜不能被当成完全不加糖
   ---
-  duration_ms: 0.855775
+  duration_ms: 0.801236
   type: 'test'
   ...
 # Subtest: 连锁条目的 nfs 要真的生效，不能写了不算
-ok 166 - 连锁条目的 nfs 要真的生效，不能写了不算
+ok 168 - 连锁条目的 nfs 要真的生效，不能写了不算
   ---
-  duration_ms: 0.446953
+  duration_ms: 0.365584
   type: 'test'
   ...
 # Subtest: 南浦拌饭：石锅拌饭几款的差别应当在浇头上，不在那碗饭上
-ok 167 - 南浦拌饭：石锅拌饭几款的差别应当在浇头上，不在那碗饭上
+ok 169 - 南浦拌饭：石锅拌饭几款的差别应当在浇头上，不在那碗饭上
   ---
-  duration_ms: 0.475517
+  duration_ms: 0.416602
   type: 'test'
   ...
 # Subtest: 冰淇淋打底的茶饮：点「无糖」不等于没有糖
-ok 168 - 冰淇淋打底的茶饮：点「无糖」不等于没有糖
+ok 170 - 冰淇淋打底的茶饮：点「无糖」不等于没有糖
   ---
-  duration_ms: 0.496035
+  duration_ms: 0.356681
   type: 'test'
   ...
 # Subtest: 鲜果椰乳类不含茶底，不该标成含咖啡因
-ok 169 - 鲜果椰乳类不含茶底，不该标成含咖啡因
+ok 171 - 鲜果椰乳类不含茶底，不该标成含咖啡因
   ---
-  duration_ms: 0.444829
+  duration_ms: 0.994488
   type: 'test'
   ...
 # Subtest: 缺的项留在列表里，值是 null —— 不许整格消失
-ok 170 - 缺的项留在列表里，值是 null —— 不许整格消失
+ok 172 - 缺的项留在列表里，值是 null —— 不许整格消失
   ---
-  duration_ms: 3.139631
+  duration_ms: 1.805959
   type: 'test'
   ...
 # Subtest: 体脂和饮水只在记到过的时候才占一格
-ok 171 - 体脂和饮水只在记到过的时候才占一格
+ok 173 - 体脂和饮水只在记到过的时候才占一格
   ---
-  duration_ms: 0.545096
+  duration_ms: 0.368909
   type: 'test'
   ...
 # Subtest: 同步状态按「今天同步过没有」判定，缺项不影响它
-ok 172 - 同步状态按「今天同步过没有」判定，缺项不影响它
+ok 174 - 同步状态按「今天同步过没有」判定，缺项不影响它
   ---
-  duration_ms: 0.339392
+  duration_ms: 0.229348
   type: 'test'
   ...
 # Subtest: 来源写成人话，缺项原因有统一说法
-ok 173 - 来源写成人话，缺项原因有统一说法
+ok 175 - 来源写成人话，缺项原因有统一说法
   ---
-  duration_ms: 0.571264
+  duration_ms: 0.518436
   type: 'test'
   ...
 # Subtest: 脏数据不会印成 NaN
-ok 174 - 脏数据不会印成 NaN
+ok 176 - 脏数据不会印成 NaN
   ---
-  duration_ms: 0.339302
+  duration_ms: 0.318182
   type: 'test'
   ...
 # Subtest: 数据不足时只给一条说明，不瞎解读
-ok 175 - 数据不足时只给一条说明，不瞎解读
+ok 177 - 数据不足时只给一条说明，不瞎解读
   ---
-  duration_ms: 3.317773
+  duration_ms: 2.185204
   type: 'test'
   ...
 # Subtest: 所有文案都不含未展开的字符串拼接或模板残留
-ok 176 - 所有文案都不含未展开的字符串拼接或模板残留
+ok 178 - 所有文案都不含未展开的字符串拼接或模板残留
   ---
-  duration_ms: 28.756201
+  duration_ms: 14.661967
   type: 'test'
   ...
 # Subtest: 步数分档使用谨慎的参考表述，不把步数等同久坐或健康结论
-ok 177 - 步数分档使用谨慎的参考表述，不把步数等同久坐或健康结论
+ok 179 - 步数分档使用谨慎的参考表述，不把步数等同久坐或健康结论
   ---
-  duration_ms: 3.639453
+  duration_ms: 1.812058
   type: 'test'
   ...
 # Subtest: 运动量按 WHO 每周 150 分钟判定
-ok 178 - 运动量按 WHO 每周 150 分钟判定
+ok 180 - 运动量按 WHO 每周 150 分钟判定
   ---
-  duration_ms: 1.134003
+  duration_ms: 0.654062
   type: 'test'
   ...
 # Subtest: 周运动量按日历跨度折算，并把明确的零运动日计为 0
-ok 179 - 周运动量按日历跨度折算，并把明确的零运动日计为 0
+ok 181 - 周运动量按日历跨度折算，并把明确的零运动日计为 0
   ---
-  duration_ms: 1.245341
+  duration_ms: 0.667983
   type: 'test'
   ...
 # Subtest: 日历数据大面积缺测时不把缺测日当作零运动日下结论
-ok 180 - 日历数据大面积缺测时不把缺测日当作零运动日下结论
+ok 182 - 日历数据大面积缺测时不把缺测日当作零运动日下结论
   ---
-  duration_ms: 0.425112
+  duration_ms: 0.319505
   type: 'test'
   ...
 # Subtest: 有其它健康数据但缺运动字段时，也不能把缺测日补成零
-ok 181 - 有其它健康数据但缺运动字段时，也不能把缺测日补成零
+ok 183 - 有其它健康数据但缺运动字段时，也不能把缺测日补成零
   ---
-  duration_ms: 0.814137
+  duration_ms: 0.427678
   type: 'test'
   ...
 # Subtest: 睡眠分档只描述睡眠时长波动，不推断作息规律性
-ok 182 - 睡眠分档只描述睡眠时长波动，不推断作息规律性
+ok 184 - 睡眠分档只描述睡眠时长波动，不推断作息规律性
   ---
-  duration_ms: 0.964988
+  duration_ms: 0.535923
   type: 'test'
   ...
 # Subtest: 减重过快会被拦下（>1% 体重/周）
-ok 183 - 减重过快会被拦下（>1% 体重/周）
+ok 185 - 减重过快会被拦下（>1% 体重/周）
   ---
-  duration_ms: 1.0681
+  duration_ms: 0.580049
   type: 'test'
   ...
 # Subtest: 体重趋势同时要求足够点数与至少 7 天首末间隔
-ok 184 - 体重趋势同时要求足够点数与至少 7 天首末间隔
+ok 186 - 体重趋势同时要求足够点数与至少 7 天首末间隔
   ---
-  duration_ms: 0.950221
+  duration_ms: 0.58708
   type: 'test'
   ...
 # Subtest: 体脂和静息心率不足一周时不外推每周趋势
-ok 185 - 体脂和静息心率不足一周时不外推每周趋势
+ok 187 - 体脂和静息心率不足一周时不外推每周趋势
   ---
-  duration_ms: 0.540677
+  duration_ms: 0.33615
   type: 'test'
   ...
 # Subtest: 体重趋势偏离目标但不足 28 天时不贸然调整热量
-ok 186 - 体重趋势偏离目标但不足 28 天时不贸然调整热量
+ok 188 - 体重趋势偏离目标但不足 28 天时不贸然调整热量
   ---
-  duration_ms: 1.497891
+  duration_ms: 0.908729
   type: 'test'
   ...
 # Subtest: 至少 28 天后才按实际与目标差值建议热量调整，且单次不超过 ±250 kcal
-ok 187 - 至少 28 天后才按实际与目标差值建议热量调整，且单次不超过 ±250 kcal
+ok 189 - 至少 28 天后才按实际与目标差值建议热量调整，且单次不超过 ±250 kcal
   ---
-  duration_ms: 0.862738
+  duration_ms: 0.497274
   type: 'test'
   ...
 # Subtest: 体重实际趋势和目标同方向但差值超出容差时仍会提醒
-ok 188 - 体重实际趋势和目标同方向但差值超出容差时仍会提醒
+ok 190 - 体重实际趋势和目标同方向但差值超出容差时仍会提醒
   ---
-  duration_ms: 0.511674
+  duration_ms: 0.271091
   type: 'test'
   ...
 # Subtest: 体重与目标一致时给正反馈
-ok 189 - 体重与目标一致时给正反馈
+ok 191 - 体重与目标一致时给正反馈
   ---
-  duration_ms: 0.506153
+  duration_ms: 0.246344
   type: 'test'
   ...
 # Subtest: 静息心率持续上升会提醒
-ok 190 - 静息心率持续上升会提醒
+ok 192 - 静息心率持续上升会提醒
   ---
-  duration_ms: 0.515611
+  duration_ms: 0.354638
   type: 'test'
   ...
 # Subtest: 体脂结论必须结合体重，并提示 BIA 的测量局限
-ok 191 - 体脂结论必须结合体重，并提示 BIA 的测量局限
+ok 193 - 体脂结论必须结合体重，并提示 BIA 的测量局限
   ---
-  duration_ms: 0.556507
+  duration_ms: 0.326916
   type: 'test'
   ...
 # Subtest: 体重与体脂方向不一致时不武断判断肌肉流失
-ok 192 - 体重与体脂方向不一致时不武断判断肌肉流失
+ok 194 - 体重与体脂方向不一致时不武断判断肌肉流失
   ---
-  duration_ms: 0.471158
+  duration_ms: 0.284852
   type: 'test'
   ...
 # Subtest: 饮食记录太少会提醒（否则收支算不准）
-ok 193 - 饮食记录太少会提醒（否则收支算不准）
+ok 195 - 饮食记录太少会提醒（否则收支算不准）
   ---
-  duration_ms: 0.427096
+  duration_ms: 0.232563
   type: 'test'
   ...
 # Subtest: 饮食记得够全就不再唠叨
-ok 194 - 饮食记得够全就不再唠叨
+ok 196 - 饮食记得够全就不再唠叨
   ---
-  duration_ms: 0.723077
+  duration_ms: 0.363081
   type: 'test'
   ...
 # Subtest: 饮食覆盖提示使用所选日历窗口，不把“健康记录日数”冒充天数
-ok 195 - 饮食覆盖提示使用所选日历窗口，不把“健康记录日数”冒充天数
+ok 197 - 饮食覆盖提示使用所选日历窗口，不把“健康记录日数”冒充天数
   ---
-  duration_ms: 0.293177
+  duration_ms: 0.179372
   type: 'test'
   ...
 # Subtest: 摘要指标取近窗口均值
-ok 196 - 摘要指标取近窗口均值
+ok 198 - 摘要指标取近窗口均值
   ---
-  duration_ms: 0.511614
+  duration_ms: 0.292393
   type: 'test'
   ...
 # Subtest: 明确记录的零步数和零活动参与平均，缺失字段才跳过
-ok 197 - 明确记录的零步数和零活动参与平均，缺失字段才跳过
+ok 199 - 明确记录的零步数和零活动参与平均，缺失字段才跳过
   ---
-  duration_ms: 0.283959
+  duration_ms: 0.16437
   type: 'test'
   ...
 # Subtest: 窗口先按日期排序，并以截止日期取日历窗口
-ok 198 - 窗口先按日期排序，并以截止日期取日历窗口
+ok 200 - 窗口先按日期排序，并以截止日期取日历窗口
   ---
-  duration_ms: 0.347548
+  duration_ms: 0.191661
   type: 'test'
   ...
 # Subtest: 未来数据不会进入摘要或健康解读
-ok 199 - 未来数据不会进入摘要或健康解读
+ok 201 - 未来数据不会进入摘要或健康解读
   ---
-  duration_ms: 0.454256
+  duration_ms: 0.225182
   type: 'test'
   ...
 # Subtest: 识别出被单位缺陷缩小过的历史能量数据
-ok 200 - 识别出被单位缺陷缩小过的历史能量数据
+ok 202 - 识别出被单位缺陷缩小过的历史能量数据
   ---
-  duration_ms: 0.503298
+  duration_ms: 0.344252
   type: 'test'
   ...
 # Subtest: 正常量级的能量数据不会被误报
-ok 201 - 正常量级的能量数据不会被误报
+ok 203 - 正常量级的能量数据不会被误报
   ---
-  duration_ms: 0.487589
+  duration_ms: 0.273264
   type: 'test'
   ...
 # Subtest: 真正久坐的人（步数也低）不会被误判成数据错误
-ok 202 - 真正久坐的人（步数也低）不会被误判成数据错误
+ok 204 - 真正久坐的人（步数也低）不会被误判成数据错误
   ---
-  duration_ms: 0.494251
+  duration_ms: 0.291402
   type: 'test'
   ...
 # Subtest: 概览与解读的日均睡眠是同一个数，不会因两次取整差出 0.1 小时
-ok 203 - 概览与解读的日均睡眠是同一个数，不会因两次取整差出 0.1 小时
+ok 205 - 概览与解读的日均睡眠是同一个数，不会因两次取整差出 0.1 小时
   ---
-  duration_ms: 0.430963
+  duration_ms: 0.305824
   type: 'test'
   ...
 # Subtest: 「涨得太快」的门槛比「掉得太快」严：两者受的限制不是一回事
-ok 204 - 「涨得太快」的门槛比「掉得太快」严：两者受的限制不是一回事
+ok 206 - 「涨得太快」的门槛比「掉得太快」严：两者受的限制不是一回事
   ---
-  duration_ms: 2.733293
+  duration_ms: 1.931749
   type: 'test'
   ...
 # Subtest: 只有 fullSnapshot === true 才能触发全量替换，格式名本身不构成授权
-ok 205 - 只有 fullSnapshot === true 才能触发全量替换，格式名本身不构成授权
+ok 207 - 只有 fullSnapshot === true 才能触发全量替换，格式名本身不构成授权
   ---
-  duration_ms: 1.438972
+  duration_ms: 1.105397
   type: 'test'
   ...
 # Subtest: 完整 Apple 快照会移除已从下一次导出消失的旧 Apple 字段
-ok 206 - 完整 Apple 快照会移除已从下一次导出消失的旧 Apple 字段
+ok 208 - 完整 Apple 快照会移除已从下一次导出消失的旧 Apple 字段
   ---
-  duration_ms: 1.707953
+  duration_ms: 1.392822
   type: 'test'
   ...
 # Subtest: 完整 Apple 快照保留字段级标记的手动补录
-ok 207 - 完整 Apple 快照保留字段级标记的手动补录
+ok 209 - 完整 Apple 快照保留字段级标记的手动补录
   ---
-  duration_ms: 0.540547
+  duration_ms: 0.444795
   type: 'test'
   ...
 # Subtest: 完整快照即使带来同名字段，也不能覆盖用户手动补录
-ok 208 - 完整快照即使带来同名字段，也不能覆盖用户手动补录
+ok 210 - 完整快照即使带来同名字段，也不能覆盖用户手动补录
   ---
-  duration_ms: 0.35423
+  duration_ms: 0.280846
   type: 'test'
   ...
 # Subtest: 完整快照中完全消失的 Apple-only 日期会删除
-ok 209 - 完整快照中完全消失的 Apple-only 日期会删除
+ok 211 - 完整快照中完全消失的 Apple-only 日期会删除
   ---
-  duration_ms: 0.447334
+  duration_ms: 0.378254
   type: 'test'
   ...
 # Subtest: 增量 JSON/CSV 导入不会删除本次缺失的旧字段
-ok 210 - 增量 JSON/CSV 导入不会删除本次缺失的旧字段
+ok 212 - 增量 JSON/CSV 导入不会删除本次缺失的旧字段
   ---
-  duration_ms: 0.417187
+  duration_ms: 0.34297
   type: 'test'
   ...
 # Subtest: 手动修改只把所改字段标成 manual
-ok 211 - 手动修改只把所改字段标成 manual
+ok 213 - 手动修改只把所改字段标成 manual
   ---
-  duration_ms: 0.486968
+  duration_ms: 0.260225
   type: 'test'
   ...
-# (node:2367) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+# (node:2373) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
 # (Use `node --trace-warnings ...` to show where the warning was created)
 # Subtest: 健康同步表强制 RLS，浏览器不能读取令牌哈希或越权写健康表
-ok 212 - 健康同步表强制 RLS，浏览器不能读取令牌哈希或越权写健康表
+ok 214 - 健康同步表强制 RLS，浏览器不能读取令牌哈希或越权写健康表
   ---
-  duration_ms: 4.806377
+  duration_ms: 4.763855
   type: 'test'
   ...
 # Subtest: 设备写入入口只向 service role 开放并有体积、时间和频率保护
-ok 213 - 设备写入入口只向 service role 开放并有体积、时间和频率保护
+ok 215 - 设备写入入口只向 service role 开放并有体积、时间和频率保护
   ---
-  duration_ms: 1.213021
+  duration_ms: 1.191347
   type: 'test'
   ...
 # Subtest: 自动同步入口集中在数据管理，并进入离线外壳
-ok 214 - 自动同步入口集中在数据管理，并进入离线外壳
+ok 216 - 自动同步入口集中在数据管理，并进入离线外壳
   ---
-  duration_ms: 0.336937
+  duration_ms: 0.28959
   type: 'test'
   ...
 # Subtest: 原始设备令牌只留在当前页面内存，账号切换会丢弃旧请求
-ok 215 - 原始设备令牌只留在当前页面内存，账号切换会丢弃旧请求
+ok 217 - 原始设备令牌只留在当前页面内存，账号切换会丢弃旧请求
   ---
-  duration_ms: 0.282487
+  duration_ms: 0.257391
   type: 'test'
   ...
 # Subtest: 显式采集时间无效时拒绝请求，只有完全省略时间才使用服务器时间
-ok 216 - 显式采集时间无效时拒绝请求，只有完全省略时间才使用服务器时间
+ok 218 - 显式采集时间无效时拒绝请求，只有完全省略时间才使用服务器时间
   ---
-  duration_ms: 1.179237
+  duration_ms: 1.063042
   type: 'test'
   ...
 # Subtest: 四项快照指标分别要求对应测量时间，同时保留别名和跨日期任务
-ok 217 - 四项快照指标分别要求对应测量时间，同时保留别名和跨日期任务
+ok 219 - 四项快照指标分别要求对应测量时间，同时保留别名和跨日期任务
   ---
-  duration_ms: 53.890771
+  duration_ms: 41.001311
   type: 'test'
   ...
 # Subtest: 每项累计指标使用独立采集游标，部分上传不会推进或重放其它字段
-ok 218 - 每项累计指标使用独立采集游标，部分上传不会推进或重放其它字段
+ok 220 - 每项累计指标使用独立采集游标，部分上传不会推进或重放其它字段
   ---
-  duration_ms: 5.286482
+  duration_ms: 3.880876
   type: 'test'
   ...
 # Subtest: Pages 先于数据库迁移发布时自动回退旧健康列，不中断账号读取
-ok 219 - Pages 先于数据库迁移发布时自动回退旧健康列，不中断账号读取
+ok 221 - Pages 先于数据库迁移发布时自动回退旧健康列，不中断账号读取
   ---
-  duration_ms: 0.206094
+  duration_ms: 0.216939
   type: 'test'
   ...
 # Subtest: 静息心率没有样本时不会毁掉整次上传
-ok 220 - 静息心率没有样本时不会毁掉整次上传
+ok 222 - 静息心率没有样本时不会毁掉整次上传
   ---
-  duration_ms: 1.540611
+  duration_ms: 1.789204
   type: 'test'
   ...
 # Subtest: 下限大于 0 的指标读到 0 一律当成没有样本
-ok 221 - 下限大于 0 的指标读到 0 一律当成没有样本
+ok 223 - 下限大于 0 的指标读到 0 一律当成没有样本
   ---
-  duration_ms: 0.684696
+  duration_ms: 0.786012
   type: 'test'
   ...
 # Subtest: 下限为 0 的指标，0 是真值不是缺失
-ok 222 - 下限为 0 的指标，0 是真值不是缺失
+ok 224 - 下限为 0 的指标，0 是真值不是缺失
   ---
-  duration_ms: 0.353158
+  duration_ms: 0.464845
   type: 'test'
   ...
 # Subtest: 超出生理范围的值被挑出来，其余照常入库
-ok 223 - 超出生理范围的值被挑出来，其余照常入库
+ok 225 - 超出生理范围的值被挑出来，其余照常入库
   ---
-  duration_ms: 0.189242
+  duration_ms: 0.29679
   type: 'test'
   ...
 # Subtest: 一个合法指标都不剩时才失败，并说明是哪一项
-ok 224 - 一个合法指标都不剩时才失败，并说明是哪一项
+ok 226 - 一个合法指标都不剩时才失败，并说明是哪一项
   ---
-  duration_ms: 0.222424
+  duration_ms: 0.342039
   type: 'test'
   ...
 # Subtest: 体重缺测量时间时只摘掉体重，不再丢掉同一次的步数和能量
-ok 225 - 体重缺测量时间时只摘掉体重，不再丢掉同一次的步数和能量
+ok 227 - 体重缺测量时间时只摘掉体重，不再丢掉同一次的步数和能量
   ---
-  duration_ms: 0.263331
+  duration_ms: 0.331533
   type: 'test'
   ...
 # Subtest: 粘贴健康 JSON 自动兼容智能引号和 Markdown 代码框
-ok 226 - 粘贴健康 JSON 自动兼容智能引号和 Markdown 代码框
+ok 228 - 粘贴健康 JSON 自动兼容智能引号和 Markdown 代码框
   ---
-  duration_ms: 6.14931
+  duration_ms: 5.793477
   type: 'test'
   ...
 # Subtest: 非法健康 JSON 返回简短中文提示
-ok 227 - 非法健康 JSON 返回简短中文提示
+ok 229 - 非法健康 JSON 返回简短中文提示
   ---
-  duration_ms: 0.626628
+  duration_ms: 0.589604
   type: 'test'
   ...
 # Subtest: 能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡
-ok 228 - 能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡
+ok 230 - 能量单位区分大小写：Apple 导出的 Cal 是千卡，不是小卡
   ---
-  duration_ms: 0.296262
+  duration_ms: 0.281356
   type: 'test'
   ...
 # Subtest: 单位换算覆盖 HealthKit 其它常见单位
-ok 229 - 单位换算覆盖 HealthKit 其它常见单位
+ok 231 - 单位换算覆盖 HealthKit 其它常见单位
   ---
-  duration_ms: 0.262339
+  duration_ms: 0.242478
   type: 'test'
   ...
 # Subtest: 体脂率：HealthKit 存的是 0~1 的比例，第三方常存百分数
-ok 230 - 体脂率：HealthKit 存的是 0~1 的比例，第三方常存百分数
+ok 232 - 体脂率：HealthKit 存的是 0~1 的比例，第三方常存百分数
+  ---
+  duration_ms: 0.190048
+  type: 'test'
+  ...
+# Subtest: Apple 时间戳带时区偏移，日期取本地日
+ok 233 - Apple 时间戳带时区偏移，日期取本地日
+  ---
+  duration_ms: 0.26379
+  type: 'test'
+  ...
+# Subtest: 属性解析
+ok 234 - 属性解析
+  ---
+  duration_ms: 0.457544
+  type: 'test'
+  ...
+# Subtest: 累加型指标相加，快照型取当天最后一条
+ok 235 - 累加型指标相加，快照型取当天最后一条
+  ---
+  duration_ms: 5.278926
+  type: 'test'
+  ...
+# Subtest: 未知类型被跳过而不是报错
+ok 236 - 未知类型被跳过而不是报错
+  ---
+  duration_ms: 0.658869
+  type: 'test'
+  ...
+# Subtest: 睡眠只统计入睡片段，并归到醒来那天
+ok 237 - 睡眠只统计入睡片段，并归到醒来那天
+  ---
+  duration_ms: 1.264347
+  type: 'test'
+  ...
+# Subtest: 睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集
+ok 238 - 睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集
+  ---
+  duration_ms: 0.705881
+  type: 'test'
+  ...
+# Subtest: XML 精确重复去重，多设备累计量不再静默相加
+ok 239 - XML 精确重复去重，多设备累计量不再静默相加
+  ---
+  duration_ms: 11.685733
+  type: 'test'
+  ...
+# Subtest: 多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源
+ok 240 - 多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源
+  ---
+  duration_ms: 0.636125
+  type: 'test'
+  ...
+# Subtest: 同名来源的两台设备也必须参与重叠消重，不能先在来源内相加
+ok 241 - 同名来源的两台设备也必须参与重叠消重，不能先在来源内相加
+  ---
+  duration_ms: 0.508291
+  type: 'test'
+  ...
+# Subtest: HKWasUserEntered 的手动样本在重叠区间优先于设备推断优先级
+ok 242 - HKWasUserEntered 的手动样本在重叠区间优先于设备推断优先级
+  ---
+  duration_ms: 0.773914
+  type: 'test'
+  ...
+# Subtest: UUID/ExternalUUID 优先精确去重，ExternalUUID 不同的同属性记录必须同时保留
+ok 243 - UUID/ExternalUUID 优先精确去重，ExternalUUID 不同的同属性记录必须同时保留
+  ---
+  duration_ms: 0.990993
+  type: 'test'
+  ...
+# Subtest: SyncIdentifier 只保留最高 SyncVersion，同版本再出现视为重复
+ok 244 - SyncIdentifier 只保留最高 SyncVersion，同版本再出现视为重复
+  ---
+  duration_ms: 0.699661
+  type: 'test'
+  ...
+# Subtest: ActivitySummary 覆盖圆环指标，Workout 仅形成独立摘要且不重复加入活动能量
+ok 245 - ActivitySummary 覆盖圆环指标，Workout 仅形成独立摘要且不重复加入活动能量
+  ---
+  duration_ms: 2.024821
+  type: 'test'
+  ...
+# Subtest: 新版 Workout 可从内嵌 WorkoutStatistics 读取能量和距离摘要
+ok 246 - 新版 Workout 可从内嵌 WorkoutStatistics 读取能量和距离摘要
+  ---
+  duration_ms: 0.50143
+  type: 'test'
+  ...
+# Subtest: Correlation 内嵌 Record 不会被当顶层样本重复累计
+ok 247 - Correlation 内嵌 Record 不会被当顶层样本重复累计
+  ---
+  duration_ms: 0.340416
+  type: 'test'
+  ...
+# Subtest: 未知顶层容器必须整体跳过，内嵌 Record 不能污染聚合结果
+ok 248 - 未知顶层容器必须整体跳过，内嵌 Record 不能污染聚合结果
+  ---
+  duration_ms: 0.768886
+  type: 'test'
+  ...
+# Subtest: 已知可安全略过的 Apple 顶层结构不会阻止完整快照
+ok 249 - 已知可安全略过的 Apple 顶层结构不会阻止完整快照
+  ---
+  duration_ms: 1.143704
+  type: 'test'
+  ...
+# Subtest: 只有完整闭合的 HealthData 才标记全量快照，截断 XML 必须降级为 partial
+ok 250 - 只有完整闭合的 HealthData 才标记全量快照，截断 XML 必须降级为 partial
+  ---
+  duration_ms: 0.477655
+  type: 'test'
+  ...
+# Subtest: 只有文件尾部而没有 HealthData 开头时绝不能标记全量快照
+ok 251 - 只有文件尾部而没有 HealthData 开头时绝不能标记全量快照
+  ---
+  duration_ms: 0.42161
+  type: 'test'
+  ...
+# Subtest: 未知顶层容器未闭合时即使看见根尾标签也必须降级为 partial
+ok 252 - 未知顶层容器未闭合时即使看见根尾标签也必须降级为 partial
+  ---
+  duration_ms: 0.179152
+  type: 'test'
+  ...
+# Subtest: 即使出现 HealthData 尾标签，未闭合的 Record 仍视为损坏快照
+ok 253 - 即使出现 HealthData 尾标签，未闭合的 Record 仍视为损坏快照
   ---
   duration_ms: 0.201906
   type: 'test'
   ...
-# Subtest: Apple 时间戳带时区偏移，日期取本地日
-ok 231 - Apple 时间戳带时区偏移，日期取本地日
-  ---
-  duration_ms: 0.281354
-  type: 'test'
-  ...
-# Subtest: 属性解析
-ok 232 - 属性解析
-  ---
-  duration_ms: 0.468513
-  type: 'test'
-  ...
-# Subtest: 累加型指标相加，快照型取当天最后一条
-ok 233 - 累加型指标相加，快照型取当天最后一条
-  ---
-  duration_ms: 5.615926
-  type: 'test'
-  ...
-# Subtest: 未知类型被跳过而不是报错
-ok 234 - 未知类型被跳过而不是报错
-  ---
-  duration_ms: 0.68631
-  type: 'test'
-  ...
-# Subtest: 睡眠只统计入睡片段，并归到醒来那天
-ok 235 - 睡眠只统计入睡片段，并归到醒来那天
-  ---
-  duration_ms: 1.250942
-  type: 'test'
-  ...
-# Subtest: 睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集
-ok 236 - 睡眠跨午夜按整段最终醒来日归档，重叠来源只算区间并集
-  ---
-  duration_ms: 0.739028
-  type: 'test'
-  ...
-# Subtest: XML 精确重复去重，多设备累计量不再静默相加
-ok 237 - XML 精确重复去重，多设备累计量不再静默相加
-  ---
-  duration_ms: 13.820246
-  type: 'test'
-  ...
-# Subtest: 多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源
-ok 238 - 多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源
-  ---
-  duration_ms: 0.734819
-  type: 'test'
-  ...
-# Subtest: 同名来源的两台设备也必须参与重叠消重，不能先在来源内相加
-ok 239 - 同名来源的两台设备也必须参与重叠消重，不能先在来源内相加
-  ---
-  duration_ms: 0.575934
-  type: 'test'
-  ...
-# Subtest: HKWasUserEntered 的手动样本在重叠区间优先于设备推断优先级
-ok 240 - HKWasUserEntered 的手动样本在重叠区间优先于设备推断优先级
-  ---
-  duration_ms: 0.826701
-  type: 'test'
-  ...
-# Subtest: UUID/ExternalUUID 优先精确去重，ExternalUUID 不同的同属性记录必须同时保留
-ok 241 - UUID/ExternalUUID 优先精确去重，ExternalUUID 不同的同属性记录必须同时保留
-  ---
-  duration_ms: 1.053573
-  type: 'test'
-  ...
-# Subtest: SyncIdentifier 只保留最高 SyncVersion，同版本再出现视为重复
-ok 242 - SyncIdentifier 只保留最高 SyncVersion，同版本再出现视为重复
-  ---
-  duration_ms: 0.696068
-  type: 'test'
-  ...
-# Subtest: ActivitySummary 覆盖圆环指标，Workout 仅形成独立摘要且不重复加入活动能量
-ok 243 - ActivitySummary 覆盖圆环指标，Workout 仅形成独立摘要且不重复加入活动能量
-  ---
-  duration_ms: 2.185302
-  type: 'test'
-  ...
-# Subtest: 新版 Workout 可从内嵌 WorkoutStatistics 读取能量和距离摘要
-ok 244 - 新版 Workout 可从内嵌 WorkoutStatistics 读取能量和距离摘要
-  ---
-  duration_ms: 0.587846
-  type: 'test'
-  ...
-# Subtest: Correlation 内嵌 Record 不会被当顶层样本重复累计
-ok 245 - Correlation 内嵌 Record 不会被当顶层样本重复累计
-  ---
-  duration_ms: 0.354932
-  type: 'test'
-  ...
-# Subtest: 未知顶层容器必须整体跳过，内嵌 Record 不能污染聚合结果
-ok 246 - 未知顶层容器必须整体跳过，内嵌 Record 不能污染聚合结果
-  ---
-  duration_ms: 0.833463
-  type: 'test'
-  ...
-# Subtest: 已知可安全略过的 Apple 顶层结构不会阻止完整快照
-ok 247 - 已知可安全略过的 Apple 顶层结构不会阻止完整快照
-  ---
-  duration_ms: 0.286915
-  type: 'test'
-  ...
-# Subtest: 只有完整闭合的 HealthData 才标记全量快照，截断 XML 必须降级为 partial
-ok 248 - 只有完整闭合的 HealthData 才标记全量快照，截断 XML 必须降级为 partial
-  ---
-  duration_ms: 0.533053
-  type: 'test'
-  ...
-# Subtest: 只有文件尾部而没有 HealthData 开头时绝不能标记全量快照
-ok 249 - 只有文件尾部而没有 HealthData 开头时绝不能标记全量快照
-  ---
-  duration_ms: 0.430883
-  type: 'test'
-  ...
-# Subtest: 未知顶层容器未闭合时即使看见根尾标签也必须降级为 partial
-ok 250 - 未知顶层容器未闭合时即使看见根尾标签也必须降级为 partial
-  ---
-  duration_ms: 0.213718
-  type: 'test'
-  ...
-# Subtest: 即使出现 HealthData 尾标签，未闭合的 Record 仍视为损坏快照
-ok 251 - 即使出现 HealthData 尾标签，未闭合的 Record 仍视为损坏快照
-  ---
-  duration_ms: 0.238295
-  type: 'test'
-  ...
 # Subtest: 来源版本、设备与创建时间在质量元数据中保留，XML 实体会解码
-ok 252 - 来源版本、设备与创建时间在质量元数据中保留，XML 实体会解码
+ok 254 - 来源版本、设备与创建时间在质量元数据中保留，XML 实体会解码
   ---
-  duration_ms: 0.588817
+  duration_ms: 1.486555
   type: 'test'
   ...
 # Subtest: 跨午夜累计样本按持续时间拆分到两个本地日
-ok 253 - 跨午夜累计样本按持续时间拆分到两个本地日
+ok 255 - 跨午夜累计样本按持续时间拆分到两个本地日
   ---
-  duration_ms: 0.554874
+  duration_ms: 0.461731
   type: 'test'
   ...
 # Subtest: 分块流式解析：标签被切成两半也不丢数据
-ok 254 - 分块流式解析：标签被切成两半也不丢数据
+ok 256 - 分块流式解析：标签被切成两半也不丢数据
   ---
-  duration_ms: 2.091026
+  duration_ms: 1.739138
   type: 'test'
   ...
 # Subtest: Record 内含子元素时不会破坏解析
-ok 255 - Record 内含子元素时不会破坏解析
+ok 257 - Record 内含子元素时不会破坏解析
   ---
-  duration_ms: 0.460738
+  duration_ms: 0.40211
   type: 'test'
   ...
 # Subtest: Health Auto Export 风格的 JSON
-ok 256 - Health Auto Export 风格的 JSON
+ok 258 - Health Auto Export 风格的 JSON
   ---
-  duration_ms: 0.537021
+  duration_ms: 0.546178
   type: 'test'
   ...
 # Subtest: JSON 平均型按日求平均，最近值按时间而不是数组顺序
-ok 257 - JSON 平均型按日求平均，最近值按时间而不是数组顺序
+ok 259 - JSON 平均型按日求平均，最近值按时间而不是数组顺序
   ---
-  duration_ms: 0.363878
+  duration_ms: 0.326846
   type: 'test'
   ...
 # Subtest: 扁平 JSON（快捷指令粘贴的格式）
-ok 258 - 扁平 JSON（快捷指令粘贴的格式）
+ok 260 - 扁平 JSON（快捷指令粘贴的格式）
   ---
-  duration_ms: 0.377834
+  duration_ms: 0.386266
   type: 'test'
   ...
 # Subtest: JSON 能量累计值保留覆盖时间，供动态预算冻结外推基准
-ok 259 - JSON 能量累计值保留覆盖时间，供动态预算冻结外推基准
+ok 261 - JSON 能量累计值保留覆盖时间，供动态预算冻结外推基准
   ---
-  duration_ms: 0.278249
+  duration_ms: 0.270781
   type: 'test'
   ...
 # Subtest: CSV 导入
-ok 260 - CSV 导入
+ok 262 - CSV 导入
   ---
-  duration_ms: 1.323977
+  duration_ms: 1.229965
   type: 'test'
   ...
 # Subtest: CSV 支持引号逗号、空值、BOM、单位表头与重复日期合并
-ok 261 - CSV 支持引号逗号、空值、BOM、单位表头与重复日期合并
+ok 263 - CSV 支持引号逗号、空值、BOM、单位表头与重复日期合并
   ---
-  duration_ms: 0.465597
+  duration_ms: 0.45474
   type: 'test'
   ...
 # Subtest: 异常健康值被隔离而不是写入
-ok 262 - 异常健康值被隔离而不是写入
+ok 264 - 异常健康值被隔离而不是写入
   ---
-  duration_ms: 0.27922
+  duration_ms: 0.245602
   type: 'test'
   ...
 # Subtest: CSV 缺少日期列时明确失败而不是产生垃圾数据
-ok 263 - CSV 缺少日期列时明确失败而不是产生垃圾数据
+ok 265 - CSV 缺少日期列时明确失败而不是产生垃圾数据
   ---
-  duration_ms: 0.361563
+  duration_ms: 0.340256
   type: 'test'
   ...
 # Subtest: 基线：体重趋势用最小二乘拟合，抗单日波动
-ok 264 - 基线：体重趋势用最小二乘拟合，抗单日波动
+ok 266 - 基线：体重趋势用最小二乘拟合，抗单日波动
   ---
-  duration_ms: 1.100531
+  duration_ms: 0.954427
   type: 'test'
   ...
 # Subtest: 基线：没有历史饮食记录时返回 null 而不是 0
-ok 265 - 基线：没有历史饮食记录时返回 null 而不是 0
+ok 267 - 基线：没有历史饮食记录时返回 null 而不是 0
   ---
-  duration_ms: 0.216583
+  duration_ms: 0.245472
   type: 'test'
   ...
 # Subtest: 单条 JSON 记录也能导入（快捷指令最容易产出这种）
-ok 266 - 单条 JSON 记录也能导入（快捷指令最容易产出这种）
+ok 268 - 单条 JSON 记录也能导入（快捷指令最容易产出这种）
   ---
-  duration_ms: 0.287516
+  duration_ms: 0.263089
   type: 'test'
   ...
 # Subtest: 字段名带多余空格 / 大小写 / 下划线都能认出来
-ok 267 - 字段名带多余空格 / 大小写 / 下划线都能认出来
+ok 269 - 字段名带多余空格 / 大小写 / 下划线都能认出来
   ---
-  duration_ms: 1.49692
+  duration_ms: 1.248042
   type: 'test'
   ...
 # Subtest: 体重的多种叫法都认得
-ok 268 - 体重的多种叫法都认得
+ok 270 - 体重的多种叫法都认得
   ---
-  duration_ms: 0.417939
+  duration_ms: 0.394419
   type: 'test'
   ...
 # Subtest: 认不出的字段会被列出来，而不是悄悄丢掉
-ok 269 - 认不出的字段会被列出来，而不是悄悄丢掉
+ok 271 - 认不出的字段会被列出来，而不是悄悄丢掉
   ---
-  duration_ms: 0.244476
+  duration_ms: 0.243099
   type: 'test'
   ...
 # Subtest: 缺少 date 时不产出垃圾数据
-ok 270 - 缺少 date 时不产出垃圾数据
+ok 272 - 缺少 date 时不产出垃圾数据
   ---
-  duration_ms: 0.17179
+  duration_ms: 0.157889
   type: 'test'
   ...
 # Subtest: 完整应用备份选错入口时给出正确恢复路径
-ok 271 - 完整应用备份选错入口时给出正确恢复路径
+ok 273 - 完整应用备份选错入口时给出正确恢复路径
   ---
-  duration_ms: 0.264172
+  duration_ms: 0.243409
   type: 'test'
   ...
 # Subtest: 日期字段的多种叫法都认得
-ok 272 - 日期字段的多种叫法都认得
+ok 274 - 日期字段的多种叫法都认得
   ---
-  duration_ms: 0.330195
+  duration_ms: 0.307847
   type: 'test'
   ...
 # Subtest: CSV 表头也走同一套归一化
-ok 273 - CSV 表头也走同一套归一化
+ok 275 - CSV 表头也走同一套归一化
   ---
-  duration_ms: 0.320838
+  duration_ms: 0.294617
   type: 'test'
   ...
 # Subtest: 识别被单位缺陷缩小一千倍的日子
-ok 274 - 识别被单位缺陷缩小一千倍的日子
+ok 276 - 识别被单位缺陷缩小一千倍的日子
   ---
-  duration_ms: 0.528014
+  duration_ms: 0.531757
   type: 'test'
   ...
 # Subtest: 修正只动能量字段，其余原样保留
-ok 275 - 修正只动能量字段，其余原样保留
+ok 277 - 修正只动能量字段，其余原样保留
   ---
-  duration_ms: 0.412429
+  duration_ms: 1.253351
   type: 'test'
   ...
 # Subtest: 历史能量修复逐字段处理，且不会碰当天未同步完的静息能量
-ok 276 - 历史能量修复逐字段处理，且不会碰当天未同步完的静息能量
+ok 278 - 历史能量修复逐字段处理，且不会碰当天未同步完的静息能量
   ---
-  duration_ms: 0.993451
+  duration_ms: 0.29694
   type: 'test'
   ...
 # Subtest: 基线先排序并截断当前日，不能偷看未来体重
-ok 277 - 基线先排序并截断当前日，不能偷看未来体重
+ok 279 - 基线先排序并截断当前日，不能偷看未来体重
   ---
-  duration_ms: 0.274732
+  duration_ms: 0.286595
   type: 'test'
   ...
 # Subtest: 修正是幂等的：再跑一次不会把正确数据放大一千倍
-ok 278 - 修正是幂等的：再跑一次不会把正确数据放大一千倍
+ok 280 - 修正是幂等的：再跑一次不会把正确数据放大一千倍
   ---
-  duration_ms: 0.285622
+  duration_ms: 0.273024
   type: 'test'
   ...
 # Subtest: 正常数据不会被误伤
-ok 279 - 正常数据不会被误伤
+ok 281 - 正常数据不会被误伤
   ---
-  duration_ms: 0.362636
+  duration_ms: 0.339325
   type: 'test'
   ...
 # Subtest: iPhone 与 Apple Watch 各写一份步数时不重复计数
-ok 280 - iPhone 与 Apple Watch 各写一份步数时不重复计数
+ok 282 - iPhone 与 Apple Watch 各写一份步数时不重复计数
   ---
-  duration_ms: 0.665059
+  duration_ms: 0.585458
   type: 'test'
   ...
 # Subtest: 只有一个来源时结果和原来完全一样
-ok 281 - 只有一个来源时结果和原来完全一样
+ok 283 - 只有一个来源时结果和原来完全一样
   ---
-  duration_ms: 0.385739
+  duration_ms: 0.334036
   type: 'test'
   ...
 # Subtest: 活动能量与静息能量同样按来源去重
-ok 282 - 活动能量与静息能量同样按来源去重
+ok 284 - 活动能量与静息能量同样按来源去重
   ---
-  duration_ms: 0.631477
+  duration_ms: 0.511996
   type: 'test'
   ...
 # Subtest: 睡眠也不会因为手机与手表各记一份而翻倍
-ok 283 - 睡眠也不会因为手机与手表各记一份而翻倍
+ok 285 - 睡眠也不会因为手机与手表各记一份而翻倍
   ---
-  duration_ms: 1.483114
+  duration_ms: 1.159128
   type: 'test'
   ...
 # Subtest: 识别生理上不可能的数值
-ok 284 - 识别生理上不可能的数值
+ok 286 - 识别生理上不可能的数值
   ---
-  duration_ms: 0.293447
+  duration_ms: 0.282979
   type: 'test'
   ...
 # Subtest: 大运动量不会被当成异常
-ok 285 - 大运动量不会被当成异常
+ok 287 - 大运动量不会被当成异常
   ---
-  duration_ms: 0.157554
+  duration_ms: 0.143959
   type: 'test'
   ...
 # Subtest: 清掉异常值时只删该删的那几项
-ok 286 - 清掉异常值时只删该删的那几项
+ok 288 - 清掉异常值时只删该删的那几项
   ---
-  duration_ms: 0.239447
+  duration_ms: 0.225452
   type: 'test'
   ...
 # Subtest: 基线平均值把不可能的数挡在外面
-ok 287 - 基线平均值把不可能的数挡在外面
+ok 289 - 基线平均值把不可能的数挡在外面
   ---
-  duration_ms: 0.237913
+  duration_ms: 0.213654
   type: 'test'
   ...
 # Subtest: 摄入均值的分母是「记了饮食的天数」，不是日历天数
-ok 288 - 摄入均值的分母是「记了饮食的天数」，不是日历天数
+ok 290 - 摄入均值的分母是「记了饮食的天数」，不是日历天数
   ---
-  duration_ms: 0.446021
+  duration_ms: 0.440879
   type: 'test'
   ...
 # Subtest: 记满之后分母跟着变大
-ok 289 - 记满之后分母跟着变大
+ok 291 - 记满之后分母跟着变大
   ---
-  duration_ms: 0.3646
+  duration_ms: 0.32944
   type: 'test'
   ...
 # Subtest: 焦耳单位不区分大小写（只有 cal / Cal 那一对需要区分）
-ok 290 - 焦耳单位不区分大小写（只有 cal / Cal 那一对需要区分）
+ok 292 - 焦耳单位不区分大小写（只有 cal / Cal 那一对需要区分）
   ---
-  duration_ms: 0.174595
+  duration_ms: 0.168476
   type: 'test'
   ...
 # Subtest: 单位换算用的是精确换算因子
-ok 291 - 单位换算用的是精确换算因子
+ok 293 - 单位换算用的是精确换算因子
   ---
-  duration_ms: 0.158735
+  duration_ms: 0.142956
   type: 'test'
   ...
 # Subtest: 碳水按 AMDR 区间判断，不再说「按剩余热量分配」
-ok 292 - 碳水按 AMDR 区间判断，不再说「按剩余热量分配」
+ok 294 - 碳水按 AMDR 区间判断，不再说「按剩余热量分配」
   ---
-  duration_ms: 1.501428
+  duration_ms: 2.246527
   type: 'test'
   ...
 # Subtest: 下限够了就是绿的，再多也不会变成警告
-ok 293 - 下限够了就是绿的，再多也不会变成警告
+ok 295 - 下限够了就是绿的，再多也不会变成警告
   ---
-  duration_ms: 0.339433
+  duration_ms: 0.454429
   type: 'test'
   ...
 # Subtest: 红色只留给真正的上限
-ok 294 - 红色只留给真正的上限
+ok 296 - 红色只留给真正的上限
   ---
-  duration_ms: 0.20401
+  duration_ms: 0.288087
   type: 'test'
   ...
 # Subtest: 热量在计划区间内是绿的，出界只到橙，永远不红
-ok 295 - 热量在计划区间内是绿的，出界只到橙，永远不红
+ok 297 - 热量在计划区间内是绿的，出界只到橙，永远不红
   ---
-  duration_ms: 0.459587
+  duration_ms: 0.629114
   type: 'test'
   ...
 # Subtest: 区间条整条线性，罩子位置只由区间本身决定
-ok 296 - 区间条整条线性，罩子位置只由区间本身决定
+ok 298 - 区间条整条线性，罩子位置只由区间本身决定
   ---
-  duration_ms: 0.36497
+  duration_ms: 0.496373
   type: 'test'
   ...
 # Subtest: 饮水只是记录，不判达标
-ok 297 - 饮水只是记录，不判达标
+ok 299 - 饮水只是记录，不判达标
   ---
-  duration_ms: 0.202117
+  duration_ms: 0.26997
   type: 'test'
   ...
 # Subtest: 八项指标各自归到该有的性质
-ok 298 - 八项指标各自归到该有的性质
+ok 300 - 八项指标各自归到该有的性质
   ---
-  duration_ms: 1.14264
+  duration_ms: 1.634639
   type: 'test'
   ...
 # Subtest: 目标为 0 或缺失时不产生 NaN
-ok 299 - 目标为 0 或缺失时不产生 NaN
+ok 301 - 目标为 0 或缺失时不产生 NaN
   ---
-  duration_ms: 0.312753
+  duration_ms: 0.397393
   type: 'test'
   ...
 # Subtest: 目标是脏数据时不许把 NaN 印到界面上
-ok 300 - 目标是脏数据时不许把 NaN 印到界面上
+ok 302 - 目标是脏数据时不许把 NaN 印到界面上
   ---
-  duration_ms: 0.727236
+  duration_ms: 1.063062
   type: 'test'
   ...
 # Subtest: 参考区间由脂肪 AMDR 反解，不是随手划的一个点
-ok 301 - 参考区间由脂肪 AMDR 反解，不是随手划的一个点
+ok 303 - 参考区间由脂肪 AMDR 反解，不是随手划的一个点
   ---
-  duration_ms: 1.450717
+  duration_ms: 0.548512
   type: 'test'
   ...
 # Subtest: 两个百分比凑成 100，落在区间里叫「结构适中」
-ok 302 - 两个百分比凑成 100，落在区间里叫「结构适中」
+ok 304 - 两个百分比凑成 100，落在区间里叫「结构适中」
   ---
-  duration_ms: 4.012057
+  duration_ms: 5.073395
   type: 'test'
   ...
 # Subtest: 当天吃得还不多时只报比例，不下结构结论
-ok 303 - 当天吃得还不多时只报比例，不下结构结论
+ok 305 - 当天吃得还不多时只报比例，不下结构结论
   ---
-  duration_ms: 0.241971
+  duration_ms: 0.231911
   type: 'test'
   ...
 # Subtest: 一口没吃时不硬凑一个比例出来
-ok 304 - 一口没吃时不硬凑一个比例出来
+ok 306 - 一口没吃时不硬凑一个比例出来
   ---
-  duration_ms: 0.18244
+  duration_ms: 0.154384
   type: 'test'
   ...
 # Subtest: 照着方案吃的人不会被判成偏碳水或偏脂肪
-ok 305 - 照着方案吃的人不会被判成偏碳水或偏脂肪
+ok 307 - 照着方案吃的人不会被判成偏碳水或偏脂肪
   ---
-  duration_ms: 42.699851
+  duration_ms: 42.155657
   type: 'test'
   ...
 # Subtest: 每个模块调用的共享函数都真的导入了
-ok 306 - 每个模块调用的共享函数都真的导入了
+ok 308 - 每个模块调用的共享函数都真的导入了
   ---
-  duration_ms: 184.957987
+  duration_ms: 184.277199
   type: 'test'
   ...
 # Subtest: 视图之间不互相 import，避免循环依赖
-ok 307 - 视图之间不互相 import，避免循环依赖
+ok 309 - 视图之间不互相 import，避免循环依赖
   ---
-  duration_ms: 1.349104
+  duration_ms: 1.233511
   type: 'test'
   ...
 # Subtest: Mifflin-St Jeor 与已知数值一致
-ok 308 - Mifflin-St Jeor 与已知数值一致
+ok 310 - Mifflin-St Jeor 与已知数值一致
   ---
-  duration_ms: 2.703578
+  duration_ms: 2.117031
   type: 'test'
   ...
 # Subtest: 有体脂率时改用 Katch-McArdle
-ok 309 - 有体脂率时改用 Katch-McArdle
+ok 311 - 有体脂率时改用 Katch-McArdle
   ---
-  duration_ms: 0.344582
+  duration_ms: 0.294306
   type: 'test'
   ...
 # Subtest: 年龄由生日推算，跨生日前后差一岁
-ok 310 - 年龄由生日推算，跨生日前后差一岁
+ok 312 - 年龄由生日推算，跨生日前后差一岁
   ---
-  duration_ms: 0.512876
+  duration_ms: 0.411013
   type: 'test'
   ...
 # Subtest: 瘦体重与 BMI 分类
-ok 311 - 瘦体重与 BMI 分类
+ok 313 - 瘦体重与 BMI 分类
   ---
-  duration_ms: 0.287155
+  duration_ms: 0.251061
   type: 'test'
   ...
 # Subtest: TDEE = BMR × 活动系数
-ok 312 - TDEE = BMR × 活动系数
+ok 314 - TDEE = BMR × 活动系数
   ---
-  duration_ms: 1.312336
+  duration_ms: 1.320874
   type: 'test'
   ...
 # Subtest: 减脂目标产生赤字，增肌产生盈余
-ok 313 - 减脂目标产生赤字，增肌产生盈余
+ok 315 - 减脂目标产生赤字，增肌产生盈余
   ---
-  duration_ms: 1.41687
+  duration_ms: 1.280102
   type: 'test'
   ...
 # Subtest: 过激速率会按体重比例、每日赤字和成人常用下限共同限制
-ok 314 - 过激速率会按体重比例、每日赤字和成人常用下限共同限制
+ok 316 - 过激速率会按体重比例、每日赤字和成人常用下限共同限制
   ---
-  duration_ms: 0.455769
+  duration_ms: 0.386296
   type: 'test'
   ...
 # Subtest: 宏量营养素分配自洽：三大宏量的热量之和与总热量闭合
-ok 315 - 宏量营养素分配自洽：三大宏量的热量之和与总热量闭合
+ok 317 - 宏量营养素分配自洽：三大宏量的热量之和与总热量闭合
   ---
-  duration_ms: 0.591252
+  duration_ms: 0.475721
   type: 'test'
   ...
 # Subtest: 蛋白质目标：减脂 > 维持，且以瘦体重为基准更高
-ok 316 - 蛋白质目标：减脂 > 维持，且以瘦体重为基准更高
+ok 318 - 蛋白质目标：减脂 > 维持，且以瘦体重为基准更高
   ---
-  duration_ms: 0.807695
+  duration_ms: 0.690557
   type: 'test'
   ...
 # Subtest: 自定义 g/kg 覆盖默认算法
-ok 317 - 自定义 g/kg 覆盖默认算法
+ok 319 - 自定义 g/kg 覆盖默认算法
   ---
-  duration_ms: 0.725712
+  duration_ms: 0.58003
   type: 'test'
   ...
 # Subtest: 非法身体信息和过高自定义蛋白不会生成伪精确结果
-ok 318 - 非法身体信息和过高自定义蛋白不会生成伪精确结果
+ok 320 - 非法身体信息和过高自定义蛋白不会生成伪精确结果
   ---
-  duration_ms: 0.996417
+  duration_ms: 0.818331
   type: 'test'
   ...
 # Subtest: 中国成人纤维与饮水参考口径
-ok 319 - 中国成人纤维与饮水参考口径
+ok 321 - 中国成人纤维与饮水参考口径
   ---
-  duration_ms: 0.493149
+  duration_ms: 0.405435
   type: 'test'
   ...
 # Subtest: 活动曲线：凌晨为 0，深夜为 1，单调不减
-ok 320 - 活动曲线：凌晨为 0，深夜为 1，单调不减
+ok 322 - 活动曲线：凌晨为 0，深夜为 1，单调不减
   ---
-  duration_ms: 0.248473
+  duration_ms: 0.215377
   type: 'test'
   ...
 # Subtest: 动态 TDEE：活动多的一天预算更高
-ok 321 - 动态 TDEE：活动多的一天预算更高
+ok 323 - 动态 TDEE：活动多的一天预算更高
   ---
-  duration_ms: 0.482188
+  duration_ms: 0.427929
   type: 'test'
   ...
 # Subtest: 动态 TDEE 优先使用健康快照覆盖时间，不受页面当前时间参数影响
-ok 322 - 动态 TDEE 优先使用健康快照覆盖时间，不受页面当前时间参数影响
+ok 324 - 动态 TDEE 优先使用健康快照覆盖时间，不受页面当前时间参数影响
   ---
-  duration_ms: 1.007728
+  duration_ms: 0.867596
   type: 'test'
   ...
 # Subtest: 动态 TDEE：清晨不会把静息能量外推成天文数字
-ok 323 - 动态 TDEE：清晨不会把静息能量外推成天文数字
+ok 325 - 动态 TDEE：清晨不会把静息能量外推成天文数字
   ---
-  duration_ms: 0.228947
+  duration_ms: 0.185411
   type: 'test'
   ...
 # Subtest: 动态 TDEE 会把已发生的活动外推到全天
-ok 324 - 动态 TDEE 会把已发生的活动外推到全天
+ok 326 - 动态 TDEE 会把已发生的活动外推到全天
   ---
-  duration_ms: 0.183062
+  duration_ms: 0.139312
   type: 'test'
   ...
 # Subtest: 动态 TDEE 与 Apple 静息+活动口径一致，不重复叠加固定 TEF
-ok 325 - 动态 TDEE 与 Apple 静息+活动口径一致，不重复叠加固定 TEF
+ok 327 - 动态 TDEE 与 Apple 静息+活动口径一致，不重复叠加固定 TEF
   ---
-  duration_ms: 0.184805
+  duration_ms: 0.137438
   type: 'test'
   ...
 # Subtest: 活动字段缺失不等于零：优先基线，无基线才用活动系数补足
-ok 326 - 活动字段缺失不等于零：优先基线，无基线才用活动系数补足
+ok 328 - 活动字段缺失不等于零：优先基线，无基线才用活动系数补足
   ---
-  duration_ms: 0.503539
+  duration_ms: 0.401689
   type: 'test'
   ...
 # Subtest: 异常活动且无历史基线时回退到静态活动量，而不是把活动清零
-ok 327 - 异常活动且无历史基线时回退到静态活动量，而不是把活动清零
+ok 329 - 异常活动且无历史基线时回退到静态活动量，而不是把活动清零
   ---
-  duration_ms: 0.169586
+  duration_ms: 0.142136
   type: 'test'
   ...
 # Subtest: 营养汇总与差额
-ok 328 - 营养汇总与差额
+ok 330 - 营养汇总与差额
   ---
-  duration_ms: 0.612662
+  duration_ms: 0.468921
   type: 'test'
   ...
 # Subtest: 凌晨报来不可能的活动能量时，热量目标不被顶高
-ok 329 - 凌晨报来不可能的活动能量时，热量目标不被顶高
+ok 331 - 凌晨报来不可能的活动能量时，热量目标不被顶高
   ---
-  duration_ms: 0.224458
+  duration_ms: 0.207886
   type: 'test'
   ...
 # Subtest: 晚上报来的多天累加值也要拦住，不能只在凌晨管用
-ok 330 - 晚上报来的多天累加值也要拦住，不能只在凌晨管用
+ok 332 - 晚上报来的多天累加值也要拦住，不能只在凌晨管用
   ---
-  duration_ms: 0.27943
+  duration_ms: 0.275358
   type: 'test'
   ...
 # Subtest: 真实的大运动量不会被上限误伤
-ok 331 - 真实的大运动量不会被上限误伤
+ok 333 - 真实的大运动量不会被上限误伤
   ---
-  duration_ms: 0.212506
+  duration_ms: 0.148775
   type: 'test'
   ...
 # Subtest: 一小时高强度训练在上限之内
-ok 332 - 一小时高强度训练在上限之内
+ok 334 - 一小时高强度训练在上限之内
   ---
-  duration_ms: 0.162312
+  duration_ms: 0.130888
   type: 'test'
   ...
 # Subtest: 静息能量在一天刚开始时本来就不被采信
-ok 333 - 静息能量在一天刚开始时本来就不被采信
+ok 335 - 静息能量在一天刚开始时本来就不被采信
   ---
-  duration_ms: 0.159117
+  duration_ms: 0.133713
   type: 'test'
   ...
 # Subtest: Mifflin-St Jeor 与原文公式逐项吻合
-ok 334 - Mifflin-St Jeor 与原文公式逐项吻合
+ok 336 - Mifflin-St Jeor 与原文公式逐项吻合
   ---
-  duration_ms: 0.249324
+  duration_ms: 0.226113
   type: 'test'
   ...
 # Subtest: Katch-McArdle 与原文公式吻合，且优先于 Mifflin
-ok 335 - Katch-McArdle 与原文公式吻合，且优先于 Mifflin
+ok 337 - Katch-McArdle 与原文公式吻合，且优先于 Mifflin
   ---
-  duration_ms: 0.226362
+  duration_ms: 0.170439
   type: 'test'
   ...
 # Subtest: Atwater 系数就是 4/4/9/7
-ok 336 - Atwater 系数就是 4/4/9/7
+ok 338 - Atwater 系数就是 4/4/9/7
   ---
-  duration_ms: 0.157494
+  duration_ms: 0.135135
   type: 'test'
   ...
 # Subtest: 脂肪当量沿用 Wishnofsky 的 7700 kcal/kg
-ok 337 - 脂肪当量沿用 Wishnofsky 的 7700 kcal/kg
+ok 339 - 脂肪当量沿用 Wishnofsky 的 7700 kcal/kg
   ---
-  duration_ms: 0.146954
+  duration_ms: 0.129126
   type: 'test'
   ...
 # Subtest: 微量目标对齐各自的权威推荐值
-ok 338 - 微量目标对齐各自的权威推荐值
+ok 340 - 微量目标对齐各自的权威推荐值
   ---
-  duration_ms: 0.197839
+  duration_ms: 0.188657
   type: 'test'
   ...
 # Subtest: 脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）
-ok 339 - 脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）
+ok 341 - 脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）
   ---
-  duration_ms: 0.335385
+  duration_ms: 0.282799
   type: 'test'
   ...
 # Subtest: 碳水区间由当天热量预算解出，照方案吃绝不会被判成「低于建议」
-ok 340 - 碳水区间由当天热量预算解出，照方案吃绝不会被判成「低于建议」
+ok 342 - 碳水区间由当天热量预算解出，照方案吃绝不会被判成「低于建议」
   ---
-  duration_ms: 23.367922
+  duration_ms: 20.122419
   type: 'test'
   ...
 # Subtest: 碳水区间的两端就是脂肪吃到 AMDR 两端时的余数
-ok 341 - 碳水区间的两端就是脂肪吃到 AMDR 两端时的余数
+ok 343 - 碳水区间的两端就是脂肪吃到 AMDR 两端时的余数
   ---
-  duration_ms: 0.27382
+  duration_ms: 0.263099
   type: 'test'
   ...
 # Subtest: 碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过
-ok 342 - 碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过
+ok 344 - 碳水低于 IOM 推荐量时会被标出来，而不是悄悄放过
   ---
-  duration_ms: 0.311801
+  duration_ms: 0.280365
   type: 'test'
   ...
 # Subtest: 活动系数用的是流传最广的那组惯例值
-ok 343 - 活动系数用的是流传最广的那组惯例值
+ok 345 - 活动系数用的是流传最广的那组惯例值
   ---
-  duration_ms: 0.175778
+  duration_ms: 0.190869
   type: 'test'
   ...
 # Subtest: 有 Apple 实测数据时不再乘活动系数，不会把运动算两遍
-ok 344 - 有 Apple 实测数据时不再乘活动系数，不会把运动算两遍
+ok 346 - 有 Apple 实测数据时不再乘活动系数，不会把运动算两遍
   ---
-  duration_ms: 0.20943
+  duration_ms: 0.194385
   type: 'test'
   ...
 # Subtest: 静息能量优先用实测，公式只是兜底
-ok 345 - 静息能量优先用实测，公式只是兜底
+ok 347 - 静息能量优先用实测，公式只是兜底
   ---
-  duration_ms: 0.216894
+  duration_ms: 0.21126
   type: 'test'
   ...
 # Subtest: 实测消耗与预计消耗分开返回，界面不能把预计说成实测
-ok 346 - 实测消耗与预计消耗分开返回，界面不能把预计说成实测
+ok 348 - 实测消耗与预计消耗分开返回，界面不能把预计说成实测
   ---
-  duration_ms: 0.197779
+  duration_ms: 0.15821
   type: 'test'
   ...
 # Subtest: 年龄是填的还是兜底猜的，必须能分辨
-ok 347 - 年龄是填的还是兜底猜的，必须能分辨
+ok 349 - 年龄是填的还是兜底猜的，必须能分辨
   ---
-  duration_ms: 0.358809
+  duration_ms: 3.444775
   type: 'test'
   ...
 # Subtest: 蛋白目标落在文献给出的区间内
-ok 348 - 蛋白目标落在文献给出的区间内
+ok 350 - 蛋白目标落在文献给出的区间内
   ---
-  duration_ms: 0.180496
+  duration_ms: 0.183067
   type: 'test'
   ...
 # Subtest: 增重的建议上沿不能照抄减重那条 1% 体重/周
-ok 349 - 增重的建议上沿不能照抄减重那条 1% 体重/周
+ok 351 - 增重的建议上沿不能照抄减重那条 1% 体重/周
   ---
-  duration_ms: 0.79421
+  duration_ms: 0.734474
   type: 'test'
   ...
 # Subtest: 建议上沿只警告不截断，硬闸门只拦离谱的量级
-ok 350 - 建议上沿只警告不截断，硬闸门只拦离谱的量级
+ok 352 - 建议上沿只警告不截断，硬闸门只拦离谱的量级
   ---
-  duration_ms: 0.271506
+  duration_ms: 0.266034
   type: 'test'
   ...
 # Subtest: 填速率时的即时提示：三档说三种话
-ok 351 - 填速率时的即时提示：三档说三种话
+ok 353 - 填速率时的即时提示：三档说三种话
   ---
-  duration_ms: 0.375139
+  duration_ms: 0.328629
   type: 'test'
   ...
 # Subtest: 照着库里现成份量记的不进记忆表
-ok 352 - 照着库里现成份量记的不进记忆表
+ok 354 - 照着库里现成份量记的不进记忆表
   ---
-  duration_ms: 1.669251
+  duration_ms: 1.396067
   type: 'test'
   ...
 # Subtest: 改过一次就记住，下次选中直接用这个数
-ok 353 - 改过一次就记住，下次选中直接用这个数
+ok 355 - 改过一次就记住，下次选中直接用这个数
   ---
-  duration_ms: 1.221436
+  duration_ms: 1.011304
   type: 'test'
   ...
 # Subtest: 已经改过的食物，改回默认份量也要记
-ok 354 - 已经改过的食物，改回默认份量也要记
+ok 356 - 已经改过的食物，改回默认份量也要记
   ---
-  duration_ms: 2.048849
+  duration_ms: 1.866992
   type: 'test'
   ...
 # Subtest: 和上次记的一样就不用再写一次库
-ok 355 - 和上次记的一样就不用再写一次库
+ok 357 - 和上次记的一样就不用再写一次库
   ---
-  duration_ms: 0.281144
+  duration_ms: 0.236128
   type: 'test'
   ...
 # Subtest: 脏数据不进表
-ok 356 - 脏数据不进表
+ok 358 - 脏数据不进表
   ---
-  duration_ms: 0.390118
+  duration_ms: 0.378044
   type: 'test'
   ...
 # Subtest: 表不会无限长，先记的先掉
-ok 357 - 表不会无限长，先记的先掉
+ok 359 - 表不会无限长，先记的先掉
   ---
-  duration_ms: 1.034047
+  duration_ms: 0.960497
   type: 'test'
   ...
 # Subtest: 记住的量对得上某一档就选那一档，对不上才落到按克输入
-ok 358 - 记住的量对得上某一档就选那一档，对不上才落到按克输入
+ok 360 - 记住的量对得上某一档就选那一档，对不上才落到按克输入
   ---
-  duration_ms: 0.4185
+  duration_ms: 0.339966
   type: 'test'
   ...
 # Subtest: qty 要一起给出来：面板上那个大数字读的是它，不是 grams
-ok 359 - qty 要一起给出来：面板上那个大数字读的是它，不是 grams
+ok 361 - qty 要一起给出来：面板上那个大数字读的是它，不是 grams
   ---
-  duration_ms: 0.259733
+  duration_ms: 0.215117
   type: 'test'
   ...
 # Subtest: 快捷指令基础配置只包含低风险的三项累计指标
-ok 360 - 快捷指令基础配置只包含低风险的三项累计指标
+ok 362 - 快捷指令基础配置只包含低风险的三项累计指标
   ---
-  duration_ms: 1.500016
+  duration_ms: 0.989391
   type: 'test'
   ...
 # Subtest: 快捷指令入口可直接打开编辑器，并明确缺失指标不能伪造为零
-ok 361 - 快捷指令入口可直接打开编辑器，并明确缺失指标不能伪造为零
+ok 363 - 快捷指令入口可直接打开编辑器，并明确缺失指标不能伪造为零
   ---
-  duration_ms: 0.34885
+  duration_ms: 0.225572
   type: 'test'
   ...
 # Subtest: 健康导出文件选择区支持键盘操作
-ok 362 - 健康导出文件选择区支持键盘操作
+ok 364 - 健康导出文件选择区支持键盘操作
   ---
-  duration_ms: 0.30567
+  duration_ms: 0.172782
   type: 'test'
   ...
 # Subtest: 步骤里写明「查找健康样本」必须接「计算统计数据 → 总计」
-ok 363 - 步骤里写明「查找健康样本」必须接「计算统计数据 → 总计」
+ok 365 - 步骤里写明「查找健康样本」必须接「计算统计数据 → 总计」
   ---
-  duration_ms: 0.313814
+  duration_ms: 0.20408
   type: 'test'
   ...
 # Subtest: 同步区列出当天实际收到的字段，缺哪项一眼可见
-ok 364 - 同步区列出当天实际收到的字段，缺哪项一眼可见
+ok 366 - 同步区列出当天实际收到的字段，缺哪项一眼可见
   ---
-  duration_ms: 0.318864
+  duration_ms: 0.203338
   type: 'test'
   ...
 # Subtest: 快捷指令排查步骤只对快捷指令上传的那天出现
-ok 365 - 快捷指令排查步骤只对快捷指令上传的那天出现
+ok 367 - 快捷指令排查步骤只对快捷指令上传的那天出现
   ---
-  duration_ms: 0.266877
+  duration_ms: 0.139011
   type: 'test'
   ...
 # Subtest: 不是每天都有的指标读到 0 不会丢掉同一次的其他字段
-ok 366 - 不是每天都有的指标读到 0 不会丢掉同一次的其他字段
+ok 368 - 不是每天都有的指标读到 0 不会丢掉同一次的其他字段
   ---
-  duration_ms: 0.350613
+  duration_ms: 0.268056
   type: 'test'
   ...
 # Subtest: 普通食物没有自选配料时也能生成记录说明
-ok 367 - 普通食物没有自选配料时也能生成记录说明
+ok 369 - 普通食物没有自选配料时也能生成记录说明
   ---
-  duration_ms: 1.705308
+  duration_ms: 1.205599
   type: 'test'
   ...
 # Subtest: v1.2 升级会迁移旧版冲突目标，不让应用在启动时崩溃
-ok 368 - v1.2 升级会迁移旧版冲突目标，不让应用在启动时崩溃
+ok 370 - v1.2 升级会迁移旧版冲突目标，不让应用在启动时崩溃
   ---
-  duration_ms: 0.39159
+  duration_ms: 2.410276
   type: 'test'
   ...
 # Subtest: 同一份健康快照随时钟前进仍使用原覆盖比例
-ok 369 - 同一份健康快照随时钟前进仍使用原覆盖比例
+ok 371 - 同一份健康快照随时钟前进仍使用原覆盖比例
   ---
-  duration_ms: 0.571355
+  duration_ms: 0.506398
   type: 'test'
   ...
 # Subtest: 旧数据可用导入时刻作覆盖时间，完全缺时间则明确回退
-ok 370 - 旧数据可用导入时刻作覆盖时间，完全缺时间则明确回退
+ok 372 - 旧数据可用导入时刻作覆盖时间，完全缺时间则明确回退
   ---
-  duration_ms: 0.317071
+  duration_ms: 0.28381
   type: 'test'
   ...
 # Subtest: 身体信息算不出目标时不会让整条流水线崩掉
-ok 371 - 身体信息算不出目标时不会让整条流水线崩掉
+ok 373 - 身体信息算不出目标时不会让整条流水线崩掉
   ---
-  duration_ms: 93.84619
+  duration_ms: 87.904077
   type: 'test'
   ...
 # Subtest: 身体信息改回可用之后立刻恢复个性化
-ok 372 - 身体信息改回可用之后立刻恢复个性化
+ok 374 - 身体信息改回可用之后立刻恢复个性化
   ---
-  duration_ms: 12.444472
+  duration_ms: 13.313863
   type: 'test'
   ...
 # Subtest: 设备记录一律盖过手填的身高体重
-ok 373 - 设备记录一律盖过手填的身高体重
+ok 375 - 设备记录一律盖过手填的身高体重
   ---
-  duration_ms: 3.078196
+  duration_ms: 4.728902
   type: 'test'
   ...
 # Subtest: 没有新记录就一直沿用上一次读到的值，并记下是哪天读的
-ok 374 - 没有新记录就一直沿用上一次读到的值，并记下是哪天读的
+ok 376 - 没有新记录就一直沿用上一次读到的值，并记下是哪天读的
   ---
-  duration_ms: 3.518597
+  duration_ms: 5.593052
   type: 'test'
   ...
 # Subtest: 设备从来没给过时才用手填值，否则新用户连目标都算不出来
-ok 375 - 设备从来没给过时才用手填值，否则新用户连目标都算不出来
+ok 377 - 设备从来没给过时才用手填值，否则新用户连目标都算不出来
   ---
-  duration_ms: 3.173233
+  duration_ms: 4.660729
   type: 'test'
   ...
 # Subtest: 只看得到未来那天的记录时不往回借
-ok 376 - 只看得到未来那天的记录时不往回借
+ok 378 - 只看得到未来那天的记录时不往回借
   ---
-  duration_ms: 3.062155
+  duration_ms: 4.717265
   type: 'test'
   ...
 # Subtest: recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一次
-ok 377 - recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一次
+ok 379 - recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一次
   ---
-  duration_ms: 49.183092
+  duration_ms: 65.986577
   type: 'test'
   ...
 # Subtest: 身体信息算不出目标时退回默认档案，并把原因交给界面去说
-ok 378 - 身体信息算不出目标时退回默认档案，并把原因交给界面去说
+ok 380 - 身体信息算不出目标时退回默认档案，并把原因交给界面去说
   ---
-  duration_ms: 8.291012
+  duration_ms: 9.754435
   type: 'test'
   ...
 # Subtest: 动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法
-ok 379 - 动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法
+ok 381 - 动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法
   ---
-  duration_ms: 4.398397
+  duration_ms: 4.221192
   type: 'test'
   ...
 # Subtest: 每个部位的主要肌肉都至少有一个动作练得到
-ok 380 - 每个部位的主要肌肉都至少有一个动作练得到
+ok 382 - 每个部位的主要肌肉都至少有一个动作练得到
   ---
-  duration_ms: 0.265434
+  duration_ms: 0.323551
   type: 'test'
   ...
 # Subtest: 杠铃卧推和哑铃卧推判为高度重复
-ok 381 - 杠铃卧推和哑铃卧推判为高度重复
+ok 383 - 杠铃卧推和哑铃卧推判为高度重复
   ---
-  duration_ms: 0.430142
+  duration_ms: 0.364573
   type: 'test'
   ...
 # Subtest: 名字像但练的不是一回事的，不判重复
-ok 382 - 名字像但练的不是一回事的，不判重复
+ok 384 - 名字像但练的不是一回事的，不判重复
   ---
-  duration_ms: 0.242321
+  duration_ms: 0.229438
   type: 'test'
   ...
 # Subtest: 名字毫不相干但主动肌相同的，能被认出来
-ok 383 - 名字毫不相干但主动肌相同的，能被认出来
+ok 385 - 名字毫不相干但主动肌相同的，能被认出来
   ---
-  duration_ms: 0.151082
+  duration_ms: 0.173853
   type: 'test'
   ...
 # Subtest: 重复时给出的替换动作，本身不与留下的动作重复
-ok 384 - 重复时给出的替换动作，本身不与留下的动作重复
+ok 386 - 重复时给出的替换动作，本身不与留下的动作重复
   ---
-  duration_ms: 0.541219
+  duration_ms: 0.645088
   type: 'test'
   ...
 # Subtest: 覆盖分析说得出这套还缺哪块肉
-ok 385 - 覆盖分析说得出这套还缺哪块肉
+ok 387 - 覆盖分析说得出这套还缺哪块肉
   ---
-  duration_ms: 0.369799
+  duration_ms: 0.390082
   type: 'test'
   ...
 # Subtest: 按部位取动作，复合动作排在前面
-ok 386 - 按部位取动作，复合动作排在前面
+ok 388 - 按部位取动作，复合动作排在前面
   ---
-  duration_ms: 0.285422
+  duration_ms: 0.227636
   type: 'test'
   ...
 # Subtest: 组合建议：重复、推拉失衡、全孤立动作都能指出来
-ok 387 - 组合建议：重复、推拉失衡、全孤立动作都能指出来
+ok 389 - 组合建议：重复、推拉失衡、全孤立动作都能指出来
   ---
-  duration_ms: 2.453353
+  duration_ms: 3.5542
   type: 'test'
   ...
 # Subtest: 纯腿日不会被推拉平衡的提示打扰
-ok 388 - 纯腿日不会被推拉平衡的提示打扰
+ok 390 - 纯腿日不会被推拉平衡的提示打扰
   ---
-  duration_ms: 0.759054
+  duration_ms: 1.039717
   type: 'test'
   ...
 # Subtest: 动作可以按中文名、拼音和肌肉搜到
-ok 389 - 动作可以按中文名、拼音和肌肉搜到
+ok 391 - 动作可以按中文名、拼音和肌肉搜到
   ---
-  duration_ms: 0.45645
+  duration_ms: 0.702305
   type: 'test'
   ...
 # Subtest: 固定器械动作足够多，每个部位都能只用器械凑出一套
-ok 390 - 固定器械动作足够多，每个部位都能只用器械凑出一套
+ok 392 - 固定器械动作足够多，每个部位都能只用器械凑出一套
   ---
-  duration_ms: 0.235749
+  duration_ms: 0.292864
   type: 'test'
   ...
 # Subtest: 还没练到某块肌肉时，给得出具体补什么动作
-ok 391 - 还没练到某块肌肉时，给得出具体补什么动作
+ok 393 - 还没练到某块肌肉时，给得出具体补什么动作
   ---
-  duration_ms: 0.15034
+  duration_ms: 0.210299
   type: 'test'
   ...
 # Subtest: 补缺口的动作不会和已选动作再重复一遍
-ok 392 - 补缺口的动作不会和已选动作再重复一遍
+ok 394 - 补缺口的动作不会和已选动作再重复一遍
   ---
-  duration_ms: 0.213849
+  duration_ms: 0.326185
   type: 'test'
   ...
 # Subtest: 缺口提示带上可以直接点的动作
-ok 393 - 缺口提示带上可以直接点的动作
+ok 395 - 缺口提示带上可以直接点的动作
   ---
-  duration_ms: 0.578688
+  duration_ms: 0.668204
   type: 'test'
   ...
 # Subtest: 重复提示里的替换动作可以一键换掉原来那个
-ok 394 - 重复提示里的替换动作可以一键换掉原来那个
+ok 396 - 重复提示里的替换动作可以一键换掉原来那个
   ---
-  duration_ms: 0.400396
+  duration_ms: 0.497955
   type: 'test'
   ...
 # Subtest: 两个动作器械相同时不说「只差器械」
-ok 395 - 两个动作器械相同时不说「只差器械」
+ok 397 - 两个动作器械相同时不说「只差器械」
   ---
-  duration_ms: 0.539345
+  duration_ms: 0.736187
   type: 'test'
   ...
 # Subtest: 替换建议优先同类：不拿孤立动作换掉复合动作
-ok 396 - 替换建议优先同类：不拿孤立动作换掉复合动作
+ok 398 - 替换建议优先同类：不拿孤立动作换掉复合动作
   ---
-  duration_ms: 0.268039
+  duration_ms: 0.388269
   type: 'test'
   ...
 # Subtest: 身体部位推荐给出四至五个互补动作，不会堆同一种模式
-ok 397 - 身体部位推荐给出四至五个互补动作，不会堆同一种模式
+ok 399 - 身体部位推荐给出四至五个互补动作，不会堆同一种模式
   ---
-  duration_ms: 0.785854
+  duration_ms: 1.006496
   type: 'test'
   ...
 # Subtest: 动作模式推荐跟随推拉腿核心选择，并给出四至五个互补动作
-ok 398 - 动作模式推荐跟随推拉腿核心选择，并给出四至五个互补动作
+ok 400 - 动作模式推荐跟随推拉腿核心选择，并给出四至五个互补动作
   ---
-  duration_ms: 1.358081
+  duration_ms: 1.173229
   type: 'test'
   ...
 # Subtest: 起手组合从复合动作打底
-ok 399 - 起手组合从复合动作打底
+ok 401 - 起手组合从复合动作打底
   ---
-  duration_ms: 0.450711
+  duration_ms: 2.516657
   type: 'test'
   ...
 # Subtest: 动作再多，建议条数也不会失控
-ok 400 - 动作再多，建议条数也不会失控
+ok 402 - 动作再多，建议条数也不会失控
   ---
-  duration_ms: 4.007618
+  duration_ms: 4.816085
   type: 'test'
   ...
 # Subtest: 提示过多时给出汇总，而不是默默吞掉
-ok 401 - 提示过多时给出汇总，而不是默默吞掉
+ok 403 - 提示过多时给出汇总，而不是默默吞掉
   ---
-  duration_ms: 0.61159
+  duration_ms: 0.534009
   type: 'test'
   ...
 # Subtest: 正常规模的一套动作不会被汇总提示打扰
-ok 402 - 正常规模的一套动作不会被汇总提示打扰
+ok 404 - 正常规模的一套动作不会被汇总提示打扰
   ---
-  duration_ms: 0.229407
+  duration_ms: 0.179302
   type: 'test'
   ...
 # Subtest: 重复提示不把话说死：重复度只看动作构成，看不出训练量和负荷
-ok 403 - 重复提示不把话说死：重复度只看动作构成，看不出训练量和负荷
+ok 405 - 重复提示不把话说死：重复度只看动作构成，看不出训练量和负荷
   ---
-  duration_ms: 0.455639
+  duration_ms: 0.457564
   type: 'test'
   ...
 # Subtest: 训练记录：坏数据清洗掉，不抛异常
-ok 404 - 训练记录：坏数据清洗掉，不抛异常
+ok 406 - 训练记录：坏数据清洗掉，不抛异常
   ---
-  duration_ms: 0.532602
+  duration_ms: 0.499488
   type: 'test'
   ...
 # Subtest: 训练量只统计真的填了的组，没填重量不冒充 0 kg
-ok 405 - 训练量只统计真的填了的组，没填重量不冒充 0 kg
+ok 407 - 训练量只统计真的填了的组，没填重量不冒充 0 kg
   ---
-  duration_ms: 0.366843
+  duration_ms: 0.371764
   type: 'test'
   ...
 # Subtest: 周训练量按日期窗口统计，窗口外的不算
-ok 406 - 周训练量按日期窗口统计，窗口外的不算
+ok 408 - 周训练量按日期窗口统计，窗口外的不算
   ---
-  duration_ms: 0.799651
+  duration_ms: 0.805462
   type: 'test'
   ...
 # Subtest: 最近练过按日期倒序，且不含当天
-ok 407 - 最近练过按日期倒序，且不含当天
+ok 409 - 最近练过按日期倒序，且不含当天
   ---
-  duration_ms: 0.3971
+  duration_ms: 0.373527
   type: 'test'
   ...
 # Subtest: 每个动作都归得进推拉腿核心，一个不落
-ok 408 - 每个动作都归得进推拉腿核心，一个不落
+ok 410 - 每个动作都归得进推拉腿核心，一个不落
   ---
-  duration_ms: 0.327641
+  duration_ms: 0.268968
   type: 'test'
   ...
 # Subtest: 髋铰链按主动肌再分一次：硬拉和背伸展在拉日，罗马尼亚硬拉在腿日
-ok 409 - 髋铰链按主动肌再分一次：硬拉和背伸展在拉日，罗马尼亚硬拉在腿日
+ok 411 - 髋铰链按主动肌再分一次：硬拉和背伸展在拉日，罗马尼亚硬拉在腿日
   ---
-  duration_ms: 0.246219
+  duration_ms: 0.24449
   type: 'test'
   ...
 # Subtest: 推日里不该混进拉的动作，反之亦然
-ok 410 - 推日里不该混进拉的动作，反之亦然
+ok 412 - 推日里不该混进拉的动作，反之亦然
   ---
-  duration_ms: 0.424131
+  duration_ms: 0.418444
   type: 'test'
   ...
 # Subtest: 四类都有足够多的动作，凑得出一次训练
-ok 411 - 四类都有足够多的动作，凑得出一次训练
+ok 413 - 四类都有足够多的动作，凑得出一次训练
   ---
-  duration_ms: 0.237352
+  duration_ms: 0.246884
   type: 'test'
   ...
 # Subtest: 动作所属分组必须包含它的主动肌
-ok 412 - 动作所属分组必须包含它的主动肌
+ok 414 - 动作所属分组必须包含它的主动肌
   ---
-  duration_ms: 0.27931
+  duration_ms: 0.294086
   type: 'test'
   ...
 # Subtest: 划船和引体一定要写上肱二头肌
-ok 413 - 划船和引体一定要写上肱二头肌
+ok 415 - 划船和引体一定要写上肱二头肌
   ---
-  duration_ms: 0.34936
+  duration_ms: 0.313345
   type: 'test'
   ...
 # Subtest: 推的动作一定要写上肱三头肌
-ok 414 - 推的动作一定要写上肱三头肌
+ok 416 - 推的动作一定要写上肱三头肌
   ---
-  duration_ms: 0.237783
+  duration_ms: 0.30343
   type: 'test'
   ...
 # Subtest: 起手组合每个都覆盖到该部位的主要肌肉，且不含高度重复
-ok 415 - 起手组合每个都覆盖到该部位的主要肌肉，且不含高度重复
+ok 417 - 起手组合每个都覆盖到该部位的主要肌肉，且不含高度重复
   ---
-  duration_ms: 0.464706
+  duration_ms: 0.750198
   type: 'test'
   ...
 # Subtest: 动作推荐避开已选动作，也避开和已选高度重合的
-ok 416 - 动作推荐避开已选动作，也避开和已选高度重合的
+ok 418 - 动作推荐避开已选动作，也避开和已选高度重合的
   ---
-  duration_ms: 0.827212
+  duration_ms: 1.253671
   type: 'test'
   ...
 # Subtest: 器械档位也管着推荐，不然列表和推荐说的不是一件事
-ok 417 - 器械档位也管着推荐，不然列表和推荐说的不是一件事
+ok 419 - 器械档位也管着推荐，不然列表和推荐说的不是一件事
   ---
-  duration_ms: 0.521973
+  duration_ms: 0.519998
   type: 'test'
   ...
 # Subtest: 选了高度重合的一对就直接给替换按钮
-ok 418 - 选了高度重合的一对就直接给替换按钮
+ok 420 - 选了高度重合的一对就直接给替换按钮
   ---
-  duration_ms: 0.61177
+  duration_ms: 0.657287
   type: 'test'
   ...
 # Subtest: 近 7 日训练记录：一行一个动作，数字全来自实际记录
-ok 419 - 近 7 日训练记录：一行一个动作，数字全来自实际记录
+ok 421 - 近 7 日训练记录：一行一个动作，数字全来自实际记录
   ---
-  duration_ms: 0.561497
+  duration_ms: 0.69219
   type: 'test'
   ...
 # Subtest: analyzeSeries 给出均值、极值与前后半段的漂移
-ok 420 - analyzeSeries 给出均值、极值与前后半段的漂移
+ok 422 - analyzeSeries 给出均值、极值与前后半段的漂移
   ---
-  duration_ms: 2.006679
+  duration_ms: 1.733239
   type: 'test'
   ...
 # Subtest: drift 用前后半段均值而不是首尾两点，单个离群值不会主导结论
-ok 421 - drift 用前后半段均值而不是首尾两点，单个离群值不会主导结论
+ok 423 - drift 用前后半段均值而不是首尾两点，单个离群值不会主导结论
   ---
-  duration_ms: 0.453095
+  duration_ms: 0.43524
   type: 'test'
   ...
 # Subtest: 样本不足时 analyzeSeries 不声称有趋势
-ok 422 - 样本不足时 analyzeSeries 不声称有趋势
+ok 424 - 样本不足时 analyzeSeries 不声称有趋势
   ---
-  duration_ms: 0.292915
+  duration_ms: 0.248076
   type: 'test'
   ...
 # Subtest: 漏记的日子不是 0：null 会被剔掉而不是当成零
-ok 423 - 漏记的日子不是 0：null 会被剔掉而不是当成零
+ok 425 - 漏记的日子不是 0：null 会被剔掉而不是当成零
   ---
-  duration_ms: 0.296182
+  duration_ms: 0.201266
   type: 'test'
   ...
 # Subtest: 空序列给出「怎么才能有数据」而不是硬凑结论
-ok 424 - 空序列给出「怎么才能有数据」而不是硬凑结论
+ok 426 - 空序列给出「怎么才能有数据」而不是硬凑结论
   ---
-  duration_ms: 1.219122
+  duration_ms: 1.027829
   type: 'test'
   ...
 # Subtest: 热量解读报出与目标的差、超标天数与走向
-ok 425 - 热量解读报出与目标的差、超标天数与走向
+ok 427 - 热量解读报出与目标的差、超标天数与走向
   ---
-  duration_ms: 0.504841
+  duration_ms: 0.413367
   type: 'test'
   ...
 # Subtest: 摄入偏低时只有连续多天才说「长期」
-ok 426 - 摄入偏低时只有连续多天才说「长期」
+ok 428 - 摄入偏低时只有连续多天才说「长期」
   ---
-  duration_ms: 0.401759
+  duration_ms: 0.362971
   type: 'test'
   ...
 # Subtest: 蛋白解读以达标率为主，平均值不能掩盖漏掉的日子
-ok 427 - 蛋白解读以达标率为主，平均值不能掩盖漏掉的日子
+ok 429 - 蛋白解读以达标率为主，平均值不能掩盖漏掉的日子
   ---
-  duration_ms: 0.323091
+  duration_ms: 0.300265
   type: 'test'
   ...
 # Subtest: 体重记录不够时说明门槛，而不是给一个假的每周变化
-ok 428 - 体重记录不够时说明门槛，而不是给一个假的每周变化
+ok 430 - 体重记录不够时说明门槛，而不是给一个假的每周变化
   ---
-  duration_ms: 0.661192
+  duration_ms: 0.576103
   type: 'test'
   ...
 # Subtest: 减脂掉得比目标多算「快」，不能带符号相减说成「慢」
-ok 429 - 减脂掉得比目标多算「快」，不能带符号相减说成「慢」
+ok 431 - 减脂掉得比目标多算「快」，不能带符号相减说成「慢」
   ---
-  duration_ms: 2.005026
+  duration_ms: 1.639857
   type: 'test'
   ...
 # Subtest: 体重往目标反方向走时直接点破，而不是报一个「慢多少」
-ok 430 - 体重往目标反方向走时直接点破，而不是报一个「慢多少」
+ok 432 - 体重往目标反方向走时直接点破，而不是报一个「慢多少」
   ---
-  duration_ms: 0.296262
+  duration_ms: 0.307236
   type: 'test'
   ...
 # Subtest: 目标是维持时不谈快慢，只说有没有稳住
-ok 431 - 目标是维持时不谈快慢，只说有没有稳住
+ok 433 - 目标是维持时不谈快慢，只说有没有稳住
   ---
-  duration_ms: 0.22027
+  duration_ms: 0.206964
   type: 'test'
   ...
 # Subtest: 摄入样本不足 3 天时不给「日均比目标差多少」的结论
-ok 432 - 摄入样本不足 3 天时不给「日均比目标差多少」的结论
+ok 434 - 摄入样本不足 3 天时不给「日均比目标差多少」的结论
   ---
-  duration_ms: 0.321559
+  duration_ms: 0.251321
   type: 'test'
   ...
 # Subtest: 蛋白样本不足时只报天数，不下达标率的判断
-ok 433 - 蛋白样本不足时只报天数，不下达标率的判断
+ok 435 - 蛋白样本不足时只报天数，不下达标率的判断
   ---
-  duration_ms: 0.226983
+  duration_ms: 0.212402
   type: 'test'
   ...
 # Subtest: 体重解读只说趋势和快慢，不直接开热量处方
-ok 434 - 体重解读只说趋势和快慢，不直接开热量处方
+ok 436 - 体重解读只说趋势和快慢，不直接开热量处方
   ---
-  duration_ms: 0.248012
+  duration_ms: 0.267605
   type: 'test'
   ...
 # Subtest: 静息心率持续上升时点名可能的原因
-ok 435 - 静息心率持续上升时点名可能的原因
+ok 437 - 静息心率持续上升时点名可能的原因
   ---
-  duration_ms: 0.191887
+  duration_ms: 0.183969
   type: 'test'
   ...
 # Subtest: 静息心率的常见范围表述与解读一致
-ok 436 - 静息心率的常见范围表述与解读一致
+ok 438 - 静息心率的常见范围表述与解读一致
   ---
-  duration_ms: 0.217465
+  duration_ms: 0.158641
   type: 'test'
   ...
 # Subtest: 热量收支样本少于 3 天时不换算成每周体重变化
-ok 437 - 热量收支样本少于 3 天时不换算成每周体重变化
+ok 439 - 热量收支样本少于 3 天时不换算成每周体重变化
   ---
-  duration_ms: 0.224087
+  duration_ms: 0.200294
   type: 'test'
   ...
 # Subtest: 睡眠不足时先建议稳定增加睡眠机会，而不是周末补觉
-ok 438 - 睡眠不足时先建议稳定增加睡眠机会，而不是周末补觉
+ok 440 - 睡眠不足时先建议稳定增加睡眠机会，而不是周末补觉
   ---
-  duration_ms: 0.269953
+  duration_ms: 0.313195
   type: 'test'
   ...
 # Subtest: 所有解读都不会输出脏值
-ok 439 - 所有解读都不会输出脏值
+ok 441 - 所有解读都不会输出脏值
   ---
-  duration_ms: 0.480416
+  duration_ms: 0.419296
   type: 'test'
   ...
 # Subtest: 「有几天低于X」只数有记录的天，不把漏记的算成 0
-ok 440 - 「有几天低于X」只数有记录的天，不把漏记的算成 0
+ok 442 - 「有几天低于X」只数有记录的天，不把漏记的算成 0
   ---
-  duration_ms: 0.644411
+  duration_ms: 0.572038
   type: 'test'
   ...
 # Subtest: 序列不是数组时不炸卡片
-ok 441 - 序列不是数组时不炸卡片
+ok 443 - 序列不是数组时不炸卡片
   ---
-  duration_ms: 0.206575
+  duration_ms: 0.156898
   type: 'test'
   ...
 # Subtest: 体重解读：涨太快也要说，而且门槛比掉太快严
-ok 442 - 体重解读：涨太快也要说，而且门槛比掉太快严
+ok 444 - 体重解读：涨太快也要说，而且门槛比掉太快严
   ---
-  duration_ms: 0.433198
+  duration_ms: 0.367647
   type: 'test'
   ...
 # Subtest: 调用方没给称重次数时不把 undefined 印出来
-ok 443 - 调用方没给称重次数时不把 undefined 印出来
+ok 445 - 调用方没给称重次数时不把 undefined 印出来
   ---
-  duration_ms: 0.195435
+  duration_ms: 0.187144
   type: 'test'
   ...
 # Subtest: 健身器械筛选由 training view 自己管理状态
-ok 444 - 健身器械筛选由 training view 自己管理状态
+ok 446 - 健身器械筛选由 training view 自己管理状态
   ---
-  duration_ms: 1.996612
+  duration_ms: 1.823265
   type: 'test'
   ...
 # Subtest: 移动端挑动作控制区保持三层结构
-ok 445 - 移动端挑动作控制区保持三层结构
+ok 447 - 移动端挑动作控制区保持三层结构
   ---
-  duration_ms: 1.549077
+  duration_ms: 1.381546
   type: 'test'
   ...
 # Subtest: 应用版本与离线缓存键同步
-ok 446 - 应用版本与离线缓存键同步
+ok 448 - 应用版本与离线缓存键同步
   ---
-  duration_ms: 0.87477
+  duration_ms: 0.80489
   type: 'test'
   ...
 # Subtest: 栏目分工：数据页看数据与走势，设置页放身体信息与维护操作
-not ok 447 - 栏目分工：数据页看数据与走势，设置页放身体信息与维护操作
+ok 449 - 栏目分工：数据页看数据与走势，设置页放身体信息与维护操作
   ---
-  duration_ms: 5.869589
+  duration_ms: 3.649175
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:34:1'
-  failureType: 'testCodeFailure'
-  error: '健康数据应排在趋势图之前'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: true
-  actual: false
-  operator: '=='
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:71:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.start (node:internal/test_runner/test:944:17)
-    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
   ...
 # Subtest: 同一批数字不在两页各写一遍
-not ok 448 - 同一批数字不在两页各写一遍
+ok 450 - 同一批数字不在两页各写一遍
   ---
-  duration_ms: 2.312329
+  duration_ms: 1.861503
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:83:1'
-  failureType: 'testCodeFailure'
-  error: '「你填的数被改过了」这类提示不能丢：rateWasClamped'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: true
-  actual: false
-  operator: '=='
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:113:12)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
   ...
 # Subtest: 份量面板正文独立滚动，记录按钮固定在不留假占位的底栏
-ok 449 - 份量面板正文独立滚动，记录按钮固定在不留假占位的底栏
+ok 451 - 份量面板正文独立滚动，记录按钮固定在不留假占位的底栏
   ---
-  duration_ms: 1.698025
+  duration_ms: 1.145257
   type: 'test'
   ...
 # Subtest: 喝水只数次数，不记毫升，也不画完成条
-ok 450 - 喝水只数次数，不记毫升，也不画完成条
+ok 452 - 喝水只数次数，不记毫升，也不画完成条
   ---
-  duration_ms: 0.610027
+  duration_ms: 0.4223
   type: 'test'
   ...
 # Subtest: 搜索先出十条，换词收回展开；没找到时给反馈入口
-ok 451 - 搜索先出十条，换词收回展开；没找到时给反馈入口
+ok 453 - 搜索先出十条，换词收回展开；没找到时给反馈入口
   ---
-  duration_ms: 0.582936
+  duration_ms: 0.403592
   type: 'test'
   ...
 # Subtest: 历史搜索按高度折叠两行，没溢出就不出「展开」
-ok 452 - 历史搜索按高度折叠两行，没溢出就不出「展开」
+ok 454 - 历史搜索按高度折叠两行，没溢出就不出「展开」
   ---
-  duration_ms: 1.214814
+  duration_ms: 0.782567
   type: 'test'
   ...
 # Subtest: 缺数据的指标画一道杠，不是整格消失
-ok 453 - 缺数据的指标画一道杠，不是整格消失
+ok 455 - 缺数据的指标画一道杠，不是整格消失
   ---
-  duration_ms: 0.52606
+  duration_ms: 0.536494
   type: 'test'
   ...
 # Subtest: 漏记的那天不能被当成 0 画进折线
-ok 454 - 漏记的那天不能被当成 0 画进折线
+ok 456 - 漏记的那天不能被当成 0 画进折线
   ---
-  duration_ms: 0.293437
+  duration_ms: 0.246554
   type: 'test'
   ...
 # Subtest: 图表 key 认不出来时退回第一张，不让整张卡消失
-ok 455 - 图表 key 认不出来时退回第一张，不让整张卡消失
+ok 457 - 图表 key 认不出来时退回第一张，不让整张卡消失
   ---
-  duration_ms: 0.661253
+  duration_ms: 0.568793
   type: 'test'
   ...
 # Subtest: 趋势卡标题固定，不跟着下拉变
-ok 456 - 趋势卡标题固定，不跟着下拉变
+ok 458 - 趋势卡标题固定，不跟着下拉变
   ---
-  duration_ms: 0.770165
+  duration_ms: 0.595593
   type: 'test'
   ...
 # Subtest: 身高体重只从 Apple 健康读，读到过就不再让人改
-ok 457 - 身高体重只从 Apple 健康读，读到过就不再让人改
+ok 459 - 身高体重只从 Apple 健康读，读到过就不再让人改
   ---
-  duration_ms: 1.104157
+  duration_ms: 0.829468
   type: 'test'
   ...
 # Subtest: 今日健康数据钉死今天，不沿用前几天的体重体脂
-ok 458 - 今日健康数据钉死今天，不沿用前几天的体重体脂
+ok 460 - 今日健康数据钉死今天，不沿用前几天的体重体脂
   ---
-  duration_ms: 1.536743
+  duration_ms: 1.438321
   type: 'test'
   ...
 # Subtest: 挑动作的两种入口都在，部位标签标出今天已练到的组
-ok 459 - 挑动作的两种入口都在，部位标签标出今天已练到的组
+ok 461 - 挑动作的两种入口都在，部位标签标出今天已练到的组
   ---
-  duration_ms: 1.729143
+  duration_ms: 1.779789
   type: 'test'
   ...
 # Subtest: 摞在一起的分段控件之间要留缝，器械档位不借趋势卡那套样式
-ok 460 - 摞在一起的分段控件之间要留缝，器械档位不借趋势卡那套样式
+ok 462 - 摞在一起的分段控件之间要留缝，器械档位不借趋势卡那套样式
   ---
-  duration_ms: 1.267813
+  duration_ms: 1.315204
   type: 'test'
   ...
 # Subtest: 动作推荐跟随部位 / 模式 / 器械，并避开已选动作
-ok 461 - 动作推荐跟随部位 / 模式 / 器械，并避开已选动作
+ok 463 - 动作推荐跟随部位 / 模式 / 器械，并避开已选动作
   ---
-  duration_ms: 1.919037
+  duration_ms: 1.912661
   type: 'test'
   ...
 # Subtest: 动作行默认只给一行：练哪儿、什么模式
-ok 462 - 动作行默认只给一行：练哪儿、什么模式
+ok 464 - 动作行默认只给一行：练哪儿、什么模式
   ---
-  duration_ms: 0.445381
+  duration_ms: 1.016111
   type: 'test'
   ...
 # Subtest: 动作列表默认只出前几个，但已选的绝不会被藏起来
-ok 463 - 动作列表默认只出前几个，但已选的绝不会被藏起来
+ok 465 - 动作列表默认只出前几个，但已选的绝不会被藏起来
   ---
-  duration_ms: 1.147779
+  duration_ms: 0.311593
   type: 'test'
   ...
 # Subtest: 可移动的卡片各自成模块，换页只是改一行 import
-ok 464 - 可移动的卡片各自成模块，换页只是改一行 import
+ok 466 - 可移动的卡片各自成模块，换页只是改一行 import
   ---
-  duration_ms: 0.814247
+  duration_ms: 0.622875
   type: 'test'
   ...
 # Subtest: Apple 健康同步与完整备份在文案和行为上明确区分
-ok 465 - Apple 健康同步与完整备份在文案和行为上明确区分
+ok 467 - Apple 健康同步与完整备份在文案和行为上明确区分
   ---
-  duration_ms: 0.79384
+  duration_ms: 0.582152
   type: 'test'
   ...
 # Subtest: 长提示在窄屏内换行并限制高度，不再形成溢出的巨型胶囊
-ok 466 - 长提示在窄屏内换行并限制高度，不再形成溢出的巨型胶囊
+ok 468 - 长提示在窄屏内换行并限制高度，不再形成溢出的巨型胶囊
   ---
-  duration_ms: 1.203823
+  duration_ms: 0.780534
   type: 'test'
   ...
 # Subtest: 数据页只留健康数据和趋势，解读收到每张图下面
-not ok 467 - 数据页只留健康数据和趋势，解读收到每张图下面
+ok 469 - 数据页只留健康数据和趋势，解读收到每张图下面
   ---
-  duration_ms: 1.784837
+  duration_ms: 2.315993
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:438:1'
-  failureType: 'testCodeFailure'
-  error: '健康数据应排在趋势图之前'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: true
-  actual: false
-  operator: '=='
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:447:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 设置从底部主栏目移到可收起的右侧抽屉，补充说明使用信息圆点
-ok 468 - 设置从底部主栏目移到可收起的右侧抽屉，补充说明使用信息圆点
+ok 470 - 设置从底部主栏目移到可收起的右侧抽屉，补充说明使用信息圆点
   ---
-  duration_ms: 1.336461
+  duration_ms: 1.2262
   type: 'test'
   ...
 # Subtest: 设置页覆盖本地模式、两种登录和互通的登录方式
-ok 469 - 设置页覆盖本地模式、两种登录和互通的登录方式
+ok 471 - 设置页覆盖本地模式、两种登录和互通的登录方式
   ---
-  duration_ms: 1.070646
+  duration_ms: 1.129333
   type: 'test'
   ...
 # Subtest: 账号冲突必须明确选择，退出使用先同步后清本机的安全流程
-ok 470 - 账号冲突必须明确选择，退出使用先同步后清本机的安全流程
+ok 472 - 账号冲突必须明确选择，退出使用先同步后清本机的安全流程
   ---
-  duration_ms: 0.841459
+  duration_ms: 0.835607
   type: 'test'
   ...
 # Subtest: 账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领
-ok 471 - 账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领
+ok 473 - 账号归属未确认时锁定业务界面和设置，只允许原账号恢复或明确认领
   ---
-  duration_ms: 1.772182
+  duration_ms: 1.469429
   type: 'test'
   ...
 # Subtest: 登录账号下恢复备份和清空会明确同步影响云端
-ok 472 - 登录账号下恢复备份和清空会明确同步影响云端
+ok 474 - 登录账号下恢复备份和清空会明确同步影响云端
   ---
-  duration_ms: 0.795132
+  duration_ms: 0.687863
   type: 'test'
   ...
 # Subtest: 含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因
-ok 473 - 含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因
+ok 475 - 含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因
   ---
-  duration_ms: 0.61687
+  duration_ms: 0.579168
   type: 'test'
   ...
 # Subtest: 趋势页的体重门槛、蛋白达标线与当前日统计口径一致
-ok 474 - 趋势页的体重门槛、蛋白达标线与当前日统计口径一致
+ok 476 - 趋势页的体重门槛、蛋白达标线与当前日统计口径一致
   ---
-  duration_ms: 1.048795
+  duration_ms: 0.879844
   type: 'test'
   ...
 # Subtest: 趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据
-ok 475 - 趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据
+ok 477 - 趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据
   ---
-  duration_ms: 0.764596
+  duration_ms: 0.716146
   type: 'test'
   ...
 # Subtest: 清补凉支持逐项选配和份量调整，记录会保存营养与配料快照
-ok 476 - 清补凉支持逐项选配和份量调整，记录会保存营养与配料快照
+ok 478 - 清补凉支持逐项选配和份量调整，记录会保存营养与配料快照
   ---
-  duration_ms: 1.590735
+  duration_ms: 1.405602
   type: 'test'
   ...
 # Subtest: 普通食物记录失败会恢复按钮，条目说明不会被底栏截断
-ok 477 - 普通食物记录失败会恢复按钮，条目说明不会被底栏截断
+ok 479 - 普通食物记录失败会恢复按钮，条目说明不会被底栏截断
   ---
-  duration_ms: 1.847143
+  duration_ms: 1.693388
   type: 'test'
   ...
 # Subtest: 脂肪计划值不再冒充上限，液体条目始终使用 ml
-ok 478 - 脂肪计划值不再冒充上限，液体条目始终使用 ml
+ok 480 - 脂肪计划值不再冒充上限，液体条目始终使用 ml
   ---
-  duration_ms: 2.585228
+  duration_ms: 2.115959
   type: 'test'
   ...
 # Subtest: 数据与趋势页显示统计截止日期，新版本可主动提示刷新
-ok 479 - 数据与趋势页显示统计截止日期，新版本可主动提示刷新
+ok 481 - 数据与趋势页显示统计截止日期，新版本可主动提示刷新
   ---
-  duration_ms: 1.629627
+  duration_ms: 1.377589
   type: 'test'
   ...
 # Subtest: 趋势页所有折线图共用同一横轴窗口
-ok 480 - 趋势页所有折线图共用同一横轴窗口
+ok 482 - 趋势页所有折线图共用同一横轴窗口
   ---
-  duration_ms: 0.647757
+  duration_ms: 0.575143
   type: 'test'
   ...
 # Subtest: 活动能量图有平均参考线，且与卡片标签同源
-ok 481 - 活动能量图有平均参考线，且与卡片标签同源
+ok 483 - 活动能量图有平均参考线，且与卡片标签同源
   ---
-  duration_ms: 0.590831
+  duration_ms: 0.46133
   type: 'test'
   ...
 # Subtest: 趋势图统计到前一天为止，当天不画也不计入
-ok 482 - 趋势图统计到前一天为止，当天不画也不计入
+ok 484 - 趋势图统计到前一天为止，当天不画也不计入
   ---
-  duration_ms: 0.940984
+  duration_ms: 0.844771
   type: 'test'
   ...
 # Subtest: 区间档位是 近 7 日 / 近 30 日 / 近 90 日 / 全部
-ok 483 - 区间档位是 近 7 日 / 近 30 日 / 近 90 日 / 全部
+ok 485 - 区间档位是 近 7 日 / 近 30 日 / 近 90 日 / 全部
   ---
-  duration_ms: 0.613193
+  duration_ms: 0.576254
   type: 'test'
   ...
 # Subtest: 只有 7 天视图开逐日标注与点选
-ok 484 - 只有 7 天视图开逐日标注与点选
+ok 486 - 只有 7 天视图开逐日标注与点选
   ---
-  duration_ms: 0.777088
+  duration_ms: 0.664538
   type: 'test'
   ...
 # Subtest: 「全部」档位附一张逐日明细表
-ok 485 - 「全部」档位附一张逐日明细表
+ok 487 - 「全部」档位附一张逐日明细表
   ---
-  duration_ms: 0.952125
+  duration_ms: 0.777209
   type: 'test'
   ...
 # Subtest: 一次点选让同一页所有图标注同一天
-ok 486 - 一次点选让同一页所有图标注同一天
+ok 488 - 一次点选让同一页所有图标注同一天
   ---
-  duration_ms: 0.873027
+  duration_ms: 0.764289
   type: 'test'
   ...
 # Subtest: 数值显示在图外，不遮挡数据点
-ok 487 - 数值显示在图外，不遮挡数据点
+ok 489 - 数值显示在图外，不遮挡数据点
   ---
-  duration_ms: 2.093441
+  duration_ms: 1.238418
   type: 'test'
   ...
 # Subtest: 每个 js 模块都在 Service Worker 的离线清单里
-ok 488 - 每个 js 模块都在 Service Worker 的离线清单里
+ok 490 - 每个 js 模块都在 Service Worker 的离线清单里
   ---
-  duration_ms: 1.179388
+  duration_ms: 1.076533
   type: 'test'
   ...
 # Subtest: Service Worker 缓存名跟着版本号走
-ok 489 - Service Worker 缓存名跟着版本号走
+ok 491 - Service Worker 缓存名跟着版本号走
   ---
-  duration_ms: 0.268741
+  duration_ms: 0.24375
   type: 'test'
   ...
 # Subtest: 账号 SDK 固定版本，应用外壳按整版原子切换并支持离线恢复
-ok 490 - 账号 SDK 固定版本，应用外壳按整版原子切换并支持离线恢复
+ok 492 - 账号 SDK 固定版本，应用外壳按整版原子切换并支持离线恢复
   ---
-  duration_ms: 0.573749
+  duration_ms: 0.48833
   type: 'test'
   ...
 # Subtest: 账号归属检查先于可交互首屏，暂时离线后可自动重连
-ok 491 - 账号归属检查先于可交互首屏，暂时离线后可自动重连
+ok 493 - 账号归属检查先于可交互首屏，暂时离线后可自动重连
   ---
-  duration_ms: 0.936055
+  duration_ms: 0.826403
   type: 'test'
   ...
 # Subtest: 启动卡住时提供只清程序缓存的自救入口，不会删除 IndexedDB 记录
-ok 492 - 启动卡住时提供只清程序缓存的自救入口，不会删除 IndexedDB 记录
+ok 494 - 启动卡住时提供只清程序缓存的自救入口，不会删除 IndexedDB 记录
   ---
-  duration_ms: 0.594408
+  duration_ms: 0.575112
   type: 'test'
   ...
 # Subtest: 生产页面只在应用启动前注入 Supabase 浏览器公开配置
-not ok 493 - 生产页面只在应用启动前注入 Supabase 浏览器公开配置
+ok 495 - 生产页面只在应用启动前注入 Supabase 浏览器公开配置
   ---
-  duration_ms: 0.404283
+  duration_ms: 0.40875
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:832:1'
-  failureType: 'testCodeFailure'
-  error: '云配置必须在 app.js 启动前注入'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected: true
-  actual: false
-  operator: '=='
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:837:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切掉
-ok 494 - 7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切掉
+ok 496 - 7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切掉
   ---
-  duration_ms: 0.341096
+  duration_ms: 0.317672
   type: 'test'
   ...
 # Subtest: 短标签不会被从中间断成两截
-ok 495 - 短标签不会被从中间断成两截
+ok 497 - 短标签不会被从中间断成两截
   ---
-  duration_ms: 1.036562
+  duration_ms: 0.959576
   type: 'test'
   ...
 # Subtest: 身体信息不可用时，界面说清是哪一条不合格
-ok 496 - 身体信息不可用时，界面说清是哪一条不合格
+ok 498 - 身体信息不可用时，界面说清是哪一条不合格
   ---
-  duration_ms: 0.600249
+  duration_ms: 0.490384
   type: 'test'
   ...
 # Subtest: 食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着
-ok 497 - 食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着
+ok 499 - 食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着
   ---
-  duration_ms: 3.446082
+  duration_ms: 3.084118
   type: 'test'
   ...
 # Subtest: 统计截止日期收在信息按钮里，不再占一整段正文
-ok 498 - 统计截止日期收在信息按钮里，不再占一整段正文
+ok 500 - 统计截止日期收在信息按钮里，不再占一整段正文
   ---
-  duration_ms: 0.555315
+  duration_ms: 0.477714
   type: 'test'
   ...
 # Subtest: 区间与图表改用下拉，不再铺一屏按钮
-ok 499 - 区间与图表改用下拉，不再铺一屏按钮
+ok 501 - 区间与图表改用下拉，不再铺一屏按钮
   ---
-  duration_ms: 0.739478
+  duration_ms: 0.414789
   type: 'test'
   ...
 # Subtest: 设置页不再把用户指向已经搬走的数据管理
-ok 500 - 设置页不再把用户指向已经搬走的数据管理
+ok 502 - 设置页不再把用户指向已经搬走的数据管理
   ---
-  duration_ms: 2.483338
+  duration_ms: 1.633227
   type: 'test'
   ...
 # Subtest: 训练计划按天落库，不再是刷新就没的页面内存
-ok 501 - 训练计划按天落库，不再是刷新就没的页面内存
+ok 503 - 训练计划按天落库，不再是刷新就没的页面内存
   ---
-  duration_ms: 0.918712
+  duration_ms: 0.559668
   type: 'test'
   ...
 # Subtest: 每个 store 都要同步到导入上限、备份校验和云同步三处
-ok 502 - 每个 store 都要同步到导入上限、备份校验和云同步三处
+ok 504 - 每个 store 都要同步到导入上限、备份校验和云同步三处
   ---
-  duration_ms: 1.091074
+  duration_ms: 0.69223
   type: 'test'
   ...
 # Subtest: 多选：单项可直接记，多项仍先放清单再一次落库
-ok 503 - 多选：单项可直接记，多项仍先放清单再一次落库
+ok 505 - 多选：单项可直接记，多项仍先放清单再一次落库
   ---
-  duration_ms: 1.378549
+  duration_ms: 0.808076
   type: 'test'
   ...
 # Subtest: 输入框有焦点时不许整页重绘，但事后要补上
-ok 504 - 输入框有焦点时不许整页重绘，但事后要补上
+ok 506 - 输入框有焦点时不许整页重绘，但事后要补上
   ---
-  duration_ms: 0.582966
+  duration_ms: 0.300446
   type: 'test'
   ...
 # Subtest: 重复提示在挑的时候就出，勾中还没提交的也算
-not ok 505 - 重复提示在挑的时候就出，勾中还没提交的也算
+ok 507 - 重复提示在挑的时候就出，勾中还没提交的也算
   ---
-  duration_ms: 0.689415
+  duration_ms: 0.737929
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1036:1'
-  failureType: 'testCodeFailure'
-  error: '整条 className 被覆盖会让空槽的隐藏样式失效，行里留一道空白'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-  actual: |-
-    /**
-     * 健身：按身体部位或动作模式挑动作，实时指出刺激高度相似的组合，并按天记下来。
-     *
-     * 计划本身存 IndexedDB（`store.saveTraining`），不再是页面内存里的一个数组——
-     * 之前刷新一下当天选的动作就全没了，记不下来的计划等于没记。
-     *
-     * 只有「当前看哪个部位 / 哪个器械档位 / 哪个动作展开着」这类纯界面状态还放模块级：
-     * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
-     */
-    
-    import { h, clearEl, mount, num, todayKey, infoTip, toast } from '../lib/utils.js';
-    import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
-    import { state, saveTraining, trainingFor } from '../lib/store.js';
-    import { selectBar } from '../lib/select-bar.js';
-    import {
-      exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
-      recommendFor, EQUIP_FILTERS, equipFilterOf,
-      sessionVolume, recentExercises, recentTrainingRows,
-      overlapScore, overlapLevel,
-    } from '../core/training.js';
-    
-    let activeGroup = 'chest';
-    /*
-     * 挑动作有两种思路：「今天练胸」按部位，「今天是推的日子」按动作模式。
-     * 分化训练用的是后者 —— 推的动作共用三角肌前束和肱三头肌，分开练等于
-     * 让这些小肌肉连着两天挨累。两种都留着，用分段控件切。
-     */
-    let pickMode = 'group';     // 'group' 按部位 | 'split' 按推拉腿
-    let activeSplit = 'push';
-    // 展开着记组数的那个动作；纯界面状态，不落库
-    let expanded = null;
-    /*
-     * 动作列表默认只出前几个。一个部位三十来个动作是整整一屏半，
-     * 而真正要挑的时候人是先切部位、再切器械档位，把范围缩到几个才开始看——
-     * 一上来就铺满，反而看不出这一档里有什么。
-     */
-    const LIST_PREVIEW = 8;
-    let showAllExercises = false;
-    // 动作列表那张卡现在看的是列表还是推荐。纯界面状态，不落库
-    let showRecommend = false;
-    /*
-     * 待加入计划的一批动作。
-     *
-     * 只放在页面内存里，勾选不写库、不重绘 —— 原先每点一个都要落库并整页重绘，
-     * 实测连点三个：页面自己滚了两次，同一行的 y 从 813 跳到 201 又跳到 897。
-     * 列表在手指底下动，第二下十有八九点错。攒够了按一次「加入计划」。
-     */
-    let pending = new Set();
-    let pickerBar = null;
-    
-    /*
-     * 健身页固定记**今天**，不跟今日 / 饮食页选的日期走。
-     * 那两页翻回昨天是为了补记饮食；训练跟着翻的话，勾一个动作会落到昨天那一天，
-     * 而页面上没有任何地方提示你正在记哪一天。历史训练去「近 7 日训练记录」看。
-     */
-    const trainingDay = () => todayKey();
-    const session = () => trainingFor(trainingDay());
-    const picked = () => session().items.map((i) => i.id);
-    
-    /** 改一天的计划：写库 → store 触发重绘，不用自己调 rerender */
-    async function updateSession(mutate) {
-      const current = session();
-      const next = mutate(current.items.map((i) => ({ ...i, sets: i.sets.map((x) => ({ ...x })) })));
-      return saveTraining(trainingDay(), { items: next });
-    }
-    
-    const cloneTrainingItem = (item) => ({
-      ...item,
-      sets: (item.sets || []).map((set) => ({ ...set })),
-    });
-    
-    async function removeExerciseWithUndo(exercise) {
-      const current = session().items;
-      const index = current.findIndex((item) => item.id === exercise.id);
-      if (index < 0) return;
-      const removed = cloneTrainingItem(current[index]);
-      await updateSession((items) => items.filter((item) => item.id !== exercise.id));
-      toast(`已移除「${exercise.name}」`, 'info', {
-        label: '撤销',
-        onClick: () => updateSession((items) => {
-          if (items.some((item) => item.id === removed.id)) return items;
-          const next = [...items];
-          next.splice(Math.min(index, next.length), 0, cloneTrainingItem(removed));
-          return next;
-        }),
-      });
-    }
-    /* 器械档位定义搬去了 core/training.js —— 推荐和动作列表得筛在同一个范围里 */
-    let equipFilter = 'all';
-    // 器械菜单属于纯界面状态：换器械会重绘，但菜单不应因此自动收起。
-    let equipMenuOpen = false;
-    
-    const pickedExercises = () => picked().map((id) => EXERCISE_BY_ID.get(id)).filter(Boolean);
-    
-    function muscleLine(e) {
-      const primary = e.primary.map((m) => MUSCLES[m]).join('、');
-      const secondary = e.secondary.map((m) => MUSCLES[m]).join('、');
-      return secondary ? `${primary}　协同：${secondary}` : primary;
-    }
-    
-    /*
-     * 部位标签上带一个点：今天已选的动作练到了这一组。
-     *
-     * 这原本是人体图唯一比这排标签多给的信息（「今天哪儿练了、哪儿空着」）。
-     * 图本身已经删掉 —— 它在真机上一块胸肌只有 19px 宽，画不出能看的解剖细节，
-     * 而正下方这排文字标签做的是同一件事，还说得更清楚。只把这条信息搬过来。
-     * 协同肌也算：卧推练到了三头，问「肩臂今天空着吗」时它不该算空着。
-     */
-    function groupTabs(rerender) {
-      const covered = coveredGroupKeys(picked());
-      return h('div.range-switch.body-part-switch.picker-scope-switch', null,
-        GROUPS.map((g) => {
-          const done = covered.has(g.key);
-          return h('button', {
-            class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
-            type: 'button', 'aria-pressed': String(activeGroup === g.key),
-            // 点是纯装饰，读屏软件按这句话来
-            'aria-label': done ? `${g.label}（今天已练到）` : g.label,
-            onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
-          }, g.label, done ? h('span.tab-dot', { 'aria-hidden': 'true' }) : null);
-        }));
-    }
-    
-    /** 身体部位 / 动作模式 —— 两种挑法之间切换 */
-    function modeTabs(rerender) {
-      return h('div.range-switch.picker-mode-switch', null,
-        [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
-          class: `chip-btn${pickMode === key ? ' active' : ''}`,
-          type: 'button', 'aria-pressed': String(pickMode === key),
-          onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
-        }, label)));
-    }
-    
-    function splitTabs(rerender) {
-      return h('div.range-switch.picker-scope-switch', null,
-        SPLITS.map((sp) => h('button', {
-          class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
-          type: 'button', 'aria-pressed': String(activeSplit === sp.key),
-          onclick: () => { activeSplit = sp.key; showAllExercises = false; rerender(); },
-        }, sp.label)));
-    }
-    
-    /*
-     * 和这个动作重合度最高的那一个，用来在挑的时候当场标出来。
-     *
-     * **勾中还没提交的那些也要算进来。** 原先只比已经在计划里的：
-     * 连勾杠铃卧推和哑铃卧推，两个都还没落库，一句提示都不出，
-     * 等按下「加入计划」之后才在训练建议里读到「这俩刺激高度相似」——
-     * 那时候人已经选完了，改起来要回头再走一遍。
-     */
-    function clashWith(e) {
-      const others = [...pickedExercises(), ...[...pending].map((id) => EXERCISE_BY_ID.get(id))]
-        .filter(Boolean);
-      let worst = null;
-      for (const other of others) {
-        if (other.id === e.id) continue;
-        const score = overlapScore(e, other);
-        if (overlapLevel(score) === 'none') continue;
-        if (!worst || score > worst.score) worst = { other, score, level: overlapLevel(score) };
-      }
-      return worst;
-    }
-    
-    /*
-     * 一行上那句重复提示；没有重复、或者这一行本来就已经选中了，都不显示。
-     *
-     * **已经选中的行不提示。** 这句话的用处是「先别点这个」——
-     * 都选完了再在两行上各写一遍「和对方几乎一样」，说的是同一件事，
-     * 而且把列表铺满红字。选完之后要看的分析在「训练建议」里。
-     *
-     * 措辞要短：这是挑动作时扫一眼的东西，不是读的。
-     */
-    function clashLine(e) {
-      if (picked().includes(e.id) || pending.has(e.id)) return null;
-      const clash = clashWith(e);
-      if (!clash) return null;
-      return clash.level === 'high'
-        ? { cls: 'ex-clash', badge: '重复', detail: `和「${clash.other.name}」重复` }
-        : { cls: 'ex-clash soft', badge: '重叠', detail: `和「${clash.other.name}」部分重叠` };
-    }
-    
-    function exerciseRow(e, rerender, lastDone) {
-      const chosen = picked().includes(e.id);
-      const marked = pending.has(e.id);
-      // 单独留住这两个节点，勾选时只改它们，不重建整行
-      const pickNode = h('span.ex-pick', null, chosen || marked ? '✓' : '＋');
-      const clashNode = h('span.ex-clash-slot', {
-        onclick: (event) => {
-          const detail = clashNode.dataset.detail;
-          if (!detail) return;
-          event.preventDefault();
-          event.stopPropagation();
-          toast(detail, 'info');
-        },
-      });
-      const row = h('button.ex-row', {
-        class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
-        type: 'button',
-        'aria-pressed': String(chosen || marked),
-        onclick: async () => {
-          // 已在计划里的：点一下就撤掉。撤销不常做，重绘一次可以接受。
-          if (chosen) {
-            await removeExerciseWithUndo(e);
-            return;
-          }
-          /*
-           * 还没加的：只改这一行的样子和底下那条多选条，不整页重绘。
-           * 走 rerender() 的话列表会重排（多出一行「与已选的X刺激高度相似」），
-           * 下一个要点的动作就跑走了 —— 这正是要避开的那件事。
-           */
-          if (pending.has(e.id)) pending.delete(e.id); else pending.add(e.id);
-          const on = pending.has(e.id);
-          row.classList.toggle('marked', on);
-          row.setAttribute('aria-pressed', String(on));
-          pickNode.textContent = on ? '✓' : '＋';
-          // 勾中一个会改变其它行「和已选的重不重」，所以整列的提示都要跟一下
-          for (const other of row.parentNode?.children || []) other.syncClash?.();
-          if (pickerBar) pickerBar.render();
-        },
-      },
-      h('div.ex-main', null,
-        h('div.ex-name', null, h('strong', null, e.name)),
-        /*
-         * 默认只给一行：主要练哪儿 · 什么模式。
-         * 原先每行都把主动肌和所有协同肌铺开（「胸大肌中部　协同：三角肌前束、肱三头肌」），
-         * 十几行叠起来全是同一批肌肉名，扫的时候反而找不到动作名在哪。
-         * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
-         */
-        h('div.ex-muscle', null,
-          `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`,
-          e.compound ? h('span.ex-tag.compound', null, '复合') : null),
-        clashNode,
-        // 标出上次练过是哪天，省得每次从头翻
-        lastDone && !chosen ? h('div.ex-last', null, `上次 ${lastDone.slice(5)}`) : null),
-      pickNode);
-    
-      /*
-       * 只改这一句提示的文字，不动行的其它部分。
-       * 走 rerender() 会重排整张列表，下一个要点的动作就跑走了。
-       */
-      row.syncClash = () => {
-        const line = clashLine(e);
-        // 保留 ex-clash-slot：整条 className 覆盖掉的话，提示消失之后
-        // `:empty { display: none }` 就不再命中，行里会留一道空白
-        clashNode.className = line ? `ex-clash-slot clash-badge ${line.cls}` : 'ex-clash-slot';
-        clashNode.textContent = line ? line.badge : '';
-        clashNode.dataset.detail = line ? line.detail : '';
-        clashNode.title = line ? line.detail : '';
-      };
-      row.syncClash();
-      return row;
-    }
-    
-    function equipMenu(rerender, all) {
-      const active = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
-      return h('div.equip-filter-wrap', null,
-        h('button.equip-filter-btn', {
-          type: 'button',
-          'aria-haspopup': 'menu',
-          'aria-expanded': String(equipMenuOpen),
-          onclick: (event) => {
-            event.stopPropagation();
-            equipMenuOpen = !equipMenuOpen;
-            rerender();
-          },
-        },
-        h('span', null, active.label),
-        h('span.equip-filter-caret', { 'aria-hidden': 'true' }, '⌄')),
-        equipMenuOpen ? h('div.equip-filter-menu', { role: 'menu', 'aria-label': '器械筛选' },
-          EQUIP_FILTERS.map((f) => {
-            const n = all.filter(f.match).length;
-            const selected = equipFilter === f.key;
-            return h('button.equip-filter-option', {
-              class: `equip-filter-option${selected ? ' active' : ''}${n ? '' : ' empty'}`,
-              type: 'button', role: 'menuitemradio', 'aria-checked': String(selected),
-              onclick: (event) => {
-                event.stopPropagation();
-                equipFilter = f.key;
-                showAllExercises = false;
-                // 选一个器械后保持菜单展开，方便连续比较；点外部或筛选按钮才收起。
-                equipMenuOpen = true;
-                rerender();
-              },
-            },
-            h('span', null, f.label),
-            h('span.equip-filter-count', null, String(n)),
-            h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? '✓' : ''));
-          })) : null);
-    }
-    
-    function pickerCard(rerender) {
-      const lastDoneAt = new Map(
-        recentExercises(state.trainingDays, { limit: 200, before: trainingDay() })
-          .map((r) => [r.exercise.id, r.date]),
-      );
-      const byGroup = pickMode === 'group';
-      const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
-      const filter = equipFilterOf(equipFilter);
-      const list = all.filter(filter.match);
-      const group = GROUPS.find((g) => g.key === activeGroup);
-      const split = SPLITS.find((sp) => sp.key === activeSplit);
-      const scopeLabel = byGroup ? group.label : `${split.label}的动作`;
-      /*
-       * 收起时也不能把已选的动作藏掉：这一行的 ✓ 就是取消选择的入口，
-       * 藏起来等于选了就撤不掉。排在第 8 个之后的已选项直接接到末尾，
-       * 不打乱原顺序（同部位是按主次排的）。
-       */
-      const chosen = new Set(picked());
-      const visible = showAllExercises
-        ? list
-        : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
-    
-      /* 全部动作与推荐组合是两种并列视图，文字直接说出当前选择，避免只写“推荐”。 */
-      const rec = showRecommend ? recommendFor({
-        mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-        selection: picked(), equip: equipFilter,
-      }) : null;
-      const viewTabs = h('div.picker-view-switch.picker-list-tabs', null,
-        [['all', '全部动作'], ['recommend', '推荐组合']].map(([key, label]) => {
-          const active = (key === 'recommend') === showRecommend;
-          return h('button', {
-            class: `chip-btn${active ? ' active' : ''}`,
-            type: 'button', 'aria-pressed': String(active),
-            onclick: () => { showRecommend = key === 'recommend'; rerender(); },
-          }, label);
-        }));
-    
-      return h('section.card.exercise-picker-card', null,
-        h('div.card-head', null,
-          h('h3', null, '挑动作'),
-          h('div.card-head-actions', null,
-            h('span.card-tag', null, showRecommend
-              ? `${rec.items.length} 个推荐`
-              : `${list.length} 个动作`),
-            showRecommend ? recommendTip() : null)),
-        modeTabs(rerender),
-        byGroup ? groupTabs(rerender) : splitTabs(rerender),
-        h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all)),
-        showRecommend
-          ? recommendBody(rec)
-          : [
-            list.length
-              ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
-              : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
-            list.length > LIST_PREVIEW ? h('button.more-btn', {
-              onclick: () => { showAllExercises = !showAllExercises; rerender(); },
-            }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
-          ],
-        // 待记录的那一批在两个视图里都留着，切过去不会让人以为勾的东西没了
-        pickerBar.el);
-    }
-    
-    /** 勾中的这一批一次加进计划：一次落库、一次重绘 */
-    async function commitPending() {
-      const ids = [...pending].filter((id) => !picked().includes(id));
-      if (!ids.length) { pending = new Set(); return; }
-      pending = new Set();
-      await updateSession((items) => [...items, ...ids.map((id) => ({ id, sets: [], done: false }))]);
-      toast(`已加入 ${ids.length} 个动作`, 'ok');
-    }
-    
-    function buildPickerBar() {
-      /*
-       * 这一条紧贴动作列表，不留上边距。
-       *
-       * 公共横幅默认带 10px 上边距，那是给饮食页用的——那边它下面还接着别的内容。
-       * 健身页里它就长在列表末尾，10px 变成一条说不出理由的空白。
-       * 只给这一处加个修饰类，不动共用样式。
-       */
-      const bar = selectBar({
-        summary: () => `已选 ${pending.size} 个动作`,
-        detail: () => [...pending]
-          .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、'),
-        actionLabel: () => '加入计划',
-        items: () => [...pending].map((id) => {
-          const e = EXERCISE_BY_ID.get(id);
-          return e ? { key: id, label: e.name, note: `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}` } : null;
-        }).filter(Boolean),
-        onRemove: (id) => { pending.delete(id); rerenderTraining?.(); },
-        onClear: () => { pending = new Set(); rerenderTraining?.(); },
-        onConfirm: () => { commitPending(); },
-      });
-      bar.el.classList.add('select-bar-tight', 'select-bar-wide');
-      return bar;
-    }
-    
-    /*
-     * 组数用一行一组，不用「组数 × 次数」两个数字。
-     * 递减组、爬坡加重这些真实练法里每组本来就不一样，压成两个数字会逼人取平均。
-     *
-     * 输入用 change 而不是 input：每敲一个字符就落库会让 iOS 在输入过程中重绘，
-     * 键盘会被收起来（视图渲染那节记过这个坑）。
-     */
-    function setRow(item, index, set) {
-      const numberInput = (key, placeholder, step) => h('input.set-input', {
-        type: 'number', inputmode: 'decimal', step, min: 0,
-        value: set[key] == null ? '' : set[key],
-        placeholder,
-        onchange: (ev) => {
-          const raw = ev.target.value.trim();
-          updateSession((items) => items.map((i) => (i.id === item.id
-            ? { ...i, sets: i.sets.map((x, k) => (k === index ? { ...x, [key]: raw === '' ? null : Number(raw) } : x)) }
-            : i)));
-        },
-      });
-      return h('div.set-row', null,
-        h('span.set-index', null, `${index + 1}`),
-        numberInput('weightKg', '重量', '0.5'),
-        h('span.set-unit', null, 'kg ×'),
-        numberInput('reps', '次数', '1'),
-        h('span.set-unit', null, '次'),
-        h('button.text-btn.danger', {
-          onclick: async () => {
-            const removed = { ...set };
-            await updateSession((items) => items.map((i) => (i.id === item.id
-              ? { ...i, sets: i.sets.filter((_, k) => k !== index) } : i)));
-            toast('已删除这一组', 'info', {
-              label: '撤销',
-              onClick: () => updateSession((items) => items.map((i) => {
-                if (i.id !== item.id) return i;
-                const sets = [...i.sets];
-                sets.splice(Math.min(index, sets.length), 0, { ...removed });
-                return { ...i, sets };
-              })),
-            });
-          },
-          'aria-label': '删除这一组',
-        }, '×'));
-    }
-    
-    function planRow(exercise, index) {
-      const item = session().items.find((i) => i.id === exercise.id) || { id: exercise.id, sets: [] };
-      const open = expanded === exercise.id;
-      const heaviest = Math.max(...item.sets.map((x) => x.weightKg || 0), 0);
-      const setSummary = item.sets.length
-        ? `${item.sets.length}组${heaviest > 0 ? ` · ${num(heaviest, 1)}kg` : ''}`
-        : '记组数';
-      return h('div.plan-row-wrap', null,
-        h('div.plan-row', null,
-          h('span.plan-index', null, String(index + 1)),
-          h('div.plan-main', null,
-            h('div.ex-name', null, h('strong', null, exercise.name),
-              h('span.ex-tag', null, EQUIPMENT[exercise.equipment])),
-            h('div.ex-muscle', null, muscleLine(exercise))),
-          h('button.text-btn', {
-            class: `text-btn${item.sets.length ? ' has-sets' : ''}`,
-            onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
-          }, setSummary),
-          h('button.text-btn.danger', {
-            onclick: () => removeExerciseWithUndo(exercise),
-          }, '移除')),
-        open ? h('div.set-editor', null,
-          item.sets.length
-            ? item.sets.map((set, k) => setRow(item, k, set))
-            : h('p.form-hint', null, '还没记组数。重量留空也可以，只记次数一样能统计组数。'),
-          h('button.secondary-btn.full', {
-            style: { marginTop: '8px' },
-            onclick: () => updateSession((items) => items.map((i) => {
-              if (i.id !== exercise.id) return i;
-              // 新的一组默认沿用上一组的重量和次数：连续几组同重量是最常见的情况
-              const last = i.sets[i.sets.length - 1];
-              return { ...i, sets: [...i.sets, { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null }] };
-            })),
-          }, item.sets.length ? '再加一组' : '加第一组')) : null);
-    }
-    
-    /*
-     * 这张卡只回答「今天选了什么、做了几组」。
-     *
-     * 原先它还兼着报「覆盖部位」和「这套动作之间没有明显重复」——
-     * 那是建议，和下面那张「训练建议」说的是同一件事，在同一屏里说两遍。
-     * 重复的提示现在提前到挑动作那一步（每行自己带一句），
-     * 需要细看的分析仍在训练建议里。这里只做记录。
-     */
-    function planCard() {
-      const list = pickedExercises();
-      // 固定记今天，标题就直说是今天，不再跟着日期变来变去
-      const dayLabel = '今日动作';
-      if (!list.length) {
-        // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
-        return h('section.card', null,
-          h('div.card-head', null, h('h3', null, dayLabel)),
-          h('p.empty-hint', null, '还没有动作，从下面按身体部位或动作模式挑选。'),
-          h('button.secondary-btn.plan-start', {
-            type: 'button',
-            onclick: () => document.querySelector('.exercise-picker-card')?.scrollIntoView({
-              behavior: 'smooth', block: 'start',
-            }),
-          }, '开始挑选'));
-      }
-      const volume = sessionVolume(session());
-      return h('section.card', null,
-        h('div.card-head', null,
-          h('h3', null, dayLabel),
-          h('div.card-head-actions', null,
-            h('span.card-tag', null, volume.sets
-              ? `${list.length} 个动作 · ${volume.sets} 组${volume.tonnage ? ` · ${num(volume.tonnage)} kg` : ''}`
-              : `${list.length} 个动作`),
-            h('button.text-btn', {
-              onclick: async () => {
-                const removed = session().items.map(cloneTrainingItem);
-                await updateSession(() => []);
-                toast('已清空今日动作', 'info', {
-                  label: '撤销',
-                  onClick: () => updateSession(() => removed.map(cloneTrainingItem)),
-                });
-              },
-            }, '清空'))),
-        h('div.plan-list', null, list.map((e, i) => planRow(e, i))));
-    }
-    
-    /*
-     * 建议里的动作名直接做成按钮。
-     * 「还没练到三角肌后束」念完还得回列表里翻，问题等于原样退回给用户；
-     * 点一下就加进今日计划（若是替换建议，同时把被换掉的那个移走）才叫建议。
-     */
-    function tipAction(a, rerender) {
-      return h('button.chip-btn.tip-action', {
-        onclick: () => {
-          updateSession((items) => {
-            const kept = a.replaces ? items.filter((i) => i.id !== a.replaces) : items;
-            return kept.some((i) => i.id === a.id) ? kept : [...kept, { id: a.id, sets: [], done: false }];
-          });
-        },
-      },
-      h('span', null, `＋ ${a.label}`),
-      a.note ? h('span.tip-action-note', null, a.note) : null);
-    }
-    
-    function adviceCard(rerender) {
-      const tips = planAdvice(pickedExercises());
-      if (!tips.length) return null;
-      return h('section.card', null,
-        h('div.card-head', null, h('h3', null, '训练建议')),
-        h('div.insight-list', null, tips.map((t) => h(`div.insight.${t.level}`, null,
-          h('div.insight-title', null, t.title),
-          h('div.insight-text', null, t.text),
-          t.actions?.length
-            ? h('div.tip-actions', null, t.actions.map((a) => tipAction(a, rerender)))
-            : null))));
-    }
-    
-    /**
-     * 近 7 日训练记录：一行一个动作。
-     *
-     * 原先这里是「近 7 天训练量」——各部位多少组的一排数字，外加一整段
-     * 「这里只报数，不给每周该练几组的结论」。那段话本身没错，可它比数字还长，
-     * 而人翻到这儿想看的是「我前天练了什么、上了多少重量」。
-     *
-     * 「训练量」这个词以后要留给「重量 × 次数」的容量，不能和训练记录混着用。
-     */
-    let expandedRow = null;
-    
-    function weeklyCard(rerender) {
-      const rows = recentTrainingRows(state.trainingDays, trainingDay());
-      if (!rows.length) {
-        return h('section.card', null,
-          h('div.card-head', null, h('h3', null, '近 7 日训练记录')),
-          h('p.empty-hint', null, '记录后显示'));
-      }
-      return h('section.card', null,
-        h('div.card-head', null,
-          h('h3', null, '近 7 日训练记录'),
-          h('span.card-tag', null, `${new Set(rows.map((r) => r.date)).size} 天 · ${rows.length} 个动作`)),
-        h('div.log-list', null, rows.map((r, i) => {
-          const key = `${r.date}:${r.id}:${i}`;
-          const open = expandedRow === key;
-          const meta = [`${r.setCount} 组`, r.weightLabel, r.repsLabel].filter(Boolean).join(' · ');
-          return h('div.log-item', null,
-            h('button.log-row', {
-              type: 'button', 'aria-expanded': String(open),
-              // 每组的重量次数收在里面：一行摊开五组，列表就没法扫了
-              onclick: () => { expandedRow = open ? null : key; rerender(); },
-            },
-            h('span.log-date', null, r.date.slice(5)),
-            h('span.log-name', null, r.name),
-            h('span.log-meta', null, meta || '未记组数')),
-            open && r.sets.length
-              ? h('div.log-sets', null, r.sets.map((set, n) => h('div.log-set', null,
-                h('span', null, `第 ${n + 1} 组`),
-                h('span', null, [
-                  set.weightKg > 0 ? `${set.weightKg} kg` : null,
-                  set.reps > 0 ? `${set.reps} 次` : null,
-                ].filter(Boolean).join(' × ') || '未记'))))
-              : null);
-        })));
-    }
-    
-    /**
-     * 动作推荐：作为「动作列表」那张卡的一个可选视图，不再单独占一张卡。
-     *
-     * 它和列表回答的是同一个问题的两半——「这个范围里有什么」和「这个范围里挑哪几个」，
-     * 所以共用一张卡、共用同一组开关（部位 / 模式 + 器械档位），点一下切过去，
-     * 再点一下切回来。原先它单独占一张卡，夹在挑动作和动作列表中间，
-     * 把真正要用的那列动作往下推了整整一屏。
-     *
-     * 挑什么、为什么挑、重复了该换成什么，全在 core/training.js 的 recommendFor 里。
-     */
-    function recommendTip() {
-      return infoTip('这几个是怎么挑的',
-        h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
-          + '复合动作排在前面。'),
-        h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
-          + '否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。'),
-        h('p', null, '这只是可编辑的起手参考，不是「必须练满」的清单。'));
-    }
-    
-    function recommendBody(rec) {
-      if (!rec.items.length && !rec.replacements.length) {
-        return h('p.empty-hint', null, '这个范围里已经没有和已选动作不重复的推荐了，换个部位或器械档位看看。');
-      }
-      return [
-        /*
-         * 已经选了高度重合的一对时，把「换掉哪个」直接摆成按钮。
-         * 只说最重的那一对：一次列五对，等于把选择的负担又推回去。
-         */
-        rec.replacements.map((r) => h('div.rec-swap', null,
-          h('div.rec-swap-title', null, r.title),
-          h('div.tip-actions', null, r.options.map((o) => h('button.chip-btn.tip-action', {
-            type: 'button',
-            onclick: () => updateSession((items) => [
-              ...items.filter((i) => i.id !== r.dropId),
-              ...(items.some((i) => i.id === o.id) ? [] : [{ id: o.id, sets: [], done: false }]),
-            ]),
-          }, h('span', null, `换成 ${o.name}`)))))),
-        h('div.rec-picks', null, rec.items.map((item) => h('div.rec-pick', null,
-          h('div.rec-pick-main', null,
-            h('div.ex-name', null, h('strong', null, item.name)),
-            // 理由用短标签，不写长句：五条推荐写成五段话，读完比自己翻列表还慢
-            h('div.rec-pick-tags', null, item.tags.map((t) => h('span.rec-tag', null, t)))),
-          /*
-           * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
-           * 而这一屏真正的主要动作是下面那个「全部加入」。
-           */
-          h('button.rec-add', {
-            type: 'button', 'aria-label': `加入 ${item.name}`,
-            onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
-              ? items
-              : [...items, { id: item.id, sets: [], done: false }])),
-          }, '＋')))),
-        rec.items.length > 1 ? h('button.secondary-btn.full', {
-          style: { marginTop: '12px' },
-          onclick: () => updateSession((items) => [
-            ...items,
-            ...rec.items.filter((r) => !items.some((i) => i.id === r.id))
-              .map((r) => ({ id: r.id, sets: [], done: false })),
-          ]),
-        }, '全部加入') : null,
-      ];
-    }
-    
-    /*
-     * 展开/收起组数编辑器这类纯界面状态改不了 store，触发不了订阅重绘，
-     * 所以留一个直接重画本页的入口。
-     */
-    let rerenderTraining = () => {};
-    
-    // 点菜单外部才关闭器械筛选；换器械本身不会把菜单折回去。
-    document.addEventListener('click', (event) => {
-      if (!equipMenuOpen || event.target.closest?.('.equip-filter-wrap')) return;
-      equipMenuOpen = false;
-      rerenderTraining();
-    });
-    
-    export function renderTraining(root) {
-      const rerender = () => renderTraining(root);
-      rerenderTraining = rerender;
-      clearEl(root);
-      // 整页重绘会把上一条的 DOM 丢掉，重新建一条；pending 本身是模块级的，留着
-      pickerBar = buildPickerBar();
-      /*
-       * 顺序按「我今天练了什么 → 接下来练什么 → 这一套行不行 → 前几天练了什么」。
-       *
-       * 推荐紧跟在控制它的那几个开关后面：换一下部位或器械就看见推荐跟着变。
-       * 原先推荐长在页面最上面，和控制它的开关隔着一整列动作，
-       * 换了档位也不知道是它在变。
-       */
-      mount(root,
-        picked().length ? planCard() : null,
-        pickerCard(rerender),
-        adviceCard(rerender),
-        weeklyCard(rerender),
-      );
-    }
-    
-  operator: 'match'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1053:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 「已选动作」只记录选了什么，不在这里给建议
-ok 506 - 「已选动作」只记录选了什么，不在这里给建议
+ok 508 - 「已选动作」只记录选了什么，不在这里给建议
   ---
-  duration_ms: 0.540979
+  duration_ms: 0.292944
   type: 'test'
   ...
 # Subtest: 说明层点外面就收起来，不必回去再点一次感叹号
-ok 507 - 说明层点外面就收起来，不必回去再点一次感叹号
+ok 509 - 说明层点外面就收起来，不必回去再点一次感叹号
   ---
-  duration_ms: 0.39704
+  duration_ms: 0.282138
   type: 'test'
   ...
 # Subtest: 饮食记录默认只读，按「编辑」才能改克数或删除
-ok 508 - 饮食记录默认只读，按「编辑」才能改克数或删除
+ok 510 - 饮食记录默认只读，按「编辑」才能改克数或删除
   ---
-  duration_ms: 0.62743
+  duration_ms: 0.392846
   type: 'test'
   ...
 # Subtest: 碳水脂肪合成一条，比例和克数都要在上面
-ok 509 - 碳水脂肪合成一条，比例和克数都要在上面
+ok 511 - 碳水脂肪合成一条，比例和克数都要在上面
   ---
-  duration_ms: 4.961937
+  duration_ms: 2.774247
   type: 'test'
   ...
-# Subtest: 速率越线在主卡上说，不藏进感叹号
-not ok 510 - 速率越线在主卡上说，不藏进感叹号
+# Subtest: 速率越过建议只在输入时即时提示，不常驻今日主卡
+ok 512 - 速率越过建议只在输入时即时提示，不常驻今日主卡
   ---
-  duration_ms: 0.486517
+  duration_ms: 0.268116
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1187:1'
-  failureType: 'testCodeFailure'
-  error: '主卡上没有速率说明'
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-  actual: |-
-    function heroCard(advice, targets, derived) {
-      const { status, gaps } = advice;
-      const metrics = dailyMetrics(targets, gaps, derived.health?.waterCount);
-      const kcal = metrics.find((m) => m.key === 'kcal');
-      const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
-    
-      
-      const ringColor = status.level === 'good' ? 'var(--accent)' : 'var(--warn)';
-    
-      return h(`section.card.hero.${status.level}`, null,
-        h('div.hero-head', null,
-          h('div.hero-head-main', null,
-            h('span.status-pill', null, LEVEL_TEXT[status.level]),
-            h('h2', null, status.headline)),
-          heroInfo(derived, targets)),
-        h('p.hero-detail', null, status.detail),
-    
-        h('div.hero-body', null,
-          h('div.hero-ring', null,
-            ring({
-              pct: gaps.kcal.pct,
-              size: 104,
-              stroke: 10,
-              label: num(kcal.eaten),
-              sub: `/ ${num(targets.kcal)} kcal`,
-              color: ringColor,
-            })),
-          energyBalance(derived, targets)),
-    
-        h('div.metric-list', null,
-          metricRow(by.protein),
-          splitRow(macroSplit(targets, gaps))),
-        h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
-        energyFreshness(derived),
-      );
-    }
-    
-    
-  operator: 'match'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1196:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 填目标速率时给出即时判断，离谱的存不下去
-ok 511 - 填目标速率时给出即时判断，离谱的存不下去
+ok 513 - 填目标速率时给出即时判断，离谱的存不下去
   ---
-  duration_ms: 0.321409
+  duration_ms: 0.211351
   type: 'test'
   ...
 # Subtest: 设置主页只列五组，点进去才是表单
-not ok 512 - 设置主页只列五组，点进去才是表单
+ok 514 - 设置主页只列五组，点进去才是表单
   ---
-  duration_ms: 2.523944
+  duration_ms: 1.33199
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1227:1'
-  failureType: 'testCodeFailure'
-  error: |-
-    Expected values to be strictly deep-equal:
-    + actual - expected
-    
-      [
-        '身体与目标',
-        '账号与同步',
-    +   '导入与备份',
-    -   '数据管理',
-        '计算与显示',
-        '关于与反馈'
-      ]
-    
-  code: 'ERR_ASSERTION'
-  name: 'AssertionError'
-  expected:
-    0: '身体与目标'
-    1: '账号与同步'
-    2: '数据管理'
-    3: '计算与显示'
-    4: '关于与反馈'
-  actual:
-    0: '身体与目标'
-    1: '账号与同步'
-    2: '导入与备份'
-    3: '计算与显示'
-    4: '关于与反馈'
-  operator: 'deepStrictEqual'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/ui.test.js:1230:10)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 顶栏日期只印一次，不跟日期走的页面也不写「数据截至」
-ok 513 - 顶栏日期只印一次，不跟日期走的页面也不写「数据截至」
+ok 515 - 顶栏日期只印一次，不跟日期走的页面也不写「数据截至」
   ---
-  duration_ms: 0.576885
+  duration_ms: 0.418925
   type: 'test'
   ...
 # Subtest: 数据页、趋势和健身页都不跟所选日期走
-ok 514 - 数据页、趋势和健身页都不跟所选日期走
+ok 516 - 数据页、趋势和健身页都不跟所选日期走
   ---
-  duration_ms: 1.177905
+  duration_ms: 0.667993
   type: 'test'
   ...
 # Subtest: 返回箭头是描边图标，不是打出来的字符
-ok 515 - 返回箭头是描边图标，不是打出来的字符
+ok 517 - 返回箭头是描边图标，不是打出来的字符
   ---
-  duration_ms: 1.292058
+  duration_ms: 0.754905
   type: 'test'
   ...
 # Subtest: 设置里展开的折叠块不会被一次落库收回去
-ok 516 - 设置里展开的折叠块不会被一次落库收回去
+ok 518 - 设置里展开的折叠块不会被一次落库收回去
   ---
-  duration_ms: 0.84247
+  duration_ms: 0.585428
   type: 'test'
   ...
 # Subtest: 睡眠和锻炼写成小时加分钟，不写小数小时
-ok 517 - 睡眠和锻炼写成小时加分钟，不写小数小时
+ok 519 - 睡眠和锻炼写成小时加分钟，不写小数小时
   ---
-  duration_ms: 1.583511
+  duration_ms: 0.878452
   type: 'test'
   ...
 # Subtest: 底部安全区只在盖住视口的那一层算，别处不许再加一遍
-ok 518 - 底部安全区只在盖住视口的那一层算，别处不许再加一遍
+ok 520 - 底部安全区只在盖住视口的那一层算，别处不许再加一遍
   ---
-  duration_ms: 1.966535
+  duration_ms: 1.159148
   type: 'test'
   ...
 # Subtest: 健身多选条跨过内容区底部留白，紧邻底栏
-ok 519 - 健身多选条跨过内容区底部留白，紧邻底栏
+ok 521 - 健身多选条跨过内容区底部留白，紧邻底栏
   ---
-  duration_ms: 1.326993
+  duration_ms: 0.770058
   type: 'test'
   ...
 # Subtest: 饮食记录编辑态能改餐次
-ok 520 - 饮食记录编辑态能改餐次
+ok 522 - 饮食记录编辑态能改餐次
   ---
-  duration_ms: 1.061248
+  duration_ms: 0.781225
   type: 'test'
   ...
 # Subtest: 饮食与训练的轻量删除都能原样撤销
-ok 521 - 饮食与训练的轻量删除都能原样撤销
+ok 523 - 饮食与训练的轻量删除都能原样撤销
   ---
-  duration_ms: 2.157211
+  duration_ms: 1.741421
   type: 'test'
   ...
 # Subtest: 搜索结果整行开份量面板，份量确认后可直接记录或继续添加
-ok 522 - 搜索结果整行开份量面板，份量确认后可直接记录或继续添加
+ok 524 - 搜索结果整行开份量面板，份量确认后可直接记录或继续添加
   ---
-  duration_ms: 0.667083
+  duration_ms: 0.63325
   type: 'test'
   ...
 # Subtest: 窗口是往前数 7 个日历日，含当天
-ok 523 - 窗口是往前数 7 个日历日，含当天
+ok 525 - 窗口是往前数 7 个日历日，含当天
   ---
-  duration_ms: 2.753371
+  duration_ms: 2.367881
   type: 'test'
   ...
 # Subtest: 日期串坏掉时返回 null，不炸整张卡
-ok 524 - 日期串坏掉时返回 null，不炸整张卡
+ok 526 - 日期串坏掉时返回 null，不炸整张卡
   ---
-  duration_ms: 0.662335
+  duration_ms: 0.602263
   type: 'test'
   ...
 # Subtest: 什么数据都没有时也给得出一张小结
-not ok 525 - 什么数据都没有时也给得出一张小结
+ok 527 - 什么数据都没有时也给得出一张小结
   ---
-  duration_ms: 0.674307
+  duration_ms: 0.510695
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:25:1'
-  failureType: 'testCodeFailure'
-  error: "Cannot read properties of undefined (reading 'value')"
-  code: 'ERR_TEST_FAILURE'
-  name: 'TypeError'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:31:36)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 摄入的分母是有饮食记录的天数，不是日历天数
-ok 526 - 摄入的分母是有饮食记录的天数，不是日历天数
+ok 528 - 摄入的分母是有饮食记录的天数，不是日历天数
   ---
-  duration_ms: 0.758483
+  duration_ms: 0.624197
   type: 'test'
   ...
 # Subtest: 样本少于三天不给日均
-ok 527 - 样本少于三天不给日均
+ok 529 - 样本少于三天不给日均
   ---
-  duration_ms: 0.726634
+  duration_ms: 0.553039
   type: 'test'
   ...
 # Subtest: 蛋白达标按目标的九成算，差一两克不算没达标
-ok 528 - 蛋白达标按目标的九成算，差一两克不算没达标
+ok 530 - 蛋白达标按目标的九成算，差一两克不算没达标
   ---
-  duration_ms: 0.936505
+  duration_ms: 0.667913
   type: 'test'
   ...
 # Subtest: 体重报首末差，不做拟合
-ok 529 - 体重报首末差，不做拟合
+ok 531 - 体重报首末差，不做拟合
   ---
-  duration_ms: 0.631927
+  duration_ms: 0.510454
   type: 'test'
   ...
 # Subtest: 窗口外的数据不算进来
-not ok 530 - 窗口外的数据不算进来
+ok 532 - 窗口外的数据不算进来
   ---
-  duration_ms: 0.384427
+  duration_ms: 0.292032
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:84:1'
-  failureType: 'testCodeFailure'
-  error: "Cannot read properties of undefined (reading 'value')"
-  code: 'ERR_TEST_FAILURE'
-  name: 'TypeError'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:93:36)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
-# Subtest: 训练只报做了几次几组，不下「该练几组」的结论
-not ok 531 - 训练只报做了几次几组，不下「该练几组」的结论
+# Subtest: 近 7 日速览不重复健身页的力量训练次数和组数
+ok 533 - 近 7 日速览不重复健身页的力量训练次数和组数
   ---
-  duration_ms: 0.667996
+  duration_ms: 0.675204
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:97:1'
-  failureType: 'testCodeFailure'
-  error: "Cannot read properties of undefined (reading 'value')"
-  code: 'ERR_TEST_FAILURE'
-  name: 'TypeError'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:106:36)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 脏数据不该让小结抛异常
-ok 532 - 脏数据不该让小结抛异常
+ok 534 - 脏数据不该让小结抛异常
   ---
-  duration_ms: 0.89616
+  duration_ms: 0.885243
   type: 'test'
   ...
 # Subtest: 累计收支只算同时有摄入和消耗的日子
-ok 533 - 累计收支只算同时有摄入和消耗的日子
+ok 535 - 累计收支只算同时有摄入和消耗的日子
   ---
-  duration_ms: 2.205109
+  duration_ms: 1.33223
   type: 'test'
   ...
 # Subtest: 配对数据不足时直说不足，不硬凑一个数
-ok 534 - 配对数据不足时直说不足，不硬凑一个数
+ok 536 - 配对数据不足时直说不足，不硬凑一个数
   ---
-  duration_ms: 0.278149
+  duration_ms: 0.284943
   type: 'test'
   ...
 # Subtest: 日均锻炼取设备分钟，不拿力量训练次数顶替
-not ok 535 - 日均锻炼取设备分钟，不拿力量训练次数顶替
+ok 537 - 日均锻炼取设备分钟，不拿力量训练次数顶替
   ---
-  duration_ms: 0.433177
+  duration_ms: 0.344823
   type: 'test'
-  location: '/home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:170:1'
-  failureType: 'testCodeFailure'
-  error: "Cannot read properties of undefined (reading 'value')"
-  code: 'ERR_TEST_FAILURE'
-  name: 'TypeError'
-  stack: |-
-    TestContext.<anonymous> (file:///home/runner/work/Fitness-and-health/Fitness-and-health/test/weekly-summary.test.js:182:28)
-    Test.runInAsyncScope (node:async_hooks:214:14)
-    Test.run (node:internal/test_runner/test:1047:25)
-    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
-    Test.postRun (node:internal/test_runner/test:1173:19)
-    Test.run (node:internal/test_runner/test:1101:12)
-    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
   ...
 # Subtest: 设备数据太少时不给日均，缺测的日子不进分母
-ok 536 - 设备数据太少时不给日均，缺测的日子不进分母
+ok 538 - 设备数据太少时不给日均，缺测的日子不进分母
   ---
-  duration_ms: 0.229117
+  duration_ms: 0.22407
   type: 'test'
   ...
-1..536
-# tests 536
+1..538
+# tests 538
 # suites 0
-# pass 524
-# fail 12
+# pass 538
+# fail 0
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2057.82647
+# duration_ms 1941.550349
