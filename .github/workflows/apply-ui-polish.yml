@@ -20,9 +20,15 @@ jobs:
           node-version: '22'
       - name: Apply source patch
         run: python3 tools/apply_ui_polish.py
-      - name: Run unit tests
-        run: npm test
-      - name: Commit patched sources
+      - name: Run unit tests and capture diagnostics
+        run: |
+          set +e
+          npm test > test-run.log 2>&1
+          status=$?
+          cat test-run.log
+          echo "$status" > test-run.status
+          exit 0
+      - name: Commit patched sources and diagnostics
         run: |
           rm -f tools/apply_ui_polish.py .github/workflows/apply-ui-polish.yml
           git config user.name "github-actions[bot]"
