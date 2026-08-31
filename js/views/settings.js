@@ -12,6 +12,7 @@ import { h, clearEl, toast, mount, num, infoTip, confirmAction, field, todayKey 
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
+import { takeIntent } from '../lib/nav.js';
 import { GOALS } from '../core/nutrition.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
@@ -555,7 +556,7 @@ function sectionRow(section, account, rerender) {
 const SECTIONS = [
   { key: 'body', label: '身体与目标' },
   { key: 'account', label: '账号与同步' },
-  { key: 'data', label: '数据管理' },
+  { key: 'data', label: '导入与备份' },
   { key: 'calc', label: '计算与显示' },
   { key: 'about', label: '关于与反馈' },
 ];
@@ -571,6 +572,10 @@ function backBar(label, rerender) {
 
 export function renderSettings(root) {
   const rerender = () => renderSettings(root);
+  const intent = takeIntent();
+  if (intent?.settingsSection && SECTIONS.some((x) => x.key === intent.settingsSection)) {
+    openSection = intent.settingsSection;
+  }
   clearEl(root);
   const slot = h('div.account-slot');
   renderAccountSlot(slot);

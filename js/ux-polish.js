@@ -26,62 +26,6 @@ function enhanceHealthContext() {
   document.documentElement.classList.toggle('ux-health-page', Boolean(document.querySelector('.trend-card')));
 }
 
-function enhanceTraining() {
-  const picker = document.querySelector('.exercise-picker-card');
-  if (!picker) return;
-
-  /* 没有今日动作时，直接从“挑动作”开始，不先摆一张空卡。 */
-  const emptyPlan = [...document.querySelectorAll('#view > .card')]
-    .find((card) => card.querySelector('.plan-start'));
-  if (emptyPlan) emptyPlan.hidden = true;
-
-  /* 器械从常驻的一整排收成一个筛选按钮；原按钮本身直接搬进去，事件不丢。 */
-  if (!picker.querySelector('.ux-equip-filter')) {
-    const switches = [...picker.querySelectorAll(':scope > .range-switch')];
-    const equipment = switches.find((row) => [...row.querySelectorAll('button')]
-      .some((button) => /固定器械|自由重量|徒手/.test(button.textContent || '')));
-    if (equipment) {
-      const active = equipment.querySelector('button.active');
-      const current = String(active?.textContent || '全部').replace(/\s+\d+\s*$/, '').trim();
-      const details = document.createElement('details');
-      details.className = 'ux-equip-filter';
-      const summary = document.createElement('summary');
-      summary.textContent = `筛选 · ${current}`;
-      const menu = document.createElement('div');
-      menu.className = 'ux-equip-menu';
-      while (equipment.firstChild) menu.append(equipment.firstChild);
-      details.append(summary, menu);
-      equipment.replaceWith(details);
-    }
-  }
-
-  picker.querySelector('.picker-view-switch')?.classList.add('ux-list-tabs');
-
-  /* 未选统一描边＋，待选/已选统一 ✓。 */
-  picker.querySelectorAll('.ex-row').forEach((row) => {
-    const pick = row.querySelector('.ex-pick');
-    if (!pick) return;
-    pick.textContent = row.getAttribute('aria-pressed') === 'true' ? '✓' : '＋';
-  });
-
-  /* 长句压成“重复/重叠”标签；点标签才看具体和哪个动作冲突。 */
-  picker.querySelectorAll('.ex-clash-slot').forEach((slot) => {
-    const text = String(slot.dataset.uxDetail || slot.textContent || '').trim();
-    if (!text) return;
-    if (!slot.dataset.uxDetail) slot.dataset.uxDetail = text;
-    slot.textContent = /部分重叠/.test(text) ? '重叠' : '重复';
-    slot.classList.add('ux-clash-badge');
-    slot.title = text;
-    if (slot.dataset.uxBound === '1') return;
-    slot.dataset.uxBound = '1';
-    slot.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toast(slot.dataset.uxDetail, 'info');
-    });
-  });
-}
-
 function numberFrom(row, selector) {
   const text = row?.querySelector(selector)?.textContent || '';
   const match = String(text).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
@@ -141,7 +85,6 @@ function enhanceImpactSplit() {
 
 function enhance() {
   enhanceHealthContext();
-  enhanceTraining();
   enhanceImpactSplit();
 }
 

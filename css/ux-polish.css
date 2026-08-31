@@ -1,4 +1,4 @@
-/* v2.10.0：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
+/* v2.10.1：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
@@ -96,57 +96,44 @@
 /* 11a：没有动作时从挑选器直接开始；旧空卡由精修脚本标 hidden。 */
 #view > .card[hidden] { display: none !important; }
 
-/* 12a：器械筛选收进一个按钮，动作/推荐变成列表内的标签。 */
-.ux-equip-filter {
-  position: relative;
-  margin-top: 8px;
+/* 12a/13a：健身挑选器由 training.js 原生渲染，不再做 DOM 二次改造。 */
+.picker-mode-switch .chip-btn {
+  flex: 1 1 0;
+  min-height: 44px;
 }
-.ux-equip-filter > summary {
-  list-style: none;
-  width: fit-content;
-  min-height: 38px;
-  padding: 7px 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--card-2);
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
+.picker-scope-switch {
+  width: max-content;
+  max-width: 100%;
+  gap: 4px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
 }
-.ux-equip-filter > summary::-webkit-details-marker { display: none; }
-.ux-equip-filter > summary::after { content: '⌄'; margin-left: 2px; font-size: 12px; }
-.ux-equip-filter[open] > summary {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
-  background: var(--accent-soft);
+.picker-scope-switch::-webkit-scrollbar { display: none; }
+.picker-scope-switch .chip-btn {
+  flex: 0 0 68px;
+  min-width: 68px;
+  min-height: 44px;
+  padding: 6px 4px;
 }
-.ux-equip-menu {
-  margin-top: 8px;
-  padding: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  border-radius: var(--r-md);
-  background: var(--card-2);
-}
-.ux-equip-menu .chip-btn { flex: 1 1 auto; }
 
-.picker-view-switch.ux-list-tabs {
-  margin-top: 10px;
-  padding: 0;
+.picker-list-toolbar {
+  position: relative;
   display: flex;
-  gap: 18px;
-  background: transparent;
-  border-radius: 0;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 10px;
   border-bottom: 1px solid var(--hairline);
 }
-.picker-view-switch.ux-list-tabs .chip-btn {
+.picker-view-switch {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 18px;
+}
+.picker-view-switch .chip-btn {
   flex: 0 0 auto;
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 2px 8px;
   border: 0;
   border-radius: 0;
@@ -154,14 +141,82 @@
   color: var(--muted);
   font-weight: 600;
 }
-.picker-view-switch.ux-list-tabs .chip-btn.active {
+.picker-view-switch .chip-btn.active {
   color: var(--accent);
   background: transparent;
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-/* 13a：重复原因不再撑高整行；点标签时由 ux-polish.js 给出原句。 */
-.ex-clash-slot.ux-clash-badge {
+.equip-filter-wrap {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding-bottom: 5px;
+}
+.equip-filter-btn {
+  min-height: 44px;
+  max-width: 132px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.equip-filter-btn[aria-expanded='true'] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.equip-filter-caret { font-size: 11px; transform: translateY(-1px); }
+.equip-filter-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  right: 0;
+  width: min(278px, calc(100vw - 56px));
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--card);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .14);
+}
+.equip-filter-option {
+  width: 100%;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 20px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.equip-filter-option + .equip-filter-option { margin-top: 2px; }
+.equip-filter-option.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.equip-filter-option.empty { opacity: .45; }
+.equip-filter-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.equip-filter-check { color: var(--accent); text-align: center; font-weight: 700; }
+
+/* 重复原因本来就属于辅助信息：短标签常驻，点一下再看具体和谁冲突。 */
+.ex-clash-slot.clash-badge {
   display: inline-flex;
   width: fit-content;
   margin-top: 4px;
@@ -174,7 +229,7 @@
   line-height: 1.35;
   cursor: pointer;
 }
-.ex-clash-slot.ux-clash-badge.soft {
+.ex-clash-slot.clash-badge.soft {
   color: var(--muted);
   background: var(--card-2);
 }
@@ -225,4 +280,47 @@
 
 @media (prefers-color-scheme: dark) {
   .chart-wrap:has(.chart-empty)::before { opacity: .24; filter: brightness(1.45); }
+}
+
+
+/* v2.10.1：高频搜索优先，自定义食物退到标题区。 */
+.search-card-head .card-head-actions { gap: 7px; }
+.search-card-head .text-btn {
+  min-height: 36px;
+  padding: 0 7px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.search-row.search-row-full .search-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 数据页只有在缺失/陈旧时才出现这条轻提示。 */
+.health-sync-nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.health-sync-nudge > span { flex: 1 1 auto; min-width: 0; }
+.health-sync-nudge .text-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 360px) {
+  .picker-scope-switch { width: 100%; }
+  .picker-scope-switch .chip-btn { flex-basis: 66px; min-width: 66px; }
+  .picker-list-toolbar { gap: 6px; }
+  .picker-view-switch { gap: 12px; }
+  .equip-filter-btn { max-width: 116px; padding-inline: 8px; }
 }

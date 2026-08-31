@@ -8,11 +8,12 @@
  * 数据的维护性操作（导入 / 备份 / 补录）在设置页。
  */
 
-import { h, clearEl, toast, mount } from '../lib/utils.js';
+import { h, clearEl, toast, mount, todayKey } from '../lib/utils.js';
 import {
   countMisscaledDays, repairHealthEnergy,
-  listImplausibleDays, clearImplausibleHealth,
+  listImplausibleDays, clearImplausibleHealth, state,
 } from '../lib/store.js';
+import { setIntent } from '../lib/nav.js';
 import { trendCharts } from './cards/trend-charts.js';
 import { healthMetricsCard } from './cards/health-metrics.js';
 import { weeklySummaryCard } from './cards/weekly-summary.js';
@@ -82,9 +83,38 @@ function implausibleCard(rerender) {
 }
 
 
+function healthSyncNudge() {
+  const at = new Date(state.lastImport?.at || '');
+  const now = Date.now();
+  const hasHistory = Array.isArray(state.healthDays) && state.healthDays.length > 0;
+  let message = '';
 
+  if (Number.isNaN(at.getTime())) {
+    message = hasHistory ? '今天还没有新的健康同步。' : '还没有健康数据，可以先导入或连接同步。';
+  } else if (todayKey(at) !== todayKey()) {
+    message = '今天还没有同步健康数据。';
+  } else if (now - at.getTime() > 3 * 60 * 60 * 1000 || state.derived?.energyData?.stale) {
+    message = '健康数据已经有一段时间没更新。';
+  }
+  if (!message) return null;
 
+  return h('div.health-sync-nudge', null,
+    h('span', null, message),
+    h('button.text-btn', {
+      type: 'button',
+      onclick: () => {
+        setIntent({ settingsSection: 'data' });
+        location.hash = 'settings';
+      },
+    }, '去同步 / 导入'));
+}
 
+function healthMetricsWithSync() {
+  const card = healthMetricsCard();
+  const nudge = healthSyncNudge();
+  if (card && nudge) card.append(nudge);
+  return card;
+}
 
 export function renderHealth(root) {
   const rerender = () => renderHealth(root);
@@ -92,7 +122,7 @@ export function renderHealth(root) {
   mount(root,
     repairCard(rerender),
     implausibleCard(rerender),
-    healthMetricsCard(),
+    healthMetricsWithSync(),
     // 速览在趋势图上面：先回答「这七天整体怎么样」，想看某项怎么走再往下翻
     weeklySummaryCard(),
     ...(trendCharts(rerender) || []),
