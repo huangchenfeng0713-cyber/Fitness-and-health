@@ -20,6 +20,13 @@ test('移动端挑动作控制区保持三层结构', () => {
   assert.doesNotMatch(training, /equipTabs\(rerender, all\)/);
 });
 
+test('冒烟测试从当前主卡判断热量超出状态', () => {
+  const smoke = text('scripts/smoke.mjs');
+  assert.match(smoke, /heroText: document\.querySelector\('\.hero'\)/);
+  assert.match(smoke, /semantics\.heroText/);
+  assert.doesNotMatch(smoke, /!\/多\|超\/\.test\(semantics\.foot\)/);
+});
+
 test('应用版本与离线缓存键同步', () => {
   assert.match(text('package.json'), /"version": "2\.10\.1"/);
   assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.10\.1'/);
