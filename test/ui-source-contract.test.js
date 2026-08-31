@@ -25,6 +25,8 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
   assert.match(smoke, /heroText: document\.querySelector\('\.hero'\)/);
   assert.match(smoke, /semantics\.heroText/);
   assert.doesNotMatch(smoke, /!\/多\|超\/\.test\(semantics\.foot\)/);
+  assert.doesNotMatch(smoke, /waitUntil:\s*'networkidle'/,
+    '可选云请求会让 networkidle 永远等不到，启动冒烟应以 DOM 与应用节点为准');
 });
 
 test('应用版本与离线缓存键同步', () => {

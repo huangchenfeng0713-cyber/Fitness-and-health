@@ -50,7 +50,8 @@ page.on('console', (m) => {
 
 try {
   // ---- 起得来 ----
-  await page.goto(`${BASE}/index.html`, { waitUntil: 'networkidle' });
+  // 账号 SDK / 云同步属于可选网络请求，不能拿“全网静默”当应用启动条件。
+  await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForSelector('.tab', { timeout: 15000 });
   await page.evaluate(() => document.querySelector('.onboard .text-btn, .onboard button:last-child')?.click());
   await page.waitForTimeout(400);
@@ -552,7 +553,7 @@ try {
     await addEntry({ foodId: 'rice_white', grams: 123 });
     return state.dietEntries.length;
   });
-  await page.reload({ waitUntil: 'networkidle' });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForSelector('.tab', { timeout: 15000 });
   await page.waitForTimeout(1200);
   const persisted = await page.evaluate(async () => {
