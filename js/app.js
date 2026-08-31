@@ -328,6 +328,11 @@ function renderAccountLock() {
 }
 
 function renderCurrent() {
+  const actionSlot = $('#actionbar');
+  if (actionSlot) {
+    clearEl(actionSlot);
+    actionSlot.hidden = true;
+  }
   if (accountDataLocked()) {
     renderAccountLock();
     return;

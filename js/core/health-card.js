@@ -4,13 +4,13 @@
  * 挑哪几项、缺的怎么讲、同步算不算成功 —— 都是判断，所以放 core，
  * 视图只负责摆图标和方格。
  *
- * 两条口径不能动：
+ * 两条口径：
  *  1. **这张卡永远说真正的今天**，不跟着今日 / 饮食页选的日期走。
  *     那两页翻回昨天是为了补记饮食；跟着翻的话，「今日健康数据」
  *     这个标题就成了假的，而且没有任何地方提示你正在看哪一天。
- *  2. **不沿用前几天的体重 / 体脂 / 静息心率。** 沿用会让人把三天前
- *     称的数当成今早刚称的 —— 尤其在体重每天都在小幅波动的时候。
- *     缺就画一道杠，最近一次测量去感叹号或趋势图里找。
+ *  2. **体重使用截至今天最近一次有效记录。** 体重不必每天测量；测量日期
+ *     由卡片右上角的说明明确给出。体脂和静息心率仍只显示当天值，避免把
+ *     较早的测量伪装成今天的数据。
  */
 
 const FIELDS = [
@@ -52,18 +52,39 @@ const numeric = (v) => {
  *  - lastImport  最近一次导入 { at, days, range, ... }
  *  - today       今天的日期串
  *  - everSeen    历史上出现过的字段集合，决定体脂这类可选项占不占格
- * @returns {{ synced, syncedAt, cells, present, missing, hasAny, sourceNote }}
+ *  - latestWeight 截至今天最近一次体重 { value, date }
+ * @returns {{ synced, syncedAt, cells, present, presentToday, recent, missing, hasAny, sourceNote }}
  */
 export function healthCardState({
-  health = null, lastImport = null, today = '', everSeen = [],
+  health = null, lastImport = null, today = '', everSeen = [], latestWeight = null,
 } = {}) {
   const row = health || {};
   const seen = new Set(everSeen);
+  const fallbackWeight = numeric(latestWeight?.value);
   const cells = FIELDS
     .filter((f) => !f.optIn || seen.has(f.key))
-    .map((f) => ({ ...f, value: numeric(row[f.key]) }));
+    .map((f) => {
+      const todayValue = numeric(row[f.key]);
+      if (f.key === 'weightKg' && todayValue == null && fallbackWeight != null) {
+        const observedDate = String(latestWeight?.date || '');
+        return {
+          ...f,
+          value: fallbackWeight,
+          observedDate,
+          recent: observedDate !== today,
+        };
+      }
+      return {
+        ...f,
+        value: todayValue,
+        observedDate: todayValue == null ? '' : today,
+        recent: false,
+      };
+    });
 
   const present = cells.filter((c) => c.value != null).map((c) => c.key);
+  const presentToday = cells.filter((c) => c.value != null && !c.recent).map((c) => c.key);
+  const recent = cells.filter((c) => c.value != null && c.recent).map((c) => c.key);
   const missing = cells.filter((c) => c.value == null).map((c) => c.key);
 
   /*
@@ -78,6 +99,8 @@ export function healthCardState({
     syncedAt: syncedToday ? at : (at || null),
     cells,
     present,
+    presentToday,
+    recent,
     missing,
     hasAny: present.length > 0,
     sourceNote: sourceNote(row.source),

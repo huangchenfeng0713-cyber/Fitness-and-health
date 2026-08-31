@@ -52,12 +52,15 @@ export function recommendCard(rerender) {
   const meal = advice.budget.meal.key;
   const all = advice.recommend;
   const list = expanded.recommend ? all : all.slice(0, 3);
-  return h('section.card', null,
-    h('div.card-head', null,
-      h('h3', null, '当前饮食推荐'),
-      h('span.card-tag', null, advice.budget.proteinFeasible
-        ? `${MEAL_LABEL[meal]}时段 · ${num(advice.budget.kcal)} kcal / ${num(advice.budget.protein, 0)}g 蛋白`
-        : `${MEAL_LABEL[meal]}时段 · ${num(advice.budget.kcal)} kcal / 蛋白最多约 ${num(advice.budget.maxProteinByKcal, 1)}g`)),
+  return h('section.card.recommend-card', null,
+    h('div.card-head.recommend-card-head', null,
+      h('h3', null, '当前饮食推荐')),
+    h('div.recommend-budget', { 'aria-label': '当前餐次预算' },
+      h('span', null, MEAL_LABEL[meal]),
+      h('span', null, `${num(advice.budget.kcal)} kcal`),
+      h('span', null, advice.budget.proteinFeasible
+        ? `蛋白 ${num(advice.budget.protein, 0)}g`
+        : `蛋白≤${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length
       ? [
         h('div.rec-list', null, list.map((item) => recRow(item, meal))),
@@ -136,7 +139,8 @@ export function waterCard(rerender) {
         h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— '
           + '饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，'
           + '单算白水没法代表全天水分够不够。'),
-        h('p', null, `一般成人每天**直接饮水**参考约 ${goal || 1700} ml（女性约 1500 ml），`
+        h('p', null, '一般成人每天', h('strong', null, '直接饮水'),
+          `参考约 ${goal || 1700} ml（女性约 1500 ml），`
           + '把食物和汤水算进去，全天总水分约 2700–3000 ml。运动、高温和出汗会明显改变需要量。'),
         h('p', null, '次数只代表主动饮水这个行为，不代表精确的总水分摄入。'
           + '真正好用的判断是口渴感、尿色和一天下来的整体状态，不是有没有恰好喝满某个数字。'),

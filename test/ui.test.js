@@ -275,21 +275,20 @@ test('身高体重只从 Apple 健康读，读到过就不再让人改', () => {
 });
 
 /*
- * 「今日健康数据」这张卡只说今天。
- *
- * 它以前干两件互相打架的事：跟着今日页选的日期走（于是翻回昨天，标题还写「今天」），
- * 又把体重、体脂沿用最近一次（于是三天前称的数看着像今早刚称的）。
- * 现在两条都改掉：日期钉死今天，缺的项就是一道杠，最近一次去感叹号里查。
+ * 活动数据钉死今天；体重不要求每天称，显示截至今天最近一次并明确日期。
+ * 体脂与静息心率仍只显示当天值，避免旧测量冒充今天。
  */
-test('今日健康数据钉死今天，不沿用前几天的体重体脂', () => {
+test('今日健康数据钉死今天，只有体重可使用最近记录', () => {
   const metrics = strip(read('js/views/cards/health-metrics.js'));
   assert.match(metrics, /const today = todayKey\(\);/, '这张卡还在跟着所选日期走');
   assert.ok(!/state\.day/.test(metrics), `不该再读 state.day：${metrics.match(/.*state\.day.*/)?.[0]}`);
   assert.match(metrics, /state\.healthByDate\?\.get\(today\)/, '取的不是今天那一行');
+  assert.match(metrics, /latestHealthEntry\('weightKg', today\)/, '没有取截至今天最近一次体重');
+  assert.match(metrics, /latestWeight,/, '最近体重没有交给健康卡状态层');
 
-  // 格子里不许再出现「体重 08-26」这种把旧日期挂在名字后面的写法
+  // 格子保持简洁，测量日期收在右上角感叹号里。
   assert.ok(!/`体重 \$\{/.test(metrics), '又把沿用的日期标回格子里了');
-  // 最近一次仍然查得到，只是收进了说明层
+  assert.match(metrics, /体重默认显示截至今天最近一次有效记录/, '说明层没有解释最近体重口径');
   assert.match(metrics, /function lastSeenLines\(/, '最近一次测量没有地方可查');
   assert.match(metrics, /infoTip\(/, '同步情况和最近一次测量要收在感叹号里');
 
@@ -297,6 +296,8 @@ test('今日健康数据钉死今天，不沿用前几天的体重体脂', () =>
   const core = strip(read('js/core/health-card.js'));
   assert.match(core, /localDay\(at\) === today/, '同步状态没有按「今天有没有同步」判定');
   assert.ok(!/synced[^\n]*missing\.length/.test(core), '又拿缺项去判定同步状态了');
+  assert.match(core, /f\.key === 'weightKg' && todayValue == null && fallbackWeight != null/,
+    '状态层没有只给体重使用最近记录');
   // 主界面上不再出现「同步＋补录」「手动录入」这类来源字样
   assert.ok(!/同步＋补录|手动录入/.test(metrics), '来源字样应收进说明层，不占卡面');
 });
@@ -334,7 +335,7 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
 });
 
-test('摞在一起的分段控件之间要留缝，器械档位不借趋势卡那套样式', () => {
+test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () => {
   /*
    * 三排分段控件各自 margin: 0，直接摞起来就是几条灰槽贴着边，看着像
    * 一整块被割开的色块。而器械档位原先借的是 .chart-switch —— 那套样式
@@ -342,13 +343,20 @@ test('摞在一起的分段控件之间要留缝，器械档位不借趋势卡�
    * 就成了一行说不出理由的空白。趋势卡早就改用下拉，那套样式已无人使用。
    */
   const css = read('css/app.css');
+  const polish = read('css/ux-polish.css');
   const training = read('js/views/training.js');
   assert.match(css, /\.range-switch \+ \.range-switch\s*\{[^}]*margin-top/s, '摞起来的分段控件之间没有缝');
   assert.ok(!css.includes('.chart-switch'), '.chart-switch 已无人使用，应当删掉');
   assert.ok(!/h\('div\.chart-switch/.test(training), '器械档位不该再借趋势卡那套样式');
-  // 等宽会让「固定器械 10」在 320px 的机子上被截断
+  // 通用分段控件仍按内容分宽；选择动作的部位/模式范围是短标签，要等宽铺满。
   assert.match(css, /\.range-switch \.chip-btn\s*\{[\s\S]*?flex:\s*1 1 auto/,
     '分段控件按内容分宽，不能等宽');
+  assert.match(polish, /\.picker-scope-switch\s*\{[\s\S]*?grid-template-columns:\s*repeat\(var\(--picker-cols\), minmax\(0, 1fr\)\)/,
+    '动作范围按钮没有按实际选项数等宽铺满');
+  assert.match(training, /style: \{ '--picker-cols': String\(GROUPS\.length\) \}/,
+    '身体部位没有把实际列数交给样式');
+  assert.match(training, /style: \{ '--picker-cols': String\(SPLITS\.length\) \}/,
+    '动作模式没有把实际列数交给样式');
 });
 
 /*
@@ -875,10 +883,9 @@ test('身体信息不可用时，界面说清是哪一条不合格', () => {
   assert.ok(!/dailyTargets\(effectiveProfile/.test(store), '目标仍在用未经校验的档案计算');
 });
 
-test('食物数量不写死：界面上的数由食物库自己算，README 的数有测试盯着', () => {
-  // 写死必然漂移：库里已经 1080 项时，饮食页还写着「900+ 种」、README 写着 1010。
+test('添加食物标题不展示总数，README 的库规模仍有测试盯着', () => {
   const diet = read('js/views/diet.js');
-  assert.match(diet, /\$\{allFoods\(\)\.length\} 种/, '界面上的食物数仍是写死的');
+  assert.doesNotMatch(diet, /\$\{allFoods\(\)\.length\} 种/, '添加食物标题又塞回食物总数');
   assert.ok(!diet.includes('900+'), '还残留写死的旧数字');
 
   const readme = read('README.md');
@@ -984,7 +991,10 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
   for (const [name, src] of [['diet', diet], ['training', training]]) {
     assert.match(src, /import \{ selectBar \} from '\.\.\/lib\/select-bar\.js'/, `${name} 没用共用的多选条`);
   }
-  assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
+  assert.match(bar, /el\.hidden = empty && !alwaysVisible/,
+    '共用多选条没有区分普通收起态与固定操作栏');
+  assert.match(training, /alwaysVisible: true/, '健身页没有让选择栏在空状态也保持可见');
+  assert.ok(!/alwaysVisible:\s*true/.test(diet), '饮食页空清单仍应收起，不能常驻一条空横幅');
 
   // 饮食：单项是高频路径，可确认份量后直接记；多项仍保留清单批量确认
   assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
@@ -1351,8 +1361,10 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
     .filter((sel) => sel !== ':root');
   assert.deepEqual(raw, [], `这些规则绕过了 --safe-* 直接用 env()：${raw.join('、')}`);
 
-  const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
+  const bar = css.slice(css.indexOf('\n.select-bar {') + 1, css.indexOf('.select-bar[hidden]'));
   assert.ok(!/safe/.test(bar), '多选条又把底部安全区算了一遍');
+  const dock = css.slice(css.indexOf('.actionbar-slot {'), css.indexOf('.tab {'));
+  assert.ok(!/safe-bottom/.test(dock), '固定选择栏又把底部安全区算了一遍');
   // 弹层底栏接触屏幕底边，它需要；正文有底栏时不再重复计算。
   assert.match(css, /\.sheet-footer \{[\s\S]*?var\(--safe-bottom\)/);
   assert.match(css, /\.sheet\.has-footer \.sheet-scroll \{ padding-bottom: 12px; \}/);
@@ -1360,22 +1372,28 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
   assert.ok(!/safe-bottom/.test(action), '操作按钮内部又重复算了一遍安全区');
 });
 
-test('健身多选条跨过内容区底部留白，紧邻底栏', () => {
+test('健身选择栏常驻应用壳底部并紧邻底栏', () => {
   const css = read('css/app.css');
   const training = strip(read('js/views/training.js'));
-  const bar = css.slice(css.indexOf('.select-bar {'), css.indexOf('.select-bar.select-bar-tight'));
-  assert.match(bar, /bottom: calc\(0px - var\(--view-bottom-pad\)\)/,
-    '多选条仍停在内容区底部 padding 上方');
-  assert.match(css, /\.view \{[\s\S]*?padding:[^;]*var\(--view-bottom-pad\)/,
-    '内容区底部留白和多选条没有共用同一尺寸');
-  assert.match(training, /classList\.add\('select-bar-tight', 'select-bar-wide'\)/,
-    '健身待选横幅没有启用全屏样式');
-  const wide = css.slice(css.indexOf('.select-bar.select-bar-wide {'), css.indexOf('.select-bar[hidden]'));
-  assert.match(wide, /margin-left: calc\(0px - 16px - var\(--view-inline-pad\) - var\(--safe-left\)\)/,
-    '横幅左边没有跨过卡片和页面留白');
-  assert.match(wide, /margin-right: calc\(0px - 16px - var\(--view-inline-pad\) - var\(--safe-right\)\)/,
-    '横幅右边没有跨过卡片和页面留白');
-  assert.match(wide, /border-radius: 0/, '全屏横幅仍长得像卡片的一部分');
+  const app = strip(read('js/app.js'));
+  const html = read('index.html');
+  assert.match(html, /<main id="view"[\s\S]*?<div id="actionbar"[\s\S]*?<nav id="tabbar"/,
+    '固定选择栏没有放在内容区与底部导航之间');
+  assert.match(app, /clearEl\(actionSlot\);\s*actionSlot\.hidden = true;/,
+    '切换栏目时没有清理旧的固定操作栏');
+  assert.match(training, /document\.getElementById\('actionbar'\)/,
+    '健身选择栏仍挂在动作卡内部');
+  assert.match(training, /clearEl\(actionSlot\);\s*actionSlot\.hidden = true;/,
+    '健身页内部重绘前没有清掉旧横幅，会越切筛选越多');
+  assert.match(training, /actionSlot\.hidden = false;\s*mount\(actionSlot, pickerBar\.el\);/,
+    '健身页没有把选择栏挂进固定槽位');
+  assert.match(training, /alwaysVisible: true/, '没选动作时横幅仍会消失');
+  const dock = css.slice(css.indexOf('.actionbar-slot {'), css.indexOf('.tab {'));
+  assert.match(dock, /flex:\s*none/, '选择栏会被内容区挤压');
+  assert.match(dock, /\.actionbar-slot \.select-bar\s*\{[\s\S]*?position:\s*static/,
+    '选择栏仍在动作卡内做 sticky 定位');
+  assert.match(dock, /margin:\s*0/, '固定栏仍带着卡片内负边距');
+  assert.match(dock, /border-radius:\s*0/, '固定栏仍长得像卡片的一部分');
 });
 
 /*

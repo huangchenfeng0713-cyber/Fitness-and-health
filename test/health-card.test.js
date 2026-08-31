@@ -1,8 +1,8 @@
 /**
  * 「今日健康数据」这张卡。
  *
- * 两条口径：这张卡永远说真正的今天；不沿用前几天的体重 / 体脂 / 静息心率。
- * 沿用会让三天前称的数看着像今早刚称的 —— 而体重每天都在小幅波动。
+ * 两条口径：这张卡永远说真正的今天；体重可显示截至今天最近一次有效记录，
+ * 体脂与静息心率仍只显示当天值。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,8 +20,39 @@ test('缺的项留在列表里，值是 null —— 不许整格消失', () => {
   const keys = s.cells.map((c) => c.key);
   assert.deepEqual(keys, ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'restingHR', 'weightKg']);
   assert.deepEqual(s.present, ['steps', 'activeEnergy']);
-  assert.ok(s.missing.includes('weightKg'), '今天没称重就该缺着，不能拿前几天的顶上');
+  assert.ok(s.missing.includes('weightKg'), '没有当天或历史体重时就该缺着');
   assert.equal(s.hasAny, true);
+});
+
+test('体重沿用截至今天最近一次记录，并保留测量日期', () => {
+  const s = healthCardState({
+    health: { steps: 8200, bodyFatPct: null, restingHR: null },
+    latestWeight: { value: 61.8, date: '2026-08-26' },
+    today: TODAY,
+    everSeen: ['bodyFatPct'],
+  });
+  const cells = Object.fromEntries(s.cells.map((cell) => [cell.key, cell]));
+  assert.equal(cells.weightKg.value, 61.8);
+  assert.equal(cells.weightKg.observedDate, '2026-08-26');
+  assert.equal(cells.weightKg.recent, true);
+  assert.ok(s.recent.includes('weightKg'));
+  assert.ok(!s.presentToday.includes('weightKg'));
+  assert.equal(cells.bodyFatPct.value, null, '体脂不能跟着体重一起沿用');
+  assert.equal(cells.restingHR.value, null, '静息心率不能跟着体重一起沿用');
+  assert.ok(!s.missing.includes('weightKg'));
+});
+
+test('今天有体重时优先使用今天，不标成历史记录', () => {
+  const s = healthCardState({
+    health: { weightKg: 62.1 },
+    latestWeight: { value: 61.8, date: '2026-08-26' },
+    today: TODAY,
+  });
+  const weight = s.cells.find((cell) => cell.key === 'weightKg');
+  assert.equal(weight.value, 62.1);
+  assert.equal(weight.observedDate, TODAY);
+  assert.equal(weight.recent, false);
+  assert.ok(s.presentToday.includes('weightKg'));
 });
 
 test('体脂和饮水只在记到过的时候才占一格', () => {
@@ -72,6 +103,7 @@ test('来源写成人话，缺项原因有统一说法', () => {
 test('脏数据不会印成 NaN', () => {
   const s = healthCardState({
     health: { steps: 'x', activeEnergy: null, weightKg: undefined, restingHR: '58' },
+    latestWeight: { value: '不是数字', date: '2026-08-26' },
     today: TODAY,
   });
   const by = Object.fromEntries(s.cells.map((c) => [c.key, c.value]));

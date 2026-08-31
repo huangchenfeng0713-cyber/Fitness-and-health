@@ -108,7 +108,9 @@ function muscleLine(e) {
  */
 function groupTabs(rerender) {
   const covered = coveredGroupKeys(picked());
-  return h('div.range-switch.body-part-switch.picker-scope-switch', null,
+  return h('div.range-switch.body-part-switch.picker-scope-switch', {
+    style: { '--picker-cols': String(GROUPS.length) },
+  },
     GROUPS.map((g) => {
       const done = covered.has(g.key);
       return h('button', {
@@ -132,7 +134,9 @@ function modeTabs(rerender) {
 }
 
 function splitTabs(rerender) {
-  return h('div.range-switch.picker-scope-switch', null,
+  return h('div.range-switch.picker-scope-switch', {
+    style: { '--picker-cols': String(SPLITS.length) },
+  },
     SPLITS.map((sp) => h('button', {
       class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
       type: 'button', 'aria-pressed': String(activeSplit === sp.key),
@@ -327,7 +331,7 @@ function pickerCard(rerender) {
 
   return h('section.card.exercise-picker-card', null,
     h('div.card-head', null,
-      h('h3', null, '挑动作'),
+      h('h3', null, '选择动作'),
       h('div.card-head-actions', null,
         h('span.card-tag', null, showRecommend
           ? `${rec.items.length} 个推荐`
@@ -346,8 +350,7 @@ function pickerCard(rerender) {
           onclick: () => { showAllExercises = !showAllExercises; rerender(); },
         }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
       ],
-    // 待记录的那一批在两个视图里都留着，切过去不会让人以为勾的东西没了
-    pickerBar.el);
+  );
 }
 
 /** 勾中的这一批一次加进计划：一次落库、一次重绘 */
@@ -360,18 +363,14 @@ async function commitPending() {
 }
 
 function buildPickerBar() {
-  /*
-   * 这一条紧贴动作列表，不留上边距。
-   *
-   * 公共横幅默认带 10px 上边距，那是给饮食页用的——那边它下面还接着别的内容。
-   * 健身页里它就长在列表末尾，10px 变成一条说不出理由的空白。
-   * 只给这一处加个修饰类，不动共用样式。
-   */
+  // 横幅挂在应用壳里，因此无论动作列表滚到哪里都固定在底栏上方。
   const bar = selectBar({
-    summary: () => `已选 ${pending.size} 个动作`,
+    summary: () => pending.size ? `已选 ${pending.size} 个动作` : '尚未选择动作',
     detail: () => [...pending]
-      .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、'),
+      .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、')
+      || '可连续选择多个动作',
     actionLabel: () => '加入计划',
+    actionAriaLabel: () => pending.size ? `把已选的 ${pending.size} 个动作加入计划` : '请先选择动作',
     items: () => [...pending].map((id) => {
       const e = EXERCISE_BY_ID.get(id);
       return e ? { key: id, label: e.name, note: `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}` } : null;
@@ -379,8 +378,9 @@ function buildPickerBar() {
     onRemove: (id) => { pending.delete(id); rerenderTraining?.(); },
     onClear: () => { pending = new Set(); rerenderTraining?.(); },
     onConfirm: () => { commitPending(); },
+    alwaysVisible: true,
   });
-  bar.el.classList.add('select-bar-tight', 'select-bar-wide');
+  bar.el.classList.add('training-select-bar');
   return bar;
 }
 
@@ -659,13 +659,19 @@ let rerenderTraining = () => {};
 document.addEventListener('click', (event) => {
   if (!equipMenuOpen || event.target.closest?.('.equip-filter-wrap')) return;
   equipMenuOpen = false;
-  rerenderTraining();
+  // 切换底部栏目时，目标页已经把健身 DOM 清掉；此时不能再把旧健身页画回来。
+  if (document.querySelector('#view .exercise-picker-card')) rerenderTraining();
 });
 
 export function renderTraining(root) {
   const rerender = () => renderTraining(root);
   rerenderTraining = rerender;
   clearEl(root);
+  const actionSlot = document.getElementById('actionbar');
+  if (actionSlot) {
+    clearEl(actionSlot);
+    actionSlot.hidden = true;
+  }
   // 整页重绘会把上一条的 DOM 丢掉，重新建一条；pending 本身是模块级的，留着
   pickerBar = buildPickerBar();
   /*
@@ -681,4 +687,8 @@ export function renderTraining(root) {
     adviceCard(rerender),
     weeklyCard(rerender),
   );
+  if (actionSlot) {
+    actionSlot.hidden = false;
+    mount(actionSlot, pickerBar.el);
+  }
 }

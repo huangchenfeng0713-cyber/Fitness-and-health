@@ -221,7 +221,7 @@ function insightsCard(advice, rerender) {
         : i.priority === INSIGHT_PRIORITY.data
           ? h('div.insight-basis', null, i.basis)
           : h('details.insight-why', null,
-            h('summary', null, '为什么'),
+            h('summary', { 'aria-label': '查看判断依据', title: '查看判断依据' }, '!'),
             h('div.insight-basis', null, i.basis));
       return h(`div.insight.${i.type}`, null, primary, evidence);
     })),

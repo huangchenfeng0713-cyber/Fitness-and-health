@@ -74,6 +74,47 @@ try {
         .filter(Boolean).join('，'));
   }
 
+  // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('饮食'))?.click());
+  await page.waitForTimeout(500);
+  const dietLayout = await page.evaluate(() => {
+    const head = document.querySelector('.search-card-head');
+    const title = head?.querySelector('h3');
+    const custom = head?.querySelector('.text-btn');
+    const center = (el) => {
+      const rect = el?.getBoundingClientRect();
+      return rect ? rect.top + rect.height / 2 : null;
+    };
+    const water = document.querySelector('.water-add');
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--accent)';
+    document.body.append(probe);
+    const accentColor = getComputedStyle(probe).color;
+    probe.remove();
+    const budget = document.querySelector('.recommend-budget');
+    const budgetCells = [...(budget?.children || [])];
+    return {
+      hasFoodCount: /\d+\s*种/.test(head?.textContent || ''),
+      headCenterGap: title && custom ? Math.abs(center(title) - center(custom)) : null,
+      waterColor: water ? getComputedStyle(water).color : null,
+      accentColor,
+      budgetCells: budgetCells.length,
+      budgetWrapped: budgetCells.some((cell) => cell.scrollWidth > cell.clientWidth + 1
+        || cell.getClientRects().length > 1),
+    };
+  });
+  const dietProblems = [
+    dietLayout.hasFoodCount && '“添加食物”标题仍显示食物总数',
+    dietLayout.headCenterGap == null && '找不到添加食物标题或自定义按钮',
+    dietLayout.headCenterGap > 2 && `标题与按钮垂直错开 ${dietLayout.headCenterGap.toFixed(1)}px`,
+    dietLayout.waterColor !== dietLayout.accentColor
+      && `饮水色 ${dietLayout.waterColor} 没有统一成主绿色 ${dietLayout.accentColor}`,
+    dietLayout.budgetCells !== 3 && `推荐预算应为三栏，实际 ${dietLayout.budgetCells} 栏`,
+    dietLayout.budgetWrapped && '推荐预算文字在手机宽度下折行或溢出',
+  ].filter(Boolean);
+  check('饮食页标题、饮水与推荐预算对齐', dietProblems.length === 0, dietProblems.join('；'));
+
   /*
    * 健康数据的格子排布。
    *
@@ -419,43 +460,65 @@ try {
   await page.evaluate(() => { const el = document.querySelector('.search-input'); if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); } });
   await page.waitForTimeout(300);
 
-  // ---- 健身多选条要跨过 .view 自己的底部留白，紧贴 tab 栏 ----
+  // ---- 健身选择栏始终在 .view 与 tab 栏之间；空状态也要看得见 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('健身'))?.click());
   await page.waitForTimeout(500);
-  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen)')?.click());
+  const emptyPicker = await page.evaluate(() => {
+    const slot = document.querySelector('#actionbar');
+    const bar = slot?.querySelector('.training-select-bar:not([hidden])');
+    const button = bar?.querySelector('.select-bar-go');
+    return {
+      slotVisible: !!slot && !slot.hidden,
+      barVisible: !!bar,
+      disabled: !!button?.disabled,
+      summary: bar?.querySelector('.select-bar-summary')?.textContent.trim() || '',
+    };
+  });
+  check('健身选择栏空状态常驻且不能误提交',
+    emptyPicker.slotVisible && emptyPicker.barVisible && emptyPicker.disabled
+      && emptyPicker.summary.includes('尚未选择动作'),
+    JSON.stringify(emptyPicker));
+
+  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked)')?.click());
   await page.waitForTimeout(300);
   const pickerEdge = await page.evaluate(() => {
     const view = document.querySelector('main.view');
-    const bar = document.querySelector('.exercise-picker-card .select-bar:not([hidden])');
+    const slot = document.querySelector('#actionbar');
+    const bar = slot?.querySelector('.training-select-bar:not([hidden])');
     const tabs = document.querySelector('.tabbar');
-    if (!view || !bar || !tabs) return null;
+    if (!view || !slot || !bar || !tabs) return null;
     const vr = view.getBoundingClientRect();
+    const sr = slot.getBoundingClientRect();
     const br = bar.getBoundingClientRect();
     const tr = tabs.getBoundingClientRect();
     return {
-      viewGap: Math.round((vr.bottom - br.bottom) * 10) / 10,
-      tabGap: Math.round((tr.top - br.bottom) * 10) / 10,
+      viewGap: Math.round((sr.top - vr.bottom) * 10) / 10,
+      tabGap: Math.round((tr.top - sr.bottom) * 10) / 10,
       leftGap: Math.round(br.left * 10) / 10,
       rightGap: Math.round((window.innerWidth - br.right) * 10) / 10,
       horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
-      visible: br.top < vr.bottom && br.bottom > vr.top,
+      visible: br.top >= vr.bottom - 2 && br.bottom <= tr.top + 2,
+      enabled: !bar.querySelector('.select-bar-go')?.disabled,
+      summary: bar.querySelector('.select-bar-summary')?.textContent.trim() || '',
     };
   });
   const pickerProblems = [
     !pickerEdge && '选中动作后没有多选条',
     pickerEdge && !pickerEdge.visible && '多选条没在可见区',
+    pickerEdge && !pickerEdge.enabled && '选中动作后提交按钮仍不可用',
+    pickerEdge && !pickerEdge.summary.includes('已选 1 个动作') && `选择摘要不对：${pickerEdge.summary}`,
     pickerEdge && Math.abs(pickerEdge.viewGap) > 2
-      && `多选条离内容区底边还有 ${pickerEdge.viewGap}px`,
+      && `固定栏与内容区之间有 ${pickerEdge.viewGap}px 缝隙`,
     pickerEdge && Math.abs(pickerEdge.tabGap) > 2
-      && `多选条离 tab 栏还有 ${pickerEdge.tabGap}px`,
+      && `固定栏与 tab 栏之间有 ${pickerEdge.tabGap}px 缝隙`,
     pickerEdge && Math.abs(pickerEdge.leftGap) > 2
       && `多选条左边没有铺满屏幕：${pickerEdge.leftGap}px`,
     pickerEdge && Math.abs(pickerEdge.rightGap) > 2
       && `多选条右边没有铺满屏幕：${pickerEdge.rightGap}px`,
     pickerEdge && pickerEdge.horizontalOverflow && '全宽多选条造成了横向滚动',
   ].filter(Boolean);
-  check('健身多选条横跨屏幕并紧贴底部栏', pickerProblems.length === 0, pickerProblems.join('；'));
+  check('健身选择栏横跨屏幕并固定在底部', pickerProblems.length === 0, pickerProblems.join('；'));
 
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());

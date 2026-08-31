@@ -1,5 +1,5 @@
 /**
- * 今日健康数据卡：**今天**从 Apple 健康同步上来的原始数值。
+ * 今日健康数据卡：今天的活动数据 + 截至今天最近一次有效体重。
  *
  * 挂在数据页最顶上。下面那张趋势卡画的就是这几项的走势——
  * 「今天多少」和「这些天在往哪走」放在同一页，才不用来回切。
@@ -15,6 +15,7 @@
 
 import { h, num, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
+import { setIntent } from '../../lib/nav.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
 
 const svg = (path, { fill = false } = {}) => {
@@ -71,8 +72,11 @@ export function metricColumns(n) {
 
 /** 同步入口收在设置抽屉的「数据管理」里，这里直接把抽屉打开 */
 function dataCenterBtn() {
-  return h('button.secondary-btn.full', {
-    onclick: () => document.querySelector('.topbar-settings-btn')?.click(),
+  return h('button.secondary-btn.full.health-sync-action', {
+    onclick: () => {
+      setIntent({ settingsSection: 'data' });
+      document.querySelector('.topbar-settings-btn')?.click();
+    },
   }, '去同步健康数据');
 }
 
@@ -82,13 +86,13 @@ const fmt = (cell) => {
   return num(cell.value, cell.decimals || 0);
 };
 
-/** 「最近一次 X 是哪天量的」收进感叹号，不再摆到格子里冒充今天的数 */
+/** 体脂与静息心率仍只显示当天值；最近一次收进感叹号供核对。 */
 function lastSeenLines(today) {
-  return ['weightKg', 'bodyFatPct', 'restingHR'].map((key) => {
+  return ['bodyFatPct', 'restingHR'].map((key) => {
     const hit = latestHealthEntry(key, today);
     if (!hit) return null;
     const value = key === 'restingHR' ? num(hit.value) : num(hit.value, 1);
-    const unit = key === 'weightKg' ? ' kg' : key === 'bodyFatPct' ? '%' : ' bpm';
+    const unit = key === 'bodyFatPct' ? '%' : ' bpm';
     return h('li', null, h('strong', null, `${FIELD_LABEL[key]}：`),
       `最近一次 ${hit.date} 记到 ${value}${unit}`);
   }).filter(Boolean);
@@ -96,6 +100,7 @@ function lastSeenLines(today) {
 
 export function healthMetricsCard() {
   const today = todayKey();
+  const latestWeight = latestHealthEntry('weightKg', today);
   const seen = new Set();
   for (const row of state.healthDays) {
     for (const key of Object.keys(row)) {
@@ -107,6 +112,7 @@ export function healthMetricsCard() {
     lastImport: state.lastImport,
     today,
     everSeen: [...seen],
+    latestWeight,
   });
   const cols = metricColumns(info.cells.length);
   // 有数据但缺了活动能量时也值得再同步一次：热量预算就靠它动态调整
@@ -116,6 +122,9 @@ export function healthMetricsCard() {
       month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
     })
     : null;
+
+  const optionalLastSeen = lastSeenLines(today);
+  const weightCell = info.cells.find((cell) => cell.key === 'weightKg');
 
   return h('section.card', null,
     h('div.card-head', null,
@@ -127,8 +136,8 @@ export function healthMetricsCard() {
           h('p', null, syncedClock
             ? `最近一次同步：${syncedClock}${info.synced ? '（今天）' : ''}。`
             : '还没有同步过健康数据。'),
-          info.present.length
-            ? h('p', null, `今天读到了：${info.present.map((k) => FIELD_LABEL[k]).join('、')}。`)
+          info.presentToday.length
+            ? h('p', null, `今天读到了：${info.presentToday.map((k) => FIELD_LABEL[k]).join('、')}。`)
             : null,
           info.missing.length
             ? [
@@ -136,14 +145,14 @@ export function healthMetricsCard() {
               h('ul', null, MISSING_REASONS.map((r) => h('li', null, r))),
             ]
             : null,
-          /*
-           * 体重、体脂、静息心率不是每天都测。以前卡面上直接沿用最近一次的值，
-           * 三天前称的数看着就像今早刚称的；现在缺就是缺，最近一次在这儿查。
-           */
-          h('p', null, '这张卡只说今天。体重、体脂、静息心率不会沿用前几天的记录：'),
-          h('ul', null, lastSeenLines(today).length
-            ? lastSeenLines(today)
-            : h('li', null, '这三项都还没有过记录。')),
+          h('p', null, '体重默认显示截至今天最近一次有效记录，不要求必须当天称重。',
+            weightCell?.value != null
+              ? ` 当前显示 ${num(weightCell.value, 1)} kg，测量日期 ${weightCell.observedDate || '未知'}。`
+              : ' 当前还没有体重记录。'),
+          h('p', null, '体脂与静息心率仍只显示当天值；最近一次记录如下：'),
+          h('ul', null, optionalLastSeen.length
+            ? optionalLastSeen
+            : h('li', null, '体脂与静息心率都还没有记录。')),
           info.sourceNote ? h('p', null, info.sourceNote) : null))),
     info.hasAny
       /*

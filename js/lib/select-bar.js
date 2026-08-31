@@ -9,8 +9,8 @@
  *
  * 所以选中只改页面内存，不写库、不重绘；攒够了按一次确认。
  *
- * 它钉在滚动容器底部而不是视口底部：`.view` 才是真正在滚的那层
- * （见 sheet.js 里同一个坑），钉在视口上会盖住 tab 栏。
+ * 饮食页把它钉在滚动卡片底部；健身页则把同一组件挂进应用壳的
+ * `#actionbar`，固定在内容区与 tab 栏之间。
  */
 
 import { h, mount, clearEl } from './utils.js';
@@ -28,9 +28,11 @@ import { h, mount, clearEl } from './utils.js';
  * @param {(key) => void} opts.onRemove      去掉某一项
  * @param {() => void}   opts.onConfirm      提交
  * @param {() => void}   opts.onClear        全部清掉
+ * @param {boolean}      [opts.alwaysVisible] 没有选中项时是否仍显示（用于固定操作栏）
  */
 export function selectBar({
   summary, detail, actionLabel, actionAriaLabel, items, onRemove, onConfirm, onClear,
+  alwaysVisible = false,
 }) {
   const el = h('div.select-bar', { hidden: true });
   let open = false;
@@ -38,12 +40,14 @@ export function selectBar({
   function render() {
     const list = items();
     clearEl(el);
-    // 一项都没有时整条收起来：留一条空条会一直占着屏幕底部
-    el.hidden = list.length === 0;
-    if (!list.length) { open = false; return; }
+    const empty = list.length === 0;
+    // 饮食清单没内容时收起；健身固定栏则保留，并把提交按钮置灰。
+    el.hidden = empty && !alwaysVisible;
+    if (empty) open = false;
+    if (el.hidden) return;
     const sub = detail ? detail() : '';
     mount(el,
-      open ? h('div.select-bar-list', null,
+      open && !empty ? h('div.select-bar-list', null,
         list.map((it) => h('div.select-bar-item', null,
           h('div.select-bar-item-main', null,
             h('strong', null, it.label),
@@ -59,18 +63,19 @@ export function selectBar({
       h('div.select-bar-main', null,
         // 摘要本身是展开开关：多选之后最想确认的就是「我到底选了什么」
         h('button.select-bar-summary', {
-          type: 'button', 'aria-expanded': String(open),
+          type: 'button', 'aria-expanded': String(open), disabled: empty,
           onclick: () => { open = !open; render(); },
         },
         h('span.select-bar-summary-text', null,
           h('strong', null, summary()),
           sub ? h('span.select-bar-detail', null, sub) : null),
-        h('span.select-bar-caret', { 'aria-hidden': 'true' }, open ? '⌄' : '⌃')),
+        empty ? null : h('span.select-bar-caret', { 'aria-hidden': 'true' }, open ? '⌄' : '⌃')),
         h('button.primary-btn.select-bar-go', {
           type: 'button',
+          disabled: empty,
           // 按钮上只有一个符号时，读屏软件念不出它是干什么的
           'aria-label': actionAriaLabel ? actionAriaLabel() : null,
-          onclick: () => { open = false; onConfirm(); },
+          onclick: () => { if (empty) return; open = false; onConfirm(); },
         }, actionLabel())));
   }
 

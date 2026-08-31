@@ -114,7 +114,8 @@ export function renderHealth(root) {
   clearEl(root);
   const metrics = healthMetricsCard();
   const nudge = healthSyncNudge();
-  if (metrics && nudge) metrics.append(nudge);
+  // 健康卡自己已经给出同步按钮时，不再追加第二个同义入口。
+  if (metrics && nudge && !metrics.querySelector('.health-sync-action')) metrics.append(nudge);
   mount(root,
     repairCard(rerender),
     implausibleCard(rerender),

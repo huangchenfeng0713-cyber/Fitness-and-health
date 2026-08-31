@@ -19,7 +19,8 @@
    */
   --protein: #6d5bd0;
   --carb: #e0932f;
-  --water: #3b8fc4;
+  /* 饮水和全应用主操作使用同一套绿色，不再单独引入一块蓝色。 */
+  --water: var(--accent);
   --warn: #d9822b;
   --danger: #d64545;
 
@@ -40,6 +41,12 @@
   --safe-right: var(--env-right);
   --view-inline-pad: 14px;
   --view-bottom-pad: 18px;
+  --card-pad: 18px;
+  --section-gap: 16px;
+  --control-lg: 48px;
+  --control-md: 44px;
+  --control-sm: 36px;
+  --info-size: 28px;
 
   /*
    * 一套比例，不是二十三个随手取的数。
@@ -89,7 +96,7 @@
     --accent-soft: #102c25;
     --protein: #9787f0;
     --carb: #eeae55;
-    --water: #5fb0e0;
+    --water: var(--accent);
     --warn: #e8a04d;
     --danger: #f06a6a;
     --shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 10px 30px rgba(0, 0, 0, .18);
@@ -229,7 +236,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 .view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
-  padding: 14px calc(var(--view-inline-pad) + var(--safe-right)) var(--view-bottom-pad) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: 13px; }
+  padding: 14px calc(var(--view-inline-pad) + var(--safe-right)) var(--view-bottom-pad) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: var(--section-gap); }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
 
@@ -240,6 +247,24 @@ html, body { height: 100%; overflow: hidden; }
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
 }
+
+/* 健身页的批量选择栏是应用壳的一层，始终位于内容区与底部导航之间。 */
+.actionbar-slot {
+  flex: none;
+  background: var(--card);
+  border-top: 1px solid var(--hairline);
+}
+.actionbar-slot[hidden] { display: none; }
+.actionbar-slot .select-bar {
+  position: static;
+  margin: 0;
+  padding: 9px calc(var(--view-inline-pad) + var(--card-pad) + var(--safe-right))
+    9px calc(var(--view-inline-pad) + var(--card-pad) + var(--safe-left));
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
+}
+.actionbar-slot .select-bar-list { max-height: min(32vh, 240px); }
 .tab {
   flex: 1;
   border: 0;
@@ -311,7 +336,7 @@ html, body { height: 100%; overflow: hidden; }
   background: var(--card);
   border: 0;
   border-radius: var(--radius);
-  padding: 17px 16px;
+  padding: var(--card-pad);
   box-shadow: var(--shadow);
 }
 .card-head {
@@ -336,7 +361,7 @@ html, body { height: 100%; overflow: hidden; }
 
 .info-tip { position: relative; flex: none; }
 .info-tip > summary {
-  list-style: none; width: 23px; height: 23px; display: grid; place-items: center;
+  list-style: none; width: var(--info-size); height: var(--info-size); display: grid; place-items: center;
   border: 1px solid var(--border); border-radius: 50%; background: var(--card-2);
   color: var(--muted); font: 700 12px/1 var(--font); cursor: pointer;
 }
@@ -1087,7 +1112,7 @@ body.sheet-open {
 
 /* 喝水：一个大点击区 + 次数。不画完成条 —— 它没有「该喝几次」这回事 */
 /*
- * 喝水一行：左边一条浅蓝的状态条，右边一个「＋饮水」。
+ * 喝水一行：左边一条浅绿的状态条，右边一个「＋饮水」。
  * 状态条不是按钮 —— 点击区只有一个，免得点哪儿都能加一次。
  */
 .water-row { display: flex; align-items: center; gap: 10px; }
@@ -1104,10 +1129,7 @@ body.sheet-open {
   border: 0; background: none; padding: 0; cursor: pointer;
   color: inherit; font: inherit; text-decoration: underline;
 }
-/*
- * 按钮用水那个蓝，不用强调绿。绿色的 tinted 按钮是留给「这一屏的主要动作」的，
- * 而这一页的主要动作是记食物；喝水在这儿再染一次绿，一屏里就有两个「主要动作」。
- */
+/* 饮水动作与全应用的主绿色一致，靠浅底控制视觉重量。 */
 .water-add {
   flex: none; white-space: nowrap; cursor: pointer;
   padding: 10px 14px; border: 0; border-radius: var(--r-md);
@@ -1140,30 +1162,17 @@ body.sheet-open {
 .select-bar {
   position: sticky; bottom: calc(0px - var(--view-bottom-pad)); z-index: 3;
   /* 顶到卡片的内边距外面，让它横贯整张卡 */
-  margin: 10px -16px -17px;
+  margin: 10px calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
   /*
    * 底部不加安全区。这一条钉的是**滚动容器**的底边，而滚动容器下面还有 tab 栏，
    * 安全区已经由 .tabbar 的 padding-bottom 吃掉了 —— 这里再加一次就是双算：
    * 真机上多出 34px 的空白顶在按钮下面，卡片里凭空空出一大块。
    * 真正盖住整个视口的是 .sheet，那一层才需要安全区。
    */
-  padding: 8px 16px;
+  padding: 8px var(--card-pad);
   background: var(--card);
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
-}
-/* 健身页里它就长在动作列表末尾，10px 上边距成了一条说不出理由的空白。 */
-.select-bar.select-bar-tight { margin-top: 0; }
-/*
- * 健身页的待选动作是屏幕级操作，不属于白色动作卡本身。
- * 背景跨过卡片和页面两层内边距铺满屏幕，内容仍与卡片正文对齐。
- */
-.select-bar.select-bar-wide {
-  margin-left: calc(0px - 16px - var(--view-inline-pad) - var(--safe-left));
-  margin-right: calc(0px - 16px - var(--view-inline-pad) - var(--safe-right));
-  padding-left: calc(16px + var(--view-inline-pad) + var(--safe-left));
-  padding-right: calc(16px + var(--view-inline-pad) + var(--safe-right));
-  border-radius: 0;
 }
 .select-bar[hidden] { display: none; }
 .select-bar-main { display: flex; align-items: center; gap: 8px; }
@@ -1171,6 +1180,7 @@ body.sheet-open {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px;
   border: 0; background: none; padding: 4px 0; text-align: left;
 }
+.select-bar-summary:disabled { opacity: 1; cursor: default; }
 /* 主行和副行分开摆：挤在一行上「已选 4 样 · 966 kcal · 蛋白 52g」会折成两截 */
 .select-bar-summary-text { min-width: 0; }
 .select-bar-summary-text strong {
@@ -1855,9 +1865,8 @@ body.sheet-open {
 
 @media (min-width: 640px) {
   body { font-size: 17px; }
-  :root { --view-inline-pad: 18px; --view-bottom-pad: 28px; }
+  :root { --view-inline-pad: 18px; --view-bottom-pad: 28px; --card-pad: 20px; }
   .view { padding-top: 18px; gap: 16px; }
-  .card { padding: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -1867,14 +1876,7 @@ body.sheet-open {
 }
 
 @media (max-width: 380px) {
-  :root { --view-inline-pad: 11px; }
-  .card { padding: 14px; }
-  .select-bar.select-bar-wide {
-    margin-left: calc(0px - 14px - var(--view-inline-pad) - var(--safe-left));
-    margin-right: calc(0px - 14px - var(--view-inline-pad) - var(--safe-right));
-    padding-left: calc(14px + var(--view-inline-pad) + var(--safe-left));
-    padding-right: calc(14px + var(--view-inline-pad) + var(--safe-right));
-  }
+  :root { --view-inline-pad: 11px; --card-pad: 14px; }
   .card-head { gap: 7px; }
   .card-tag { max-width: 40%; font-size: 11px; }
   .data-action { grid-template-columns: 34px minmax(0, 1fr); }

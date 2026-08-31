@@ -1,4 +1,4 @@
-/* v2.10.1：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
+/* v2.11.0：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
@@ -33,9 +33,9 @@
 }
 .ex-pick,
 .rec-add {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   display: inline-grid;
   place-items: center;
   border: 1px solid var(--border);
@@ -102,17 +102,15 @@
   min-height: 44px;
 }
 .picker-scope-switch {
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(var(--picker-cols), minmax(0, 1fr));
   gap: 4px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
+  overflow: visible;
 }
-.picker-scope-switch::-webkit-scrollbar { display: none; }
 .picker-scope-switch .chip-btn {
-  flex: 0 0 68px;
-  min-width: 68px;
+  width: 100%;
+  min-width: 0;
   min-height: 44px;
   padding: 6px 4px;
 }
@@ -283,8 +281,9 @@
 }
 
 
-/* v2.10.1：高频搜索优先，自定义食物退到标题区。 */
+/* v2.11.0：高频搜索优先，自定义食物退到标题区。 */
 .search-card-head .card-head-actions { gap: 7px; }
+.search-card-head { align-items: center; }
 .search-card-head .text-btn {
   min-height: 36px;
   padding: 0 7px;
@@ -318,9 +317,75 @@
 }
 
 @media (max-width: 360px) {
-  .picker-scope-switch { width: 100%; }
-  .picker-scope-switch .chip-btn { flex-basis: 66px; min-width: 66px; }
   .picker-list-toolbar { gap: 6px; }
   .picker-view-switch { gap: 12px; }
   .equip-filter-btn { max-width: 116px; padding-inline: 8px; }
 }
+
+/* 统一常用控件的点击尺寸。紧凑标签仍保留较小的视觉体量。 */
+.primary-btn { min-height: var(--control-lg); }
+.secondary-btn { min-height: var(--control-md); }
+.chip-btn { min-height: var(--control-sm); }
+.search-input { min-height: var(--control-lg); }
+
+/* 今日提示：用统一的信息符号替代一串重复的“为什么”。 */
+.insight { position: relative; }
+.insight:has(.insight-why) { padding-right: 34px; }
+.insight-why { margin: 0; }
+.insight-why summary {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--info-size);
+  height: var(--info-size);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.insight-why[open] summary {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.insight-why[open] summary::after { content: none; }
+.insight-why .insight-basis { margin-top: 7px; }
+
+/* 饮水与本应用主色统一；左右两块等高，文字基线一致。 */
+.water-row { align-items: stretch; }
+.water-pill,
+.water-add {
+  min-height: var(--control-lg);
+  display: flex;
+  align-items: center;
+}
+.water-add { justify-content: center; min-width: 88px; }
+
+/* 推荐预算独占一行，避免卡片标题右边的长句断成两行。 */
+.recommend-card-head { align-items: center; margin-bottom: 9px; }
+.recommend-budget {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--control-sm);
+  margin-bottom: 7px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.recommend-budget span { min-width: 0; white-space: nowrap; text-align: center; }
+.recommend-budget span:first-child { color: var(--accent); font-weight: 600; text-align: left; }
+.recommend-budget span + span { border-left: 1px solid var(--hairline); }
+.recommend-card .rec-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 40px; }
+
+/* 固定选择栏始终是屏幕级横幅，不继承卡片内 sticky 与负边距。 */
+.actionbar-slot .training-select-bar { width: 100%; }
+.actionbar-slot .select-bar-go { min-height: var(--control-md); padding-inline: 18px; }
