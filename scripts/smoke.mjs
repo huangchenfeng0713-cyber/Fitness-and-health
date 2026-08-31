@@ -182,6 +182,7 @@ try {
     } : null;
     return {
       rows, chips, chipText, foot, split,
+      heroText: document.querySelector('.hero')?.innerText.replace(/\n/g, ' ') || '',
       splitCount: document.querySelectorAll('.split-row').length,
       ringStroke: ring ? getComputedStyle(ring).stroke : null,
     };
@@ -228,7 +229,7 @@ try {
     /饮水[^｜]*\//.test(semantics.chipText) && `饮水凭空长出了一个分母：${semantics.chipText}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
-    !/多|超/.test(semantics.foot) && `没吃超，圆环颜色这条没测到（${semantics.foot}）`,
+    !/多|超|高/.test(semantics.heroText) && `没吃超，圆环颜色这条没测到（${semantics.heroText}）`,
     /* 增重计划下吃超时圆环不能是红的 */
     /rgb\(2[0-9]{2},\s*6[0-9],/.test(semantics.ringStroke || '') && `热量圆环画成了红色 ${semantics.ringStroke}`,
   ].filter(Boolean);

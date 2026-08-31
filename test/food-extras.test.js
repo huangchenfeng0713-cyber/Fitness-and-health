@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 
 import '../js/data/food-extras.js';
 import {
-  findFood, searchFoods, hasFoodMix, defaultFoodMix, foodMixNutrition,
+  FOOD_BY_ID, searchFoods, hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../js/data/foods.js';
+
+const findFood = (id) => FOOD_BY_ID.get(id);
 
 test('响铃卷可搜索且带常用份量', () => {
   const food = findFood('ringing_roll_fried');

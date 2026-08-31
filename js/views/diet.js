@@ -134,8 +134,10 @@ function buildShell(root) {
     // 「饮食记录」这个名字让给下面那张真正列出记录的卡；这一张做的是「加一笔」
     h('div.card-head.search-card-head', null,
       h('h3', null, '添加食物'),
-      h('span.card-tag', null, `${allFoods().length} 种`)),
-    h('div.search-row', null, nodes.searchInput, nodes.customToggle),
+      h('div.card-head-actions', null,
+        h('span.card-tag', null, `${allFoods().length} 种`),
+        nodes.customToggle)),
+    h('div.search-row.search-row-full', null, nodes.searchInput),
     nodes.customBox,
     nodes.favRow,
     nodes.categories,

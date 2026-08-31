@@ -28,7 +28,7 @@ test('什么数据都没有时也给得出一张小结', () => {
   assert.equal(rowOf(s, 'logged').value, '0 / 7 天');
   assert.equal(rowOf(s, 'kcal').value, '—', '没记录时不该编一个日均出来');
   assert.equal(rowOf(s, 'weight').value, '—');
-  assert.equal(rowOf(s, 'training').value, '0 次');
+  assert.equal(rowOf(s, 'training'), undefined, '力量训练次数留在健身页，不在速览重复');
 });
 
 test('摄入的分母是有饮食记录的天数，不是日历天数', () => {
@@ -86,28 +86,22 @@ test('窗口外的数据不算进来', () => {
     endDate: '2026-08-28',
     dietDaily: [{ date: day(20), kcal: 9999, protein: 300 }, { date: day(0), kcal: 2000, protein: 150 }],
     healthDays: [{ date: day(30), weightKg: 95 }, { date: day(1), weightKg: 80 }],
-    trainingDays: [{ date: day(40), items: [{ id: 'a', sets: [{}] }] }],
     targets: { kcal: 2000, protein: 150 },
   });
   assert.equal(rowOf(s, 'logged').value, '1 / 7 天', '把窗口外的日子算进来了');
-  assert.equal(rowOf(s, 'training').value, '0 次');
   assert.match(rowOf(s, 'weight').note, /只称了一次/);
 });
 
-test('训练只报做了几次几组，不下「该练几组」的结论', () => {
+test('近 7 日速览不重复健身页的力量训练次数和组数', () => {
   const s = weeklySummary({
     endDate: '2026-08-28',
     trainingDays: [
       { date: day(1), items: [{ id: 'a', sets: [{}, {}, {}] }] },
       { date: day(3), items: [{ id: 'b', sets: [{}, {}] }] },
-      { date: day(4), items: [] },   // 建了但一个动作都没选：不算一次训练
     ],
   });
-  assert.equal(rowOf(s, 'training').value, '2 次');
-  assert.match(rowOf(s, 'training').note, /共记下 5 组/);
-  for (const r of s.rows) {
-    assert.doesNotMatch(String(r.note), /应该|建议每周|太少|不够/, `训练那行下了结论：${r.note}`);
-  }
+  assert.equal(rowOf(s, 'training'), undefined);
+  assert.ok(!s.rows.some((r) => /力量训练|共记下 .*组/.test(`${r.label} ${r.note}`)));
 });
 
 test('脏数据不该让小结抛异常', () => {
@@ -173,15 +167,12 @@ test('日均锻炼取设备分钟，不拿力量训练次数顶替', () => {
     endDate: '2026-08-28',
     dietDaily: [],
     healthDays: days.map((date, i) => ({ date, exerciseMinutes: 20 + i * 10, steps: 6000 })),
-    trainingDays: [{ date: '2026-08-25', items: [{ sets: [{}, {}, {}] }] }],
     targets: { kcal: 2200, protein: 110 },
   });
   const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
   assert.equal(by.exercise.value, '40分钟', '20/30/40/50/60 的均值是 40');
   assert.match(by.exercise.note, /Apple 健康/);
-  assert.equal(by.training.value, '1 次');
-  assert.match(by.training.label, /力量训练/, '两个数得叫不同的名字');
-  assert.notEqual(by.exercise.label, by.training.label);
+  assert.equal(by.training, undefined, '力量训练次数应留在健身页');
 });
 
 test('设备数据太少时不给日均，缺测的日子不进分母', () => {

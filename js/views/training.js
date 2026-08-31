@@ -87,6 +87,8 @@ async function removeExerciseWithUndo(exercise) {
 }
 /* 器械档位定义搬去了 core/training.js —— 推荐和动作列表得筛在同一个范围里 */
 let equipFilter = 'all';
+// 器械菜单属于纯界面状态：换器械会重绘，但菜单不应因此自动收起。
+let equipMenuOpen = false;
 
 const pickedExercises = () => picked().map((id) => EXERCISE_BY_ID.get(id)).filter(Boolean);
 
@@ -106,7 +108,7 @@ function muscleLine(e) {
  */
 function groupTabs(rerender) {
   const covered = coveredGroupKeys(picked());
-  return h('div.range-switch.body-part-switch', null,
+  return h('div.range-switch.body-part-switch.picker-scope-switch', null,
     GROUPS.map((g) => {
       const done = covered.has(g.key);
       return h('button', {
@@ -121,7 +123,7 @@ function groupTabs(rerender) {
 
 /** 身体部位 / 动作模式 —— 两种挑法之间切换 */
 function modeTabs(rerender) {
-  return h('div.range-switch', null,
+  return h('div.range-switch.picker-mode-switch', null,
     [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
       class: `chip-btn${pickMode === key ? ' active' : ''}`,
       type: 'button', 'aria-pressed': String(pickMode === key),
@@ -130,7 +132,7 @@ function modeTabs(rerender) {
 }
 
 function splitTabs(rerender) {
-  return h('div.range-switch', null,
+  return h('div.range-switch.picker-scope-switch', null,
     SPLITS.map((sp) => h('button', {
       class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
       type: 'button', 'aria-pressed': String(activeSplit === sp.key),
@@ -173,16 +175,24 @@ function clashLine(e) {
   const clash = clashWith(e);
   if (!clash) return null;
   return clash.level === 'high'
-    ? { cls: 'ex-clash', text: `和「${clash.other.name}」重复` }
-    : { cls: 'ex-clash soft', text: `和「${clash.other.name}」部分重叠` };
+    ? { cls: 'ex-clash', badge: '重复', detail: `和「${clash.other.name}」重复` }
+    : { cls: 'ex-clash soft', badge: '重叠', detail: `和「${clash.other.name}」部分重叠` };
 }
 
 function exerciseRow(e, rerender, lastDone) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
   // 单独留住这两个节点，勾选时只改它们，不重建整行
-  const pickNode = h('span.ex-pick', null, chosen ? '✓' : marked ? '●' : '＋');
-  const clashNode = h('div.ex-clash-slot');
+  const pickNode = h('span.ex-pick', null, chosen || marked ? '✓' : '＋');
+  const clashNode = h('span.ex-clash-slot', {
+    onclick: (event) => {
+      const detail = clashNode.dataset.detail;
+      if (!detail) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toast(detail, 'info');
+    },
+  });
   const row = h('button.ex-row', {
     class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
     type: 'button',
@@ -202,7 +212,7 @@ function exerciseRow(e, rerender, lastDone) {
       const on = pending.has(e.id);
       row.classList.toggle('marked', on);
       row.setAttribute('aria-pressed', String(on));
-      pickNode.textContent = on ? '●' : '＋';
+      pickNode.textContent = on ? '✓' : '＋';
       // 勾中一个会改变其它行「和已选的重不重」，所以整列的提示都要跟一下
       for (const other of row.parentNode?.children || []) other.syncClash?.();
       if (pickerBar) pickerBar.render();
@@ -233,26 +243,49 @@ function exerciseRow(e, rerender, lastDone) {
     // 保留 ex-clash-slot：整条 className 覆盖掉的话，提示消失之后
     // `:empty { display: none }` 就不再命中，行里会留一道空白
     clashNode.className = line ? `ex-clash-slot ${line.cls}` : 'ex-clash-slot';
-    clashNode.textContent = line ? line.text : '';
+    clashNode.textContent = line ? line.badge : '';
+    clashNode.dataset.detail = line ? line.detail : '';
+    clashNode.title = line ? line.detail : '';
   };
   row.syncClash();
   return row;
 }
 
-function equipTabs(rerender, all) {
-  // 器械档位本来就是互斥的一组选择，和上面两排一样用分段控件。
-  // 它原先借的是趋势卡那个 .chart-switch —— 那套样式带着一条分隔线和
-  // 10px 上内边距（给「图下面还有别的内容」用的），套在灰槽里就成了
-  // 一行说不出理由的空白。趋势卡早就改用下拉了，那套样式已无人使用。
-  return h('div.range-switch', null,
-    EQUIP_FILTERS.map((f) => {
-      const n = all.filter(f.match).length;
-      return h('button', {
-        class: `chip-btn${equipFilter === f.key ? ' active' : ''}${n ? '' : ' empty'}`,
-        type: 'button', 'aria-pressed': String(equipFilter === f.key),
-        onclick: () => { equipFilter = f.key; showAllExercises = false; rerender(); },
-      }, `${f.label} ${n}`);
-    }));
+function equipMenu(rerender, all) {
+  const active = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
+  return h('div.equip-filter-wrap', null,
+    h('button.equip-filter-btn', {
+      type: 'button',
+      'aria-haspopup': 'menu',
+      'aria-expanded': String(equipMenuOpen),
+      onclick: (event) => {
+        event.stopPropagation();
+        equipMenuOpen = !equipMenuOpen;
+        rerender();
+      },
+    },
+    h('span', null, active.label),
+    h('span.equip-filter-caret', { 'aria-hidden': 'true' }, '⌄')),
+    equipMenuOpen ? h('div.equip-filter-menu', { role: 'menu', 'aria-label': '器械筛选' },
+      EQUIP_FILTERS.map((f) => {
+        const n = all.filter(f.match).length;
+        const selected = equipFilter === f.key;
+        return h('button.equip-filter-option', {
+          class: `equip-filter-option${selected ? ' active' : ''}${n ? '' : ' empty'}`,
+          type: 'button', role: 'menuitemradio', 'aria-checked': String(selected),
+          onclick: (event) => {
+            event.stopPropagation();
+            equipFilter = f.key;
+            showAllExercises = false;
+            // 选一个器械后保持菜单展开，方便连续比较；点外部或筛选按钮才收起。
+            equipMenuOpen = true;
+            rerender();
+          },
+        },
+        h('span', null, f.label),
+        h('span.equip-filter-count', null, String(n)),
+        h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? '✓' : ''));
+      })) : null);
 }
 
 function pickerCard(rerender) {
@@ -282,7 +315,7 @@ function pickerCard(rerender) {
     mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
     selection: picked(), equip: equipFilter,
   }) : null;
-  const viewTabs = h('div.range-switch.picker-view-switch', null,
+  const viewTabs = h('div.picker-view-switch.picker-list-tabs', null,
     [['all', '全部动作'], ['recommend', '推荐组合']].map(([key, label]) => {
       const active = (key === 'recommend') === showRecommend;
       return h('button', {
@@ -297,13 +330,12 @@ function pickerCard(rerender) {
       h('h3', null, '挑动作'),
       h('div.card-head-actions', null,
         h('span.card-tag', null, showRecommend
-          ? `${scopeLabel} · ${rec.items.length} 个`
-          : `${scopeLabel} · ${list.length} 个`),
+          ? `${rec.items.length} 个推荐`
+          : `${list.length} 个动作`),
         showRecommend ? recommendTip() : null)),
     modeTabs(rerender),
     byGroup ? groupTabs(rerender) : splitTabs(rerender),
-    equipTabs(rerender, all),
-    viewTabs,
+    h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all)),
     showRecommend
       ? recommendBody(rec)
       : [
@@ -623,6 +655,13 @@ function recommendBody(rec) {
  */
 let rerenderTraining = () => {};
 
+// 点菜单外部才关闭器械筛选；换器械本身不会把菜单折回去。
+document.addEventListener('click', (event) => {
+  if (!equipMenuOpen || event.target.closest?.('.equip-filter-wrap')) return;
+  equipMenuOpen = false;
+  rerenderTraining();
+});
+
 export function renderTraining(root) {
   const rerender = () => renderTraining(root);
   rerenderTraining = rerender;
@@ -637,7 +676,7 @@ export function renderTraining(root) {
    * 换了档位也不知道是它在变。
    */
   mount(root,
-    planCard(),
+    picked().length ? planCard() : null,
     pickerCard(rerender),
     adviceCard(rerender),
     weeklyCard(rerender),
