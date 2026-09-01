@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analyzeSeries, trendReading, MIN_POINTS_FOR_TREND, MIN_POINTS_FOR_CLAIM,
+  INSUFFICIENT_DATA_TEXT,
 } from '../js/core/trend-reading.js';
 
 const pts = (...ys) => ys.map((y, i) => ({ x: `2026-08-${String(i + 1).padStart(2, '0')}`, y }));
@@ -45,11 +46,10 @@ test('漏记的日子不是 0：null 会被剔掉而不是当成零', () => {
   assert.equal(s.min, 2000);
 });
 
-test('空序列给出「怎么才能有数据」而不是硬凑结论', () => {
-  for (const metric of ['kcal', 'protein', 'weight', 'active', 'sleep', 'restingHR', 'balance']) {
+test('空序列统一只写「数据不足」，不硬凑结论', () => {
+  for (const metric of ['kcal', 'protein', 'weight', 'active', 'sleep', 'restingHR', 'balance', 'steps', 'exercise']) {
     const text = trendReading(metric, [], { target: 2000, threshold: 100 });
-    assert.ok(text.length > 8, `${metric} 的空态文案太短`);
-    assert.ok(!/NaN|undefined|null/.test(text), `${metric} 空态出现了脏值：${text}`);
+    assert.equal(text, INSUFFICIENT_DATA_TEXT, `${metric} 的空态没有统一`);
   }
   assert.equal(trendReading('不存在的指标', pts(1, 2, 3)), '');
 });
@@ -78,14 +78,11 @@ test('蛋白解读以达标率为主，平均值不能掩盖漏掉的日子', ()
   assert.match(text, /达标率偏低/);
 });
 
-test('体重记录不够时说明门槛，而不是给一个假的每周变化', () => {
+test('体重记录不够时只写「数据不足」，不拼假的每周变化', () => {
   const text = trendReading('weight', pts(60.02, 59.98), {
     kgPerWeek: null, goalRate: -0.5, records: 2, spanDays: 2,
   });
-  // 卡片右上角写「最新 60.0 kg」，图下面这句得是同一个写法
-  assert.match(text, /所选区间有 2 次记录，最新 60\.0 kg/);
-  assert.match(text, /至少需要 4 次、且首末相隔 7 天/);
-  assert.ok(!/kg\/周/.test(text.replace('kg/周趋势', '')) || !/拟合趋势/.test(text));
+  assert.equal(text, INSUFFICIENT_DATA_TEXT);
 });
 
 test('减脂掉得比目标多算「快」，不能带符号相减说成「慢」', () => {
@@ -129,26 +126,22 @@ test('目标是维持时不谈快慢，只说有没有稳住', () => {
   assert.match(drift, /目标是维持，但每周涨了 0\.35 kg/);
 });
 
-test('摄入样本不足 3 天时不给「日均比目标差多少」的结论', () => {
+test('摄入样本不足 3 天时只写「数据不足」', () => {
   /*
    * 这道门槛原先在今日提示那边（buildInsights）。摄入结论搬到图下面之后，
    * 门槛也只剩这一道：记了一天就说「日均 1287 kcal，比目标低 713」，
    * 那是那一天，不是平均。
-   */
+  */
   const one = trendReading('kcal', pts(1287), { target: 2000 });
-  assert.match(one, /有记录的 1 天里日均 1287 kcal/);
-  assert.doesNotMatch(one, /比目标[高低]/);
-  assert.match(one, /再记满 2 天/);
+  assert.equal(one, INSUFFICIENT_DATA_TEXT);
 
   const enough = trendReading('kcal', pts(1287, 1300, 1400), { target: 2000 });
   assert.match(enough, /有记录的 3 天里日均 1329 kcal，比目标低 671 kcal/);
 });
 
-test('蛋白样本不足时只报天数，不下达标率的判断', () => {
+test('蛋白样本不足时只写「数据不足」', () => {
   const two = trendReading('protein', pts(120, 60), { target: 120, threshold: 108 });
-  assert.match(two, /有记录的 2 天里达标 1 天/);
-  assert.doesNotMatch(two, /执行得不错|一半多的日子|达标率偏低/);
-  assert.match(two, /再记满 1 天/);
+  assert.equal(two, INSUFFICIENT_DATA_TEXT);
 });
 
 test('体重解读只说趋势和快慢，不直接开热量处方', () => {
@@ -175,8 +168,7 @@ test('静息心率的常见范围表述与解读一致', () => {
 
 test('热量收支样本少于 3 天时不换算成每周体重变化', () => {
   const few = trendReading('balance', pts(-1200, -1100));
-  assert.ok(!few.includes('7700'), `样本不足仍在外推：${few}`);
-  assert.match(few, /还不足以换算成每周的体重变化/);
+  assert.equal(few, INSUFFICIENT_DATA_TEXT);
 
   const enough = trendReading('balance', pts(-600, -500, -550));
   assert.match(enough, /按 7700 kcal\/kg 的脂肪当量换算/);
@@ -257,9 +249,9 @@ test('体重解读：涨太快也要说，而且门槛比掉太快严', () => {
   assert.match(say(-1.0, -0.5, 70), /掉的往往不只是脂肪/, say(-1.0, -0.5, 70));
 });
 
-test('调用方没给称重次数时不把 undefined 印出来', () => {
+test('调用方没给体重趋势时按数据不足处理，不把 undefined 印出来', () => {
   const pts = [{ x: '2026-08-01', y: 80 }, { x: '2026-08-02', y: 79.8 }, { x: '2026-08-03', y: 79.5 }];
   const text = trendReading('weight', pts, {});
   assert.doesNotMatch(text, /undefined/, text);
-  assert.match(text, /3 次记录/, text);
+  assert.equal(text, INSUFFICIENT_DATA_TEXT);
 });

@@ -1,11 +1,11 @@
 /** 今日：当前状态、核心目标与可执行提示。 */
 
-import { h, clearEl, num, mount, infoTip } from '../lib/utils.js';
+import { h, clearEl, num, mount, infoTip, persistentInfoTip } from '../lib/utils.js';
 import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
-import { FOCUS_LABEL, INSIGHT_PRIORITY } from '../core/advisor.js';
+import { FOCUS_LABEL } from '../core/advisor.js';
 import { setIntent } from '../lib/nav.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
@@ -202,8 +202,18 @@ function insightsCard(advice, rerender) {
   const all = advice.insights;
   if (!all.length) return null;
   const list = expanded.insights ? all : all.slice(0, 3);
+  const explained = list.filter((insight) => insight.basis);
+  const evidence = explained.length
+    ? persistentInfoTip('today-insights-evidence', '查看当前提示的判断依据',
+      h('ul.insight-evidence-list', null, explained.map((insight) => h('li', null,
+        h('strong', null, `${insight.title}：`),
+        insight.basis))))
+    : null;
+  evidence?.classList.add('insight-evidence-tip');
   return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '今日提示')),
+    h('div.card-head', null,
+      h('h3', null, '今日提示'),
+      evidence),
     h('div.insight-list', null, list.map((i) => {
       const focus = INSIGHT_FOCUS[i.type];
       const main = [
@@ -217,13 +227,7 @@ function insightsCard(advice, rerender) {
           onclick: () => { setIntent({ focus }); location.hash = 'diet'; },
         }, ...main)
         : h('div.insight-main', null, ...main);
-      const evidence = !i.basis ? null
-        : i.priority === INSIGHT_PRIORITY.data
-          ? h('div.insight-basis', null, i.basis)
-          : h('details.insight-why', null,
-            h('summary', { 'aria-label': '查看判断依据', title: '查看判断依据' }, '!'),
-            h('div.insight-basis', null, i.basis));
-      return h(`div.insight.${i.type}`, null, primary, evidence);
+      return h(`div.insight.${i.type}`, null, primary);
     })),
     moreToggle('insights', all.length, 3, rerender));
 }

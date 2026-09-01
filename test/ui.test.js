@@ -391,12 +391,17 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
   assert.match(core, /export function exerciseTags/, '推荐理由没有压成短标签');
 });
 
-test('动作行默认只给一行：练哪儿、什么模式', () => {
+test('全部动作与推荐组合共用动作模式、主要肌肉、动作类型标签', () => {
   // 原先每行都把主动肌和所有协同肌铺开，十几行叠起来全是同一批肌肉名，
   // 扫的时候反而找不到动作名在哪
   const training = read('js/views/training.js');
-  const rows = training.match(/\$\{MUSCLES\[e\.primary\[0\]\] \|\| ''\} · \$\{PATTERNS\[e\.pattern\]\}/g) || [];
-  assert.ok(rows.length >= 2, `挑动作和动作推荐都该用一行式，只找到 ${rows.length} 处`);
+  const css = read('css/app.css');
+  assert.match(training, /recommendFor, exerciseTags, EQUIP_FILTERS/, '列表没有复用 core 的标签语义');
+  assert.match(training, /function exerciseMeta\(tags\)/, '缺少两个视图共用的标签渲染器');
+  const metaCalls = training.match(/exerciseMeta\(/g) || [];
+  assert.ok(metaCalls.length >= 3, `定义外，全部动作和推荐组合都应调用同一渲染器，只找到 ${metaCalls.length - 1} 处`);
+  assert.match(css, /\.exercise-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
+  assert.match(css, /\.exercise-meta-tag\s*\{[^}]*border-radius:/s);
   // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
   assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
 });
@@ -565,8 +570,8 @@ test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因',
 test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致', () => {
   const trends = page('health');
   const charts = read('js/lib/charts.js');
-  // 体重门槛的说法由解读模块给出，必须和 weightTrendStats 的实际口径一致
-  assert.ok(read('js/core/trend-reading.js').includes('至少需要 4 次、且首末相隔 7 天'));
+  // 体重门槛收进说明层，必须和 weightTrendStats 的实际口径一致
+  assert.ok(trends.includes('体重趋势至少需要 4 次称重，且第一条与最后一条相隔至少 7 天'));
   assert.match(read('js/core/health-insights.js'),
     /points\.length >= 4 && elapsedDays >= 7/, '体重拟合门槛与解读文案不一致');
   assert.ok(trends.includes('target: proteinThreshold'));
@@ -574,7 +579,9 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
   assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
   // 当天已经整体不画了，不再需要「半截数据点」处理
   assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截数据的处理');
-  assert.ok(charts.includes('emptyText = \'数据不足，至少需要 2 个记录日\''));
+  assert.ok(charts.includes("emptyText = '数据不足'"));
+  assert.match(trends, /h\('div\.trend-insufficient',[\s\S]*INSUFFICIENT_DATA_TEXT\)/,
+    '样本不足时没有收敛成单一空状态');
 });
 
 test('趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据', () => {
@@ -1110,6 +1117,20 @@ test('说明层点外面就收起来，不必回去再点一次感叹号', () =>
   const bind = utils.slice(utils.indexOf('function bindInfoTipDismiss'), utils.indexOf('export function infoTip'))
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
   assert.ok(!/pointerdown/.test(bind), 'pointerdown 早于原生切换，点感叹号本身会先关再开，闪一下');
+});
+
+test('卡片级说明层在无关重绘后保持用户选择的展开态', () => {
+  const utils = read('js/lib/utils.js');
+  const training = read('js/views/training.js');
+  assert.match(utils, /const persistentInfoTipOpen = new Set\(\)/,
+    '没有保存卡片级说明层展开态');
+  assert.match(utils, /export function persistentInfoTip\(key, label, \.\.\.children\)/);
+  assert.match(utils, /details\.open = persistentInfoTipOpen\.has\(stableKey\)/);
+  assert.match(utils, /details\.addEventListener\('toggle'/,
+    '再次点击、点外面或按 Escape 后没有把关闭状态写回');
+  assert.match(training,
+    /persistentInfoTip\('training-recommendation-method', '这几个是怎么挑的'/,
+    '选择动作卡右上角说明仍会随整页重绘自动收起');
 });
 
 test('饮食记录默认只读，按「编辑」才能改克数或删除', () => {

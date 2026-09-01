@@ -8,13 +8,13 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey, infoTip, toast } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, persistentInfoTip, toast } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
-  recommendFor, EQUIP_FILTERS, equipFilterOf,
+  recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf,
   sessionVolume, recentExercises, recentTrainingRows,
   overlapScore, overlapLevel,
 } from '../core/training.js';
@@ -183,6 +183,18 @@ function clashLine(e) {
     : { cls: 'ex-clash soft', badge: '重叠', detail: `和「${clash.other.name}」部分重叠` };
 }
 
+/**
+ * 动作列表与推荐列表共用同一套注释。
+ *
+ * 这里接收已经整理好的三项语义（主要动作模式 / 主要肌肉 / 动作类型），
+ * 避免两个视图各自拼字：一边写成「股四头肌 · 深蹲 + 复合」，另一边又是
+ * 三个圆角标签，看起来像在表达两套不同的信息。
+ */
+function exerciseMeta(tags) {
+  return h('div.exercise-meta', null,
+    tags.map((tag) => h('span.exercise-meta-tag', null, tag)));
+}
+
 function exerciseRow(e, rerender, lastDone) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
@@ -225,14 +237,12 @@ function exerciseRow(e, rerender, lastDone) {
   h('div.ex-main', null,
     h('div.ex-name', null, h('strong', null, e.name)),
     /*
-     * 默认只给一行：主要练哪儿 · 什么模式。
+     * 默认只给三个短标签：主要动作模式 / 主要肌肉 / 动作类型。
      * 原先每行都把主动肌和所有协同肌铺开（「胸大肌中部　协同：三角肌前束、肱三头肌」），
      * 十几行叠起来全是同一批肌肉名，扫的时候反而找不到动作名在哪。
      * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
      */
-    h('div.ex-muscle', null,
-      `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}`,
-      e.compound ? h('span.ex-tag.compound', null, '复合') : null),
+    exerciseMeta(exerciseTags(e)),
     clashNode,
     // 标出上次练过是哪天，省得每次从头翻
     lastDone && !chosen ? h('div.ex-last', null, `上次 ${lastDone.slice(5)}`) : null),
@@ -597,7 +607,7 @@ function weeklyCard(rerender) {
  * 挑什么、为什么挑、重复了该换成什么，全在 core/training.js 的 recommendFor 里。
  */
 function recommendTip() {
-  return infoTip('这几个是怎么挑的',
+  return persistentInfoTip('training-recommendation-method', '这几个是怎么挑的',
     h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
       + '复合动作排在前面。'),
     h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
@@ -627,7 +637,7 @@ function recommendBody(rec) {
       h('div.rec-pick-main', null,
         h('div.ex-name', null, h('strong', null, item.name)),
         // 理由用短标签，不写长句：五条推荐写成五段话，读完比自己翻列表还慢
-        h('div.rec-pick-tags', null, item.tags.map((t) => h('span.rec-tag', null, t)))),
+        exerciseMeta(item.tags)),
       /*
        * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
        * 而这一屏真正的主要动作是下面那个「全部加入」。

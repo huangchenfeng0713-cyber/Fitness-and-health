@@ -673,20 +673,14 @@ html, body { height: 100%; overflow: hidden; }
 .insight.up { border-left-color: var(--accent); }
 .insight.down, .insight.fiber { border-left-color: var(--carb); }
 .insight-title { font-size: 13.5px; font-weight: 600; }
-/*
- * 依据和建议分两行。依据是「凭什么这么讲」，浅一档；
- * 建议是「那我该做什么」，用正文色 —— 那才是要照着做的那句。
- */
-.insight-basis { font-size: 12.5px; color: var(--faint); line-height: 1.6; margin-top: 2px; }
+/* 建议是「那我该做什么」；判断依据集中收进卡片右上角的一个入口。 */
 .insight-action { font-size: 12.5px; color: var(--muted); line-height: 1.6; margin-top: 3px; }
 .insight-main { min-width: 0; }
-.insight-why { margin-top: 4px; }
-.insight-why summary {
-  width: fit-content; cursor: pointer; color: var(--accent);
-  font-size: var(--fs-caption); font-weight: 600; list-style: none;
+.insight-evidence-list strong { display: inline; }
+.insight-evidence-tip .info-tip-panel {
+  max-height: min(60vh, 420px); overflow-y: auto;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
-.insight-why summary::-webkit-details-marker { display: none; }
-.insight-why[open] summary::after { content: ' 收起'; color: var(--faint); font-weight: 400; }
 /* 建议里可以直接点的动作：点一下就进今日计划 */
 .tip-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .tip-action { font-size: 12.5px; display: inline-flex; align-items: baseline; gap: 5px; }
@@ -905,8 +899,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .rec-pick:last-child { border-bottom: 0; }
 .rec-pick-main { flex: 1; min-width: 0; }
-.rec-pick-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
-.rec-tag {
+/* 全部动作与推荐组合共用：主要动作模式 / 主要肌肉 / 动作类型 */
+.exercise-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.exercise-meta-tag {
   font-size: var(--fs-caption); color: var(--faint);
   background: var(--card-2); border-radius: var(--r-xs); padding: 1px 6px;
 }
@@ -2036,6 +2031,10 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .trend-summary {
   margin: 8px 2px 0; color: var(--muted); font-size: var(--fs-small);
   font-variant-numeric: tabular-nums;
+}
+.trend-insufficient {
+  min-height: 190px; display: grid; place-items: center;
+  color: var(--faint); font-size: var(--fs-small); text-align: center;
 }
 .picker-view-switch { margin-top: 10px; }
 .plan-start { width: 100%; margin-top: 10px; }

@@ -239,7 +239,7 @@ export function lineChart({
   domain = null, showAllDates = false, interactive = false,
   selectedX = null, onPick = null,
   breakOnMissing = false, showPoints = false, overIsBad = false, minPoints = 2,
-  emptyText = '数据不足，至少需要 2 个记录日',
+  emptyText = '数据不足',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });

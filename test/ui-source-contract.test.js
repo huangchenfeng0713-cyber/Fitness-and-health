@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.0"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.0'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.0/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.0\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.1"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.1'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.1/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.1\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -45,10 +45,20 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   const polish = text('css/ux-polish.css');
 
   assert.doesNotMatch(dashboard, /h\('summary'[^\n]*'为什么'/, '今日页又出现成排“为什么”');
-  assert.match(dashboard, /'aria-label': '查看判断依据'[^\n]*}\s*,\s*'!'/,
-    '判断依据缺少可访问的符号入口');
+  assert.match(dashboard,
+    /persistentInfoTip\('today-insights-evidence', '查看当前提示的判断依据'/,
+    '今日提示缺少唯一的卡片级说明入口');
+  assert.doesNotMatch(dashboard, /insight-why/, '今日提示行里又出现了各自的感叹号');
+  assert.match(dashboard, /const explained = list\.filter\(\(insight\) => insight\.basis\)/,
+    '说明层内容没有跟随当前显示的提示');
+  assert.match(css, /\.insight-evidence-tip \.info-tip-panel\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/s,
+    '集中后的提示依据在手机上可能长出屏幕');
   assert.match(training, /h\('h3', null, '选择动作'\)/);
   assert.doesNotMatch(training, /h\('h3', null, '挑动作'\)/);
+  assert.match(training, /exerciseMeta\(exerciseTags\(e\)\)/,
+    '全部动作没有使用主要动作模式、主要肌肉、动作类型标签');
+  assert.match(training, /exerciseMeta\(item\.tags\)/,
+    '推荐组合没有使用同一个标签渲染器');
 
   assert.match(diet, /section\.card\.search-card/, '食物搜索卡缺少控制输入态样式的锚点');
   const searchHead = diet.slice(diet.indexOf("h('div.card-head.search-card-head"), diet.indexOf("h('div.search-row.search-row-full"));

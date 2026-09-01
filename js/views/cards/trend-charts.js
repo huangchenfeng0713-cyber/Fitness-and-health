@@ -10,7 +10,7 @@ import { h, num, shiftDay, formatDuration, todayKey, infoTip } from '../../lib/u
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
-import { trendReading } from '../../core/trend-reading.js';
+import { trendReading, INSUFFICIENT_DATA_TEXT } from '../../core/trend-reading.js';
 
 
 /*
@@ -271,7 +271,7 @@ export function trendCharts(rerender) {
         data: kcalTimeline, color: 'var(--accent)', target: targets.kcal,
         targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
-        overIsBad: false, emptyText: '还没有饮食记录', ...pick,
+        overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
       note: trendReading('kcal', kcalSeries, { target: targets.kcal }),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
@@ -284,7 +284,7 @@ export function trendCharts(rerender) {
         data: proteinTimeline, color: 'var(--protein)', target: proteinThreshold,
         targetLabel: `达标线 ${Math.round(proteinThreshold)}g`, unit: 'g',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
-        overIsBad: false, emptyText: '还没有饮食记录', ...pick,
+        overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
       note: trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
       readout: readoutRow(valueAt((v) => `${num(v)} g`)((dd) => dietByDate.get(dd)?.protein ?? null)),
@@ -295,7 +295,7 @@ export function trendCharts(rerender) {
       tag: weightSeries.length ? `最新 ${num(weightSeries[weightSeries.length - 1].y, 1)} kg` : null,
       chart: lineChart({
         data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg', domain: axisDomain, ...pick,
-        emptyText: weightSeries.length ? '已有 1 次体重记录，暂时无法连线' : '还没有体重记录',
+        emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('weight', weightSeries, {
         kgPerWeek: weightStats.kgPerWeek, goalRate: targets.rateKgPerWeek,
@@ -310,7 +310,7 @@ export function trendCharts(rerender) {
       chart: lineChart({
         data: stepsSeries, color: 'var(--accent)', unit: '步', domain: axisDomain, ...pick,
         target: avgSteps, targetLabel: avgSteps != null ? `平均 ${num(avgSteps)}` : '',
-        emptyText: '还没有步数记录',
+        emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('steps', stepsSeries, {}),
       readout: readoutRow(valueAt((v) => `${num(v)} 步`)((dd) => health.get(dd)?.steps ?? null)),
@@ -322,7 +322,7 @@ export function trendCharts(rerender) {
       chart: lineChart({
         data: exerciseSeries, color: 'var(--accent)', unit: '分钟', domain: axisDomain, ...pick,
         target: 150 / 7, targetLabel: '建议 每周 150 分钟',
-        emptyText: '还没有锻炼记录',
+        emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('exercise', exerciseSeries, {}),
       readout: readoutRow(valueAt((v) => formatDuration(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
@@ -357,7 +357,7 @@ export function trendCharts(rerender) {
       chart: lineChart({
         data: hrSeries, color: 'var(--water)', unit: 'bpm', domain: axisDomain, ...pick,
         target: avgHR, targetLabel: avgHR != null ? `平均 ${avgHR}` : '',
-        emptyText: '还没有静息心率记录',
+        emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('restingHR', hrSeries, {}),
       readout: readoutRow(valueAt((v) => `${num(v)} bpm`)((dd) => (health.get(dd)?.restingHR > 0 ? health.get(dd).restingHR : null))),
@@ -369,7 +369,7 @@ export function trendCharts(rerender) {
       chart: lineChart({
         data: balanceSeries, color: 'var(--warn)', target: 0, targetLabel: '收支平衡',
         unit: 'kcal', domain: axisDomain, ...pick,
-        emptyText: '需要同日的饮食记录与设备能量数据',
+        emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('balance', balanceSeries, {}),
       readout: readoutRow(kcalAt((dd) => balanceSeries.find((pt) => pt.x === dd)?.y ?? null)),
@@ -390,6 +390,10 @@ export function trendCharts(rerender) {
    */
   if (typeof SPEC[activeChart] !== 'function') activeChart = CHARTS[0].key;
   const spec = SPEC[activeChart]();
+  const insufficient = spec.note === INSUFFICIENT_DATA_TEXT;
+  const insufficientHelp = activeChart === 'weight'
+    ? '体重趋势至少需要 4 次称重，且第一条与最后一条相隔至少 7 天。'
+    : '趋势解读至少需要 3 个有效记录日；没有记录的日期不会按 0 计算。';
   const todayNote = '统计到昨天为止：当天数据要等这一天过完才会出现。';
 
   return [
@@ -405,6 +409,7 @@ export function trendCharts(rerender) {
         h('div.card-head-actions', null,
           infoTip('查看这张图的统计口径',
             h('p', null, spec.tip),
+            insufficient ? h('p', null, insufficientHelp) : null,
             h('p', null, `统计到 ${endDay} 为止；${todayNote || '所选日期当天不计入。'}`)))),
 
       h('div.trend-pickers', null,
@@ -428,9 +433,13 @@ export function trendCharts(rerender) {
 
       spec.tag ? h('p.trend-summary', null, spec.tag) : null,
 
-      h('div.chart-wrap', null, spec.chart),
-      spec.readout,
-      h('p.chart-note', null, spec.note)),
+      insufficient
+        ? h('div.trend-insufficient', { role: 'status' }, INSUFFICIENT_DATA_TEXT)
+        : [
+          h('div.chart-wrap', null, spec.chart),
+          spec.readout,
+          h('p.chart-note', null, spec.note),
+        ]),
 
     range === 'all' ? fullTable(days, dietByDate) : null,
   ];

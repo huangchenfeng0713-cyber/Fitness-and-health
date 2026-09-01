@@ -132,6 +132,27 @@ export function infoTip(label, ...children) {
   return details;
 }
 
+/*
+ * 某些卡片会被账号状态、数据同步或时钟刷新整块重建。普通 infoTip 跟着 DOM
+ * 一起销毁是合理的；但卡片级的主要说明刚点开就被一次无关重绘收起，看起来像
+ * 感叹号失灵。给这类入口一个稳定 key，把用户主动选择的展开态留在模块内存里。
+ *
+ * 点外面、再次点 summary 或按 Escape 仍会改变 details.open；toggle 事件会把
+ * 新状态写回集合，因此这里只抵抗“节点被重建”，不会把用户已经关闭的层又打开。
+ */
+const persistentInfoTipOpen = new Set();
+
+export function persistentInfoTip(key, label, ...children) {
+  const stableKey = String(key);
+  const details = infoTip(label, ...children);
+  details.open = persistentInfoTipOpen.has(stableKey);
+  details.addEventListener('toggle', () => {
+    if (details.open) persistentInfoTipOpen.add(stableKey);
+    else persistentInfoTipOpen.delete(stableKey);
+  });
+  return details;
+}
+
 /**
  * 复制到剪贴板。
  *

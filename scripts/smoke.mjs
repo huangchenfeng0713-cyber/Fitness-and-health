@@ -75,6 +75,43 @@ try {
         .filter(Boolean).join('，'));
   }
 
+  // ---- 全部动作与推荐组合共用标签；推荐说明不会被一次无关重绘收起 ----
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('健身'))?.click());
+  await page.waitForTimeout(400);
+  const allTagCounts = await page.$$eval('.ex-row .exercise-meta', (rows) => rows
+    .map((row) => row.querySelectorAll('.exercise-meta-tag').length));
+  await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
+    .find((x) => x.textContent.includes('推荐组合'))?.click());
+  await page.waitForTimeout(300);
+  const recommendState = await page.evaluate(() => ({
+    tagCounts: [...document.querySelectorAll('.rec-pick .exercise-meta')]
+      .map((row) => row.querySelectorAll('.exercise-meta-tag').length),
+    hasOldTags: !!document.querySelector('.rec-tag, .rec-pick-tags'),
+    hasTip: !!document.querySelector('.exercise-picker-card .info-tip > summary'),
+  }));
+  await page.evaluate(() => document.querySelector('.exercise-picker-card .info-tip > summary')?.click());
+  await page.waitForTimeout(100);
+  const openBeforeRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
+  await page.evaluate(async () => {
+    const { renderTraining } = await import('./js/views/training.js');
+    renderTraining(document.querySelector('#view'));
+  });
+  await page.waitForTimeout(100);
+  const openAfterRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
+  const trainingProblems = [
+    !allTagCounts.length && '全部动作没有渲染',
+    allTagCounts.some((n) => n !== 3) && `全部动作标签数不是 3：${allTagCounts.join('/')}`,
+    !recommendState.tagCounts.length && '推荐组合没有渲染',
+    recommendState.tagCounts.some((n) => n !== 3)
+      && `推荐组合标签数不是 3：${recommendState.tagCounts.join('/')}`,
+    recommendState.hasOldTags && '推荐组合仍在使用旧标签样式',
+    !recommendState.hasTip && '推荐说明入口缺失',
+    !openBeforeRender && '推荐说明点击后没有展开',
+    !openAfterRender && '推荐说明被一次无关重绘自动收起',
+  ].filter(Boolean);
+  check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
+
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('饮食'))?.click());
@@ -332,7 +369,17 @@ try {
   });
   await page.waitForTimeout(500);
   const chartState = zeroLine?.noChart ? zeroLine : await page.evaluate(() => {
+    const insufficient = document.querySelector('.trend-insufficient');
+    if (insufficient) {
+      return {
+        dots: 0,
+        empty: insufficient.textContent.trim() === '数据不足',
+        emptyText: insufficient.textContent.trim(),
+        onFloor: 0,
+      };
+    }
     const wrap = document.querySelector('.chart-wrap');
+    if (!wrap) return { dots: 0, empty: false, emptyText: '', onFloor: 0 };
     const dots = [...wrap.querySelectorAll('circle')];
     const svg = wrap.querySelector('svg');
     const h = svg ? Number(svg.getAttribute('viewBox').split(' ')[3]) : 0;
@@ -351,7 +398,7 @@ try {
   check('一条记录都没有时给空状态，不画线',
     chartState.noChart || (chartState.empty && chartState.dots === 0),
     chartState.noChart ? '数据页没有图'
-      : `本该是空状态，实际画了 ${chartState.dots} 个点（空状态文字：${chartState.empty ? '有' : '无'}）`);
+      : `本该只写“数据不足”，实际画了 ${chartState.dots} 个点（空状态：${chartState.emptyText || '无'}）`);
   await page.evaluate(async () => {
     const { setDay } = await import('./js/lib/store.js');
     await setDay(new Date().toLocaleDateString('sv-SE'));

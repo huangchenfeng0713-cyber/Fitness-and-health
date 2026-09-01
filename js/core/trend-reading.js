@@ -20,6 +20,8 @@ const round = (v, d = 0) => {
 export const MIN_POINTS_FOR_TREND = 4;
 /** 少于 3 天不做「长期如何」「每周相当于多少」这类外推 */
 export const MIN_POINTS_FOR_CLAIM = 3;
+/** 记录不够时只显示这一句；补数据的方法收进趋势卡右上角的说明里。 */
+export const INSUFFICIENT_DATA_TEXT = '数据不足';
 
 /**
  * 一条序列的基本形状。
@@ -75,15 +77,14 @@ const join = (parts) => parts.filter(Boolean).join('');
 /** 热量摄入：离目标多远、超标几天、在往哪个方向走 */
 function readKcal(points, { target }) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有饮食记录，记满几天就能看出摄入的稳定程度。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   /*
    * 一两天的均值不是「日均摄入」。以前这句话在今日提示里也说一遍，那边有这道门槛；
    * 现在摄入结论只剩这一处，门槛得跟着搬过来，否则记了一天就会看到
    * 「日均 1287 kcal，比目标低 700」——那只是那一天，不是平均。
    */
   if (s.n < MIN_POINTS_FOR_CLAIM) {
-    return `有记录的 ${s.n} 天里日均 ${s.avg} kcal。`
-      + `再记满 ${MIN_POINTS_FOR_CLAIM - s.n} 天，这里会给出和目标的差距、超标了几天。`;
+    return INSUFFICIENT_DATA_TEXT;
   }
   const over = target > 0 ? countDays(points, (y) => y > target * 1.05) : 0;
   const under = target > 0 ? countDays(points, (y) => y < target * 0.75) : 0;
@@ -107,12 +108,11 @@ function readKcal(points, { target }) {
 /** 蛋白：达标率是关键，平均值会被个别高值拉高 */
 function readProtein(points, { target, threshold }) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有饮食记录，记满几天才能看出蛋白是否吃够。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const hit = countDays(points, (y) => y >= threshold);
   // 同上：两天里达标一天不叫「达标率 50%」
   if (s.n < MIN_POINTS_FOR_CLAIM) {
-    return `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`
-      + `再记满 ${MIN_POINTS_FOR_CLAIM - s.n} 天才谈得上达标率。`;
+    return INSUFFICIENT_DATA_TEXT;
   }
   const rate = s.n ? hit / s.n : 0;
   return join([
@@ -130,14 +130,11 @@ function readProtein(points, { target, threshold }) {
 /** 体重：只看趋势不看单点，且要和目标速率对照 */
 function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
   const s = analyzeSeries(points, 1);
-  if (!s) return '这段时间还没有体重记录。每周固定同一时间称一次，趋势才看得出来。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   // 调用方没给次数时用序列自己的点数，别把「undefined 次记录」印到卡片上
   const n = Number.isFinite(Number(records)) ? records : s.n;
   if (kgPerWeek == null) {
-    return join([
-      `所选区间有 ${n} 次记录，最新 ${Number(points[points.length - 1].y).toFixed(1)} kg。`,
-      '至少需要 4 次、且首末相隔 7 天才能估算每周趋势——固定早晨空腹称，两周就能看出方向。',
-    ]);
+    return INSUFFICIENT_DATA_TEXT;
   }
   /*
    * 「快 / 慢」要按目标方向算，不能带符号直接相减。
@@ -175,7 +172,7 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
 /** 活动能量：设备估算，重点在稳定性而不是绝对值 */
 function readActive(points) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有活动能量记录。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const cv = s.avg > 0 ? s.spread / s.avg : 0;
   return join([
     `日均 ${s.avg} kcal，区间内 ${s.min} ~ ${s.max} kcal。`,
@@ -192,7 +189,7 @@ function readActive(points) {
 /** 睡眠：时长、稳定性、方向 */
 function readSleep(points) {
   const s = analyzeSeries(points, 1);
-  if (!s) return '这段时间还没有睡眠记录。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const short = countDays(points, (y) => y < 6.5);
   /*
    * 具体时长写成「6小时42分」。序列本身是小时（图的纵轴要小数刻度才排得齐），
@@ -218,7 +215,7 @@ function readSleep(points) {
 /** 静息心率：绝对值 + 变化方向，上升是需要留意的信号 */
 function readRestingHR(points) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有静息心率记录。它需要手表在睡眠时佩戴才会自动产生。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   return join([
     `日均 ${s.avg} bpm，区间内 ${s.min} ~ ${s.max} bpm。`,
     s.avg > 80 ? '成人常见范围是 60~100，长期高于 80 与心血管风险上升相关；规律有氧是最有效的降低手段。'
@@ -235,12 +232,12 @@ function readRestingHR(points) {
 /** 热量收支：只有同日摄入与消耗都齐全才画得出来 */
 function readBalance(points) {
   const s = analyzeSeries(points);
-  if (!s) return '需要同一天既有饮食记录、又有设备的静息与活动能量，才能算收支。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const deficit = countDays(points, (y) => y < 0);
   const head = `${s.n} 天里日均 ${s.avg > 0 ? '+' : ''}${s.avg} kcal，其中 ${deficit} 天为负（摄入低于消耗）。`;
   // 一两天就换算成「每周掉几公斤」是最容易造出假结论的地方，样本不够就只报数
   if (s.n < MIN_POINTS_FOR_CLAIM) {
-    return `${head}只有 ${s.n} 天同时具备饮食与设备能量数据，还不足以换算成每周的体重变化。`;
+    return INSUFFICIENT_DATA_TEXT;
   }
   const weekly = round((Math.abs(s.avg) * 7) / 7700, 2);
   return join([
@@ -254,7 +251,7 @@ function readBalance(points) {
 /** 步数：绝对值 + 稳定性，参考分档见 docs/算法依据.md */
 function readSteps(points) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有步数记录。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const low = countDays(points, (y) => y < 4000);
   return join([
     `日均 ${s.avg} 步，区间内 ${s.min} ~ ${s.max} 步。`,
@@ -273,7 +270,7 @@ function readSteps(points) {
 /** 锻炼时间：对照 WHO 每周 150 分钟 */
 function readExercise(points) {
   const s = analyzeSeries(points);
-  if (!s) return '这段时间还没有锻炼记录。';
+  if (!s) return INSUFFICIENT_DATA_TEXT;
   const weekly = Math.round((s.avg * 7));
   const zero = countDays(points, (y) => y <= 0);
   return join([
@@ -295,5 +292,13 @@ const READERS = {
 export function trendReading(metric, points = [], opts = {}) {
   const reader = READERS[metric];
   if (!reader) return '';
+  const summary = analyzeSeries(points);
+  /*
+   * 一两个点能报出一个“平均”，却不能代表趋势。卡片空态统一只写“数据不足”；
+   * 需要补几天、体重为什么还要拉开 7 天，放进右上角的方法说明，避免同一张
+   * 空图下面再常驻一大段教程。
+   */
+  if (!summary || summary.n < MIN_POINTS_FOR_CLAIM) return INSUFFICIENT_DATA_TEXT;
+  if (metric === 'weight' && opts.kgPerWeek == null) return INSUFFICIENT_DATA_TEXT;
   return reader(points, opts);
 }

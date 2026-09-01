@@ -1,4 +1,4 @@
-/* v2.11.0：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
+/* v2.11.1：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
@@ -327,33 +327,6 @@
 .secondary-btn { min-height: var(--control-md); }
 .chip-btn { min-height: var(--control-sm); }
 .search-input { min-height: var(--control-lg); }
-
-/* 今日提示：用统一的信息符号替代一串重复的“为什么”。 */
-.insight { position: relative; }
-.insight:has(.insight-why) { padding-right: 34px; }
-.insight-why { margin: 0; }
-.insight-why summary {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: var(--info-size);
-  height: var(--info-size);
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: var(--card-2);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1;
-}
-.insight-why[open] summary {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.insight-why[open] summary::after { content: none; }
-.insight-why .insight-basis { margin-top: 7px; }
 
 /* 饮水与本应用主色统一；左右两块等高，文字基线一致。 */
 .water-row { align-items: stretch; }
