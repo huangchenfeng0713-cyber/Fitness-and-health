@@ -52,6 +52,7 @@
   --control-lg: 48px;
   --control-md: 44px;
   --control-sm: 36px;
+  --topbar-row: 46px;
   --info-size: 14px;
 
   /*
@@ -184,7 +185,7 @@ html, body { height: 100%; overflow: hidden; }
   padding-top: var(--safe-top);
 }
 .topbar-inner {
-  display: flex; align-items: center; gap: 6px; min-height: 46px;
+  display: flex; align-items: center; gap: 6px; min-height: var(--topbar-row);
   padding: 3px calc(12px + var(--safe-right)) 5px calc(12px + var(--safe-left));
 }
 .topbar-context { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
@@ -654,16 +655,21 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ============ 避免 ============ */
 
-.chip {
-  font-size: 11px; padding: 1.5px 6px; border-radius: 6px; white-space: nowrap;
-  background: var(--card-2); color: var(--faint); border: 1px solid var(--border); font-weight: 400;
+.ui-weak-tag {
+  min-height: 21px; padding: 1px 6px; border-radius: var(--r-xs); white-space: nowrap;
+  display: inline-flex; align-items: center;
+  font-size: var(--fs-caption); line-height: 1.45; font-weight: 450;
+  background: var(--card-2); color: var(--faint); border: 1px solid transparent;
 }
+.ui-weak-tag-soft { background: var(--card-2); color: var(--faint-readable); }
+.ui-weak-tag-outline { background: transparent; color: var(--faint); border-color: var(--border); }
+.ui-weak-tag-accent { background: var(--accent-soft); color: var(--accent); }
 .chip-est {
   /* 只披露“这不是精确标签值”，不把估算本身画成警告。 */
   background: transparent;
   color: var(--faint);
   border-color: color-mix(in srgb, var(--faint) 34%, transparent);
-  font-size: 10.5px;
+  font-size: var(--fs-caption);
   font-weight: 450;
 }
 .search-item-tags { display: flex; gap: 4px; flex-shrink: 0; }
@@ -1023,6 +1029,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* ============ 记录页 ============ */
 
 .search-row { display: flex; gap: 8px; align-items: center; }
+.ui-search-field { width: 100%; }
 .search-card-head { margin-bottom: 10px; }
 .search-input {
   flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border);
@@ -1039,6 +1046,13 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .search-item-main { min-width: 0; }
 .search-item-main strong { display: block; font-size: 13.5px; }
 .search-item-meta { font-size: 11.5px; color: var(--faint); }
+
+/* 高频列表只保留一套骨架；具体页面只决定内容和行高。 */
+.ui-list-row {
+  width: 100%; min-width: 0; min-height: var(--control-md); color: inherit; font-family: inherit;
+  border-bottom-color: var(--hairline);
+}
+.ui-list-row:last-child { border-bottom-color: transparent; }
 
 .result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
 
@@ -1939,11 +1953,6 @@ body.sheet-open {
 /* ============ 健身建议 ============ */
 .ex-row.chosen { background: var(--accent-soft); border-radius: var(--radius-sm); }
 .ex-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 15px; }
-.ex-tag {
-  font-size: 11px; color: var(--muted); background: var(--card-2);
-  border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px;
-}
-.ex-tag.compound { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
 .ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ex-muscle-old { font-size: 12.5px; color: var(--faint); margin-top: 3px; }
 /*

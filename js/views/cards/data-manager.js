@@ -5,7 +5,8 @@
  * 它以前长在数据页里，现在挂在设置页——都是维护性操作，和日常看数据不是一类。
  */
 
-import { h, num, toast, confirmAction, download, infoTip, todayKey } from '../../lib/utils.js';
+import { h, num, toast, confirmAction, download, todayKey } from '../../lib/utils.js';
+import { infoTip } from '../../lib/ui.js';
 import { state, saveHealthDay, saveProfile, clearAllData, db } from '../../lib/store.js';
 import { isPlausibleHealthValue } from '../../core/health.js';
 import { runImportWorker, applyImport } from '../../lib/importer.js';

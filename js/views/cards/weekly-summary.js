@@ -1,6 +1,7 @@
 /** 近 7 日速览卡：截至昨天的七个完整日。 */
 
-import { h, infoTip, shiftDay, todayKey } from '../../lib/utils.js';
+import { h, shiftDay, todayKey } from '../../lib/utils.js';
+import { infoTip } from '../../lib/ui.js';
 import { state } from '../../lib/store.js';
 import { weeklySummary } from '../../core/weekly-summary.js';
 

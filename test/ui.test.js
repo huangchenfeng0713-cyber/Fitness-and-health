@@ -390,8 +390,13 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
     '推荐组合视图不应显示全部动作的筛选摘要');
   assert.match(training, /picker-compact-action', null, '回到顶部'/,
     '筛选摘要没有明确说明会回到顶部');
-  assert.match(polish, /\.picker-compact-summary\s*\{[^}]*top:\s*0[^}]*width:\s*calc\(100% \+ var\(--card-pad\)/s,
-    '筛选摘要没有贴住滚动区顶部并横贯应用宽度');
+  assert.match(polish,
+    /\.picker-compact-summary\s*\{[^}]*position:\s*fixed[^}]*top:\s*var\(--safe-top\)[^}]*width:\s*min\(100vw, 720px\)/s,
+    '筛选摘要没有接管顶栏并贴住安全区下沿');
+  assert.match(polish, /height:\s*var\(--topbar-row\)/,
+    '筛选摘要与应用顶栏没有共用高度令牌');
+  assert.doesNotMatch(polish, /\.picker-compact-summary\s*\{[^}]*margin:[^}]*-40px/s,
+    '筛选摘要仍靠负边距压住第一行动作');
 });
 
 /*
@@ -441,9 +446,9 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
     '三个标签没有建立动作模式 / 肌肉 / 类型的视觉层级');
   assert.match(css, /\.exercise-meta-tag\.type\s*\{[^}]*border-color:/s,
     '动作类型没有使用最轻的描边层级');
-  assert.match(training, /button\.ex-row\.exercise-choice-row/,
+  assert.match(training, /className: `ex-row exercise-choice-row/,
     '全部动作没有使用共用动作行');
-  assert.match(training, /button\.rec-pick\.exercise-choice-row/,
+  assert.match(training, /className: 'rec-pick exercise-choice-row'/,
     '推荐组合没有使用共用动作行');
   assert.match(css, /\.exercise-choice-row\s*\{[^}]*padding:\s*10px var\(--space-2\)/s,
     '两个视图的文字位置与行内边距没有统一');
@@ -457,14 +462,19 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
 
 test('选择动作顶部使用与食物一致的搜索框，输入时只更新结果区', () => {
   const training = read('js/views/training.js');
+  const diet = read('js/views/diet.js');
+  const ui = read('js/lib/ui.js');
   const polish = read('css/ux-polish.css');
   assert.match(training, /EXERCISE_BY_ID, searchExercises/,
     '选择动作没有复用动作库的中文、拼音与英文搜索');
-  assert.match(training, /input\.search-input\.exercise-search-input/,
-    '动作搜索框没有复用添加食物的 search-input 样式');
-  assert.match(training, /placeholder: '输入内容以搜索'/);
-  assert.match(read('js/views/diet.js'), /placeholder: '输入内容以搜索'/,
-    '食物和动作搜索框没有统一占位文案');
+  assert.match(training, /const search = searchField\(\{/,
+    '动作搜索框没有复用统一搜索组件');
+  assert.match(diet, /const search = searchField\(\{/,
+    '食物搜索框没有复用统一搜索组件');
+  assert.match(ui, /placeholder = '输入内容以搜索'/,
+    '统一搜索组件没有固定占位文案');
+  assert.match(ui, /input\.search-input\.ui-search-input/,
+    '统一搜索组件没有复用 search-input 视觉基类');
   assert.match(training, /searchInput\.addEventListener\('input',[\s\S]*?updateSearch\(\)/,
     '输入搜索词后没有即时更新结果');
   assert.doesNotMatch(training, /searchInput\.addEventListener\('input',[\s\S]{0,180}?rerender\(/,
@@ -475,6 +485,31 @@ test('选择动作顶部使用与食物一致的搜索框，输入时只更新�
     '动作搜索框没有铺满可用宽度');
   assert.match(polish, /\.picker-controls\[hidden\][\s\S]*?display:\s*none\s*!important/,
     '搜索时隐藏的筛选区可能被组件自身 display 样式重新显示');
+});
+
+test('高频搜索框、弱标签、信息入口和列表行由统一组件提供', () => {
+  const ui = read('js/lib/ui.js');
+  const diet = read('js/views/diet.js');
+  const training = read('js/views/training.js');
+  const foodEstimate = read('js/views/cards/food-estimate.js');
+  const mealAdvice = read('js/views/cards/meal-advice.js');
+  const css = read('css/app.css');
+
+  assert.match(ui, /export function searchField\(/, '缺少统一搜索组件');
+  assert.match(ui, /export function weakTag\(/, '缺少统一弱标签组件');
+  assert.match(ui, /export function listRow\(/, '缺少统一列表行组件');
+  assert.match(ui, /export \{ infoTip, persistentInfoTip \}/, '信息入口没有从统一 UI 模块导出');
+  assert.match(diet, /import \{ listRow, searchField, weakTag \} from '\.\.\/lib\/ui\.js'/,
+    '添加食物没有接入统一组件');
+  assert.match(training, /import \{ listRow, persistentInfoTip, searchField, weakTag \} from '\.\.\/lib\/ui\.js'/,
+    '选择动作没有接入统一组件');
+  assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
+  assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
+    '饮食推荐列表没有接入统一列表行');
+  assert.match(css, /\.ui-weak-tag\s*\{[^}]*min-height:\s*21px/s,
+    '弱标签没有统一高度与内边距');
+  assert.match(css, /\.ui-list-row\s*\{[^}]*border-bottom-color:\s*var\(--hairline\)/s,
+    '列表行没有统一分隔线口径');
 });
 
 test('信息符号视觉减半但保留可触达区域', () => {
@@ -1217,6 +1252,9 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
   assert.match(utils, /document\.addEventListener\('click'/, '没有装「点外面收起来」的监听');
   assert.match(utils, /closeOthers\(event\.target\.closest\?\.\('details\.info-tip'\) \|\| null\)/,
     '判断点在不在自己里面应当用 closest —— 点说明层内部（选字、点链接）不该关掉它');
+  assert.match(utils,
+    /document\.addEventListener\('click',[\s\S]*?closeOthers\([\s\S]*?\}, true\);/,
+    '外部关闭必须在捕获阶段监听，否则 sheet 会截断冒泡事件');
   assert.match(utils, /if \(event\.key === 'Escape'\) closeOthers\(null\)/, 'Esc 应当也能收起来');
 
   /*
@@ -1590,7 +1628,7 @@ test('饮食与训练的轻量删除都能原样撤销', () => {
  */
 test('搜索结果整行开份量面板，份量确认后可直接记录或继续添加', () => {
   const diet = strip(read('js/views/diet.js'));
-  const row = diet.slice(diet.indexOf("h('button.search-item'"), diet.indexOf('all.length > results.length'));
+  const row = diet.slice(diet.indexOf("className: 'search-item'"), diet.indexOf('all.length > results.length'));
   assert.match(row, /onclick: \(\) => selectFood\(f\)/, '整行没有打开份量面板');
   assert.ok(!diet.includes('button.search-item-add'), '右侧还留着与整行重复的 ＋ 入口');
   assert.match(row, /button\.search-item-remove[\s\S]*?removeFromBasket\(f\.id\)/,

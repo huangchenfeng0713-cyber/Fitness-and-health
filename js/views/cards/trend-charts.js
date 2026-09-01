@@ -6,7 +6,8 @@
  * 上面一排按钮选看哪一张，选中的那张给出走势解读。
  */
 
-import { h, num, shiftDay, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
+import { h, num, shiftDay, formatDuration, todayKey } from '../../lib/utils.js';
+import { infoTip } from '../../lib/ui.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';

@@ -8,7 +8,8 @@
  * 必须整屏摆出来，收进二级页面等于没提示。
  */
 
-import { h, clearEl, toast, mount, num, infoTip, confirmAction, field, todayKey } from '../lib/utils.js';
+import { h, clearEl, toast, mount, num, confirmAction, field, todayKey } from '../lib/utils.js';
+import { infoTip } from '../lib/ui.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';

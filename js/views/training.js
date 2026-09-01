@@ -8,7 +8,8 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey, persistentInfoTip, toast } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, toast } from '../lib/utils.js';
+import { listRow, persistentInfoTip, searchField, weakTag } from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
 } from '../data/exercises.js';
@@ -198,7 +199,10 @@ function clashLine(e) {
 function exerciseMeta(tags) {
   const classes = ['pattern', 'muscle', 'type'];
   return h('div.exercise-meta', null,
-    tags.map((tag, index) => h(`span.exercise-meta-tag.${classes[index] || 'detail'}`, null, tag)));
+    tags.map((tag, index) => weakTag(tag, {
+      tone: index === 2 ? 'outline' : 'soft',
+      className: `exercise-meta-tag ${classes[index] || 'detail'}`,
+    })));
 }
 
 function exerciseRow(e, rerender) {
@@ -216,8 +220,9 @@ function exerciseRow(e, rerender) {
       toast(detail, 'info');
     },
   });
-  const row = h('button.ex-row.exercise-choice-row', {
-    class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
+  const row = listRow({
+    as: 'button',
+    className: `ex-row exercise-choice-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
     type: 'button',
     'aria-pressed': String(chosen || marked),
     onclick: async () => {
@@ -271,7 +276,7 @@ function exerciseRow(e, rerender) {
 }
 
 /**
- * 原来的两排筛选离开可视区后，只留一行当前范围摘要。
+ * 原来的两排筛选离开可视区后，用一行当前范围摘要接管应用顶栏。
  * 摘要不制造新的筛选状态，点它只把原控件滚回视野；真正的选择仍由上面的
  * 分段控件完成，避免桌面和手机各养一套交互。
  */
@@ -380,14 +385,13 @@ function pickerCard(rerender) {
   const countNode = h('span.card-tag', null, showRecommend
     ? `${rec.items.length} 个推荐`
     : `${list.length} 个动作`);
-  const searchInput = h('input.search-input.exercise-search-input', {
-    type: 'search',
+  const search = searchField({
+    className: 'exercise-search-row',
+    inputClassName: 'exercise-search-input',
     value: exerciseQuery,
-    placeholder: '输入内容以搜索',
-    'aria-label': '搜索动作，支持中文、拼音或英文',
-    autocomplete: 'off',
-    enterkeyhint: 'search',
+    ariaLabel: '搜索动作，支持中文、拼音或英文',
   });
+  const searchInput = search.input;
   const toolbar = h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all));
   const normalContent = h('div.picker-normal-results', null,
     showRecommend
@@ -434,7 +438,7 @@ function pickerCard(rerender) {
       h('div.card-head-actions', null,
         countNode,
         showRecommend ? recommendTip() : null)),
-    h('div.search-row.search-row-full.exercise-search-row', null, searchInput),
+    search.el,
     compactSummary,
     controls,
     toolbar,
@@ -531,7 +535,7 @@ function planRow(exercise, index) {
       h('span.plan-index', null, String(index + 1)),
       h('div.plan-main', null,
         h('div.ex-name', null, h('strong', null, exercise.name),
-          h('span.ex-tag', null, EQUIPMENT[exercise.equipment])),
+          weakTag(EQUIPMENT[exercise.equipment])),
         h('div.ex-muscle', null, muscleLine(exercise))),
       h('button.text-btn', {
         class: `text-btn${item.sets.length ? ' has-sets' : ''}`,
@@ -714,7 +718,8 @@ function recommendBody(rec) {
           ...(items.some((i) => i.id === o.id) ? [] : [{ id: o.id, sets: [], done: false }]),
         ]),
       }, h('span', null, `换成 ${o.name}`)))))),
-    h('div.rec-picks', null, rec.items.map((item) => h('button.rec-pick.exercise-choice-row', {
+    h('div.rec-picks', null, rec.items.map((item) => listRow({
+      as: 'button', className: 'rec-pick exercise-choice-row',
       type: 'button', 'aria-label': `加入 ${item.name}`,
       onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
         ? items

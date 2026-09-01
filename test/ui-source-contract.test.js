@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.6"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.6'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.6/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.6\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.7"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.7'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.7/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.7\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {

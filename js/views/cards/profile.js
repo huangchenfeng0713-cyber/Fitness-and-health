@@ -1,6 +1,7 @@
 /** 身体信息与目标设置。 */
 
-import { h, num, toast, infoTip, field } from '../../lib/utils.js';
+import { h, num, toast, field } from '../../lib/utils.js';
+import { infoTip } from '../../lib/ui.js';
 import { state, saveProfile } from '../../lib/store.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile, rateGuidance,

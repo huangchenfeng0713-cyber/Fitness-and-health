@@ -5,15 +5,18 @@
  * 这样不会给每一行再塞一个 i，也不会让同一份说明散落在标题、脚注和 tooltip。
  */
 
-import { h, infoTip } from '../../lib/utils.js';
+import { h } from '../../lib/utils.js';
+import { infoTip, weakTag } from '../../lib/ui.js';
 import { estimateDisclosure } from '../../data/foods.js';
 
 /** 所有页面共用同一枚弱标签；非估算条目不产生节点。 */
 export function estimateTag(food) {
   if (!estimateDisclosure(food)) return null;
-  return h('span.chip.chip-est', {
-    'aria-label': `${food?.name || '该菜品'}的营养数值为估算`,
-  }, '估算');
+  return weakTag('估算', {
+    tone: 'outline',
+    className: 'chip-est',
+    ariaLabel: `${food?.name || '该菜品'}的营养数值为估算`,
+  });
 }
 
 function disclosureRows(disclosure) {

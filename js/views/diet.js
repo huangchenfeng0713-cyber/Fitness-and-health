@@ -9,6 +9,7 @@
 import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
+import { listRow, searchField, weakTag } from '../lib/ui.js';
 import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
@@ -79,14 +80,8 @@ function buildShell(root) {
   nodes.water = h('div.slot');
   nodes.advice = h('div.slot');
 
-  nodes.searchInput = h('input.search-input', {
-    type: 'search',
-    enterkeyhint: 'search',
-    autocomplete: 'off',
-    autocapitalize: 'off',
-    autocorrect: 'off',
-    spellcheck: false,
-    placeholder: '输入内容以搜索',
+  const search = searchField({
+    ariaLabel: '搜索食物，支持中文或拼音',
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
       ui.query = e.target.value;
@@ -98,6 +93,8 @@ function buildShell(root) {
       refreshResults();
     }, 160),
   });
+  nodes.searchInput = search.input;
+  nodes.searchField = search.el;
 
   nodes.customToggle = h('button.text-btn', {
     onclick: () => {
@@ -132,7 +129,7 @@ function buildShell(root) {
       h('h3', null, '添加食物'),
       h('div.card-head-actions', null,
         nodes.customToggle)),
-    h('div.search-row.search-row-full', null, nodes.searchInput),
+    nodes.searchField,
     nodes.customBox,
     nodes.results,
     nodes.basketBar.el);
@@ -311,7 +308,8 @@ function refreshResults() {
      * 已在本餐清单里的项才显示 ✓，它只负责移出，职责清楚。
      */
     return h('div.search-item-wrap', null,
-      h('button.search-item', {
+      listRow({
+        as: 'button', className: 'search-item',
         type: 'button', disabled: chosen,
         'aria-label': chosen ? `${f.name} 已在本餐清单` : `选择 ${f.name} 的份量`,
         onclick: () => selectFood(f),
@@ -321,7 +319,7 @@ function refreshResults() {
           h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
         h('div.search-item-tags', null,
           estimateTag(f),
-          h('span.chip', null, CATEGORIES[f.cat] || '自定义'))),
+          weakTag(CATEGORIES[f.cat] || '自定义'))),
       chosen ? h('button.search-item-remove', {
         type: 'button',
         'aria-label': `把 ${f.name} 移出本餐清单`,
@@ -516,7 +514,7 @@ function refreshMixedPortion(food) {
         h('div.portion-title-line', null,
           h('strong', null, food.name),
           estimateTag(food),
-          h('span.chip', null, CATEGORIES[food.cat])),
+          weakTag(CATEGORIES[food.cat])),
         h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
       h('div.portion-head-actions', null,
         foodInfoTip(food, { label: '查看估算依据与误差' }),
@@ -743,7 +741,7 @@ function refreshPortion() {
         h('div.portion-title-line', null,
           h('strong', null, food.name),
           estimateTag(food),
-          h('span.chip', null, CATEGORIES[food.cat] || '自定义')),
+          weakTag(CATEGORIES[food.cat] || '自定义')),
         h('div.portion-per100', null,
           `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
       h('div.portion-head-actions', null,

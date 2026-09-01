@@ -178,11 +178,15 @@ function bindInfoTipDismiss() {
   /*
    * 用 click 而不是 pointerdown：pointerdown 早于原生的 summary 切换，
    * 点信息按钮本身会变成「先被这里关掉、再被原生打开」，闪一下。
-   * 点在自己的说明层里不关 —— 里面可能要选中文字或者点链接。
+   *
+   * 必须在捕获阶段监听。底部 sheet 会阻止内部 click 冒泡，若只在冒泡阶段听，
+   * 用户点份量、快捷份数或关闭按钮时，信息层永远收不到“点了外面”。捕获阶段
+   * 先判断目标，既能关闭外部浮层，也不会干扰后续控件自己的点击行为。
+   * 点在自己的说明层里仍不关 —— 里面可能要选中文字或者点链接。
    */
   document.addEventListener('click', (event) => {
     closeOthers(event.target.closest?.('details.info-tip') || null);
-  });
+  }, true);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeOthers(null);
   });

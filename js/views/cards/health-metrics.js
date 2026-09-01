@@ -13,7 +13,8 @@
  * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
  */
 
-import { h, num, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
+import { h, num, formatDuration, todayKey } from '../../lib/utils.js';
+import { infoTip } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
 import { setIntent } from '../../lib/nav.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';

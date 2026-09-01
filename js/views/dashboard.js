@@ -1,6 +1,7 @@
 /** 今日：当前状态、核心目标与可执行提示。 */
 
-import { h, clearEl, num, mount, infoTip, persistentInfoTip } from '../lib/utils.js';
+import { h, clearEl, num, mount } from '../lib/utils.js';
+import { infoTip, persistentInfoTip } from '../lib/ui.js';
 import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';

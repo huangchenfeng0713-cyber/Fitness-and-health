@@ -6,7 +6,8 @@
  * 隔着一次切页反而多余。抽成卡片模块挂到饮食页，搬家只改一行 import。
  */
 
-import { h, num, toast, runLocalAction, infoTip } from '../../lib/utils.js';
+import { h, num, toast, runLocalAction } from '../../lib/utils.js';
+import { infoTip, listRow, weakTag } from '../../lib/ui.js';
 import { state, addEntry, saveHealthDay } from '../../lib/store.js';
 import { CATEGORIES } from '../../data/foods.js';
 import { MEAL_LABEL } from '../../core/advisor.js';
@@ -24,11 +25,11 @@ function moreToggle(key, total, shown, rerender) {
 function recRow(item, meal) {
   const f = item.food;
   const unit = f.basis === '100ml' ? 'ml' : 'g';
-  return h('div.rec-row', null,
+  return listRow({ className: 'rec-row' },
     h('div.rec-info', null,
       h('div.rec-name', null, f.name,
         estimateTag(f),
-        h('span.chip', null, CATEGORIES[f.cat] || '自定义')),
+        weakTag(CATEGORIES[f.cat] || '自定义')),
       h('div.rec-portion', null, item.portionLabel),
       h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
     h('div.rec-nums', null,
