@@ -24,7 +24,7 @@ import { h, mount, clearEl } from './utils.js';
  * @param {() => string} [opts.detail]        副行，比如「蛋白 52g」；挤不下就别塞进主行
  * @param {() => string} opts.actionLabel    确认按钮上的字（可以只是一个勾）
  * @param {() => string} [opts.actionAriaLabel] 按钮只有一个符号时，给读屏软件的说法
- * @param {() => Array}  opts.items          展开后逐项列出，每项 { key, label, note }
+ * @param {() => Array}  opts.items          展开后逐项列出，每项 { key, label, note, tag? }
  * @param {(key) => void} opts.onRemove      去掉某一项
  * @param {() => void}   opts.onConfirm      提交
  * @param {() => void}   opts.onClear        全部清掉
@@ -50,7 +50,9 @@ export function selectBar({
       open && !empty ? h('div.select-bar-list', null,
         list.map((it) => h('div.select-bar-item', null,
           h('div.select-bar-item-main', null,
-            h('strong', null, it.label),
+            h('div.select-bar-item-title', null,
+              h('strong', null, it.label),
+              it.tag || null),
             it.note ? h('span.select-bar-item-note', null, it.note) : null),
           h('button.icon-btn', {
             type: 'button', 'aria-label': `去掉 ${it.label}`,

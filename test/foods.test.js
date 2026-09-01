@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   FOODS, FOOD_BY_ID, CATEGORIES, per100, nutrientsFor,
   searchFoods, unitLabel, portionTip, freeSugarFactor, freeSugarPer100, PORTION_TIPS,
-  FOOD_META, isEstimated, macroEnergyPer100,
+  FOOD_META, isEstimated, estimateDisclosure, macroEnergyPer100,
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../js/data/foods.js';
 
@@ -1059,4 +1059,22 @@ test('海底捞番茄牛肉粒拌饭按可解释配方估算并可直接搜索',
   for (const term of ['海底捞拌饭', '番茄牛肉饭', '牛肉粒拌饭', 'haidilao']) {
     assert.ok(searchFoods(term).some((item) => item.id === food.id), `搜不到“${term}”`);
   }
+});
+
+test('每个估算菜品都有统一的依据与误差披露，精确标签项不误标', () => {
+  const estimated = FOODS.filter(isEstimated);
+  assert.ok(estimated.length > 600, `估算条目覆盖异常：${estimated.length}`);
+  for (const food of estimated) {
+    const disclosure = estimateDisclosure(food);
+    assert.ok(disclosure, `${food.name} 缺估算披露`);
+    assert.ok(disclosure.basis.length >= 12, `${food.name} 的估算依据过短`);
+    assert.ok(disclosure.uncertainty.length >= 12, `${food.name} 的误差来源过短`);
+  }
+
+  const legacy = estimateDisclosure(FOOD_BY_ID.get('gongbao'));
+  assert.match(legacy.basis, /通用成品配方|食物库/,
+    '没有逐项来源的旧菜品应透明使用通用兜底，而不是编造官方来源');
+  assert.match(legacy.uncertainty, /原料比例.*用油.*汤汁|原料比例.*用油.*酱汁/);
+  assert.equal(estimateDisclosure(FOOD_BY_ID.get('mcd_bigmac')), null,
+    '已有可复核官方标签的食品不应显示估算披露');
 });

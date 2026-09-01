@@ -650,10 +650,26 @@ html, body { height: 100%; overflow: hidden; }
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); font-weight: 400;
 }
 .chip-est {
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
-  color: var(--warn); border-color: transparent;
+  /* 只披露“这不是精确标签值”，不把估算本身画成警告。 */
+  background: transparent;
+  color: var(--faint);
+  border-color: color-mix(in srgb, var(--faint) 34%, transparent);
+  font-size: 10.5px;
+  font-weight: 450;
 }
 .search-item-tags { display: flex; gap: 4px; flex-shrink: 0; }
+
+.estimate-disclosure-intro { color: var(--text); }
+.estimate-disclosure-row { overflow-wrap: anywhere; }
+.estimate-disclosure-date { color: var(--faint); font-size: 10.5px; }
+.estimate-disclosure-list {
+  max-height: min(52vh, 360px); overflow-y: auto; overscroll-behavior: contain;
+  margin-top: 9px; padding-right: 2px;
+}
+.estimate-disclosure-item { padding: 9px 0; border-top: 1px solid var(--hairline); }
+.estimate-disclosure-item:first-child { padding-top: 0; border-top: 0; }
+.estimate-disclosure-item:last-child { padding-bottom: 0; }
+.estimate-disclosure-name { display: block; margin-bottom: 4px; color: var(--text); }
 
 .chip-danger {
   background: color-mix(in srgb, var(--danger) 11%, transparent);
@@ -1208,6 +1224,7 @@ body.sheet-open {
 }
 .select-bar-item:last-child { border-bottom: 0; }
 .select-bar-item-main { flex: 1 1 auto; min-width: 0; }
+.select-bar-item-title { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .select-bar-item-main strong { font-size: var(--fs-small); font-weight: 500; }
 .select-bar-item-note { display: block; font-size: var(--fs-caption); color: var(--muted); }
 

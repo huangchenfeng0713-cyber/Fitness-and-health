@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v2.11.4';
+const CACHE = 'health-diet-v2.11.5';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
 // 根模块及其固定版本依赖只在账号功能首次成功加载后按需缓存；不为本地模式访客预下载。
@@ -58,6 +58,7 @@ const SHELL = [
   './js/views/cards/weekly-summary.js',
   './js/views/cards/data-manager.js',
   './js/views/cards/trend-charts.js',
+  './js/views/cards/food-estimate.js',
   './js/views/cards/meal-advice.js',
   './js/workers/health-import.worker.js',
   './assets/icon.svg',

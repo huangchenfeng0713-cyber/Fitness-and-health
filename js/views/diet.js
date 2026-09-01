@@ -7,7 +7,7 @@
  */
 
 import {
-  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText,
+  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
@@ -16,7 +16,7 @@ import {
   restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
-  searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
+  searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip,
   SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
   hasFoodMix, defaultFoodMix, foodMixNutrition,
 } from '../data/foods.js';
@@ -26,6 +26,7 @@ import { selectBar } from '../lib/select-bar.js';
 import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
+import { estimateTag, foodInfoTip, estimateGroupInfoTip } from './cards/food-estimate.js';
 
 const ui = {
   query: '',
@@ -117,6 +118,7 @@ function buildShell(root) {
     items: () => ui.basket.map((b) => ({
       key: b.food.id,
       label: b.food.name,
+      tag: estimateTag(b.food),
       note: `${b.grams}${b.food.basis === '100ml' ? 'ml' : 'g'} · ${Math.round(Number((b.nutrients || nutrientsFor(b.food, b.grams, b.sugarLevel || undefined)).kcal))} kcal`,
     })),
     onRemove: (id) => { removeFromBasket(id); refreshResults(); },
@@ -318,9 +320,7 @@ function refreshResults() {
           h('strong', null, f.name),
           h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
         h('div.search-item-tags', null,
-          isEstimated(f) && h('span.chip.chip-est', {
-            title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
-          }, '估算'),
+          estimateTag(f),
           h('span.chip', null, CATEGORIES[f.cat] || '自定义'))),
       chosen ? h('button.search-item-remove', {
         type: 'button',
@@ -514,11 +514,11 @@ function refreshMixedPortion(food) {
     h('div.portion-head', null,
       h('div', null,
         h('strong', null, food.name),
-        h('span.chip.chip-est', null, '按配料估算'),
+        estimateTag(food),
         h('span.chip', null, CATEGORIES[food.cat]),
         h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
       h('div.portion-head-actions', null,
-        food.note && infoTip('查看估算说明', h('p', null, food.note)),
+        foodInfoTip(food, { label: '查看估算依据与误差' }),
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
@@ -740,12 +740,12 @@ function refreshPortion() {
     h('div.portion-head', null,
       h('div', null,
         h('strong', null, food.name),
-        isEstimated(food) && h('span.chip.chip-est', null, '估算'),
+        estimateTag(food),
         h('span.chip', null, CATEGORIES[food.cat] || '自定义'),
         h('div.portion-per100', null,
           `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
       h('div.portion-head-actions', null,
-        food.note && infoTip('查看食物说明', h('p', null, food.note)),
+        foodInfoTip(food, { label: '查看食物依据与误差' }),
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
@@ -767,8 +767,6 @@ function refreshPortion() {
 
     h('p.portion-tip', null, portionTip(food)),
     caffeineWarning,
-    isEstimated(food) && h('p.form-hint', null,
-      '营养会随配方、烹调或品牌而变化，以上数值为估算参考。'),
 
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
@@ -959,6 +957,7 @@ function refreshEntries() {
     h('div.card-head', null,
       h('h3', null, '饮食记录'),
       h('div.card-head-actions', null,
+        estimateGroupInfoTip(entries.map((entry) => findFood(entry.foodId)), '查看本日估算菜品说明'),
         h('span.card-tag', null,
           `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
         h('button.text-btn', {
@@ -1005,12 +1004,17 @@ function mealSelect(entry) {
 }
 
 function entryRow(e, editing) {
-  const isLiquid = findFood(e.foodId)?.basis === '100ml';
+  const food = findFood(e.foodId);
+  const isLiquid = food?.basis === '100ml';
   const unit = isLiquid ? 'ml' : 'g';
+  const recordNote = e.note
+    ? h('p.entry-record-note', null, h('strong', null, '本次记录：'), e.note)
+    : null;
   return h('div.entry-row', { class: `entry-row${editing ? ' editing' : ''}` },
     h('div.entry-main', null,
       h('div.entry-name', null, e.name,
-        e.note && infoTip('查看配料与记录说明', h('p', null, e.note))),
+        estimateTag(food),
+        foodInfoTip(food, { label: '查看估算与记录说明', extra: recordNote })),
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
         ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),

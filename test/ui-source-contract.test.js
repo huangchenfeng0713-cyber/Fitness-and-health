@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.4"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.4'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.4/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.4\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.5"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.5'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.5/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.5\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -73,6 +73,44 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '推荐预算仍可能折到第二行');
   assert.match(css, /--water:\s*var\(--accent\)/, '饮水没有统一成主绿色');
   assert.doesNotMatch(mealAdvice, /\*\*直接饮水\*\*/, 'DOM 文案里混入了不会渲染的 Markdown');
+});
+
+test('估算菜品统一使用弱标签，误差来源集中到信息面板', () => {
+  const diet = text('js/views/diet.js');
+  const mealAdvice = text('js/views/cards/meal-advice.js');
+  const disclosure = text('js/views/cards/food-estimate.js');
+  const foods = text('js/data/foods.js');
+  const css = text('css/app.css');
+  const sw = text('sw.js');
+
+  assert.match(disclosure, /export function estimateTag\(food\)/,
+    '各页面没有复用同一枚估算标签');
+  assert.match(disclosure, /export function foodInfoTip\(food/,
+    '单项估算依据没有统一进入信息面板');
+  assert.match(disclosure, /export function estimateGroupInfoTip\(foods/,
+    '多条菜品没有使用卡片级集中说明');
+  assert.match(foods, /export function estimateDisclosure\(food\)/,
+    '估算依据与误差没有数据层统一口径');
+  assert.match(disclosure, /'估算依据：'/);
+  assert.match(disclosure, /'主要误差：'/);
+
+  assert.ok((diet.match(/estimateTag\(/g) || []).length >= 5,
+    '搜索、备选清单、份量、复合食物或饮食记录中仍有估算标签缺口');
+  assert.match(mealAdvice, /estimateTag\(f\)/, '当前饮食推荐没有统一估算标签');
+  assert.match(mealAdvice, /estimateGroupInfoTip\(all\.map/,
+    '推荐中的误差来源没有集中到卡片级信息面板');
+  assert.match(diet, /estimateGroupInfoTip\(entries\.map/,
+    '饮食记录中的估算项没有集中说明');
+  assert.doesNotMatch(diet, /按配料估算/, '复合食物仍使用不一致的标签文字');
+  assert.doesNotMatch(diet, /营养会随配方、烹调或品牌而变化，以上数值为估算参考/,
+    '估算误差仍散落在份量面板正文');
+
+  assert.match(css, /\.chip-est\s*\{[^}]*background:\s*transparent[^}]*color:\s*var\(--faint\)/s,
+    '估算标签仍是警告色，没有降为弱标签');
+  assert.doesNotMatch(css, /\.chip-est\s*\{[^}]*var\(--warn\)/s,
+    '估算标签不应使用警告色');
+  assert.match(sw, /\.\/js\/views\/cards\/food-estimate\.js/,
+    '估算呈现模块没有进入离线应用外壳');
 });
 
 test('筛选菜单不会在切换栏目后把旧健身页画回来', () => {

@@ -8,8 +8,9 @@
 
 import { h, num, toast, runLocalAction, infoTip } from '../../lib/utils.js';
 import { state, addEntry, saveHealthDay } from '../../lib/store.js';
-import { CATEGORIES, isEstimated } from '../../data/foods.js';
+import { CATEGORIES } from '../../data/foods.js';
 import { MEAL_LABEL } from '../../core/advisor.js';
+import { estimateTag, estimateGroupInfoTip } from './food-estimate.js';
 
 const expanded = { recommend: false };
 
@@ -26,7 +27,7 @@ function recRow(item, meal) {
   return h('div.rec-row', null,
     h('div.rec-info', null,
       h('div.rec-name', null, f.name,
-        isEstimated(f) && h('span.chip.chip-est', null, '估算'),
+        estimateTag(f),
         h('span.chip', null, CATEGORIES[f.cat] || '自定义')),
       h('div.rec-portion', null, item.portionLabel),
       h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
@@ -54,7 +55,9 @@ export function recommendCard(rerender) {
   const list = expanded.recommend ? all : all.slice(0, 3);
   return h('section.card.recommend-card', null,
     h('div.card-head.recommend-card-head', null,
-      h('h3', null, '当前饮食推荐')),
+      h('h3', null, '当前饮食推荐'),
+      h('div.card-head-actions', null,
+        estimateGroupInfoTip(all.map((item) => item.food), '查看推荐中的估算说明'))),
     h('div.recommend-budget', { 'aria-label': '当前餐次预算' },
       h('span', null, MEAL_LABEL[meal]),
       h('span', null, `${num(advice.budget.kcal)} kcal`),

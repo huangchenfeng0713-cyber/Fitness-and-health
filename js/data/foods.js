@@ -1743,6 +1743,52 @@ export function isEstimated(food) {
     || (food.f || []).includes('est');
 }
 
+/*
+ * “估算”不能只是一枚标签：用户还需要知道数值根据什么推出来、最可能差在哪里。
+ *
+ * 新条目应优先填写 source.ref 与 note；旧库仍有一批只有代表值、没有逐项来源的条目。
+ * 对这些条目不能编造一个“已核对”的出处，所以这里明确写成“未保存可复核标签”，
+ * 再按食物类型给出真实存在的误差项。这样每个估算条目都能披露边界，同时不会把
+ * 通用兜底话术伪装成某个品牌或实验室的来源。
+ */
+const ESTIMATE_FALLBACK = Object.freeze({
+  dish: {
+    basis: '按食物库中的通用成品配方与常见份量折算，不代表某一家餐馆的实测营养值。',
+    uncertainty: '原料比例、实际份量、用油、酱汁或汤汁摄入量，以及烹调失水都会造成误差。',
+  },
+  chain: {
+    basis: '未保存可复核的当前官方营养标签；数值按同类产品、公开菜单信息或现有代表值折算。',
+    uncertainty: '门店与批次配方、单份大小、可食部、额外酱料和临时改版都会造成误差。',
+  },
+  drink: {
+    basis: '未保存可复核的当前官方营养标签；数值按同类配方与常见杯量折算。',
+    uncertainty: '杯型、糖度、冰量、奶基底、小料和门店制作差异都会造成误差。',
+  },
+  other: {
+    basis: '未保存可复核的当前官方营养标签；数值采用食物库中的通用代表值。',
+    uncertainty: '品牌配方、实际份量、可食部、烹调方式与批次差异都会造成误差。',
+  },
+});
+
+/**
+ * 返回估算值在界面信息面板中使用的统一披露；非估算条目返回 null。
+ * source.ref 是估算依据，note 是该条目的特定边界；类型兜底补充共同误差项。
+ */
+export function estimateDisclosure(food) {
+  if (!isEstimated(food)) return null;
+  const fallback = ESTIMATE_FALLBACK[food?.cat] || ESTIMATE_FALLBACK.other;
+  const source = String(food?.source?.ref || '').trim();
+  const note = String(food?.note || '').trim();
+  const uncertainty = note
+    ? `${note}；此外，${fallback.uncertainty}`
+    : fallback.uncertainty;
+  return {
+    basis: source || fallback.basis,
+    uncertainty,
+    accessed: String(food?.source?.accessed || '').trim() || null,
+  };
+}
+
 /**
  * 用通用 Atwater 系数复核每 100g 宏量营养对应的能量。
  * total 碳水含纤维，先扣除纤维再按 4 kcal/g，纤维按 2 kcal/g；

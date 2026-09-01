@@ -729,7 +729,8 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   assert.match(read('js/core/nutrition.js'), /const fatLower = round\(\(kcal \* 0\.20\) \/ ATWATER\.fat\)/);
   assert.ok(dashboard.includes('参考上限'), '脂肪的参考上限依据要写清楚');
   // 记录行搬到饮食页之后，液体用 ml 这条也跟着搬了过去
-  assert.ok(diet.includes("findFood(e.foodId)?.basis === '100ml'"));
+  assert.match(diet, /const food = findFood\(e\.foodId\);[\s\S]*?food\?\.basis === '100ml'/,
+    '记录行应复用已查到的食物，并按 basis 决定 ml/g');
   assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
   assert.ok(diet.includes("isLiquid ? '毫升数' : '克数'"));
   assert.ok(advisor.includes("food.basis === '100ml' ? 'ml' : 'g'"));
