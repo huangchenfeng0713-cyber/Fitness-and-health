@@ -8,7 +8,7 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey, infoTip, toast } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, infoTip, toast, confirmAction, icon } from '../lib/utils.js';
 import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
@@ -233,23 +233,16 @@ function equipTabs(rerender, all) {
     }));
 }
 
-/*
- * 挑动作分成两块：先定范围（部位 / 模式 + 器械档位），再看这个范围里有什么。
+/**
+ * 挑动作：范围开关 + 这个范围里的动作，合在一张卡里。
  *
- * 拆开是为了让「动作推荐」能插在中间。推荐是被这几个开关控制的，
- * 挨着开关摆，换一下就看见推荐跟着变；隔着一整列动作的话，
- * 推荐看起来就像和这一屏无关的另一件事。
+ * 原先是两张卡：上面「挑动作」放部位 / 模式和器械档位，下面「动作列表」放动作。
+ * 可它们是同一件事的两半——先定范围再看有什么——分成两张卡只是多一道卡边，
+ * 还把动作列表往下推了一屏。
+ *
+ * 卡里用分段控件在「全部动作」和「推荐组合」之间切：两边共用同一组范围开关，
+ * 换了部位或器械，两边一起变。
  */
-function scopeCard(rerender) {
-  const byGroup = pickMode === 'group';
-  const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
-  return h('section.card', null,
-    h('div.card-head', null, h('h3', null, '挑动作')),
-    modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender),
-    equipTabs(rerender, all));
-}
-
 function pickerCard(rerender) {
   const lastDoneAt = new Map(
     recentExercises(state.trainingDays, { limit: 200, before: trainingDay() })
@@ -272,30 +265,30 @@ function pickerCard(rerender) {
     ? list
     : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
 
-  /*
-   * 推荐是这张卡的另一个视图，不是另一张卡。点「推荐」切过去，再点一下切回来。
-   * 两边共用同一组开关（部位 / 模式 + 器械档位），所以换了范围两边一起变。
-   */
   const rec = showRecommend ? recommendFor({
     mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
     selection: picked(), equip: equipFilter,
   }) : null;
-  const toggle = h('button', {
-    class: `chip-btn rec-toggle${showRecommend ? ' active' : ''}`,
-    type: 'button',
-    'aria-pressed': String(showRecommend),
-    onclick: () => { showRecommend = !showRecommend; rerender(); },
-  }, '推荐');
+
+  // 互斥的两个视图用分段控件，和上面那两排范围开关是同一套写法
+  const viewSwitch = h('div.range-switch', null,
+    [['全部动作', false], ['推荐组合', true]].map(([label, on]) => h('button', {
+      class: `chip-btn${showRecommend === on ? ' active' : ''}`,
+      type: 'button',
+      'aria-pressed': String(showRecommend === on),
+      onclick: () => { showRecommend = on; rerender(); },
+    }, label)));
 
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, showRecommend ? '动作推荐' : '动作列表'),
-      h('div.card-head-actions', null,
-        h('span.card-tag', null, showRecommend
-          ? `${scopeLabel} · ${rec.items.length} 个`
-          : `${scopeLabel} · ${list.length} 个`),
-        showRecommend ? recommendTip() : null,
-        toggle)),
+      h('h3', null, '挑动作'),
+      h('span.card-tag', null, showRecommend
+        ? `${scopeLabel} · 推荐 ${rec.items.length} 个`
+        : `${scopeLabel} · ${list.length} 个`)),
+    modeTabs(rerender),
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    equipTabs(rerender, all),
+    viewSwitch,
     showRecommend
       ? recommendBody(rec)
       : [
@@ -370,10 +363,19 @@ function setRow(item, index, set) {
     numberInput('reps', '次数', '1'),
     h('span.set-unit', null, '次'),
     h('button.text-btn.danger', {
-      onclick: () => updateSession((items) => items.map((i) => (i.id === item.id
-        ? { ...i, sets: i.sets.filter((_, k) => k !== index) } : i))),
+      onclick: async () => {
+        const removed = item.sets[index];
+        await updateSession((items) => items.map((i) => (i.id === item.id
+          ? { ...i, sets: i.sets.filter((_, k) => k !== index) } : i)));
+        toast(`已删除第 ${index + 1} 组`, 'info', {
+          label: '撤销',
+          // 插回原来那一位，不是接到末尾：递减组的顺序本身就是信息
+          onAction: () => updateSession((items) => items.map((i) => (i.id === item.id
+            ? { ...i, sets: [...i.sets.slice(0, index), removed, ...i.sets.slice(index)] } : i))),
+        });
+      },
       'aria-label': '删除这一组',
-    }, '×'));
+    }, icon('close', { size: 15 })));
 }
 
 function planRow(exercise, index) {
@@ -394,8 +396,21 @@ function planRow(exercise, index) {
         class: `text-btn${item.sets.length ? ' has-sets' : ''}`,
         onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
       }, setSummary),
+      /*
+       * 移除不弹确认框，改成删完给一条能点回来的提示。
+       * 确认框打断的是「我就是想删」那九次，撤销的代价只落在点错的那一次。
+       * 连着组数一起还回去 —— 撤销要还原成原样，不是重新加一个空动作。
+       */
       h('button.text-btn.danger', {
-        onclick: () => updateSession((items) => items.filter((i) => i.id !== exercise.id)),
+        onclick: async () => {
+          const removed = session().items.find((i) => i.id === exercise.id);
+          await updateSession((items) => items.filter((i) => i.id !== exercise.id));
+          toast(`已移除 ${exercise.name}`, 'info', {
+            label: '撤销',
+            onAction: () => updateSession((items) => (items.some((i) => i.id === exercise.id)
+              ? items : [...items, removed])),
+          });
+        },
       }, '移除')),
     open ? h('div.set-editor', null,
       item.sets.length
@@ -425,10 +440,18 @@ function planCard() {
   // 固定记今天，标题就直说是今天，不再跟着日期变来变去
   const dayLabel = '今日动作';
   if (!list.length) {
-    // 空态只说下一步做什么。原先那三行解释谁都不会在「还没开始」的时候读
+    /*
+     * 空态只说下一步做什么，而且给一个能按的按钮 ——
+     * 「请添加训练动作」把人停在原地：往下翻才是挑动作，可这句话没说要往下翻。
+     */
     return h('section.card', null,
       h('div.card-head', null, h('h3', null, dayLabel)),
-      h('p.empty-hint', null, '请添加训练动作'));
+      h('p.empty-hint', null, '今天还没有动作。挑几个加进来，练完在这里记组数和重量。'),
+      h('button.primary-btn', {
+        type: 'button',
+        onclick: () => document.querySelector('.range-switch')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      }, '开始挑选'));
   }
   const volume = sessionVolume(session());
   return h('section.card', null,
@@ -438,7 +461,16 @@ function planCard() {
         h('span.card-tag', null, volume.sets
           ? `${list.length} 个动作 · ${volume.sets} 组${volume.tonnage ? ` · ${num(volume.tonnage)} kg` : ''}`
           : `${list.length} 个动作`),
-        h('button.text-btn', { onclick: () => updateSession(() => []) }, '清空'))),
+        /*
+         * 清空整天要确认。它一次抹掉的是一整天的记录，而且撤销条只够撑几秒——
+         * 「删一条」和「清空一天」不是一个量级的操作，不能共用一套代价。
+         */
+        h('button.text-btn.danger', {
+          onclick: () => {
+            if (!confirmAction(`确定清空今天的全部 ${list.length} 个动作？`)) return;
+            updateSession(() => []);
+          },
+        }, '清空'))),
     h('div.plan-list', null, list.map((e, i) => planRow(e, i))));
 }
 
@@ -529,15 +561,6 @@ function weeklyCard(rerender) {
  *
  * 挑什么、为什么挑、重复了该换成什么，全在 core/training.js 的 recommendFor 里。
  */
-function recommendTip() {
-  return infoTip('这几个是怎么挑的',
-    h('p', null, '在当前的部位 / 模式和器械档位里，优先覆盖不同的动作模式和角度，'
-      + '复合动作排在前面。'),
-    h('p', null, '已经选过的、以及和已选动作高度重合的，都不会再出现在这里——'
-      + '否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。'),
-    h('p', null, '这只是可编辑的起手参考，不是「必须练满」的清单。'));
-}
-
 function recommendBody(rec) {
   if (!rec.items.length && !rec.replacements.length) {
     return h('p.empty-hint', null, '这个范围里已经没有和已选动作不重复的推荐了，换个部位或器械档位看看。');
@@ -603,7 +626,6 @@ export function renderTraining(root) {
    */
   mount(root,
     planCard(),
-    scopeCard(rerender),
     pickerCard(rerender),
     adviceCard(rerender),
     weeklyCard(rerender),

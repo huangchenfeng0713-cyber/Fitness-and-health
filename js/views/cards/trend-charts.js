@@ -6,7 +6,7 @@
  * 上面一排按钮选看哪一张，选中的那张给出走势解读。
  */
 
-import { h, num, shiftDay, formatDuration, todayKey, infoTip } from '../../lib/utils.js';
+import { h, num, shiftDay, formatDuration, todayKey, infoTip, icon } from '../../lib/utils.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
@@ -103,7 +103,7 @@ function picker({ label, value, options, onPick }) {
    * 和「7 天」，标签只是把同一件事再说一遍。aria-label 保留，读屏仍念得出来。
    */
   return h('div.trend-picker-field', null,
-    h('div.trend-select-wrap', null, select, h('span.trend-select-caret', { 'aria-hidden': 'true' }, '⌄')));
+    h('div.trend-select-wrap', null, select, icon('down', { size: 15, cls: 'trend-select-caret' })));
 }
 
 /*
@@ -271,7 +271,8 @@ export function trendCharts(rerender) {
         data: kcalTimeline, color: 'var(--accent)', target: targets.kcal,
         targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
-        overIsBad: true, emptyText: '还没有饮食记录', ...pick,
+        // 吃超计划是普通偏差，用橙不用红：增重计划本来就要求每天吃超
+        overTone: 'warn', emptyText: '还没有饮食记录', ...pick,
       }),
       note: trendReading('kcal', kcalSeries, { target: targets.kcal }),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
@@ -284,7 +285,7 @@ export function trendCharts(rerender) {
         data: proteinTimeline, color: 'var(--protein)', target: proteinThreshold,
         targetLabel: `达标线 ${Math.round(proteinThreshold)}g`, unit: 'g',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
-        overIsBad: false, emptyText: '还没有饮食记录', ...pick,
+        overTone: null, emptyText: '还没有饮食记录', ...pick,
       }),
       note: trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
       readout: readoutRow(valueAt((v) => `${num(v)} g`)((dd) => dietByDate.get(dd)?.protein ?? null)),
@@ -355,7 +356,8 @@ export function trendCharts(rerender) {
       title: '静息心率',
       tag: avgHR != null ? `已结束日平均 ${avgHR} bpm` : null,
       chart: lineChart({
-        data: hrSeries, color: 'var(--danger)', unit: 'bpm', domain: axisDomain, ...pick,
+        // 静息心率用中性色：一条心率曲线本身不是警告，高低要结合个人基线看
+        data: hrSeries, color: 'var(--muted)', unit: 'bpm', domain: axisDomain, ...pick,
         target: avgHR, targetLabel: avgHR != null ? `平均 ${avgHR}` : '',
         emptyText: '还没有静息心率记录',
       }),

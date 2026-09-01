@@ -16,7 +16,7 @@ import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
-import { FOCUS_LABEL } from '../core/advisor.js';
+import { FOCUS_LABEL, INSIGHT_PRIORITY } from '../core/advisor.js';
 import { setIntent } from '../lib/nav.js';
 
 const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
@@ -89,8 +89,8 @@ function metricRow(m) {
         })
         : macroBar({
           value: m.eaten, target: m.target, color: KIND_COLOR[m.key],
-          // 只有真上限会画成红色，下限和余数不会
-          overIsBad: m.kind === KIND.ceiling,
+          // 红只留给真上限（钠、游离糖）；下限和余数超了不是错，不换色
+          overTone: m.kind === KIND.ceiling ? 'danger' : null,
         }));
 }
 
@@ -354,15 +354,22 @@ function insightsCard(advice, rerender) {
     h('div.insight-list', null, list.map((i) => {
       const focus = INSIGHT_FOCUS[i.type];
       /*
-       * 三段分开写：当前情况、判断依据、可执行建议。
+       * 卡面上只留「当前情况 + 下一步做什么」，判断依据收进感叹号。
        *
-       * 原先依据和建议糊在一句话里，读的人分不清哪句是事实、哪句是程序的推断——
-       * 「吃得慢一些」当年就是这么混进来的：程序根本没有进餐时长数据，
-       * 那句话没有依据，却和有依据的数字长得一模一样。
+       * 三段都摊开的话，三条提示就是九行字，而其中三行是「凭什么这么讲」——
+       * 那句话第一次读有用，之后每天都一样。想核对的时候点开就有。
+       *
+       * 但数据质量那一档（漏记、没同步、数值不可信）例外：它的依据就是
+       * 「你现在看到的数字为什么不可信」，收起来等于没说。
        */
+      const showBasisInline = i.priority === INSIGHT_PRIORITY.data;
       const body = [
-        h('div.insight-title', null, i.title),
-        i.basis ? h('div.insight-basis', null, i.basis) : null,
+        h('div.insight-head', null,
+          h('div.insight-title', null, i.title),
+          i.basis && !showBasisInline
+            ? infoTip('为什么这么说', h('p', null, i.basis))
+            : null),
+        showBasisInline && i.basis ? h('div.insight-basis', null, i.basis) : null,
         i.action ? h('div.insight-action', null, i.action) : null,
         focus ? h('div.insight-go', null, `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
       ];

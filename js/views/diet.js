@@ -7,12 +7,12 @@
  */
 
 import {
-  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText,
+  h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, infoTip, runLocalAction, copyText, icon,
 } from '../lib/utils.js';
 import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen } from '../lib/sheet.js';
 import {
-  state, addEntry, removeEntry, updateEntry, copyDay,
+  state, addEntry, removeEntry, restoreEntry, updateEntry, copyDay,
   allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
@@ -113,13 +113,13 @@ function buildShell(root) {
   }, '+ 自定义');
 
   nodes.basketBar = selectBar({
-    /*
-     * 摘要里带上「记到哪一餐」：确认键上只有一个勾，落到哪一餐得在别处说清楚。
-     */
     summary: () => `饮食备选 ${ui.basket.length} 样 · ${basketTotals().kcal} kcal`,
-    detail: () => `蛋白 ${basketTotals().protein}g · 记录到${MEAL_LABEL[guessMeal()]}`,
-    actionLabel: () => '✓',
-    actionAriaLabel: () => `确认记录到${MEAL_LABEL[guessMeal()]}`,
+    detail: () => `蛋白 ${basketTotals().protein}g`,
+    /*
+     * 按钮上把话说全：「记录 3 样到午餐」。
+     * 只画一个勾的话，按下去会发生什么全靠猜——记几样、记到哪一餐都看不出来。
+     */
+    actionLabel: () => `记录 ${ui.basket.length} 样到${MEAL_LABEL[guessMeal()]}`,
     items: () => ui.basket.map((b) => ({
       key: b.food.id,
       label: b.food.name,
@@ -233,9 +233,10 @@ const inBasket = (id) => ui.basket.some((b) => b.food.id === id);
  * `nutrients` / `composition` 只有复合甜品（清补凉那类）会带：
  * 它们的营养是按实际选中的原料算出来的，回头再按食物库反算会把选择丢掉。
  */
-function addToBasket({ food, grams, sugarLevel = null, nutrients = null, composition = null }) {
+function addToBasket({ food, grams, level = null, nutrients = null, composition = null }) {
   if (inBasket(food.id)) return;
-  ui.basket = [...ui.basket, { food, grams, sugarLevel, nutrients, composition }];
+  // 形参不叫 sugarLevel：那会挡住 data/foods 里导出的同名函数
+  ui.basket = [...ui.basket, { food, grams, sugarLevel: level, nutrients, composition }];
 }
 
 const removeFromBasket = (id) => { ui.basket = ui.basket.filter((b) => b.food.id !== id); };
@@ -322,13 +323,10 @@ function refreshResults() {
     const basis = f.basis === '100ml' ? '100ml' : '100g';
     const chosen = inBasket(f.id);
     /*
-     * ＋ 和点行本身都开份量面板：加进备选之前先让人看一眼这次记多少。
+     * 一行就是一个入口：点它开份量面板。
      *
-     * 原先 ＋ 是「直接进备选，用记住的份量，不开弹层」——按操作次数算那样更少，
-     * 但记住的份量只是上一次的克数，同一样东西这顿吃多吃少它不知道，
-     * 而克数是乘数，差一倍热量就差一倍。现在多一步确认，多的那一步正是要确认的。
-     *
-     * 已经在备选里的那一行，＋ 变成 ✓，点一下移出去——总得有条退路。
+     * 右边原先还挂着一个 ＋，和点行本身做的是同一件事（都开份量面板），
+     * 两个入口做一件事，只会让人以为它们不一样。
      */
     return h('div.search-item-wrap', null,
       h('button.search-item', { type: 'button', onclick: () => selectFood(f) },
@@ -339,22 +337,9 @@ function refreshResults() {
           isEstimated(f) && h('span.chip.chip-est', {
             title: '营养会随配方、烹调或品牌而变化，当前数值为估算参考',
           }, '估算'),
-          h('span.chip', null, CATEGORIES[f.cat] || '自定义'))),
-      h('button.search-item-add', {
-        type: 'button',
-        class: `search-item-add${chosen ? ' chosen' : ''}`,
-        'aria-label': chosen ? `把 ${f.name} 移出待记录` : `把 ${f.name} 加入待记录`,
-        'aria-pressed': String(chosen),
-        onclick: () => {
-          if (chosen) {
-            removeFromBasket(f.id);
-            refreshResults();
-            refreshBasket();
-            return;
-          }
-          selectFood(f);
-        },
-      }, chosen ? '✓' : '＋'));
+          // 已经在备选里的给个记号：不然重复挑同一样东西看不出来
+          chosen && h('span.chip.chip-picked', null, '在备选'),
+          h('span.chip', null, CATEGORIES[f.cat] || '自定义'))));
     })),
     all.length > results.length ? h('button.more-btn', {
       onclick: () => { ui.moreResults = true; refreshResults(); },
@@ -417,12 +402,18 @@ function refreshMixedPortion(food) {
   const totalAmount = h('strong.mix-total-value');
   const totalKcal = h('strong.mix-total-value');
   const selectedCount = h('span.mix-selected-count');
-  const addBtn = h('button.primary-btn', null, '添加到饮食备选');
+  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+  const queueBtn = h('button.secondary-btn.full', null, '继续添加');
 
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
-      onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
+      onclick: () => {
+        ui.meal = m.key;
+        refreshMealChips();
+        addBtn.textContent = `记录到${m.label}`;
+        refreshBasket();
+      },
     }, m.label)));
   };
 
@@ -508,17 +499,7 @@ function refreshMixedPortion(food) {
     return row;
   });
 
-  addBtn.onclick = () => {
-    if (currentMix.grams <= 0) {
-      toast('至少选择一种配料', 'warn');
-      return;
-    }
-    addToBasket({
-      food,
-      grams: currentMix.grams,
-      nutrients: currentMix.nutrients,
-      composition: currentMix.components,
-    });
+  const closeSheetAndReset = () => {
     ui.selected = null;
     ui.mix = {};
     ui.query = '';
@@ -527,6 +508,33 @@ function refreshMixedPortion(food) {
     refreshPortion();
     refreshAdvice();
     refreshBasket();
+  };
+
+  addBtn.onclick = async () => {
+    if (currentMix.grams <= 0) { toast('至少选择一种配料', 'warn'); return; }
+    const meal = guessMeal();
+    const result = await runLocalAction(addBtn, () => addEntry({
+      foodId: food.id,
+      grams: currentMix.grams,
+      meal,
+      name: food.name,
+      nutrients: currentMix.nutrients,
+      composition: currentMix.components,
+    }), '记录食物');
+    if (!result.ok) return;
+    toast(`已记录 ${food.name} 到${MEAL_LABEL[meal]}`, 'ok');
+    closeSheetAndReset();
+  };
+
+  queueBtn.onclick = () => {
+    if (currentMix.grams <= 0) { toast('至少选择一种配料', 'warn'); return; }
+    addToBasket({
+      food,
+      grams: currentMix.grams,
+      nutrients: currentMix.nutrients,
+      composition: currentMix.components,
+    });
+    closeSheetAndReset();
   };
 
   refreshMealChips();
@@ -542,7 +550,7 @@ function refreshMixedPortion(food) {
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
-        }, '×'))),
+        }, icon('close', { size: 17 })))),
 
     h('div.mix-summary', null,
       h('div', null, h('span', null, '当前总量'), totalAmount),
@@ -566,7 +574,7 @@ function refreshMixedPortion(food) {
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
     nodes.mealRow,
-    h('div.sheet-action', null, addBtn)));
+    h('div.sheet-action', null, addBtn, queueBtn)));
 
   syncTotals();
 }
@@ -707,11 +715,14 @@ function refreshPortion() {
   nodes.preview = h('div.preview-slot');
   nodes.mealRow = h('div.portion-meal', null);
   /*
-   * 份量面板不再直接落库，改成「加进备选」。
-   * 落库是备选条上那一下勾 —— 一顿饭挑三四样，中间任何一样填错都还能撤，
-   * 而每样都直接落库的话，撤销就得靠删记录。
+   * 两个按钮，主次分明。
+   *
+   * 记一样东西是最常见的事，所以主按钮就是「记录到X餐」，一步到位。
+   * 要连着记好几样才需要备选清单——那是次按钮「继续添加」的事。
+   * 之前把所有人都赶进备选流程，记一样也要按两次，多出来的那次没有意义。
    */
-  const addBtn = h('button.primary-btn', null, '添加到饮食备选');
+  const addBtn = h('button.primary-btn', null, `记录到${MEAL_LABEL[guessMeal()]}`);
+  const queueBtn = h('button.secondary-btn.full', null, '继续添加');
 
   // 茶饮的糖度：同一杯全糖和三分糖能差 100 多千卡，必须能选
   const sugarRow = hasSugarLevel(food) ? h('div.sugar-row') : null;
@@ -732,16 +743,16 @@ function refreshPortion() {
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
-      onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
+      onclick: () => {
+        ui.meal = m.key;
+        refreshMealChips();
+        addBtn.textContent = `记录到${m.label}`;
+        refreshBasket();
+      },
     }, m.label)));
   };
 
-  addBtn.onclick = () => {
-    addToBasket({
-      food,
-      grams: ui.grams,
-      sugarLevel: hasSugarLevel(food) ? ui.sugar : null,
-    });
+  const closeSheetAndReset = () => {
     ui.selected = null;
     ui.query = '';
     nodes.searchInput.value = '';
@@ -749,6 +760,30 @@ function refreshPortion() {
     refreshPortion();
     refreshAdvice();
     refreshBasket();
+  };
+
+  addBtn.onclick = async () => {
+    const levelLabel = hasSugarLevel(food) && ui.sugar !== 'full'
+      ? `（${sugarLevel(ui.sugar).label}）` : '';
+    const meal = guessMeal();
+    const result = await runLocalAction(addBtn, () => addEntry({
+      foodId: food.id, grams: ui.grams, meal,
+      sugarLevel: hasSugarLevel(food) ? ui.sugar : null,
+      name: food.name + levelLabel,
+      custom: food.custom ? food : null,
+    }), '记录食物');
+    if (!result.ok) return;
+    toast(`已记录 ${food.name}${levelLabel} 到${MEAL_LABEL[meal]}`, 'ok');
+    closeSheetAndReset();
+  };
+
+  queueBtn.onclick = () => {
+    addToBasket({
+      food,
+      grams: ui.grams,
+      level: hasSugarLevel(food) ? ui.sugar : null,
+    });
+    closeSheetAndReset();
   };
 
   refreshMealChips();
@@ -768,7 +803,7 @@ function refreshPortion() {
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
-        }, '×'))),
+        }, icon('close', { size: 17 })))),
 
     sugarRow && h('div.field-label', null, '糖度'),
     sugarRow,
@@ -792,7 +827,7 @@ function refreshPortion() {
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
     nodes.mealRow,
-    h('div.sheet-action', null, addBtn)));
+    h('div.sheet-action', null, addBtn, queueBtn)));
 
   syncReadouts();
 }
@@ -808,12 +843,16 @@ function impactBlock(n) {
   const gaps = state.derived?.advice?.gaps;
   if (!gaps) return null;
 
+  /*
+   * 最后一列是「超出去染什么色」。热量和脂肪多一点是普通偏差，用橙；
+   * 红留给真正的上限（钠、游离糖），这张表里没有。
+   */
   const rows = [
-    ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0, true],
-    ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1, false],
-    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1, false],
+    ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0, 'warn'],
+    ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1, null],
+    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1, null],
     ['脂肪上限', 'g', { ...gaps.fat, target: gaps.fat.upper || gaps.fat.target },
-      n.fat, 'var(--accent)', 1, true],
+      n.fat, 'var(--accent)', 1, 'warn'],
   ];
 
   const kcalAfter = gaps.kcal.eaten + n.kcal;
@@ -831,7 +870,7 @@ function impactBlock(n) {
 
   return h('div.impact-block', null,
     h('div.impact-title', null, h('span', null, '记录后 · 今日进度'), h('span', null, '现在 → 记录后 / 目标')),
-    rows.map(([label, unit, g, add, color, dec, overIsBad]) => {
+    rows.map(([label, unit, g, add, color, dec, overTone]) => {
       const after = g.eaten + add;
       const pct = g.target > 0 ? (after / g.target) * 100 : 0;
       return h('div.impact-row', null,
@@ -839,9 +878,9 @@ function impactBlock(n) {
           h('span.impact-name', null, label),
           h('span.impact-from', null, num(g.eaten, dec)),
           h('span.impact-arrow', null, '→'),
-          h('span.impact-to', { class: overIsBad && pct > 105 ? 'over' : '' }, num(after, dec)),
+          h('span.impact-to', { class: overTone && pct > 105 ? `over ${overTone}` : '' }, num(after, dec)),
           h('span.impact-target', null, `/${num(g.target, 0)}${unit}`)),
-        macroBar({ value: g.eaten, delta: add, target: g.target, color, overIsBad }));
+        macroBar({ value: g.eaten, delta: add, target: g.target, color, overTone }));
     }),
     note);
 }
@@ -911,7 +950,7 @@ function refreshCustomForm() {
         h('button', {
           'aria-label': `删除 ${f.name}`,
           onclick: async () => { await removeCustomFood(f.id); refreshCustomForm(); },
-        }, '×')))) : null,
+        }, icon('close', { size: 15 }))))) : null,
   ));
 }
 
@@ -1063,9 +1102,14 @@ function entryRow(e, editing) {
         'aria-label': `删除 ${e.name}`,
         onclick: async (ev) => {
           const result = await runLocalAction(ev.currentTarget, () => removeEntry(e.id), '删除记录');
-          if (result.ok) toast('已删除');
+          if (!result.ok) return;
+          // 删掉的那条原样留着，点「撤销」连 id 一起放回去
+          toast(`已删除 ${e.name}`, 'info', {
+            label: '撤销',
+            onAction: () => restoreEntry(result.value),
+          });
         },
-      }, '×'))
+      }, icon('close', { size: 16 })))
       // 只读时仍要看得到吃了多少，只是不能改
       : h('div.entry-actions.readonly', null,
         h('span.entry-grams-text', null, `${num(e.grams)} ${unit}`)));

@@ -1,6 +1,6 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay } from './lib/utils.js';
+import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay, icon } from './lib/utils.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -59,7 +59,7 @@ function ensureSettingsDrawer() {
   },
   h('div.settings-drawer-head', null,
     h('h2#settings-drawer-title', null, '设置'),
-    h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' }, '×')),
+    h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' }, icon('close', { size: 20 }))),
   settingsRoot);
 
   drawer.addEventListener('click', (event) => {
@@ -153,7 +153,7 @@ function renderTopbar() {
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
       'aria-label': '前一天',
-    }, '‹'),
+    }, icon('left', { size: 20 })),
     h('button.topbar-day', {
       onclick: () => !heading.isToday && setDay(todayKey()),
       title: heading.isToday ? '' : '回到今天',
@@ -166,7 +166,7 @@ function renderTopbar() {
       onclick: () => setDay(shiftDay(state.day, 1)),
       disabled: heading.isToday,
       'aria-label': '后一天',
-    }, '›'),
+    }, icon('right', { size: 20 })),
   );
   bar.append(context, settingsButton);
 }

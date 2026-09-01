@@ -124,6 +124,48 @@ function bindInfoTipDismiss() {
   });
 }
 
+/*
+ * 界面上的符号一律画出来，不打出来。
+ *
+ * 打出来的 × ‹ › ⌄ 在三个平台上是三种字形、三种基线和三种粗细：和旁边的中文
+ * 对不齐，也没法跟底栏、健康数据那几个描边图标统一。全部换成同一套描边路径。
+ */
+const ICON_PATH = {
+  close: 'M6 6l12 12M18 6L6 18',
+  left: 'M15 5l-7 7 7 7',
+  right: 'M9 5l7 7-7 7',
+  up: 'M6 15l6-6 6 6',
+  down: 'M6 9l6 6 6-6',
+  check: 'M5 12.5l4.5 4.5L19 7',
+  plus: 'M12 5v14M5 12h14',
+  upload: 'M12 19V5M6.5 10.5L12 5l5.5 5.5M5 20.5h14',
+  restore: 'M4.5 12a7.5 7.5 0 1 0 2.2-5.3M4.2 5v4h4',
+  help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.6.2-.9.7-.9 1.3v.6M12 17v.1',
+};
+
+/**
+ * 描边图标。size 只影响这一个图标，颜色一律跟着 currentColor。
+ * `cls` 用来接住原来那个 <span> 身上的定位类 —— 换成图标不该把布局一起换掉。
+ */
+export function icon(name, { size = 18, strokeWidth = 1.9, cls = '' } = {}) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', `ui-icon ui-icon-${name}${cls ? ` ${cls}` : ''}`);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', ICON_PATH[name] || ICON_PATH.close);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', String(strokeWidth));
+  path.setAttribute('stroke-linecap', 'round');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
+
 export function infoTip(label, ...children) {
   bindInfoTipDismiss();
   const details = h('details.info-tip', null,
@@ -187,7 +229,14 @@ export { formatDuration } from '../core/duration.js';
 
 /** 轻量提示条 */
 let toastTimer = null;
-export function toast(message, kind = 'info') {
+/**
+ * 轻量提示条。
+ *
+ * @param {object} [action] 提示条上挂一个动作，比如「撤销」。
+ *   删除是最需要它的场景：确认框会打断每一次删除，而十次里有九次是想删的；
+ *   删完给一条能点回来的提示，代价只落在那一次点错上。
+ */
+export function toast(message, kind = 'info', action = null) {
   let el = document.getElementById('toast');
   if (!el) {
     el = h('div.toast', {
@@ -199,12 +248,27 @@ export function toast(message, kind = 'info') {
     document.body.append(el);
   }
   const text = String(message ?? '');
-  el.textContent = text;
+  clearEl(el);
+  mount(el, h('span.toast-text', null, text));
+  if (action?.label && typeof action.onAction === 'function') {
+    mount(el, h('button.toast-action', {
+      type: 'button',
+      onclick: () => {
+        clearTimeout(toastTimer);
+        el.className = 'toast';
+        action.onAction();
+      },
+    }, action.label));
+  }
   el.dataset.long = text.length > 42 ? 'true' : 'false';
   el.className = `toast show ${kind}`;
   clearTimeout(toastTimer);
-  // 短提示停留 2.8 秒；较长的错误说明多留一点阅读时间，但不再把整份导入报告塞进提示框。
-  const duration = Math.min(6000, Math.max(2800, 1800 + text.length * 38));
+  /*
+   * 短提示停留 2.8 秒；带撤销的多留一会儿 —— 看清「删掉了什么」再决定要不要点回来，
+   * 2.8 秒不够。较长的错误说明也多留一点阅读时间。
+   */
+  const base = action ? 5200 : 2800;
+  const duration = Math.min(7000, Math.max(base, 1800 + text.length * 38));
   toastTimer = setTimeout(() => { el.className = 'toast'; }, duration);
 }
 

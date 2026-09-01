@@ -13,7 +13,7 @@
  * （见 sheet.js 里同一个坑），钉在视口上会盖住 tab 栏。
  */
 
-import { h, mount, clearEl } from './utils.js';
+import { h, mount, clearEl, icon } from './utils.js';
 
 /**
  * 建一个多选条。返回的对象只有 render 和 el —— 数据留在调用方，
@@ -51,7 +51,7 @@ export function selectBar({
           h('button.icon-btn', {
             type: 'button', 'aria-label': `去掉 ${it.label}`,
             onclick: () => { onRemove(it.key); render(); },
-          }, '×'))),
+          }, icon('close', { size: 16 })))),
         // 「清空」收在展开区里：收起时那一行只该有摘要和主操作，挤三个东西会换行
         h('button.text-btn.select-bar-clear', {
           type: 'button', onclick: () => { onClear(); open = false; render(); },
@@ -65,7 +65,7 @@ export function selectBar({
         h('span.select-bar-summary-text', null,
           h('strong', null, summary()),
           sub ? h('span.select-bar-detail', null, sub) : null),
-        h('span.select-bar-caret', { 'aria-hidden': 'true' }, open ? '⌄' : '⌃')),
+        icon(open ? 'down' : 'up', { size: 15, cls: 'select-bar-caret' })),
         h('button.primary-btn.select-bar-go', {
           type: 'button',
           // 按钮上只有一个符号时，读屏软件念不出它是干什么的

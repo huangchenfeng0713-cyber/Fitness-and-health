@@ -8,7 +8,7 @@
  * 必须整屏摆出来，收进二级页面等于没提示。
  */
 
-import { h, clearEl, toast, mount, num, infoTip, confirmAction, field } from '../lib/utils.js';
+import { h, clearEl, toast, mount, num, infoTip, confirmAction, field, icon } from '../lib/utils.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
@@ -509,6 +509,19 @@ function sectionIcon(key) {
   return el;
 }
 
+/*
+ * 今天之内只写时刻（16:51），跨天才补上日期 ——
+ * 「已同步 · 8/29 16:51」里那个日期，八成情况下就是今天，写了等于没写。
+ */
+function clockLabel(date) {
+  const today = new Date();
+  const sameDay = date.getFullYear() === today.getFullYear()
+    && date.getMonth() === today.getMonth() && date.getDate() === today.getDate();
+  const hm = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  if (sameDay) return hm;
+  return `${new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit' }).format(date)} ${hm}`;
+}
+
 /** 每行右边那句「现在设成什么了」。不用点进去就知道 */
 function sectionStatus(key, account) {
   const p = state.profile;
@@ -520,10 +533,19 @@ function sectionStatus(key, account) {
   if (key === 'account') {
     if (!account.configured) return '本地模式';
     if (!account.user) return '未登录';
-    const [text] = accountStatus(account);
-    return text;
+    const at = account.lastSyncedAt ? new Date(account.lastSyncedAt) : null;
+    if (account.syncStatus === 'conflict') return '需要选择版本';
+    if (account.syncStatus === 'error') return '同步异常';
+    if (account.syncStatus === 'syncing') return '正在同步';
+    if (at && !Number.isNaN(at.getTime())) return `已同步 · ${clockLabel(at)}`;
+    return '尚未同步';
   }
-  if (key === 'data') return '备份、导入、补录';
+  if (key === 'data') {
+    // 这一行要说的是「现在是什么状态」，不是「这里能干什么」
+    const at = state.lastBackupAt ? new Date(state.lastBackupAt) : null;
+    if (at && !Number.isNaN(at.getTime())) return `上次备份 ${clockLabel(at)}`;
+    return '尚未备份';
+  }
   if (key === 'calc') {
     return p.useAppleEnergy ? '跟随设备消耗' : '按公式估算';
   }
@@ -538,7 +560,7 @@ function sectionRow(section, account, rerender) {
   sectionIcon(section.key),
   h('span.set-title', null, section.label),
   h('span.set-status', null, sectionStatus(section.key, account)),
-  h('span.set-chevron', { 'aria-hidden': 'true' }, '›'));
+  icon('right', { size: 17, cls: 'set-chevron' }));
 }
 
 const SECTIONS = [
@@ -554,7 +576,7 @@ function backBar(label, rerender) {
     h('button.set-back-btn', {
       type: 'button',
       onclick: () => { openSection = null; rerender(); },
-    }, '‹ 设置'),
+    }, icon('left', { size: 16 }), h('span', null, '设置')),
     h('strong', null, label));
 }
 

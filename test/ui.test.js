@@ -359,17 +359,23 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
    * 原先它单独一张卡夹在中间，把真正要用的那列动作往下推了整整一屏。
    */
   const mounted = training.slice(training.indexOf('mount(root,'));
-  const order = ['planCard()', 'scopeCard(rerender)', 'pickerCard(rerender)',
+  const order = ['planCard()', 'pickerCard(rerender)',
     'adviceCard(rerender)', 'weeklyCard(rerender)'];
   const at = order.map((k) => mounted.indexOf(k));
   assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
   assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
   assert.ok(!/recommendCard\(/.test(training), '推荐又单独占了一张卡');
 
-  // 同一个按钮切过去、切回来
-  assert.match(training, /showRecommend = !showRecommend/, '推荐没有做成可以再点一次取消的开关');
-  assert.match(training, /'aria-pressed': String\(showRecommend\)/, '开关没有按下态');
+  // 两个视图互斥，用分段控件切
+  assert.match(training, /showRecommend = on/, '推荐没有做成可以切回去的视图');
+  assert.match(training, /'aria-pressed': String\(showRecommend === on\)/, '开关没有按下态');
   assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
+  /*
+   * 范围开关和动作列表也合成了一张卡：它们是同一件事的两半（先定范围再看有什么），
+   * 分成两张卡只是多一道卡边，还把动作列表往下推了一屏。
+   */
+  assert.ok(!/function scopeCard/.test(training), '范围开关又单独占了一张卡');
+  assert.match(training, /\['全部动作', false\], \['推荐组合', true\]/, '两个视图没有用分段控件切');
 
   const core = strip(read('js/core/training.js'));
   assert.match(core, /overlapLevel\(overlapScore\(e, c\)\) === 'high'/, '没有排除与已选高度重合的动作');
@@ -557,7 +563,7 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
     /points\.length >= 4 && elapsedDays >= 7/, '体重拟合门槛与解读文案不一致');
   assert.ok(trends.includes('target: proteinThreshold'));
   assert.ok(trends.includes('targetLabel: `达标线 ${Math.round(proteinThreshold)}g`'));
-  assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
+  assert.ok(trends.includes('overTone: null'), '蛋白超过最低目标不应换色');
   // 当天已经整体不画了，不再需要「半截数据点」处理
   assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截数据的处理');
   assert.ok(charts.includes('emptyText = \'数据不足，至少需要 2 个记录日\''));
@@ -980,15 +986,12 @@ test('多选：勾选只改页面内存，按确认才落库', () => {
   }
   assert.match(bar, /el\.hidden = list\.length === 0/, '一项都没选时多选条应当整条收起来');
 
-  // 饮食：份量面板只往备选里放，落库只发生在 recordBasket 里
+  // 饮食：备选是「要连着记好几样」时才用的那条路
   assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
   assert.match(diet, /async function recordBasket\(\)/, '备选不能一次性记录');
   assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
   const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
   assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入备选时不该落库，也不该弹出份量面板');
-  // 落库只有这一处：份量面板按下去只是进备选
-  const addEntryCalls = strip(diet).match(/addEntry\(/g) || [];
-  assert.equal(addEntryCalls.length, 1, `饮食页有 ${addEntryCalls.length} 处直接落库，应当只剩批量记录那一处`);
 
   // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
   assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
@@ -1368,19 +1371,136 @@ test('饮食记录编辑态能改餐次', () => {
  * ＋ 和点行本身都开份量面板：加进备选之前先看一眼这次记多少。
  * 记住的份量只是上一次的克数，而克数是乘数，差一倍热量就差一倍。
  */
-test('搜索结果的 ＋ 也开份量面板，面板只往备选里放', () => {
+/*
+ * 记一样东西是最常见的事，所以份量面板的主按钮就是「记录到X餐」，一步到位；
+ * 要连着记好几样才需要备选清单，那是次按钮「继续添加」的事。
+ */
+test('份量面板主按钮直接记录，次按钮才进备选', () => {
   const diet = strip(read('js/views/diet.js'));
-  const addBtn = diet.slice(diet.indexOf("h('button.search-item-add'"), diet.indexOf('all.length > results.length'));
-  assert.match(addBtn, /selectFood\(f\)/, '＋ 没有打开份量面板');
-  assert.match(addBtn, /if \(chosen\) \{[\s\S]*?removeFromBasket\(f\.id\)/, '已在备选里的那一行要能点掉');
+  // 普通食物和复合甜品两处都要有这一对
+  const mains = diet.match(/primary-btn', null, `记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`\)/g) || [];
+  assert.equal(mains.length, 2, `主按钮应当在两处都是「记录到X餐」，实际 ${mains.length} 处`);
+  const queues = diet.match(/const queueBtn = h\('button\.secondary-btn\.full', null, '继续添加'\)/g) || [];
+  assert.equal(queues.length, 2, `次按钮应当在两处都是「继续添加」，实际 ${queues.length} 处`);
+  assert.match(diet, /queueBtn\.onclick = \(\) => \{[\s\S]*?addToBasket\(/, '「继续添加」没有接到备选上');
+  assert.match(diet, /sheet-action', null, addBtn, queueBtn/, '两个按钮没有一起摆进弹层底部');
 
-  // 面板上的主按钮是「加进备选」，不是「记录到某餐」
-  assert.ok(!/primary-btn', null, `记录到/.test(diet), '份量面板的主按钮还是「记录到某餐」');
-  const adds = diet.match(/'添加到饮食备选'/g) || [];
-  assert.equal(adds.length, 2, `普通食物和复合甜品两处都要改，实际 ${adds.length} 处`);
+  // 批量确认要把话说全：记几样、记到哪一餐
+  assert.match(diet, /actionLabel: \(\) => `记录 \$\{ui\.basket\.length\} 样到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/,
+    '批量确认按钮没写清楚记几样到哪一餐');
+  assert.ok(!/actionLabel: \(\) => '✓'/.test(diet), '确认键又只剩一个勾了');
 
-  // 确认键是一个勾；记到哪一餐写在摘要里，否则按钮上看不出来
-  assert.match(diet, /actionLabel: \(\) => '✓'/, '确认键不是勾');
-  assert.match(diet, /actionAriaLabel: \(\) => `确认记录到/, '只有一个符号的按钮要给读屏软件说法');
-  assert.match(diet, /记录到\$\{MEAL_LABEL\[guessMeal\(\)\]\}`/, '摘要里没写会记到哪一餐');
+  // 搜索结果一行只有一个入口：右边那个 ＋ 和点行本身做的是同一件事
+  assert.ok(!/search-item-add/.test(diet), '搜索结果里还留着重复的 ＋');
+  assert.ok(!/search-item-add/.test(read('css/app.css')), '＋ 的样式没跟着撤掉');
+});
+
+/*
+ * 颜色只有三种含义：绿=照计划在走，橙=普通偏差，红=真的越过了上限。
+ * 热量比计划多吃一点属于橙 —— 增重计划本来就要求每天吃超，把执行计划画成危险色
+ * 是自相矛盾；静息心率也不该默认就是一条红线，高低要结合个人基线看。
+ */
+test('超出之后染什么色由调用方按语义给，不是一律红', () => {
+  const charts = strip(read('js/lib/charts.js'));
+  assert.ok(!/overIsBad/.test(charts), 'charts 里还留着「超了就是坏事」这个开关');
+  assert.match(charts, /overTone && clamped > 105 \? `var\(--\$\{overTone\}\)`/, '圆环没有按语义取色');
+  assert.match(charts, /overTone = null/, '默认不该自动换色');
+
+  const trends = strip(read('js/views/cards/trend-charts.js'));
+  assert.match(trends, /overTone: 'warn'/, '热量超目标应当是橙，不是红');
+  assert.ok(!/color: 'var\(--danger\)'/.test(trends), '还有曲线默认用危险红');
+  assert.match(trends, /data: hrSeries, color: 'var\(--muted\)'/, '静息心率没有改成中性色');
+
+  // 主卡上红只留给真上限（钠、游离糖）
+  assert.match(strip(read('js/views/dashboard.js')),
+    /overTone: m\.kind === KIND\.ceiling \? 'danger' : null/, '主卡的红色没有只留给真上限');
+});
+
+/*
+ * 删除不弹确认框，改成删完给一条能点回来的提示。
+ * 确认框打断的是「我就是想删」那九次，撤销的代价只落在点错的那一次。
+ * 但清空整天、清除全部数据仍然要确认 —— 那不是一个量级的操作。
+ */
+test('普通删除给撤销，清空整天才确认', () => {
+  const utils = strip(read('js/lib/utils.js'));
+  assert.match(utils, /export function toast\(message, kind = 'info', action = null\)/, '提示条没法挂动作');
+  assert.match(utils, /toast-action/, '撤销按钮没有画出来');
+
+  const store = strip(read('js/lib/store.js'));
+  assert.match(store, /export async function restoreEntry\(entry\)/, '没有把删掉的记录放回去的入口');
+  assert.match(store, /const removed = state\.dietEntries\.find/, '删除没有把原记录留下来给撤销用');
+
+  const diet = strip(read('js/views/diet.js'));
+  assert.match(diet, /label: '撤销',\s*\n?\s*onAction: \(\) => restoreEntry\(result\.value\)/, '删饮食记录没有撤销');
+  const training = strip(read('js/views/training.js'));
+  assert.match(training, /已移除 \$\{exercise\.name\}/, '移除动作没有撤销提示');
+  assert.match(training, /已删除第 \$\{index \+ 1\} 组/, '删组数没有撤销提示');
+
+  // 清空整天两处都还要确认
+  assert.match(diet, /confirmAction\(`确定清空 \$\{state\.day\}/, '清空一天的饮食不该静默执行');
+  assert.match(training, /confirmAction\(`确定清空今天的全部/, '清空一天的训练不该静默执行');
+});
+
+/*
+ * 今日提示一屏只放得下三条，摊开三段就是九行字，其中三行是「凭什么这么讲」——
+ * 那句话第一次读有用，之后每天都一样。但数据质量那一档例外：
+ * 它的依据就是「你现在看到的数字为什么不可信」，收起来等于没说。
+ */
+test('今日提示卡面只留结论和下一步，依据收进感叹号', () => {
+  const dash = strip(read('js/views/dashboard.js'));
+  assert.match(dash, /const showBasisInline = i\.priority === INSIGHT_PRIORITY\.data/, '没有区分数据质量那一档');
+  assert.match(dash, /infoTip\('为什么这么说'/, '依据没有收进感叹号');
+  assert.match(dash, /showBasisInline && i\.basis/, '数据问题的依据也被收起来了');
+});
+
+/*
+ * 界面上的符号一律画出来。打出来的 × ‹ › ⌄ 在三个平台上是三种字形、三种基线，
+ * 和旁边的中文对不齐，也没法跟底栏那几个描边图标统一。
+ */
+test('× ‹ › 这类符号全部换成描边图标', () => {
+  assert.match(strip(read('js/lib/utils.js')), /export function icon\(name/, '没有统一的图标入口');
+  for (const path of ['js/app.js', 'js/views/settings.js', 'js/lib/select-bar.js',
+    'js/views/cards/data-manager.js', 'js/views/cards/trend-charts.js']) {
+    const src = strip(read(path));
+    assert.ok(!/['`](×|‹|›|⌃|⌄|↩)/.test(src), `${path} 里还有打出来的符号`);
+  }
+  // 换成图标不该把布局一起换掉：原来那些定位类要接着用
+  assert.match(strip(read('js/views/settings.js')), /cls: 'set-chevron'/);
+  assert.match(strip(read('js/lib/select-bar.js')), /cls: 'select-bar-caret'/);
+});
+
+/*
+ * 设置页每行右边那句要说「现在是什么状态」，不是「这里能干什么」。
+ */
+test('设置页的状态摘要是真状态', () => {
+  const settings = strip(read('js/views/settings.js'));
+  assert.match(settings, /return '尚未备份'/, '数据管理那行还在写「这里能干什么」');
+  assert.match(settings, /上次备份 \$\{clockLabel\(at\)\}/, '备份状态没有时间');
+  assert.match(settings, /已同步 · \$\{clockLabel\(at\)\}/, '同步状态没有时间');
+  assert.ok(!/'备份、导入、补录'/.test(settings), '状态列还是一句功能说明');
+  // 时间要真的记下来才写得出来
+  assert.match(strip(read('js/lib/store.js')), /export async function markBackedUp/, '没有记录备份时刻');
+  assert.match(strip(read('js/views/cards/data-manager.js')), /await markBackedUp\(\)/, '导出之后没有记下时刻');
+});
+
+/*
+ * 胶囊的形状本身在说「这个能点」。分类名、「复合」这类只是说明，点不了；
+ * 一行里挂三个灰色小药丸，真正能点的那个反而不显眼了。
+ */
+test('只读标签不做成胶囊，次要文字不小于 12px', () => {
+  const css = read('css/app.css');
+  const chip = css.slice(css.indexOf('.chip {'), css.indexOf('.chip-picked {'));
+  assert.ok(!/background:|border:/.test(chip), `只读标签还是胶囊：${chip.trim().slice(0, 80)}`);
+  // 能选的那两种仍然是胶囊
+  assert.match(css, /\.chip-btn \{[^}]*border-radius: 999px/s, '可选择的档位不该丢掉胶囊形状');
+  assert.match(css, /\.chip-picked \{[^}]*border-radius: 999px/s, '选中态不该丢掉胶囊形状');
+
+  // 字号下限
+  const small = [...css.matchAll(/font-size: (\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1])).filter((v) => v < 12);
+  assert.deepEqual(small, [], `还有小于 12px 的字号：${small.join(', ')}`);
+  assert.match(css, /--fs-caption: 12px/);
+  assert.match(css, /--fs-footnote: 12px/);
+
+  // 统一焦点样式
+  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid var\(--accent\)/s, '没有统一的焦点圈');
 });

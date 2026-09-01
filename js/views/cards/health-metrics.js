@@ -56,18 +56,15 @@ const ICONS = {
 };
 
 /*
- * 列数按项数挑，别让末行只剩一个。
+ * 列数固定三列，不再按项数挑。
  *
- * 显示几项完全看当天同步上来了什么，从 1 项到 8 项都可能。
- * 固定三列的话 7 项就排成 3+3+1，最后那个吊在中间，怎么摆都是歪的。
- * 先找能整除的（8 → 4+4，6 → 3+3），实在整除不了就挑一个末行至少剩两个的。
+ * 原先是「6 项排 3 列、8 项排 4 列」，看着更整齐，代价是**每一格的位置会变**：
+ * 哪天体脂秤上了一次，整张卡从 3 列变 4 列，睡眠从第二行第一格挪到第一行第四格。
+ * 这张卡是每天扫一眼的东西，位置比密度重要——固定三列之后，
+ * 核心六项（步数 / 活动 / 锻炼 / 睡眠 / 静息心率 / 体重）永远在同样的两行六格里，
+ * 体脂、饮水这些可选项接在后面，多不多都不影响前面。
  */
-export function metricColumns(n) {
-  if (n <= 4) return Math.max(n, 1);
-  for (const c of [4, 3]) if (n % c === 0) return c;
-  for (const c of [3, 4]) if (n % c !== 1) return c;
-  return 3;
-}
+export const METRIC_COLS = 3;
 
 /** 同步入口收在设置抽屉的「数据管理」里，这里直接把抽屉打开 */
 function dataCenterBtn() {
@@ -108,7 +105,7 @@ export function healthMetricsCard() {
     today,
     everSeen: [...seen],
   });
-  const cols = metricColumns(info.cells.length);
+  const cols = METRIC_COLS;
   // 有数据但缺了活动能量时也值得再同步一次：热量预算就靠它动态调整
   const needsImport = !info.hasAny || info.missing.includes('activeEnergy');
   const syncedClock = info.syncedAt
@@ -146,12 +143,7 @@ export function healthMetricsCard() {
             : h('li', null, '这三项都还没有过记录。')),
           info.sourceNote ? h('p', null, info.sourceNote) : null))),
     info.hasAny
-      /*
-       * 列数也写成 class：四列时格子只有 78px 宽，而「6小时42分」在 17px 下要 82px，
-       * 会把格子撑破（scripts/smoke.mjs 里那条 1~8 项的检查就是拦这个的）。
-       * 密一档的排布配密一档的字号，不是所有列数都用同一个 17px。
-       */
-      ? h('div.metric-grid', { class: `metric-grid cols-${cols}`, style: { '--metric-cols': String(cols) } },
+      ? h('div.metric-grid', { style: { '--metric-cols': String(cols) } },
         info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
           svg(ICONS[cell.key] || ICONS.steps),
           h('div.metric-body', null,

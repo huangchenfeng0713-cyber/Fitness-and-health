@@ -54,6 +54,8 @@ export const state = {
   favorites: [],         // 常吃食物 id
   portionMemory: {},     // { foodId: 克数 } —— 用户自己改过的份量
   lastImport: null,
+  // 上次导出完整备份的时刻。设置页那一行要说的是真状态，不是「这里能干什么」
+  lastBackupAt: null,
   derived: null,
 };
 
@@ -98,7 +100,7 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, favorites, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
+  const [profile, favorites, portionMemory, lastImport, customFoods, healthDays, dietAll, training, lastBackupAt] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', []),
     db.getSetting('portionMemory', {}),
@@ -107,6 +109,7 @@ async function hydrateStore({ notify = false } = {}) {
     db.getAll(db.STORES.health),
     db.getAll(db.STORES.diet),
     db.getAll(db.STORES.training),
+    db.getSetting('lastBackupAt', null),
   ]);
 
   state.profile = migrateStoredProfile(profile);
@@ -123,6 +126,7 @@ async function hydrateStore({ notify = false } = {}) {
   state.favorites = favorites || [];
   state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
+  state.lastBackupAt = lastBackupAt;
   state.customFoods = customFoods || [];
   state.trainingDays = (training || []).map(normalizeSession).filter((s) => s.date);
   setHealthDays(healthDays || []);
@@ -497,12 +501,37 @@ export async function updateEntry(id, patch) {
   return next;
 }
 
+/**
+ * 删一条记录，并把删掉的那条原样返回 —— 界面拿它做「撤销」。
+ *
+ * 删除不再弹确认框：十次里有九次是真想删的，确认框打断的是那九次；
+ * 删完给一条能点回来的提示，代价只落在点错的那一次上。
+ */
 export async function removeEntry(id) {
+  const removed = state.dietEntries.find((e) => e.id === id) || null;
   await db.del(db.STORES.diet, id);
   state.dietEntries = state.dietEntries.filter((e) => e.id !== id);
   await refreshDietDaily();
   recompute();
   emit();
+  return removed;
+}
+
+/**
+ * 把删掉的那条放回去，连 id 一起 —— 撤销要还原成原样，不是新记一笔。
+ * 记录已经被别处改回来了就什么都不做。
+ */
+export async function restoreEntry(entry) {
+  if (!entry?.id || state.dietEntries.some((e) => e.id === entry.id)) return null;
+  await db.put(db.STORES.diet, entry);
+  if (entry.date === state.day) {
+    state.dietEntries = [...state.dietEntries, entry]
+      .sort((a, b) => String(a.time).localeCompare(String(b.time)));
+  }
+  await refreshDietDaily();
+  recompute();
+  emit();
+  return entry;
 }
 
 /** 把某一天的记录整批复制到当前日期（"和昨天一样"） */
@@ -597,6 +626,14 @@ export async function mergeHealthDays(days, meta = {}) {
   recompute();
   emit();
   return incomingDays.length;
+}
+
+/** 记下「刚导出过一份完整备份」。设置页那一行要说真状态，不是「这里能干什么」 */
+export async function markBackedUp(at = new Date().toISOString()) {
+  state.lastBackupAt = at;
+  await db.setSetting('lastBackupAt', at);
+  emit();
+  return at;
 }
 
 /** 有多少天的能量数据受早期单位缺陷影响 */

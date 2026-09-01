@@ -28,6 +28,32 @@ function stripComments(src) {
     .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 }
 
+/*
+ * 形参不许和「从共享模块导入的名字」重名。
+ *
+ * 起因：data-manager 里有个 managerSection(key, icon, ...)，形参 icon 把
+ * lib/utils 的 icon() 挡住了，调用时报「icon is not a function」——
+ * 整个设置抽屉白屏。import 有、函数也有，静态看哪儿都对，只有跑起来才炸。
+ */
+function shadowedImports(src) {
+  const imported = new Set();
+  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*'[^']*(?:lib|core|data)\/[^']*'/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.trim().split(/\s+as\s+/).pop().trim();
+      if (name) imported.add(name);
+    }
+  }
+  if (!imported.size) return [];
+  const hits = new Set();
+  for (const m of src.matchAll(/(?:function\s+\w*|=>|\bfunction)?\s*\(([^)]*)\)\s*(?:=>|\{)/g)) {
+    for (const raw of m[1].split(',')) {
+      const name = raw.trim().split(/[=:]/)[0].trim();
+      if (imported.has(name)) hits.add(name);
+    }
+  }
+  return [...hits];
+}
+
 const ALL = walk('js');
 const SHARED = ALL.filter((f) => /^js\/(lib|core|data)\//.test(f));
 
@@ -98,4 +124,14 @@ test('视图之间不互相 import，避免循环依赖', () => {
     }
   }
   assert.deepEqual(bad, [], `\n${bad.join('\n')}`);
+});
+
+test('形参不许遮住从共享模块导入的名字', () => {
+  const problems = [];
+  for (const file of ALL) {
+    for (const name of shadowedImports(stripComments(read(file)))) {
+      problems.push(`${file} 的某个形参叫 ${name}，会挡住导入的同名函数`);
+    }
+  }
+  assert.deepEqual(problems, []);
 });

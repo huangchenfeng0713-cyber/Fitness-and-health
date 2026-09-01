@@ -87,6 +87,7 @@ try {
     restingHR: 58, weightKg: 62.4, bodyFatPct: 18.1, waterMl: 1250,
   };
   const badLayouts = [];
+  const positions = [];
   for (let n = 1; n <= 8; n += 1) {
     await page.evaluate(async (keep) => {
       const { saveHealthDay } = await import('./js/lib/store.js');
@@ -104,19 +105,32 @@ try {
       const cells = [...grid.querySelectorAll('.metric-cell')];
       const tops = [...new Set(cells.map((c) => Math.round(c.getBoundingClientRect().top)))];
       const rows = tops.map((t) => cells.filter((c) => Math.round(c.getBoundingClientRect().top) === t).length);
-      return { rows, cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
+      // 每一项排在第几格：位置变了说明布局跟着项数在跳
+      const pos = {};
+      cells.forEach((c, i) => { pos[c.querySelector('.metric-label')?.textContent || i] = i; });
+      return { rows, pos, cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
     });
     if (!r) badLayouts.push(`${n} 项没渲染出格子`);
     else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
-    else if (r.rows.length > 1 && r.rows[r.rows.length - 1] === 1) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一个`);
+    else positions.push(r.pos);
   }
-  check('健康数据 1~8 项都排得平整', badLayouts.length === 0, badLayouts.join('；'));
+  /*
+   * 核心六项的位置不许随「今天多同步到一项」而变。
+   * 原先列数按项数挑（6 项 3 列、8 项 4 列），哪天体脂秤上了一次，
+   * 睡眠就从第二行第一格挪到第一行第四格 —— 这张卡是每天扫一眼的东西，
+   * 位置比密度重要。
+   */
+  const moved = positions.filter((p) => p && positions[positions.length - 1]
+    && Object.entries(p).some(([k, v]) => positions[positions.length - 1][k] != null
+      && positions[positions.length - 1][k] !== v));
+  if (moved.length) badLayouts.push(`核心指标的位置会随项数变（${moved.length} 种项数对不上）`);
+  check('健康数据 1~8 项都排得平整，核心项位置不变', badLayouts.length === 0, badLayouts.join('；'));
 
   /*
    * 颜色语义：红色只留给真上限。
    *
    * 单元测试能验 core/metrics.js 算出的 level，但拦不住有人在视图里把 level
-   * 接错了线——比如又给热量条加上 overIsBad。这里直接量渲染出来的颜色。
+   * 接错了线——比如又给热量条配上 danger。这里直接量渲染出来的颜色。
    */
   await page.evaluate(async () => {
     const { addEntry, saveProfile } = await import('./js/lib/store.js');

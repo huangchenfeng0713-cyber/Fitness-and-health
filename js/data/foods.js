@@ -221,6 +221,9 @@ export const FOODS = [
   { id: 'beef_lean', name: '瘦牛肉（生）', alias: 'niurou lean beef 牛肉 瘦牛肉 牛腱', cat: 'meat', n: [160, 21.5, 7.5, 1.2, 0, 0, 62], s: [['一份可食部', 100]], note: '通用瘦牛肉代表值；牛腱可作近似搜索，但不同部位脂肪含量会有差异', f: ['cook'] },
   { id: 'beef_steak', name: '西冷牛排', alias: 'niupai steak', cat: 'meat', n: [212, 24.0, 12.8, 0, 0, 0, 70], s: [['一块', 200]], f: [] },
   { id: 'lamb', name: '羊肉（瘦）', alias: 'yangrou lamb', cat: 'meat', n: [203, 19.0, 14.1, 0, 0, 0, 69], s: [['一份', 100]], f: [] },
+  { id: 'lamb_chop', name: '羊排（带骨）', alias: 'yangpai lamb chop 羊肋排', cat: 'meat', n: [232, 18.5, 17.5, 0, 0, 0, 75], s: [['一份去骨可食部', 150]], note: '按去骨可食部计；带骨整块称重时可食部约六到七成', f: ['cook'] },
+  { id: 'ribeye_steak', name: '肋眼牛排', alias: 'leiyan niupai ribeye steak 眼肉牛排', cat: 'meat', n: [255, 21.0, 19.0, 0, 0, 0, 62], s: [['一块', 200]], note: '生重计；肋眼脂肪比西冷高，煎制另加的黄油和油不含在内', f: ['cook'] },
+  { id: 'tenderloin_steak', name: '菲力牛排', alias: 'feili niupai tenderloin filet steak', cat: 'meat', n: [178, 22.5, 9.5, 0, 0, 0, 60], s: [['一块', 180]], note: '生重计；菲力是牛里脊，脂肪明显低于肋眼', f: ['cook'] },
   { id: 'duck', name: '烤鸭（带皮）', alias: 'kaoya duck', cat: 'meat', n: [436, 16.6, 38.4, 6.0, 0, 1.0, 83], s: [['一份去骨可食部', 100]], f: [] },
   { id: 'sausage', name: '中式香肠 / 腊肠', alias: 'xiangchang lachang sausage', cat: 'meat', n: [508, 12.0, 48.0, 6.0, 0, 3.0, 1300], s: [['一根', 60]], f: ['processed', 'quick'] },
   { id: 'bacon', name: '培根', alias: 'peigen bacon', cat: 'meat', n: [381, 22.4, 30.6, 2.0, 0, 1.0, 1500], s: [['一片', 25]], f: ['processed'] },
@@ -1507,6 +1510,19 @@ export const FOODS = [
   { id: 'casserole_tofu', name: '砂锅豆腐煲', alias: 'shaguo doufubao 豆腐砂锅 tofu casserole', cat: 'dish', n: [105, 7.0, 6.5, 5.0, 1.2, 1.5, 650], s: [['一份', 350]], ...META_RECIPE_READY, note: '按豆腐、菌菇蔬菜和整份汤汁估算；加入五花肉或油炸豆腐时热量会更高', f: ['est'] },
   { id: 'pickled_cabbage_pork', name: '酸菜白肉', alias: 'suancai bairou 东北酸菜汆白肉 pickled cabbage pork', cat: 'dish', n: [145, 8.0, 11.0, 4.0, 1.2, 1.0, 950], s: [['一份', 350]], ...META_RECIPE_READY, note: '按五花肉、酸菜和整碗汤计；酸菜用量、漂洗和喝汤多少会显著影响钠', f: ['est'] },
   { id: 'chili_scrambled_egg', name: '辣椒炒鸡蛋', alias: 'lajiao chao jidan 青椒炒蛋 尖椒炒蛋 chili scrambled egg', cat: 'dish', n: [150, 8.0, 11.5, 4.0, 1.3, 2.0, 560], s: [['一份', 250]], ...META_RECIPE_READY, note: '按鸡蛋和鲜辣椒同炒估算；主要差异来自鸡蛋数量与用油量', f: ['est'] },
+
+  // ---------- 闽南 / 厦漳泉 ----------
+  // 这一带的做法有两个共同点：沙茶、花生汤这类酱汁本身含糖含油，钠也高；
+  // 海蛎煎、土笋冻这些按可食部估，摊主的地瓜粉和油量差异很大，一律标估算。
+  { id: 'satay_noodle', name: '沙茶面', alias: 'shachamian satay noodle 厦门沙茶面 闽南', cat: 'dish', n: [118, 5.5, 6.0, 10.5, 0.8, 1.8, 620], s: [['一碗', 500], ['小碗', 400]], ...META_RECIPE_READY, note: '按碱面加沙茶汤底、豆芽与少量配料估算；沙茶酱含花生和油，加猪心猪肝等配料后热量明显上升', f: ['est'] },
+  { id: 'oyster_omelet', name: '海蛎煎', alias: 'haolijian oyster omelet 蚵仔煎 闽南 厦门', cat: 'dish', n: [188, 8.5, 12.5, 11.0, 0.6, 1.2, 560], s: [['一份', 220]], ...META_RECIPE_READY, note: '按海蛎、鸡蛋、地瓜粉与煎油估算；地瓜粉和用油量差异很大', f: ['est', 'fried'] },
+  { id: 'mianxian_hu', name: '面线糊', alias: 'mianxianhu 泉州面线糊 闽南', cat: 'dish', n: [62, 2.6, 1.6, 9.2, 0.4, 0.5, 520], s: [['一碗', 400]], ...META_RECIPE_READY, note: '按素面线糊底估算；加卤大肠、醋肉、油条后热量会翻倍', f: ['est'] },
+  { id: 'tusundong', name: '土笋冻', alias: 'tusundong 星虫冻 闽南 厦门', cat: 'dish', n: [58, 8.5, 1.2, 2.5, 0, 0.5, 420], s: [['一份（约4粒）', 80]], ...META_RECIPE_READY, note: '按星虫胶冻本体估算，不含蘸料；蘸酱油、辣酱后钠会明显上升', f: ['est'] },
+  { id: 'jiang_mu_ya', name: '姜母鸭', alias: 'jiangmuya ginger duck 闽南 泉州', cat: 'dish', n: [225, 18.0, 15.5, 3.5, 0.5, 1.0, 700], s: [['一份去骨可食部', 250]], ...META_RECIPE_READY, note: '按连皮鸭肉、姜与麻油米酒汤汁估算；去皮后脂肪明显下降', f: ['est'] },
+  { id: 'fried_pork_minnan', name: '醋肉', alias: 'curou 闽南醋肉 泉州 炸醋肉', cat: 'dish', n: [265, 17.0, 17.0, 11.0, 0.3, 0.8, 640], s: [['一份', 120]], ...META_RECIPE_READY, note: '腌后裹地瓜粉油炸，按沥油后估算', f: ['est', 'fried'] },
+  { id: 'peanut_soup_minnan', name: '花生汤', alias: 'huashengtang peanut soup 闽南 厦门', cat: 'dish', n: [128, 4.5, 6.5, 13.5, 1.4, 10.0, 25], s: [['一碗', 300]], ...META_RECIPE_READY, note: '花生仁加糖水炖烂；糖是主味，甜度差异很大', f: ['est', 'sweetdrink'] },
+  { id: 'ginger_duck_noodle', name: '卤面（闽南）', alias: 'lumian 闽南卤面 漳州卤面', cat: 'dish', n: [132, 6.0, 5.0, 15.5, 0.9, 1.2, 680], s: [['一碗', 450]], ...META_RECIPE_READY, note: '按勾芡卤汤加碱面与常见配料估算；芡汁厚薄影响热量', f: ['est'] },
+  { id: 'fried_five_spice_roll', name: '五香卷', alias: 'wuxiangjuan 闽南五香卷 泉州', cat: 'dish', n: [285, 13.0, 19.0, 15.0, 0.8, 1.5, 720], s: [['一条', 100]], ...META_RECIPE_READY, note: '猪肉马蹄裹豆皮油炸，按沥油后估算', f: ['est', 'fried'] },
 ];
 
 /*
@@ -1532,6 +1548,8 @@ const DISH_ADDED_SUGAR = Object.freeze({
   yuxiang_eggplant: 4.0, burger: 3.5, fried_chicken_burger: 3.5, yuxiang: 3.5,
   buldak_noodle_ready: 3.0, char_siu_rice: 3.0, gyudon: 3.0, liu_rou_duan: 3.0, pad_thai: 3.0,
   braised_chicken_wing: 2.5, braised_eggplant: 2.5, meigan_pork: 2.5, sanbei_chicken: 2.5,
+  // 闽南：花生汤是糖水，沙茶酱和卤汁本身带糖
+  peanut_soup_minnan: 9.0, satay_noodle: 1.2, ginger_duck_noodle: 1.0, oyster_omelet: 0.5,
   sandwich_egg: 2.5, sushi: 2.5, sushi_hand_roll: 2.2, takoyaki: 2.2, gongbao: 2.0,
   kungpao_shrimp: 2.0, oyakodon: 2.0, pork_rice: 2.0, rice_burger: 2.0, stirfried_niangao: 2.0,
   tuna_sandwich: 2.0, vinegar_lotus_root: 2.0, chicken_wrap: 1.8, omelette_rice: 1.8,

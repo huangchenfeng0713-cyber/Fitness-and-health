@@ -74,14 +74,16 @@ function el(tag, attrs = {}) {
 /**
  * 环形进度。
  *
- * `overIsBad` 默认关掉：超过 100% 是不是坏事，只有调用方知道。
+ * 超出之后染什么色由调用方给：`overTone` 是 null（不换色）/ 'warn'（橙）/ 'danger'（红）。
+ * 颜色只有三种含义 —— 绿是照计划在走，橙是普通偏差，红是真的越过了上限。
+ * 热量比计划多吃一点属于橙，不是红：增重计划本来就要求每天吃超。
  * 原先这里写死「>105% 一律画成 danger」，于是无论主卡传什么颜色进来都会被
  * 就地改红 —— 增重计划要求每天吃超，圆环却一直在报警，两者对不上。
  * 饮水环同理，多喝一点也不是错误。
  */
 export function ring({
   pct = 0, size = 92, stroke = 9, color = 'var(--accent)', label = '', sub = '',
-  overIsBad = false,
+  overTone = null,
 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -95,7 +97,7 @@ export function ring({
   }));
   const arc = el('circle', {
     cx: size / 2, cy: size / 2, r, fill: 'none',
-    stroke: overIsBad && clamped > 105 ? 'var(--danger)' : color,
+    stroke: overTone && clamped > 105 ? `var(--${overTone})` : color,
     'stroke-width': stroke, 'stroke-linecap': 'round',
     'stroke-dasharray': `${dash} ${c}`,
     transform: `rotate(-90 ${size / 2} ${size / 2})`,
@@ -191,7 +193,7 @@ export function splitBar({
  *        让人一眼看出「记完这笔会推进到哪」。
  */
 export function macroBar({
-  value, target, delta = 0, color = 'var(--accent)', overIsBad = true,
+  value, target, delta = 0, color = 'var(--accent)', overTone = null,
 }) {
   const wrap = document.createElement('div');
   wrap.className = 'macro-bar';
@@ -201,24 +203,25 @@ export function macroBar({
   const totalPct = pctOf(value + delta);
 
   const fill = document.createElement('div');
-  fill.className = `macro-bar-fill${overIsBad && pctOf(value) > 105 ? ' over' : ''}`;
+  const over = overTone && pctOf(value) > 105;
+  fill.className = `macro-bar-fill${over ? ` over ${overTone}` : ''}`;
   fill.style.width = `${basePct}%`;
-  if (!overIsBad || pctOf(value) <= 105) fill.style.background = color;
+  if (!over) fill.style.background = color;
   wrap.append(fill);
 
   if (delta > 0) {
     const add = document.createElement('div');
     add.className = 'macro-bar-delta';
     add.style.width = `${Math.max(0, Math.min(totalPct, 100) - basePct)}%`;
-    add.style.background = overIsBad && totalPct > 105 ? 'var(--danger)' : color;
+    add.style.background = overTone && totalPct > 105 ? `var(--${overTone})` : color;
     wrap.append(add);
   }
 
-  if (overIsBad && totalPct > 100) {
-    const over = document.createElement('div');
-    over.className = 'macro-bar-over';
-    over.style.width = `${Math.min(totalPct - 100, 40)}%`;
-    wrap.append(over);
+  if (overTone && totalPct > 100) {
+    const tail = document.createElement('div');
+    tail.className = `macro-bar-over ${overTone}`;
+    tail.style.width = `${Math.min(totalPct - 100, 40)}%`;
+    wrap.append(tail);
   }
   return wrap;
 }
@@ -235,10 +238,10 @@ export function lineChart({
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
   domain = null, showAllDates = false, interactive = false,
   selectedX = null, onPick = null,
-  breakOnMissing = false, showPoints = false, overIsBad = false, minPoints = 2,
+  breakOnMissing = false, showPoints = false, overTone = null, minPoints = 2,
   emptyText = '数据不足，至少需要 2 个记录日',
 }) {
-  const pad = { l: 38, r: 12, t: 14, b: 22 };
+  const pad = { l: 56, r: 14, t: 16, b: 30 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
   /*
    * 先剔掉 null 再转数字。
@@ -318,7 +321,7 @@ export function lineChart({
     const v = min + ((max - min) * i) / 3;
     const y = py(v);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'grid' }));
-    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': CHART_LABEL_SIZE });
     t.textContent = fmt(v);
     svg.append(t);
   }
@@ -327,7 +330,7 @@ export function lineChart({
     const y = py(target);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'target-line' }));
     if (targetLabel) {
-      const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': 10 });
+      const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': CHART_LABEL_SIZE });
       t.textContent = targetLabel;
       svg.append(t);
     }
@@ -364,10 +367,10 @@ export function lineChart({
   const visiblePoints = showPoints ? points : [last];
   const radius = showPoints && points.length > 60 ? 2 : showPoints && points.length > 14 ? 2.6 : 3.5;
   for (const point of visiblePoints) {
-    const high = overIsBad && target != null && Number(point.y) > Number(target) * 1.05;
+    const high = overTone && target != null && Number(point.y) > Number(target) * 1.05;
     svg.append(el('circle', {
       cx: pointX(point), cy: py(Number(point.y)), r: radius,
-      fill: high ? 'var(--danger)' : color,
+      fill: high ? `var(--${overTone})` : color,
     }));
   }
 
@@ -385,23 +388,33 @@ export function lineChart({
     } else {
       points.forEach((pt, i) => labelDays.push({ ms: dayXs[i], x: px(i) }));
     }
+    /*
+     * 挤不下就隔一个标一个。
+     *
+     * 「08-25」在 12px 下大约要 38px，而 320px 的机子上绘图区只有 262px ——
+     * 七个日期铺开必定压字。缩字号能躲开，但轴标签本来就已经是全屏最小的字，
+     * 再小就成了「看得见读不动」；宁可少标几个，也不要标一排看不清的。
+     */
+    const labelStep = Math.max(1, Math.ceil((labelDays.length * DATE_LABEL_W) / Math.max(1, width - pad.l - pad.r)));
     labelDays.forEach((day, i) => {
+      const isEdge = i === 0 || i === labelDays.length - 1;
+      if (!isEdge && i % labelStep !== 0) return;
       /*
        * 首末两个日期改成靠边对齐。居中的话有一半会落到绘图区外，
        * 而右边距只有 12px —— 最后一天的「20」会被 SVG 边界切掉半个字。
        */
       const anchor = i === 0 ? 'start' : i === labelDays.length - 1 ? 'end' : 'middle';
       const t = el('text', {
-        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': 9.5,
+        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': CHART_LABEL_SIZE,
       });
       t.textContent = new Date(day.ms).toISOString().slice(5, 10);
       svg.append(t);
     });
   } else {
     // 给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
-    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': CHART_LABEL_SIZE });
     first.textContent = String(useDomain ? domain[0] : points[0].x).slice(5);
-    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': CHART_LABEL_SIZE });
     lastT.textContent = String(useDomain ? domain[1] : last.x).slice(5);
     svg.append(first, lastT);
   }
@@ -434,20 +447,35 @@ export function lineChart({
   }
 
   if (unit) {
-    const u = el('text', { x: pad.l, y: 10, class: 'axis', 'font-size': 10 });
+    const u = el('text', { x: pad.l, y: 10, class: 'axis', 'font-size': CHART_LABEL_SIZE });
     u.textContent = unit;
     svg.append(u);
   }
   return svg;
 }
 
-/** 柱状图：摄入 vs 目标（超标柱染红） */
+/**
+ * 「08-25」这种日期标签在 12px 下大约占多宽。
+ * 轴标签已经是全屏最小的字，挤不下时宁可少标几个，也不缩到读不动。
+ */
+const DATE_LABEL_W = 54;
+
+/*
+ * 轴标签的字号，单位是 viewBox 里的用户单位，不是 CSS 像素。
+ *
+ * 图用 preserveAspectRatio="none" 横竖分别缩放，200 高的 viewBox 落到约 150px 高，
+ * 所以写 12 实际只渲染出 9px —— 「看得见读不动」。写 16 才折算成 12px 上下。
+ * 量出来的：390px 宽的机子上标签盒高约 17px，对应字形 12px 出头。
+ */
+const CHART_LABEL_SIZE = 16;
+
+/** 柱状图：摄入 vs 目标。超出之后染什么色由 overTone 给（橙=普通偏差，红=真超限） */
 export function barChart({
   data = [], width = 640, height = 200, target = null, unit = '',
-  targetLabel = '目标', overIsBad = true, partialX = null,
+  targetLabel = '目标', overTone = null, partialX = null,
   showAllDates = false, interactive = false, selectedX = null, onPick = null,
 }) {
-  const pad = { l: 38, r: 12, t: 14, b: 22 };
+  const pad = { l: 56, r: 14, t: 16, b: 30 };
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
   const measured = data.filter((d) => d.y != null && Number.isFinite(Number(d.y)));
   if (!measured.length) {
@@ -465,7 +493,7 @@ export function barChart({
     const v = (max * i) / 3;
     const y = py(v);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'grid' }));
-    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': CHART_LABEL_SIZE });
     t.textContent = Math.round(v);
     svg.append(t);
   }
@@ -478,7 +506,7 @@ export function barChart({
     const isPartial = partialX != null && d.x === partialX;
     svg.append(el('rect', {
       x, y, width: bw, height: Math.max(0, height - pad.b - y), rx: Math.min(3, bw / 2),
-      fill: overIsBad && target && v > target * 1.05 ? 'var(--danger)' : 'var(--accent)',
+      fill: overTone && target && v > target * 1.05 ? `var(--${overTone})` : 'var(--accent)',
       opacity: isPartial ? 0.38 : target && v < target * 0.75 ? 0.5 : 0.9,
     }));
   });
@@ -486,7 +514,7 @@ export function barChart({
   if (target != null) {
     const y = py(target);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'target-line' }));
-    const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': 10 });
+    const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': CHART_LABEL_SIZE });
     t.textContent = `${targetLabel} ${Math.round(target)}${unit}`;
     svg.append(t);
   }
@@ -494,17 +522,20 @@ export function barChart({
   const barCx = (i) => pad.l + (i + 0.5) * (innerW / data.length);
 
   if (showAllDates) {
+    // 挤不下就隔一个标一个，见上面 DATE_LABEL_W 那段注释
+    const barLabelStep = Math.max(1, Math.ceil((data.length * DATE_LABEL_W) / Math.max(1, innerW)));
     data.forEach((d, i) => {
+      if (i % barLabelStep !== 0 && i !== data.length - 1) return;
       const t = el('text', {
-        x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': 9.5,
+        x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': CHART_LABEL_SIZE,
       });
       t.textContent = String(d.x).slice(5);
       svg.append(t);
     });
   } else {
-    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': CHART_LABEL_SIZE });
     first.textContent = String(data[0].x).slice(5);
-    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': CHART_LABEL_SIZE });
     lastT.textContent = String(data[data.length - 1].x).slice(5);
     svg.append(first, lastT);
   }

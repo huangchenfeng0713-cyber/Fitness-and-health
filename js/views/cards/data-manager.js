@@ -5,8 +5,8 @@
  * 它以前长在数据页里，现在挂在设置页——都是维护性操作，和日常看数据不是一类。
  */
 
-import { h, num, toast, confirmAction, download, infoTip, todayKey } from '../../lib/utils.js';
-import { state, saveHealthDay, saveProfile, clearAllData, db } from '../../lib/store.js';
+import { h, num, toast, confirmAction, download, infoTip, todayKey, icon } from '../../lib/utils.js';
+import { state, saveHealthDay, saveProfile, clearAllData, markBackedUp, db } from '../../lib/store.js';
 import { isPlausibleHealthValue } from '../../core/health.js';
 import { runImportWorker, applyImport } from '../../lib/importer.js';
 import { getAccountState, syncNow } from '../../lib/account.js';
@@ -189,7 +189,7 @@ function backupPanel(rerender) {
 
   return h('div.data-actions', null,
       h('div.data-action', null,
-        h('div.data-action-icon', null, '↓'),
+        h('div.data-action-icon', null, icon('upload', { size: 16 })),
         h('div.data-action-copy', null,
           h('strong', null, '导出当前完整备份'),
           h('span', null, '下载到“文件”，换设备或清缓存前保存一份。')),
@@ -197,11 +197,12 @@ function backupPanel(rerender) {
           onclick: async () => {
             const payload = await db.exportAll();
             download(`健康饮食备份-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2));
+            await markBackedUp();
             toast('完整备份已下载', 'ok');
           },
         }, '导出')),
       h('div.data-action', null,
-        h('div.data-action-icon', null, '↺'),
+        h('div.data-action-icon', null, icon('restore', { size: 16 })),
         h('div.data-action-copy', null,
           h('strong', null, '恢复完整备份'),
           h('span', null, connected
@@ -209,7 +210,7 @@ function backupPanel(rerender) {
             : '会先确认再整体替换当前本地数据，不与现有数据混合。')),
         h('label.secondary-btn.compact', null, '选择备份', restoreInput)),
       h('div.data-action.danger', null,
-        h('div.data-action-icon', null, '×'),
+        h('div.data-action-icon', null, icon('close', { size: 16 })),
         h('div.data-action-copy', null,
           h('strong', null, connected ? '清空当前账号数据' : '清空本机数据'),
           h('span', null, connected
@@ -657,14 +658,15 @@ function rememberedDetails(key, spec, ...children) {
   }, ...children);
 }
 
-function managerSection(key, icon, title, subtitle, content) {
+// 形参别叫 icon：那会把 utils 里的 icon() 挡住，调用时报「icon is not a function」
+function managerSection(key, badge, title, subtitle, content) {
   return rememberedDetails(key, 'details.manager-section',
     h('summary', null,
-      h('span.manager-icon', null, icon),
+      h('span.manager-icon', null, badge),
       h('span.manager-summary-copy', null,
         h('strong', null, title),
         h('span', null, subtitle)),
-      h('span.manager-chevron', { 'aria-hidden': 'true' }, '›')),
+      icon('right', { size: 17, cls: 'manager-chevron' })),
     h('div.manager-panel', null, content));
 }
 
@@ -692,11 +694,11 @@ export function dataManagerCard(rerender) {
             ? '文件在当前设备读取；解析或恢复后的数据会同步到当前登录账号。'
             : '文件只在当前设备读取；未登录时不会上传个人数据。')))),
     h('div.manager-list', null,
-      managerSection('import', '↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
-      managerSection('manual', '＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
-      managerSection('backup', '↺', '本应用备份与恢复', connected
+      managerSection('import', icon('upload'), '同步 Apple 健康', lastHint, importPanel(rerender)),
+      managerSection('manual', icon('plus'), `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
+      managerSection('backup', icon('restore'), '本应用备份与恢复', connected
         ? '导出、恢复或清空当前账号数据'
         : '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
-      managerSection('guide', '?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
+      managerSection('guide', icon('help'), '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
   );
 }
