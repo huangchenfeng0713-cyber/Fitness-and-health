@@ -551,6 +551,16 @@ async function touchFavorite(foodId) {
   state.favorites = next;
 }
 
+/** 从“历史”快捷入口移除一项；不会删除已经记下的饮食记录或自定义食物。 */
+export async function removeFavorite(foodId) {
+  if (!foodId || !state.favorites.includes(foodId)) return false;
+  const next = state.favorites.filter((id) => id !== foodId);
+  await db.setSetting('favorites', next);
+  state.favorites = next;
+  emit();
+  return true;
+}
+
 // 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
 export function portionMemory() {
   return state.portionMemory;

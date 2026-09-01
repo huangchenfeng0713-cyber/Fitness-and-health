@@ -9,13 +9,15 @@
  */
 
 import { h, clearEl, mount, num, todayKey, persistentInfoTip, toast } from '../lib/utils.js';
-import { GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID } from '../data/exercises.js';
+import {
+  GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
+} from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf,
-  sessionVolume, recentExercises, recentTrainingRows,
+  sessionVolume, recentTrainingRows,
   overlapScore, overlapLevel,
 } from '../core/training.js';
 
@@ -38,6 +40,8 @@ const LIST_PREVIEW = 8;
 let showAllExercises = false;
 // 动作列表那张卡现在看的是列表还是推荐。纯界面状态，不落库
 let showRecommend = false;
+// 搜索词是挑选器自己的界面状态；卡片因记录动作而重绘时仍保留。
+let exerciseQuery = '';
 /*
  * 待加入计划的一批动作。
  *
@@ -197,7 +201,7 @@ function exerciseMeta(tags) {
     tags.map((tag, index) => h(`span.exercise-meta-tag.${classes[index] || 'detail'}`, null, tag)));
 }
 
-function exerciseRow(e, rerender, lastDone) {
+function exerciseRow(e, rerender) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
   // 单独留住这两个节点，勾选时只改它们，不重建整行
@@ -246,9 +250,7 @@ function exerciseRow(e, rerender, lastDone) {
      * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
      */
     exerciseMeta(exerciseTags(e)),
-    clashNode,
-    // 标出上次练过是哪天，省得每次从头翻
-    lastDone && !chosen ? h('div.ex-last', null, `上次 ${lastDone.slice(5)}`) : null),
+    clashNode),
   pickNode);
 
   /*
@@ -329,10 +331,6 @@ function equipMenu(rerender, all) {
 }
 
 function pickerCard(rerender) {
-  const lastDoneAt = new Map(
-    recentExercises(state.trainingDays, { limit: 200, before: trainingDay() })
-      .map((r) => [r.exercise.id, r.date]),
-  );
   const byGroup = pickMode === 'group';
   const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
   const filter = equipFilterOf(equipFilter);
@@ -377,28 +375,71 @@ function pickerCard(rerender) {
   h('span', null, `${byGroup ? '身体部位' : '动作模式'} · ${compactScope} · ${filter.label}`),
   h('span.picker-compact-action', null, '调整'));
 
-  return h('section.card.exercise-picker-card', null,
-    h('div.card-head', null,
-      h('h3', null, '选择动作'),
-      h('div.card-head-actions', null,
-        h('span.card-tag', null, showRecommend
-          ? `${rec.items.length} 个推荐`
-          : `${list.length} 个动作`),
-        showRecommend ? recommendTip() : null)),
-    compactSummary,
-    controls,
-    h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all)),
+  const countNode = h('span.card-tag', null, showRecommend
+    ? `${rec.items.length} 个推荐`
+    : `${list.length} 个动作`);
+  const searchInput = h('input.search-input.exercise-search-input', {
+    type: 'search',
+    value: exerciseQuery,
+    placeholder: '搜索动作，支持拼音',
+    'aria-label': '搜索动作，支持中文、拼音或英文',
+    autocomplete: 'off',
+    enterkeyhint: 'search',
+  });
+  const toolbar = h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all));
+  const normalContent = h('div.picker-normal-results', null,
     showRecommend
       ? recommendBody(rec)
       : [
         list.length
-          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, lastDoneAt.get(e.id))))
+          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender)))
           : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
         list.length > LIST_PREVIEW ? h('button.more-btn', {
           onclick: () => { showAllExercises = !showAllExercises; rerender(); },
         }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
-      ],
-  );
+      ]);
+  const searchContent = h('div.exercise-search-results', { hidden: true });
+
+  const updateSearch = () => {
+    const query = exerciseQuery.trim();
+    const searching = Boolean(query);
+    controls.hidden = searching;
+    compactSummary.hidden = searching;
+    toolbar.hidden = searching;
+    normalContent.hidden = searching;
+    searchContent.hidden = !searching;
+    clearEl(searchContent);
+    if (!searching) {
+      countNode.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`;
+      return;
+    }
+    const matches = searchExercises(query);
+    countNode.textContent = `${matches.length} 个结果`;
+    mount(searchContent,
+      matches.length
+        ? h('div.ex-list', null,
+          matches.map((e) => exerciseRow(e, rerender)))
+        : h('p.empty-hint.exercise-search-empty', null, '没有找到动作，试试动作名、拼音或英文。'));
+  };
+  searchInput.addEventListener('input', (event) => {
+    exerciseQuery = event.target.value;
+    updateSearch();
+  });
+
+  const card = h('section.card.exercise-picker-card', null,
+    h('div.card-head.picker-card-head', null,
+      h('h3', null, '选择动作'),
+      h('div.card-head-actions', null,
+        countNode,
+        showRecommend ? recommendTip() : null)),
+    h('div.search-row.search-row-full.exercise-search-row', null, searchInput),
+    compactSummary,
+    controls,
+    toolbar,
+    normalContent,
+    searchContent);
+  updateSearch();
+  return card;
 }
 
 /** 勾中的这一批一次加进计划：一次落库、一次重绘 */

@@ -59,23 +59,25 @@ test('热量解读报出与目标的差、超标天数与走向', () => {
   assert.match(text, /有记录的 4 天里日均 2550 kcal/);
   assert.match(text, /比目标高 550 kcal/);
   assert.match(text, /4 天超出目标 5% 以上/);
-  assert.match(text, /后半段比前半段多吃约 200 kcal\/天/);
+  assert.match(text, /后半段比前半段多记录约 200 kcal\/天/);
 });
 
-test('摄入偏低时只有连续多天才说「长期」', () => {
+test('摄入偏低时只有连续多天才提示风险，并先要求确认记录完整', () => {
   const one = trendReading('kcal', pts(1000, 2100, 2000, 2050), { target: 2000 });
     assert.match(one, /另有 1 天不到目标的四分之三。/);
-  assert.ok(!one.includes('长期'), `单日偏低不该给出长期结论：${one}`);
+  assert.ok(!one.includes('风险'), `单日偏低不该给出长期风险结论：${one}`);
 
   const many = trendReading('kcal', pts(1000, 1100, 1200, 1300), { target: 2000 });
-  assert.ok(many.includes('长期'), '连续多天偏低应给出长期警示');
+  assert.match(many, /若记录完整且持续如此/);
+  assert.match(many, /瘦体重流失风险/);
 });
 
 test('蛋白解读以达标率为主，平均值不能掩盖漏掉的日子', () => {
   // 日均 100g 看着达标，实际只有一天够
   const text = trendReading('protein', pts(280, 40, 40, 40), { target: 120, threshold: 108 });
   assert.match(text, /达标 1 天/);
-  assert.match(text, /达标率偏低/);
+  assert.match(text, /多数记录日低于目标/);
+  assert.match(text, /先确认饮食是否记全/);
 });
 
 test('体重记录不够时只写「数据不足」，不拼假的每周变化', () => {
@@ -93,7 +95,7 @@ test('减脂掉得比目标多算「快」，不能带符号相减说成「慢�
   });
   assert.match(fast, /拟合趋势 -0\.9 kg\/周（目标 -0\.5）/);
   assert.match(fast, /比目标快 0\.4 kg\/周/);
-  assert.match(fast, /每周变化超过体重的 1%/);
+  assert.match(fast, /变化超过体重的 1%\/周/);
 
   const slow = trendReading('weight', pts(62, 61.9, 61.8, 61.8), {
     kgPerWeek: -0.2, goalRate: -0.5, records: 4, spanDays: 14,
@@ -152,18 +154,20 @@ test('体重解读只说趋势和快慢，不直接开热量处方', () => {
   assert.doesNotMatch(text, /调整约 [+-]?\d+ kcal|每天(多|少)吃 \d+ kcal/);
 });
 
-test('静息心率持续上升时点名可能的原因', () => {
+test('静息心率变化列出可能影响因素，但不从趋势确定原因', () => {
   const up = trendReading('restingHR', pts(56, 57, 62, 64));
   assert.match(up, /日均 60 bpm，区间内 56 ~ 64 bpm/);
-  assert.match(up, /持续上升常见于训练过量、睡眠不足、压力大或正在感冒/);
+  assert.match(up, /压力、感染、药物、训练负荷和测量条件都可能影响/);
+  assert.match(up, /不能确定原因/);
 
   const down = trendReading('restingHR', pts(66, 65, 59, 58));
-  assert.match(down, /有氧能力在改善/);
+  assert.match(down, /不能单凭下降判断有氧能力改善/);
 });
 
-test('静息心率的常见范围表述与解读一致', () => {
-  assert.match(trendReading('restingHR', pts(88, 90, 86, 92)), /成人常见范围是 60~100/);
-  assert.match(trendReading('restingHR', pts(45, 46, 44, 47)), /经常训练的人属于正常/);
+test('静息心率以 60–100 常见范围和症状为依据，不把 80 自动标高', () => {
+  assert.match(trendReading('restingHR', pts(88, 90, 86, 92)), /处在成人常见参考范围内/);
+  assert.match(trendReading('restingHR', pts(102, 104, 103, 105)), /高于多数成人静息时常见的 60–100 bpm/);
+  assert.match(trendReading('restingHR', pts(45, 46, 44, 47)), /若伴有头晕、乏力或晕厥/);
 });
 
 test('热量收支样本少于 3 天时不换算成每周体重变化', () => {
@@ -176,11 +180,18 @@ test('热量收支样本少于 3 天时不换算成每周体重变化', () => {
   assert.ok(MIN_POINTS_FOR_CLAIM === 3);
 });
 
-test('睡眠不足时先建议稳定增加睡眠机会，而不是周末补觉', () => {
+test('睡眠不足按至少 7 小时说明，并保留设备时长的解释边界', () => {
   const text = trendReading('sleep', pts(5.5, 6, 5.8, 6.2));
-  assert.match(text, /明显低于成人 7~9 小时的常见建议/);
+  assert.match(text, /低于成年人规律睡够至少 7 小时的建议/);
   assert.match(text, /4 天不足 6\.5 小时/);
-  assert.match(text, /比周末补觉更有用/);
+  assert.match(text, /白天困倦、恢复和连续多日记录/);
+});
+
+test('睡眠超过 9 小时不自动判定为更好或异常', () => {
+  const text = trendReading('sleep', pts(10, 10.2, 9.8, 10.1));
+  assert.match(text, /超过 9 小时/);
+  assert.match(text, /不能只凭时长判定异常/);
+  assert.doesNotMatch(text, /往好的方向/);
 });
 
 test('所有解读都不会输出脏值', () => {
@@ -241,12 +252,12 @@ test('体重解读：涨太快也要说，而且门槛比掉太快严', () => {
     { kgPerWeek, goalRate, records: 4, spanDays: 14 });
 
   // 70kg 的人每周涨 0.6kg = 0.86% 体重，超过 0.5%
-  assert.match(say(0.6, 0.25, 70), /多出来的按比例主要是脂肪/, say(0.6, 0.25, 70));
+  assert.match(say(0.6, 0.25, 70), /可能提高脂肪增加比例/, say(0.6, 0.25, 70));
   // 每周涨 0.3kg = 0.43%，在范围内
-  assert.doesNotMatch(say(0.3, 0.25, 70), /主要是脂肪/, say(0.3, 0.25, 70));
+  assert.doesNotMatch(say(0.3, 0.25, 70), /脂肪增加比例/, say(0.3, 0.25, 70));
   // 减重仍是 1% 的门槛：0.6kg/70kg = 0.86%，不该报
-  assert.doesNotMatch(say(-0.6, -0.5, 70), /掉的往往不只是脂肪/, say(-0.6, -0.5, 70));
-  assert.match(say(-1.0, -0.5, 70), /掉的往往不只是脂肪/, say(-1.0, -0.5, 70));
+  assert.doesNotMatch(say(-0.6, -0.5, 70), /瘦体重流失风险/, say(-0.6, -0.5, 70));
+  assert.match(say(-1.0, -0.5, 70), /瘦体重流失风险/, say(-1.0, -0.5, 70));
 });
 
 test('调用方没给体重趋势时按数据不足处理，不把 undefined 印出来', () => {

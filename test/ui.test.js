@@ -184,13 +184,18 @@ test('搜索先出十条，换词或提示筛选时收回展开；没找到时�
   assert.match(diet, /【食物库缺条目】搜索词：/, '反馈模板没带上搜到的词');
 });
 
-test('历史搜索按高度折叠两行，没溢出就不出「展开」', () => {
+test('历史按高度折叠两行，支持图标删除，没溢出就不出「展开」', () => {
   // 名字长短差得远（「米饭（白米）」和「肯德基 乒乒乓乓冰球杯（柠檬味）」），
   // 按个数截会时多时少，两行看起来像三行
   const diet = read('js/views/diet.js');
   const css = read('css/app.css');
-  assert.match(diet, /const HISTORY_LIMIT = 10/);
-  assert.match(diet, /'历史搜索'/, '标签没改成历史搜索');
+  assert.match(diet, /const HISTORY_LIMIT = 24/);
+  assert.match(diet, /h\('span\.fav-label', null, '历史'\)/, '标签没有精简成“历史”');
+  assert.match(diet, /function historyChip\(food\)/, '历史词条没有独立选择与删除操作');
+  assert.match(diet, /removeFavorite\(food\.id\)/, '历史记录删除没有持久化');
+  assert.match(diet, /function trashIcon\(\)/, '删除仍在使用手打字符而不是图标');
+  assert.match(css, /grid-template-areas: 'label chips' '\. toggle'/,
+    '展开入口没有固定在历史区右下角');
   assert.match(diet, /measurements = items\.map\(\(item\) => \(\{ item, rect: item\.getBoundingClientRect\(\) \}\)\)/,
     '没有按真实按钮边界测量折叠高度');
   assert.match(diet, /Math\.abs\(top - rect\.top\) <= 1/,
@@ -442,10 +447,44 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
     '推荐组合没有使用共用动作行');
   assert.match(css, /\.exercise-choice-row\s*\{[^}]*padding:\s*10px var\(--space-2\)/s,
     '两个视图的文字位置与行内边距没有统一');
+  assert.match(css, /\.exercise-choice-row\s*\{[^}]*min-height:\s*76px/s,
+    '两个视图的动作行没有统一最小高度');
   assert.match(css, /\.exercise-choice-action\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/s,
     '两个视图的右侧加号没有统一');
   // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
   assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
+});
+
+test('选择动作顶部使用与食物一致的搜索框，输入时只更新结果区', () => {
+  const training = read('js/views/training.js');
+  const polish = read('css/ux-polish.css');
+  assert.match(training, /EXERCISE_BY_ID, searchExercises/,
+    '选择动作没有复用动作库的中文、拼音与英文搜索');
+  assert.match(training, /input\.search-input\.exercise-search-input/,
+    '动作搜索框没有复用添加食物的 search-input 样式');
+  assert.match(training, /placeholder: '搜索动作，支持拼音'/);
+  assert.match(training, /searchInput\.addEventListener\('input',[\s\S]*?updateSearch\(\)/,
+    '输入搜索词后没有即时更新结果');
+  assert.doesNotMatch(training, /searchInput\.addEventListener\('input',[\s\S]{0,180}?rerender\(/,
+    '搜索输入时重绘整页会打断键盘和焦点');
+  assert.match(training, /controls\.hidden = searching;[\s\S]*?toolbar\.hidden = searching;/,
+    '搜索时旧筛选内容仍会和结果挤在一起');
+  assert.match(polish, /\.exercise-search-input\s*\{\s*width:\s*100%/,
+    '动作搜索框没有铺满可用宽度');
+  assert.match(polish, /\.picker-controls\[hidden\][\s\S]*?display:\s*none\s*!important/,
+    '搜索时隐藏的筛选区可能被组件自身 display 样式重新显示');
+});
+
+test('信息符号视觉减半但保留可触达区域', () => {
+  const css = read('css/app.css');
+  const polish = read('css/ux-polish.css');
+  const utils = read('js/lib/utils.js');
+  assert.match(css, /--info-size:\s*14px/, '信息符号没有从 28px 缩小到一半');
+  assert.match(utils, /createElementNS\('http:\/\/www\.w3\.org\/2000\/svg', 'svg'\)/,
+    '信息符号仍是手打字符而不是可控的矢量图标');
+  assert.match(utils, /setAttribute\('class', 'info-tip-mark'\)/);
+  assert.match(polish, /\.info-tip > summary::after\s*\{[^}]*inset:\s*-15px/s,
+    '视觉缩小后没有保留约 44px 的点击热区');
 });
 
 test('动作列表默认只出前几个，但已选的绝不会被藏起来', () => {
@@ -1418,9 +1457,10 @@ test('睡眠和锻炼写成小时加分钟，不写小数小时', () => {
   assert.match(strip(read('js/core/health-card.js')), /kind: 'duration'/, '睡眠没有走时长写法');
   assert.match(strip(read('js/views/cards/health-metrics.js')), /formatDuration\(cell\.value\)/);
 
-  // 参考区间和门槛照原样写：那是文献给的数，不是量出来的时长
+  // AASM / SRS 可核对的共识是成人规律睡够至少 7 小时，不擅自扩写成 7~9 小时
   const sleep = strip(read('js/core/trend-reading.js'));
-  assert.match(sleep, /7~9 小时的常见建议/, '参考区间不该改写');
+  assert.match(sleep, /规律睡够至少 7 小时/, '睡眠时长依据没有使用共识原意');
+  assert.doesNotMatch(sleep, /7~9 小时的常见建议/, '不应把至少 7 小时扩写成 7~9 小时并归给共识');
   assert.match(sleep, /不足 6\.5 小时/, '门槛不该改写');
   assert.match(sleep, /日均 \$\{hm\(s\.avg\)\}/, '日均没有改成小时加分钟');
 });

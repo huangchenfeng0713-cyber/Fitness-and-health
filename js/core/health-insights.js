@@ -169,13 +169,13 @@ export function healthInsights(healthDays = [], opts = {}) {
         m);
     } else if (m < 7500) {
       add('steps', 'info', `日均 ${m} 步`,
-        '处在本应用的中间参考区间。若身体状况允许，可以循序增加到约 7000-8000 步；'
-        + '同时仍要结合运动强度和连续久坐时间判断，不能只看步数。',
+        '处在本应用的中间参考区间。若身体状况允许，可以先在当前基础上逐步增加约 500–1000 步/天；'
+        + '这不是统一处方，仍要结合运动强度、连续久坐时间和个人耐受判断。',
         m);
     } else {
-      add('steps', 'good', `日均 ${m} 步，达标`,
-        `达到本应用的步数参考区间。${lowDays > 0 ? `近 ${days.length} 个有记录日里有 ${lowDays} 天不足 4000 步，可以留意是否连续偏低。` : '记录期内没有明显的低步数日。'}`
-        + '步数仍不能替代对中高强度运动和久坐时间的评估。',
+      add('steps', 'info', `日均 ${m} 步，处在较高参考区间`,
+        `${lowDays > 0 ? `近 ${days.length} 个有记录日里有 ${lowDays} 天不足 4000 步，可以留意是否连续偏低。` : '记录期内没有明显的低步数日。'}`
+        + '不存在适用于所有人的统一步数目标；步数也不能替代对运动强度和久坐时间的评估。',
         m);
     }
   }
@@ -191,18 +191,14 @@ export function healthInsights(healthDays = [], opts = {}) {
     const exerciseValues = exerciseDays.map((d) => Number(d.exerciseMinutes));
     const weekly = round((exerciseValues.reduce((sum, v) => sum + v, 0) / daySpan) * 7);
     const activeDays = exerciseValues.filter((v) => v >= 20).length;
-    if (weekly < 150) {
-      add('exercise', 'warn', `每周锻炼约 ${weekly} 分钟，不足`,
-        `WHO 建议成人每周至少 150 分钟中等强度活动，还差 ${round(150 - weekly)} 分钟。`
-        + `这是按 ${daySpan} 个日历日折算的结果（${days.length} 天有健康记录，明确的零运动日计为 0）。`
-        + '可以拆成每周 5 次、每次约 30 分钟；另外每周安排两次肌力训练。',
-        weekly);
-    } else {
-      add('exercise', 'good', `每周锻炼约 ${weekly} 分钟，达标`,
-        `按 ${daySpan} 个日历日折算，达到 WHO 的每周 150 分钟建议；${days.length} 天有健康记录，其中 ${activeDays} 天记录了至少 20 分钟活动。`
-        + '若尚未安排肌力训练，可以逐步加入每周两次。',
-        weekly);
-    }
+    const comparison = weekly < 150
+      ? `若这些分钟主要达到中等强度，则距 WHO 每周至少 150 分钟的下限约 ${round(150 - weekly)} 分钟。`
+      : '若这些分钟主要达到中等强度，则时长达到 WHO 每周至少 150 分钟的下限。';
+    add('exercise', 'info', `设备记录每周约 ${weekly} 分钟`,
+      `${comparison}当前数据不能确认活动强度。`
+      + `这是按 ${daySpan} 个日历日折算的结果（${days.length} 天有健康记录，明确的零运动日计为 0；其中 ${activeDays} 天记录至少 20 分钟）。`
+      + 'WHO 还建议成人每周至少两天进行肌肉强化活动，设备时长不能判断这一项是否完成。',
+      weekly);
   }
 
   // ---------------- 睡眠 ----------------
@@ -221,9 +217,14 @@ export function healthInsights(healthDays = [], opts = {}) {
       add('sleep', 'warn', `日均睡眠 ${m} 小时，略少`,
         `离 7 小时还差一点，近 ${days.length} 天有 ${shortDays} 天不足 6.5 小时。可以先把每晚睡眠机会稳定增加约 30 分钟，并结合白天状态观察。`,
         m);
-    } else {
+    } else if (m <= 9) {
       add('sleep', 'good', `日均睡眠 ${m} 小时`,
-        `落在建议区间内。${sd > 1.2 ? `不过睡眠时长波动较大（标准差 ${sd} 小时）；这不能直接说明入睡和起床时间是否规律。` : '睡眠时长波动较小，继续保持。'}`,
+        `达到成年人规律睡够至少 7 小时的时长参考。${sd > 1.2 ? `不过睡眠时长波动较大（标准差 ${sd} 小时）；这不能直接说明入睡和起床时间是否规律。` : '睡眠时长波动较小。'}设备记录的时长也不能替代对白天困倦和睡眠质量的判断。`,
+        m);
+    } else {
+      add('sleep', 'info', `日均睡眠 ${m} 小时，时长较长`,
+        '超过 9 小时有时见于年轻人、补偿睡眠或疾病恢复期，不能只凭时长判定异常。'
+        + '如果这种情况持续、并伴随白天困倦或精神状态变化，可以复核设备记录并咨询医生。',
         m);
     }
     if (sd > 1.5 && m >= 7) {
@@ -239,17 +240,20 @@ export function healthInsights(healthDays = [], opts = {}) {
     // 不把四五天的短波动硬外推成“每周变化”；至少要真正跨过一周。
     const slope = calendarSpan(rhr) - 1 >= 7 ? slopePerDay(rhr) : null;
     const weekly = slope != null ? round(slope * 7, 1) : null;
-    if (m > 80) {
-      add('rhr', 'warn', `静息心率 ${m} bpm，偏高`,
-        '成人静息心率常见参考范围约为 60-100 bpm，但年龄、体能、药物和测量条件都会影响读数，单凭平均值不能判断疾病。'
-        + '如果持续高于个人平时水平，或伴有心悸、胸闷、乏力等不适，建议就医评估。', m);
-    } else if (weekly != null && weekly >= 1.5) {
+    if (m > 100) {
+      add('rhr', 'warn', `静息心率 ${m} bpm，高于常见范围`,
+        '多数成人静息心率常见参考范围约为 60–100 bpm，但年龄、体能、药物和测量条件都会影响读数。'
+        + '若在安静状态复测仍高，或伴有胸痛、气短、晕厥等不适，应及时就医。', m);
+    } else if (weekly != null && weekly >= 3) {
       add('rhr', 'warn', `静息心率近期上升（+${weekly} bpm/周）`,
         '这种变化可能与训练负荷、睡眠、压力、感染或测量条件变化有关，不能只凭趋势确定原因。'
         + '先复核同一时段的连续测量；若持续上升或伴有不适，再咨询医生。', m);
+    } else if (m < 50) {
+      add('rhr', 'info', `静息心率 ${m} bpm，低于 50`,
+        '训练者可能出现较低读数；若伴有头晕、乏力或晕厥，应就医评估。仍应结合个人基线和同条件复测。', m);
     } else {
       add('rhr', 'good', `静息心率 ${m} bpm`,
-        `处在成人常见参考范围${weekly != null && weekly <= -0.5 ? '，近期读数下降可能与体能或测量条件变化有关' : ''}；仍应结合个人基线和症状看待。`, m);
+        `处在多数成人常见参考范围${weekly != null && weekly <= -3 ? '；近期读数下降可能与体能、恢复状态或测量条件变化有关，不能仅凭下降断定有氧能力改善' : ''}。仍应结合个人基线和症状看待。`, m);
     }
   }
 
@@ -275,8 +279,8 @@ export function healthInsights(healthDays = [], opts = {}) {
       if (pctPerWeek != null && pctPerWeek > fastLimit) {
         add('weight', 'warn', `体重变化 ${perWeek > 0 ? '+' : ''}${perWeek} kg/周，速度偏快`,
           `相当于每周 ${round(pctPerWeek, 1)}% 体重，超过 ${fastLimit}%。${perWeek < 0
-            ? '减重过快时，变化往往不只来自脂肪，肌肉和水分也可能占较大比例；建议收小热量缺口。'
-            : '增重快于每周 0.5% 体重时，多出来的按比例主要是脂肪而不是肌肉；也可能混有水分变化。建议收小盈余，并复核饮食记录和连续几周趋势。'}`, perWeek);
+            ? '减重过快时，变化往往不只来自脂肪，瘦体重和水分也可能占一部分；先排除短期水分波动，若多周趋势仍然如此，再考虑缩小热量缺口。'
+            : '这高于增肌期常用的每周 0.25%–0.5% 体重参考范围；更快增重可能提高脂肪增加比例，但也可能混有水分变化，体重数据本身不能区分组织来源。建议复核连续几周趋势后再调整盈余。'}`, perWeek);
       } else if (rateGap != null && Math.abs(rateGap) > WEIGHT_RATE_TOLERANCE) {
         const enoughForAdjustment = weightSpan >= 28 && weight.length >= 8;
         const direction = Math.sign(perWeek) !== Math.sign(goalRate) && Math.abs(goalRate) > 0
@@ -284,7 +288,7 @@ export function healthInsights(healthDays = [], opts = {}) {
         let advice = `实际趋势与目标相差 ${round(Math.abs(rateGap), 2)} kg/周，超过 ${WEIGHT_RATE_TOLERANCE} kg/周的观察容差。`;
         if (enoughForAdjustment) {
           const adjust = clamp(round((-rateGap * 7700) / 7), -250, 250);
-          advice += `基于 ${weightSpan} 个日历日的趋势，可先把每日热量目标调整约 ${adjust > 0 ? '+' : ''}${adjust} kcal（单次最多 ±250 kcal），再观察至少两周。`;
+          advice += `基于 ${weightSpan} 个日历日的趋势，可先把每日热量目标试调约 ${adjust > 0 ? '+' : ''}${adjust} kcal（单次最多 ±250 kcal），再观察至少两周；这是能量换算估计，不是对组织变化的精确测量。`;
         } else {
           advice += `目前只有 ${weightSpan} 个日历日的跨度，先保持方案；至少积累 28 天且有足够称重记录后，再考虑调整热量。`;
         }
@@ -338,8 +342,8 @@ export function healthInsights(healthDays = [], opts = {}) {
     const sd = round(stdev(active.map((p) => p.value)) || 0);
     if (sd > m * 0.55) {
       add('energy_var', 'info', `每天活动消耗差异很大（平均 ${m}，波动 ±${sd} kcal）`,
-        '训练日和休息日的消耗差出几百千卡时，用固定热量目标就会一天吃不够、一天吃超。'
-        + '本应用会按当天设备记录估算预算；记得同步健康数据，并留意首页的“数据截至”时间。', m);
+        '活动能量是设备估算值，差异可能同时来自真实活动、佩戴和算法误差。'
+        + '本应用会据此估算当日预算；应结合饮食完整度和至少数周体重趋势校准，不把单日设备值当作精确消耗。', m);
     }
   }
 

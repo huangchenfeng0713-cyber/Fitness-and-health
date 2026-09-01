@@ -13,7 +13,7 @@ import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
-  restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
+  restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, removeFavorite, portionMemory,
 } from '../lib/store.js';
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
@@ -37,7 +37,7 @@ const ui = {
   sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
   mix: {},        // 清补凉等复合食物的 { foodId: g/ml }
   showCustomForm: false,
-  historyOpen: false,   // 历史搜索是否展开
+  historyOpen: false,   // 历史是否展开
   moreResults: false,   // 搜索结果是否已展开全部
   focus: null,          // 'protein' | 'fiber' —— 从今日页的提示跳过来时的筛选
   /*
@@ -155,13 +155,41 @@ function buildShell(root) {
  */
 
 /*
- * 历史搜索：记过的食物，点一下直接回到份量面板。
+ * 历史：记过的食物，点一下直接回到份量面板。
  *
  * 默认只露两行。这些名字长短差得很远（「米饭（白米）」和
  * 「肯德基 乒乒乓乓冰球杯（柠檬味）」不是一个量级），按个数截断会时多时少，
  * 所以用高度截断，再按实际有没有溢出决定要不要出「展开」。
  */
-const HISTORY_LIMIT = 10;
+const HISTORY_LIMIT = 24;
+
+function trashIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', 'M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5');
+  svg.append(path);
+  return svg;
+}
+
+function historyChip(food) {
+  return h('span.history-chip', null,
+    h('button.history-pick', {
+      type: 'button',
+      onclick: () => selectFood(food),
+    }, food.name),
+    h('button.history-delete', {
+      type: 'button',
+      'aria-label': `从历史中删除${food.name}`,
+      title: '从历史中删除',
+      onclick: async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await removeFavorite(food.id);
+      },
+    }, trashIcon()));
+}
 
 function refreshFav() {
   clearEl(nodes.favRow);
@@ -169,13 +197,13 @@ function refreshFav() {
   const history = state.favorites.map(findFood).filter(Boolean).slice(0, HISTORY_LIMIT);
   if (!history.length) return;
   const chips = h('div.fav-chips', { class: `fav-chips${ui.historyOpen ? '' : ' collapsed'}` },
-    history.map((f) => h('button.chip-btn', { onclick: () => selectFood(f) }, f.name)));
+    history.map(historyChip));
   const toggle = h('button.text-btn.fav-toggle', {
     hidden: true,
     onclick: () => { ui.historyOpen = !ui.historyOpen; refreshFav(); },
   }, ui.historyOpen ? '收起' : '展开');
   mount(nodes.favRow, h('div.fav-row', null,
-    h('span.fav-label', null, '历史搜索'),
+    h('span.fav-label', null, '历史'),
     chips,
     toggle));
 

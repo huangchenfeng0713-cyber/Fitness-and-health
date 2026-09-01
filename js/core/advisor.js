@@ -524,7 +524,7 @@ export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake =
     return {
       level: 'warn',
       headline: `还有 ${kcalLeft} kcal 没吃，偏少了`,
-      detail: `长期大幅低于目标不利于保留肌肉和持续执行。接下来 ${budget.meal.label} 建议吃到约 ${budget.kcal} kcal。`
+      detail: `若记录完整且长期大幅低于目标，可能增加恢复不足和瘦体重流失风险。接下来 ${budget.meal.label} 可先安排约 ${budget.kcal} kcal。`
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
@@ -612,7 +612,7 @@ export function buildInsights({
       `健康数据里今天的活动能量是 ${round(targets.activeReported || 0)} kcal，`
       + `按现在的时间点算不可能达到（近期日均 ${round(baseline.activeEnergy || 0)} kcal）。`
       + '热量目标已改按平时的活动节奏估算。',
-      '多半是取数的快捷指令里日期范围没选「今天」，把多天累加成了一天，去「数据」页核对一下。');
+      '常见原因是取数快捷指令的日期范围没有选「今天」，把多天累加成了一天；也可能是单位或同步异常，请到「数据」页核对原始数值。');
   }
 
   // 没同步到活动能量，热量目标就退回公式估算——这件事得让人知道，而不是静默降级
@@ -648,7 +648,7 @@ export function buildInsights({
     const eq = proteinEquivalent(proteinShort);
     add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,
       `目标依据：${targets.proteinBasis}。`,
-      `约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋。`);
+      `蛋白量约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋；这只是蛋白换算，实际选择还要计入总热量、脂肪和个人饮食偏好，可分到后续餐次完成。`);
   } else if (gaps.protein.pct >= 100) {
     add('good', INSIGHT_PRIORITY.energy, '蛋白已达标',
       `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);
@@ -661,7 +661,7 @@ export function buildInsights({
       ? '按设备静息记录并用活动系数补足缺失活动'
       : targets.activeSource === 'device-baseline'
         ? '按设备静息记录与近期活动基线'
-        : '按 Apple 设备记录外推';
+        : '按 Apple 设备估算值外推';
     if (Math.abs(budgetDelta) >= 80) {
       const up = budgetDelta > 0;
       add(up ? 'up' : 'down', INSIGHT_PRIORITY.energy,
@@ -724,15 +724,15 @@ export function buildInsights({
       `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
       + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
       + '。',
-      '全天总量够的前提下，可把 20–40g 蛋白安排在训练前后。');
+      '每日总蛋白和分餐分配更重要；可把一餐约 20–40g 蛋白安排在训练前后，按耐受和饮食习惯调整。');
   }
 
   // 睡眠：只在设备真的记到的时候说，缺数据不等于没睡
   const sleep = Number(health.sleepMinutes);
   if (Number.isFinite(sleep) && sleep > 0 && sleep < 390) {
     add('info', INSIGHT_PRIORITY.habit, `昨晚睡了 ${formatDuration(sleep)}`,
-      '成人参考 7–9 小时（AASM / SRS 共识），这一晚在参考区间之下。',
-      '睡眠不足会让食欲和训练表现一起变差，今天别再叠加大强度训练。');
+      'AASM / SRS 共识建议成年人规律睡够至少 7 小时；设备记录的时长不能代表睡眠质量。',
+      '若今天明显困倦或恢复不佳，可降低训练量或强度；若状态正常，不必只凭一晚数据自动取消训练。');
   }
 
   /*

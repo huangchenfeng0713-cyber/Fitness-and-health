@@ -52,7 +52,7 @@
   --control-lg: 48px;
   --control-md: 44px;
   --control-sm: 36px;
-  --info-size: 28px;
+  --info-size: 14px;
 
   /*
    * 一套比例，不是二十三个随手取的数。
@@ -373,7 +373,12 @@ html, body { height: 100%; overflow: hidden; }
 .info-tip > summary {
   list-style: none; width: var(--info-size); height: var(--info-size); display: grid; place-items: center;
   border: 1px solid var(--border); border-radius: 50%; background: var(--card-2);
-  color: var(--muted); font: 700 12px/1 var(--font); cursor: pointer;
+  color: var(--muted); cursor: pointer;
+}
+.info-tip-mark {
+  width: 9px; height: 9px; overflow: visible;
+  fill: currentColor; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; vector-effect: non-scaling-stroke;
 }
 .info-tip > summary::-webkit-details-marker { display: none; }
 .info-tip[open] > summary { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
@@ -717,7 +722,6 @@ html, body { height: 100%; overflow: hidden; }
   font-variant-numeric: tabular-nums; text-align: center;
 }
 .set-unit { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
-.ex-last { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
 
 /* 喝水进度：细一条就够，别喧宾夺主 */
 /* 喝水：卡面上只剩四个杯量按钮，两行两列 */
@@ -906,7 +910,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .ex-list { display: flex; flex-direction: column; margin-top: var(--space-1); }
 .exercise-choice-row {
   display: flex; align-items: center; gap: 10px;
-  width: 100%; padding: 10px var(--space-2);
+  width: 100%; min-height: 76px; padding: 10px var(--space-2);
   border: 0; border-bottom: 1px solid var(--border);
   background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
@@ -1012,18 +1016,47 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .search-item-main strong { display: block; font-size: 13.5px; }
 .search-item-meta { font-size: 11.5px; color: var(--faint); }
 
-.fav-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; margin-top: 10px; }
-.fav-label { font-size: 11.5px; color: var(--faint); padding-top: 8px; }
+.fav-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'label chips' '. toggle';
+  column-gap: 6px; row-gap: 3px; align-items: start; margin-top: 10px;
+}
+.fav-label { grid-area: label; font-size: 11.5px; color: var(--faint); padding-top: 6px; }
 /*
  * 收起时只露两行。按高度截而不是按个数截：这些名字长短差得很远，
  * 按个数截会时多时少，两行看起来像三行。
  */
-.fav-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.fav-chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
 .fav-chips.collapsed {
-  max-height: var(--fav-collapse-height, calc(var(--control-sm) * 2 + 6px));
+  max-height: var(--fav-collapse-height, 63px);
   overflow: hidden;
 }
-.fav-toggle { flex: none; padding-top: 6px; font-size: 12.5px; }
+.fav-toggle { grid-area: toggle; justify-self: end; min-height: 28px; padding: 0 2px; font-size: 12.5px; }
+.history-chip {
+  min-width: 0; min-height: 29px; display: inline-flex; align-items: stretch;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--card-2);
+  overflow: hidden;
+}
+.history-pick,
+.history-delete {
+  border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer;
+}
+.history-pick {
+  min-width: 0; max-width: 220px; padding: 3px 7px 3px 9px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; line-height: 1.35;
+}
+.history-delete {
+  width: 28px; min-width: 28px; padding: 0 7px 0 5px;
+  display: grid; place-items: center; color: var(--faint);
+  border-left: 1px solid var(--hairline);
+}
+.history-delete svg {
+  width: 13px; height: 13px; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.history-pick:active,
+.history-delete:active { background: var(--accent-soft); color: var(--accent); }
 .result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
 
 /*
@@ -1397,7 +1430,7 @@ body.sheet-open {
 .entry-row:last-child { border-bottom: 0; }
 .entry-main { flex: 1; min-width: 0; }
 .entry-name { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 550; }
-.entry-name .info-tip > summary { width: 20px; height: 20px; font-size: 11px; }
+.entry-name .info-tip > summary { width: var(--info-size); height: var(--info-size); }
 .entry-name .info-tip-panel {
   /* 条目可能贴着滚动区底部，跟随图标向下展开会被底栏和屏幕边缘截断。 */
   position: fixed; z-index: 85; top: auto; right: auto;

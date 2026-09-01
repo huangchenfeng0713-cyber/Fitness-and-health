@@ -39,17 +39,23 @@ test('步数分档使用谨慎的参考表述，不把步数等同久坐或健�
   const at = (v) => healthInsights(mkDays(10, () => ({ steps: v })));
   assert.equal(byKey(at(3000), 'steps').level, 'warn');
   assert.equal(byKey(at(6000), 'steps').level, 'info');
-  assert.equal(byKey(at(9000), 'steps').level, 'good');
+  assert.equal(byKey(at(9000), 'steps').level, 'info');
   assert.match(byKey(at(3000), 'steps').text, /不能单独代表/);
   assert.match(byKey(at(9000), 'steps').text, /不能替代/);
+  assert.doesNotMatch(byKey(at(9000), 'steps').title, /达标/);
+  assert.match(byKey(at(9000), 'steps').text, /不存在适用于所有人的统一步数目标/);
 });
 
-test('运动量按 WHO 每周 150 分钟判定', () => {
+test('设备运动时长只做有条件的 WHO 对照，不冒充强度判定', () => {
   const low = healthInsights(mkDays(10, () => ({ exerciseMinutes: 10 })));
   const ok = healthInsights(mkDays(10, () => ({ exerciseMinutes: 30 })));
-  assert.equal(byKey(low, 'exercise').level, 'warn');
+  assert.equal(byKey(low, 'exercise').level, 'info');
   assert.match(byKey(low, 'exercise').title, /70 分钟/);
-  assert.equal(byKey(ok, 'exercise').level, 'good');
+  assert.equal(byKey(ok, 'exercise').level, 'info');
+  assert.match(byKey(ok, 'exercise').text, /若这些分钟主要达到中等强度/);
+  assert.match(byKey(ok, 'exercise').text, /不能确认活动强度/);
+  assert.match(byKey(ok, 'exercise').text, /每周至少两天进行肌肉强化活动/);
+  assert.doesNotMatch(byKey(ok, 'exercise').title, /达标/);
 });
 
 test('周运动量按日历跨度折算，并把明确的零运动日计为 0', () => {
@@ -59,7 +65,7 @@ test('周运动量按日历跨度折算，并把明确的零运动日计为 0', 
   }));
   const hit = byKey(healthInsights(days), 'exercise');
   assert.equal(hit.metric, 75, '14 天共 150 分钟应折算为每周 75 分钟');
-  assert.equal(hit.level, 'warn');
+  assert.equal(hit.level, 'info');
   assert.equal(healthSummary(days).exerciseMinutes, 11, '摘要日均也应包含零运动日');
 });
 
@@ -89,16 +95,21 @@ test('睡眠分档只描述睡眠时长波动，不推断作息规律性', () =>
   assert.ok(/波动/.test(titles(irregular)), `未识别睡眠时长波动：${titles(irregular)}`);
   assert.doesNotMatch(irregular.map((x) => x.text).join(' | '), /作息不规律|比较规律/);
   assert.match(byKey(irregular, 'sleep_var').text, /不能代表入睡或起床时间/);
+
+  const long = healthInsights(mkDays(10, () => ({ sleepMinutes: 10 * 60 })));
+  assert.equal(byKey(long, 'sleep').level, 'info');
+  assert.match(byKey(long, 'sleep').text, /不能只凭时长判定异常/);
+  assert.match(byKey(long, 'sleep').text, /白天困倦/);
 });
 
-test('减重过快会被拦下（>1% 体重/周）', () => {
+test('减重过快会被谨慎提醒（>1% 体重/周）', () => {
   const fast = healthInsights(
     mkDays(14, (i) => ({ weightKg: 70 - i * 0.2 })),   // -1.4 kg/周 ≈ 2%
     { targets: { rateKgPerWeek: -0.5 } },
   );
   const w = byKey(fast, 'weight');
   assert.equal(w.level, 'warn');
-  assert.match(w.text, /肌肉/);
+  assert.match(w.text, /瘦体重/);
 });
 
 test('体重趋势同时要求足够点数与至少 7 天首末间隔', () => {
@@ -149,8 +160,9 @@ test('至少 28 天后才按实际与目标差值建议热量调整，且单次�
   const w = byKey(wrong, 'weight');
   assert.equal(w.level, 'warn');
   assert.match(w.text, /基于 35 个日历日/);
-  assert.match(w.text, /调整约 -250 kcal/);
+  assert.match(w.text, /试调约 -250 kcal/);
   assert.match(w.text, /单次最多 ±250 kcal/);
+  assert.match(w.text, /能量换算估计/);
 });
 
 test('体重实际趋势和目标同方向但差值超出容差时仍会提醒', () => {
@@ -173,10 +185,21 @@ test('体重与目标一致时给正反馈', () => {
 });
 
 test('静息心率持续上升会提醒', () => {
-  const rising = healthInsights(mkDays(14, (i) => ({ restingHR: 60 + i * 0.4 })));
+  const rising = healthInsights(mkDays(14, (i) => ({ restingHR: 60 + i * 0.5 })));
   assert.equal(byKey(rising, 'rhr').level, 'warn');
   assert.match(byKey(rising, 'rhr').title, /上升/);
   assert.match(byKey(rising, 'rhr').text, /可能|不能只凭趋势/);
+});
+
+test('静息心率不把 80–100 bpm 自动说成偏高，超过 100 才提示复测与症状', () => {
+  const common = byKey(healthInsights(mkDays(14, () => ({ restingHR: 90 }))), 'rhr');
+  assert.equal(common.level, 'good');
+  assert.doesNotMatch(common.title, /偏高|高于常见范围/);
+
+  const high = byKey(healthInsights(mkDays(14, () => ({ restingHR: 104 }))), 'rhr');
+  assert.equal(high.level, 'warn');
+  assert.match(high.text, /安静状态复测/);
+  assert.match(high.text, /胸痛、气短、晕厥/);
 });
 
 test('体脂结论必须结合体重，并提示 BIA 的测量局限', () => {

@@ -86,7 +86,10 @@ try {
     const name = row?.querySelector('.ex-name');
     const action = row?.querySelector('.exercise-choice-action');
     const card = document.querySelector('.exercise-picker-card');
+    const head = document.querySelector('.exercise-picker-card .picker-card-head');
+    const search = document.querySelector('.exercise-picker-card .exercise-search-row');
     const controls = document.querySelector('.picker-controls');
+    const toolbar = document.querySelector('.picker-list-toolbar');
     const controlRows = [...document.querySelectorAll('.picker-controls > .range-switch')];
     const rect = (el) => {
       const r = el?.getBoundingClientRect();
@@ -98,7 +101,8 @@ try {
       row: rect(row), name: rect(name), action: rect(action),
       font: name ? getComputedStyle(name).fontSize : '',
       symbol: action?.textContent || '',
-      card: rect(card), controls: rect(controls), controlRows: controlRows.map(rect),
+      card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
+      toolbar: rect(toolbar), controlRows: controlRows.map(rect),
     };
   });
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
@@ -109,6 +113,26 @@ try {
       .map((row) => row.querySelectorAll('.exercise-meta-tag').length),
     hasOldTags: !!document.querySelector('.rec-tag, .rec-pick-tags'),
     hasTip: !!document.querySelector('.exercise-picker-card .info-tip > summary'),
+    head: (() => {
+      const r = document.querySelector('.exercise-picker-card .picker-card-head')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    search: (() => {
+      const r = document.querySelector('.exercise-picker-card .exercise-search-row')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    controls: (() => {
+      const r = document.querySelector('.exercise-picker-card .picker-controls')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    toolbar: (() => {
+      const r = document.querySelector('.exercise-picker-card .picker-list-toolbar')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    tip: (() => {
+      const r = document.querySelector('.exercise-picker-card .info-tip > summary')?.getBoundingClientRect();
+      return r ? { width: r.width, height: r.height } : null;
+    })(),
     commonRow: !!document.querySelector('.rec-pick.exercise-choice-row'),
     row: (() => {
       const r = document.querySelector('.rec-pick')?.getBoundingClientRect();
@@ -156,6 +180,11 @@ try {
       && `两种动作名字号不同：${allState.font} / ${recommendState.font}`,
     allState.symbol !== recommendState.symbol
       && `两种加号字符不同：${allState.symbol} / ${recommendState.symbol}`,
+    ...['head', 'search', 'controls', 'toolbar'].map((key) => (
+      allState[key] && recommendState[key] && Math.abs(allState[key].top - recommendState[key].top) > 1
+        ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
+        : null
+    )),
     allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
@@ -166,6 +195,9 @@ try {
       allState.controls.width - row.width < 22 || allState.controls.width - row.width > 26)
       && `筛选控件没有按约 24px 缩窄：${allState.controlRows.map((row) => row.width.toFixed(1)).join('/')}`,
     !recommendState.hasTip && '推荐说明入口缺失',
+    recommendState.tip && (Math.abs(recommendState.tip.width - 14) > 1
+      || Math.abs(recommendState.tip.height - 14) > 1)
+      && `信息符号没有减半为 14px：${recommendState.tip.width.toFixed(1)}×${recommendState.tip.height.toFixed(1)}`,
     !openBeforeRender && '推荐说明点击后没有展开',
     !openAfterRender && '推荐说明被一次无关重绘自动收起',
   ].filter(Boolean);
@@ -174,6 +206,24 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
     .find((x) => x.textContent.includes('全部动作'))?.click());
   await page.waitForTimeout(200);
+
+  // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
+  await page.fill('.exercise-search-input', 'yingla');
+  await page.waitForTimeout(150);
+  const exerciseSearch = await page.evaluate(() => ({
+    inputFocused: document.activeElement?.classList.contains('exercise-search-input'),
+    resultText: document.querySelector('.exercise-search-results')?.innerText || '',
+    resultCount: document.querySelectorAll('.exercise-search-results .exercise-choice-row').length,
+    controlsHidden: document.querySelector('.picker-controls')?.hidden === true,
+    toolbarHidden: document.querySelector('.picker-list-toolbar')?.hidden === true,
+  }));
+  check('动作搜索支持拼音且不丢失输入焦点',
+    exerciseSearch.inputFocused && exerciseSearch.resultCount > 0
+      && exerciseSearch.resultText.includes('硬拉')
+      && exerciseSearch.controlsHidden && exerciseSearch.toolbarHidden,
+    JSON.stringify(exerciseSearch));
+  await page.fill('.exercise-search-input', '');
+  await page.waitForTimeout(100);
 
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
@@ -227,6 +277,39 @@ try {
     dietLayout.historyPartlyClipped && '历史搜索收起时仍截出半行',
   ].filter(Boolean);
   check('饮食页标题、饮水与推荐预算对齐', dietProblems.length === 0, dietProblems.join('；'));
+
+  // 历史词条的垃圾桶只移除快捷历史，不得删除已经记录的食物。
+  await page.evaluate(async () => {
+    const { addEntry } = await import('./js/lib/store.js');
+    await addEntry({ foodId: 'egg_whole', grams: 55 });
+  });
+  await page.waitForTimeout(300);
+  const historyDeleteBefore = await page.evaluate(async () => {
+    const { state } = await import('./js/lib/store.js');
+    const button = [...document.querySelectorAll('.history-delete')]
+      .find((el) => el.getAttribute('aria-label')?.includes('鸡蛋'));
+    return {
+      hasFavorite: state.favorites.includes('egg_whole'),
+      hasButton: !!button,
+      recorded: state.dietEntries.some((entry) => entry.foodId === 'egg_whole'),
+    };
+  });
+  await page.evaluate(() => [...document.querySelectorAll('.history-delete')]
+    .find((el) => el.getAttribute('aria-label')?.includes('鸡蛋'))?.click());
+  await page.waitForTimeout(300);
+  const historyDeleteAfter = await page.evaluate(async () => {
+    const { state } = await import('./js/lib/store.js');
+    return {
+      hasFavorite: state.favorites.includes('egg_whole'),
+      hasButton: [...document.querySelectorAll('.history-delete')]
+        .some((el) => el.getAttribute('aria-label')?.includes('鸡蛋')),
+      recorded: state.dietEntries.some((entry) => entry.foodId === 'egg_whole'),
+    };
+  });
+  check('历史垃圾桶只删除快捷词条',
+    historyDeleteBefore.hasFavorite && historyDeleteBefore.hasButton && historyDeleteBefore.recorded
+      && !historyDeleteAfter.hasFavorite && !historyDeleteAfter.hasButton && historyDeleteAfter.recorded,
+    `${JSON.stringify(historyDeleteBefore)} → ${JSON.stringify(historyDeleteAfter)}`);
 
   /*
    * 健康数据的格子排布。

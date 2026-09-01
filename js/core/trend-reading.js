@@ -94,14 +94,14 @@ function readKcal(points, { target }) {
     gap == null ? '。' : gap > 0 ? `，比目标高 ${gap} kcal。` : gap < 0 ? `，比目标低 ${Math.abs(gap)} kcal。` : '，正好贴着目标。',
     over ? `其中 ${over} 天超出目标 5% 以上。` : '',
     under >= MIN_POINTS_FOR_CLAIM
-      ? `另有 ${under} 天不到目标的四分之三，长期这样会掉基础代谢和肌肉。`
+      ? `另有 ${under} 天不到目标的四分之三；若记录完整且持续如此，可能增加恢复不足和瘦体重流失风险。`
       : under ? `另有 ${under} 天不到目标的四分之三。` : '',
     s.enoughForTrend && Math.abs(s.drift) >= Math.max(120, target * 0.06)
-      ? (s.drift > 0 ? `后半段比前半段多吃约 ${Math.abs(s.drift)} kcal/天，注意别继续往上走。`
-        : `后半段比前半段少吃约 ${Math.abs(s.drift)} kcal/天，掉得太快就把缺口收小一点。`)
+      ? (s.drift > 0 ? `后半段比前半段多记录约 ${Math.abs(s.drift)} kcal/天。`
+        : `后半段比前半段少记录约 ${Math.abs(s.drift)} kcal/天；先确认是否漏记，再结合多周体重趋势判断是否需要缩小缺口。`)
       : '',
     s.n >= 3 && s.spread >= Math.max(600, target * 0.35)
-      ? `最多和最少差 ${s.spread} kcal，起伏偏大——固定几餐的主食份量能明显稳住。` : '',
+      ? `最多和最少差 ${s.spread} kcal；先检查漏记、外食估算和训练日差异，再决定是否需要调整餐次安排。` : '',
   ]);
 }
 
@@ -117,13 +117,13 @@ function readProtein(points, { target, threshold }) {
   const rate = s.n ? hit / s.n : 0;
   return join([
     `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`,
-    rate >= 0.8 ? '执行得不错，保持住。'
-      : rate >= 0.5 ? '一半多的日子够了，差的那几天通常是早餐和加餐没安排到蛋白。'
-        : '达标率偏低。把高蛋白食物固定安排进早餐和加餐，比每天临时想吃什么更容易坚持。',
+    rate >= 0.8 ? '多数记录日达到当前目标，继续保持。'
+      : rate >= 0.5 ? '部分记录日低于目标；可以把全天蛋白更均匀地分到各餐。'
+        : '多数记录日低于目标；先确认饮食是否记全，再为常吃的餐次预留稳定蛋白来源。',
     s.enoughForTrend && s.drift <= -Math.max(10, target * 0.08)
-      ? `后半段比前半段少了约 ${Math.abs(s.drift)} g/天，别让它继续掉。` : '',
+      ? `后半段比前半段少记录约 ${Math.abs(s.drift)} g/天；结合达标天数并先确认记录完整。` : '',
     s.enoughForTrend && s.drift >= Math.max(10, target * 0.08)
-      ? `后半段比前半段多了约 ${s.drift} g/天，方向是对的。` : '',
+      ? `后半段比前半段多记录约 ${s.drift} g/天；是否更接近目标请结合达标天数判断。` : '',
   ]);
 }
 
@@ -147,8 +147,7 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
   const latest = Number(points[points.length - 1].y);
   /*
    * 「偏快」的门槛按方向分开：减重 1%/周，增重 0.5%/周。
-   * 增重快过 0.5% 时多出来的按比例主要是脂肪 —— 这和 dailyTargets 里
-   * 计划速率的上限是同一组数，两处不能各说各的。
+   * 超过参考范围只提示风险，不从体重数据断言组织成分；短期水分会显著干扰。
    */
   const pct = latest > 0 ? Math.abs(kgPerWeek) / latest : 0;
   const tooFastLoss = kgPerWeek < 0 && pct > MAX_LOSS_RATE_PCT;
@@ -163,9 +162,9 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
       : progress < 0 ? `方向反了：目标是${goalRate > 0 ? '增重' : '减重'}，实际在往另一边走。`
         : Math.abs(diff) < 0.1 ? '和目标基本一致，照现在的吃法继续。'
           : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
-    tooFastLoss ? '每周变化超过体重的 1% 时，掉的往往不只是脂肪，把热量缺口收小一些更划算。' : '',
-    tooFastGain ? '每周涨超过体重的 0.5% 时，多出来的按比例主要是脂肪而不是肌肉，把盈余收小一些更划算。' : '',
-    s.spread >= 2 ? `区间内最高最低差 ${s.spread} kg，多半是水分和排空差异，看趋势线不要看单日数字。` : '',
+    tooFastLoss ? '变化超过体重的 1%/周；持续过快减重会增加瘦体重流失风险，但短期水分变化也可能放大数值，先复核连续几周趋势。' : '',
+    tooFastGain ? '高于增肌期常用的 0.25%–0.5% 体重/周参考范围；更快增重可能提高脂肪增加比例，但体重数据本身不能区分脂肪、肌肉与水分。' : '',
+    s.spread >= 2 ? `区间内最高最低差 ${s.spread} kg，水分、糖原和消化道内容物都可能影响单次称重；优先看同条件下的多周趋势。` : '',
   ]);
 }
 
@@ -176,12 +175,13 @@ function readActive(points) {
   const cv = s.avg > 0 ? s.spread / s.avg : 0;
   return join([
     `日均 ${s.avg} kcal，区间内 ${s.min} ~ ${s.max} kcal。`,
-    cv >= 1.2 ? '训练日和休息日差出好几倍——用固定热量目标就会一天吃不够、一天吃超，让预算跟着当天消耗走更合适。'
-      : cv >= 0.6 ? '起伏中等，属于有训练日和休息日的正常节奏。'
-        : '每天比较接近，作息稳定。',
+    '活动能量是设备估算值，适合比较同一设备下的相对变化，不应视为精确消耗。',
+    cv >= 1.2 ? '记录日差异很大；先核对设备佩戴和同步是否一致，再结合训练安排解释。'
+      : cv >= 0.6 ? '记录日存在一定差异，可能同时受活动安排和设备估算误差影响。'
+        : '记录值相对接近，但这不能单独说明作息或活动模式稳定。',
     s.enoughForTrend && Math.abs(s.drift) >= Math.max(60, s.avg * 0.15)
-      ? (s.drift > 0 ? `后半段比前半段多消耗约 ${Math.abs(s.drift)} kcal/天。`
-        : `后半段比前半段少消耗约 ${Math.abs(s.drift)} kcal/天，活动量在下滑。`)
+      ? (s.drift > 0 ? `后半段设备记录值比前半段高约 ${Math.abs(s.drift)} kcal/天。`
+        : `后半段设备记录值比前半段低约 ${Math.abs(s.drift)} kcal/天；先核对佩戴与同步，再结合实际活动安排解释。`)
       : '',
   ]);
 }
@@ -191,41 +191,39 @@ function readSleep(points) {
   const s = analyzeSeries(points, 1);
   if (!s) return INSUFFICIENT_DATA_TEXT;
   const short = countDays(points, (y) => y < 6.5);
-  /*
-   * 具体时长写成「6小时42分」。序列本身是小时（图的纵轴要小数刻度才排得齐），
-   * 但读给人看的那句话不该让人把 0.7 乘回 60。
-   * 「7~9 小时」「不足 6.5 小时」是文献给的参考区间和门槛，照原样写。
-   */
+  // AASM / SRS 共识的可核对结论是成年人应规律睡够至少 7 小时；设备时长不等于睡眠质量。
   const hm = (hours) => formatDuration(hours * 60);
   return join([
-    s.avg < 6.5 ? `日均 ${hm(s.avg)}，明显低于成人 7~9 小时的常见建议。`
+    s.avg < 6.5 ? `日均 ${hm(s.avg)}，低于成年人规律睡够至少 7 小时的建议。`
       : s.avg < 7 ? `日均 ${hm(s.avg)}，离 7 小时还差一点。`
-        : `日均 ${hm(s.avg)}，落在常见建议区间里。`,
+        : s.avg <= 9 ? `日均 ${hm(s.avg)}，达到至少 7 小时的时长参考。`
+          : `日均 ${hm(s.avg)}，记录时长超过 9 小时；年轻人、补偿睡眠或疾病恢复期可能需要更久，不能只凭时长判定异常。`,
     short ? `其中 ${short} 天不足 6.5 小时。` : '',
-    s.spread >= 2.5 ? `最长和最短差 ${hm(s.spread)}，作息不太稳定——固定起床时间通常比固定入睡时间更容易做到。`
-      : s.enoughForTrend ? '曲线比较平稳，作息基本规律。' : '',
+    s.spread >= 2.5 ? `最长和最短差 ${hm(s.spread)}，说明睡眠时长波动较大；仅凭时长不能判断入睡和起床是否规律。`
+      : s.enoughForTrend ? '睡眠时长波动较小；这仍不能替代对白天困倦和睡眠质量的观察。' : '',
     s.enoughForTrend && Math.abs(s.drift) >= 0.6
-      ? (s.drift > 0 ? `后半段比前半段多睡约 ${hm(Math.abs(s.drift))}，在往好的方向走。`
-        : `后半段比前半段少睡约 ${hm(Math.abs(s.drift))}，注意别继续往下掉。`)
+      ? (s.drift > 0 ? `后半段记录时长比前半段多约 ${hm(Math.abs(s.drift))}。`
+        : `后半段记录时长比前半段少约 ${hm(Math.abs(s.drift))}；结合总时长和白天状态判断是否需要调整。`)
       : '',
-    s.avg < 7 ? '先把每晚的睡眠机会稳定增加 30 分钟，比周末补觉更有用。' : '',
+    s.avg < 7 ? '可以先逐步增加可用于睡眠的时间，并结合白天困倦、恢复和连续多日记录观察。'
+      : s.avg > 9 ? '若长期如此且伴随白天困倦或精神状态变化，可复核设备记录并咨询医生。' : '',
   ]);
 }
 
-/** 静息心率：绝对值 + 变化方向，上升是需要留意的信号 */
+/** 静息心率：以成人常见范围和个人基线为参照，不从短趋势推断原因。 */
 function readRestingHR(points) {
   const s = analyzeSeries(points);
   if (!s) return INSUFFICIENT_DATA_TEXT;
   return join([
     `日均 ${s.avg} bpm，区间内 ${s.min} ~ ${s.max} bpm。`,
-    s.avg > 80 ? '成人常见范围是 60~100，长期高于 80 与心血管风险上升相关；规律有氧是最有效的降低手段。'
-      : s.avg < 50 ? '偏低。经常训练的人属于正常，但若同时有头晕乏力，建议就医评估。'
+    s.avg > 100 ? '高于多数成人静息时常见的 60–100 bpm 范围；若复测仍高，或伴有胸痛、气短、晕厥等不适，应及时就医。'
+      : s.avg < 50 ? '低于 50 bpm；训练者可能出现较低读数，但若伴有头晕、乏力或晕厥，应就医评估。'
         : '处在成人常见参考范围内。',
     s.enoughForTrend && s.drift >= 3
-      ? `后半段比前半段高了约 ${s.drift} bpm——持续上升常见于训练过量、睡眠不足、压力大或正在感冒，先检查这几项。`
+      ? `后半段比前半段高了约 ${s.drift} bpm；压力、感染、药物、训练负荷和测量条件都可能影响读数，单凭这条趋势不能确定原因。`
       : '',
     s.enoughForTrend && s.drift <= -3
-      ? `后半段比前半段低了约 ${Math.abs(s.drift)} bpm，通常说明有氧能力在改善。` : '',
+      ? `后半段比前半段低了约 ${Math.abs(s.drift)} bpm；这也可能受测量条件影响，不能单凭下降判断有氧能力改善。` : '',
   ]);
 }
 
@@ -255,9 +253,9 @@ function readSteps(points) {
   const low = countDays(points, (y) => y < 4000);
   return join([
     `日均 ${s.avg} 步，区间内 ${s.min} ~ ${s.max} 步。`,
-    s.avg < 5000 ? '低于本应用的下限参考分档；先把每天的日常走动加到 5000 步，比一次走很多更容易坚持。'
-      : s.avg < 7500 ? '处在中间参考区间。若身体状况允许，可以循序增加到约 7000-8000 步。'
-        : '已经在较高的参考区间；再往上加的边际获益变小，把力气放在运动强度上更划算。',
+    s.avg < 5000 ? '处在较低参考区间；没有适用于所有人的统一步数目标，可先在当前基础上逐步增加 500–1000 步/天。'
+      : s.avg < 7500 ? '处在中间参考区间；若身体状况允许，可先在当前基础上逐步增加 500–1000 步/天，并根据耐受调整。'
+        : '处在较高参考区间；是否继续增加应结合运动强度、久坐时间、症状和个人目标。',
     low >= MIN_POINTS_FOR_CLAIM ? `其中 ${low} 天不到 4000 步。` : '',
     s.enoughForTrend && Math.abs(s.drift) >= Math.max(800, s.avg * 0.15)
       ? (s.drift > 0 ? `后半段比前半段多走约 ${Math.abs(s.drift)} 步/天。`
@@ -267,7 +265,7 @@ function readSteps(points) {
   ]);
 }
 
-/** 锻炼时间：对照 WHO 每周 150 分钟 */
+/** 锻炼时间：设备没有可靠强度字段，因此只能做有条件的 WHO 对照。 */
 function readExercise(points) {
   const s = analyzeSeries(points);
   if (!s) return INSUFFICIENT_DATA_TEXT;
@@ -275,10 +273,11 @@ function readExercise(points) {
   const zero = countDays(points, (y) => y <= 0);
   return join([
     `日均 ${s.avg} 分钟，按这个节奏一周约 ${weekly} 分钟。`,
-    weekly >= 150 ? '达到 WHO 每周 150 分钟中等强度身体活动的建议。'
-      : `离 WHO 建议的每周 150 分钟还差约 ${150 - weekly} 分钟。`,
+    weekly >= 150
+      ? '若这些分钟主要达到中等强度，则时长达到 WHO 每周至少 150 分钟的下限；当前数据不能确认强度。'
+      : `若这些分钟主要达到中等强度，则距 WHO 每周至少 150 分钟的下限约 ${150 - weekly} 分钟；当前数据不能确认强度。`,
     zero ? `其中 ${zero} 天没有记录到锻炼。` : '',
-    '这里只统计设备记录到的锻炼时长，不含力量训练的组间休息。',
+    'WHO 另建议成人每周至少 2 天进行肌肉强化活动；这里只统计设备时长，不能据此判断是否完成力量训练。',
   ]);
 }
 

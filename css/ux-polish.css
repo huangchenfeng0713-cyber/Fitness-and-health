@@ -1,10 +1,10 @@
-/* v2.11.2：搜索、动作选择与空状态的视觉收尾；不改变营养或训练算法。 */
+/* v2.11.3：动作搜索、列表对齐、紧凑信息符号与历史管理。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
 .ux-health-page .topbar-page-context { justify-content: center; }
 
-/* 17：视觉图标保持原大小，实际热区接近 iOS 44pt。 */
+/* 17：提示圆点视觉收至 14px，实际热区仍接近 iOS 44pt。 */
 .nav-arrow,
 .topbar-settings-btn,
 .settings-close,
@@ -16,7 +16,7 @@
 .info-tip > summary::after {
   content: '';
   position: absolute;
-  inset: -11px;
+  inset: -15px;
   border-radius: 50%;
 }
 
@@ -43,14 +43,12 @@
 .metric-row-note,
 .week-row-note,
 .trend-summary,
-.ex-last,
 .form-hint {
   color: var(--muted);
 }
 .card-tag,
 .metric-row-note,
-.topbar-context-note,
-.ex-last { font-size: 12.5px; }
+.topbar-context-note { font-size: 12.5px; }
 .week-row-note,
 .trend-summary,
 .form-hint { font-size: 13px; }
@@ -88,6 +86,19 @@
   display: grid;
   gap: var(--space-2);
 }
+.picker-card-head {
+  min-height: 23px;
+  align-items: center;
+}
+.exercise-search-row { margin-bottom: var(--space-3); }
+.exercise-search-input { width: 100%; }
+.exercise-search-results .ex-list { margin-top: 0; }
+.exercise-search-empty { margin: 14px 2px 4px; }
+.exercise-search-results[hidden],
+.picker-normal-results[hidden],
+.picker-controls[hidden],
+.picker-list-toolbar[hidden],
+.picker-compact-summary[hidden] { display: none !important; }
 .picker-controls .range-switch {
   width: calc(100% - 24px);
   margin-inline: auto;
@@ -308,7 +319,6 @@
   .metric-row-note,
   .week-row-note,
   .trend-summary,
-  .ex-last,
   .fav-label,
   .form-hint { color: var(--faint-readable); }
 }

@@ -126,8 +126,19 @@ function bindInfoTipDismiss() {
 
 export function infoTip(label, ...children) {
   bindInfoTipDismiss();
+  const mark = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  mark.setAttribute('class', 'info-tip-mark');
+  mark.setAttribute('viewBox', '0 0 12 12');
+  mark.setAttribute('aria-hidden', 'true');
+  const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  stem.setAttribute('d', 'M6 2.2v4.3');
+  const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  dot.setAttribute('cx', '6');
+  dot.setAttribute('cy', '9');
+  dot.setAttribute('r', '.7');
+  mark.append(stem, dot);
   const details = h('details.info-tip', null,
-    h('summary', { 'aria-label': label, title: label }, '!'),
+    h('summary', { 'aria-label': label, title: label }, mark),
     h('div.info-tip-panel', { role: 'note' }, children));
   return details;
 }

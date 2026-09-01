@@ -321,12 +321,13 @@ export function trendCharts(rerender) {
       tag: avgExercise != null ? `已结束日平均 ${formatDuration(avgExercise)}` : null,
       chart: lineChart({
         data: exerciseSeries, color: 'var(--accent)', unit: '分钟', domain: axisDomain, ...pick,
-        target: 150 / 7, targetLabel: '建议 每周 150 分钟',
+        target: 150 / 7, targetLabel: '中等强度参考 150/周',
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('exercise', exerciseSeries, {}),
       readout: readoutRow(valueAt((v) => formatDuration(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
-      tip: '参考线是 WHO 每周 150 分钟中等强度活动折算到每天（约 21 分钟）。只统计设备记录到的时长。',
+      tip: '参考线是 WHO 每周至少 150 分钟中等强度活动折算到每天（约 21 分钟）。'
+        + '设备时长不一定等同中等强度，本应用没有可靠强度字段，因此只能作条件性对照；WHO 另建议每周至少两天进行肌肉强化活动。',
     }),
     active: () => ({
       title: '活动能量',
@@ -337,7 +338,8 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('active', activeSeries, {}),
       readout: readoutRow(kcalAt((dd) => health.get(dd)?.activeEnergy ?? null)),
-      tip: '活动能量来自设备估算。新数据导入后会调整当日预算；旧快照不会随时钟自动变化。',
+      tip: '活动能量来自设备估算，适合在同一设备与相近佩戴条件下比较，不是精确消耗。'
+        + '新数据导入后会调整当日预算；长期是否合适仍应结合饮食完整度和多周体重趋势校准。',
     }),
     sleep: () => ({
       title: '睡眠',
@@ -348,8 +350,8 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('sleep', sleepSeries, {}),
       readout: readoutRow(valueAt((v) => formatDuration(v * 60))((dd) => (health.get(dd)?.sleepMinutes > 0 ? health.get(dd).sleepMinutes / 60 : null))),
-      tip: '虚线是成人 7~9 小时建议区间的下沿，不是这段时间的平均——平均写在卡片右上角。'
-        + '睡眠归到醒来那天，只统计真正入睡的片段；这里只看时长，不代表睡眠质量。',
+      tip: '虚线是 AASM / SRS“成年人规律睡够至少 7 小时”的时长参考，不是这段时间的平均——平均写在卡片右上角。'
+        + '睡眠归到醒来那天，只统计设备识别的入睡片段；这里只看时长，不代表睡眠质量。',
     }),
     restingHR: () => ({
       title: '静息心率',
@@ -361,7 +363,8 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('restingHR', hrSeries, {}),
       readout: readoutRow(valueAt((v) => `${num(v)} bpm`)((dd) => (health.get(dd)?.restingHR > 0 ? health.get(dd).restingHR : null))),
-      tip: '静息心率由手表在佩戴睡眠时自动记录，手动补录不会产生这项。',
+      tip: '静息心率由手表自动估算，手动补录不会产生这项。多数成人常见范围约为 60–100 bpm；'
+        + '训练状态、压力、感染、药物和测量条件都可能影响读数，应优先和个人基线比较。',
     }),
     balance: () => ({
       title: '热量收支（摄入 − 消耗）',
