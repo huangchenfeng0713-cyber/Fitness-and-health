@@ -86,7 +86,7 @@ const fmt = (cell) => {
   return num(cell.value, cell.decimals || 0);
 };
 
-/** 体脂与静息心率仍只显示当天值；最近一次收进感叹号供核对。 */
+/** 体脂与静息心率仍只显示当天值；最近一次收进信息按钮供核对。 */
 function lastSeenLines(today) {
   return ['bodyFatPct', 'restingHR'].map((key) => {
     const hit = latestHealthEntry(key, today);

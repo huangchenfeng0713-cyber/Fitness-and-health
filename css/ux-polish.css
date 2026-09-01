@@ -1,4 +1,4 @@
-/* v2.11.3：动作搜索、列表对齐、紧凑信息符号与历史管理。 */
+/* v2.11.4：移除食物历史、统一 SVG 信息符号并补充估算菜品。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
@@ -319,7 +319,6 @@
   .metric-row-note,
   .week-row-note,
   .trend-summary,
-  .fav-label,
   .form-hint { color: var(--faint-readable); }
 }
 

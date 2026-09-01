@@ -1041,3 +1041,22 @@ test('鲜果椰乳类不含茶底，不该标成含咖啡因', () => {
     assert.ok((f.f || []).includes('caffeinated'), `${f.name} 有茶底，应当标 caffeinated`);
   }
 });
+
+test('海底捞番茄牛肉粒拌饭按可解释配方估算并可直接搜索', () => {
+  const food = FOOD_BY_ID.get('haidilao_tomato_beef_rice');
+  assert.ok(food, '缺少海底捞拌饭');
+  assert.equal(food.cat, 'chain');
+  assert.equal(food.source?.type, 'recipe', '自助搭配不能伪装成官方固定营养表');
+  assert.equal(food.source?.accessed, '2026-09-01');
+  assert.ok(isEstimated(food));
+  assert.match(food.note, /白米饭 200g.*牛肉粒 30g.*番茄汤 60g/,
+    '估算没有披露代表配方');
+  assert.match(food.note, /鸡蛋与额外酱料须另记/, '容易漏记的额外配料没有提示');
+  assert.deepEqual(food.s[0], ['一份（约一碗）', 300]);
+  const serving = nutrientsFor(food, 300);
+  assert.equal(Math.round(serving.kcal), 333);
+  assert.ok(serving.protein > 12 && serving.protein < 15);
+  for (const term of ['海底捞拌饭', '番茄牛肉饭', '牛肉粒拌饭', 'haidilao']) {
+    assert.ok(searchFoods(term).some((item) => item.id === food.id), `搜不到“${term}”`);
+  }
+});

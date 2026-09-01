@@ -133,6 +133,11 @@ const SOURCE_NANPU = Object.freeze({
   ref: '南浦拌饭为韩式石锅拌饭连锁；品名按该品类门店通行菜单整理，营养按同类配方与常见份量估算',
   accessed: '2026-08-28',
 });
+const SOURCE_HAIDILAO_RICE = Object.freeze({
+  type: 'recipe',
+  ref: '海底捞台湾官方社交账号公开番茄牛肉饭吃法（白饭、牛肉粒、香葱与番茄锅）；营养按常见盛取量估算',
+  accessed: '2026-09-01',
+});
 const SOURCE_KFC_CN_EST = Object.freeze({
   type: 'recipe',
   ref: '肯德基中国官方产品宣传核对品名；中国食物成分表肯德基条目、FatSecret 品牌条目及公开称重拆解交叉核对营养',
@@ -771,6 +776,18 @@ export const FOODS = [
   { id: 'saizeriya_gratin', name: '萨莉亚 芝士焗饭', alias: 'saizeriya salia zhishijufan', cat: 'chain', n: [150, 5.0, 5.5, 20.0, 0.8, 1.5, 300], s: [['一份', 400]], f: ['quick', 'processed', 'est'] },
   { id: 'hefu_noodle', name: '和府捞面 招牌汤面', alias: 'hefulaomian tangmian', cat: 'chain', n: [91, 4.0, 2.2, 13.6, 0.7, 0.7, 327], s: [['一份', 550]], f: ['quick', 'processed', 'est'] },
   { id: 'yoshinoya_beef', name: '吉野家 牛肉饭（中碗）', alias: 'yoshinoya jiyejia niuroufan', cat: 'chain', n: [144, 4.9, 4.4, 21.1, 0.7, 2.7, 311], s: [['中碗', 450]], f: ['quick', 'processed', 'est'] },
+  {
+    id: 'haidilao_tomato_beef_rice',
+    name: '海底捞 番茄牛肉粒拌饭（自助搭配）',
+    alias: 'haidilao banfan fanqie niurouli 海底捞拌饭 海底捞牛肉饭 番茄牛肉饭 牛肉粒拌饭 白饭',
+    cat: 'chain',
+    n: [111, 4.4, 2.1, 19.3, 0.4, 1.0, 330],
+    s: [['一份（约一碗）', 300]],
+    source: SOURCE_HAIDILAO_RICE,
+    basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total',
+    note: '按熟白米饭 200g、牛肉粒 30g、番茄汤 60g 和少量香葱/调味估算；自助盛取量、牛肉粒品类及汤底浓度差异较大，鸡蛋与额外酱料须另记',
+    f: ['quick', 'est'],
+  },
 
   // ---------- 茶饮 / 咖啡连锁（营养按全糖录入，糖度由界面换算） ----------
   { id: 'tea_boba', name: '珍珠奶茶', alias: 'zhenzhunaicha bobo boba naicha', cat: 'chain', n: [94, 1.2, 2.8, 16.0, 0.2, 9.6, 24], s: [['中杯 500ml', 500]], sf: 1.2, nfs: 1.0, f: ['quick', 'est', 'sweetdrink', 'tealevel', 'caffeinated'] },

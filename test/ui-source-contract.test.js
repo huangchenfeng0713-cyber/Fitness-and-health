@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.3"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.3'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.3/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.3\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.4"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.4'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.4/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.4\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -48,7 +48,7 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   assert.match(dashboard,
     /persistentInfoTip\('today-insights-evidence', '查看当前提示的判断依据'/,
     '今日提示缺少唯一的卡片级说明入口');
-  assert.doesNotMatch(dashboard, /insight-why/, '今日提示行里又出现了各自的感叹号');
+  assert.doesNotMatch(dashboard, /insight-why/, '今日提示行里又出现了各自的信息按钮');
   assert.match(dashboard, /const explained = list\.filter\(\(insight\) => insight\.basis\)/,
     '说明层内容没有跟随当前显示的提示');
   assert.match(css, /\.insight-evidence-tip \.info-tip-panel\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/s,
@@ -65,6 +65,8 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   assert.doesNotMatch(searchHead, /allFoods\(\)\.length| 种/, '添加食物标题又显示库内数量');
   assert.doesNotMatch(diet, /category-browser|nodes\.categories/,
     '添加食物搜索框下又出现分类标签');
+  assert.doesNotMatch(diet, /favRow|historyChip|refreshFav|HISTORY_LIMIT/,
+    '添加食物又出现历史记录');
 
   assert.match(mealAdvice, /div\.recommend-budget/, '推荐预算又挤回标题右边');
   assert.match(polish, /\.recommend-budget span\s*\{[^}]*white-space:\s*nowrap/s,

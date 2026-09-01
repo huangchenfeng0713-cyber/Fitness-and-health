@@ -96,7 +96,7 @@ export function field(label, control, hint, extraClass = '') {
  * 点开的说明层，点外面就该收起来。
  *
  * <details> 原生只认 summary 上的点击：说明打开之后，用户以为随便点一下别处
- * 就能关掉，结果它一直挂在那儿，非得回去再点一次那个感叹号。
+ * 就能关掉，结果它一直挂在那儿，非得回去再点一次信息按钮。
  *
  * 监听器只装一次（挂在 document 上，靠 closest 判断点在不在自己里面），
  * 不能每建一个 infoTip 就装一个 —— 列表里几十条记录就是几十个监听器。
@@ -113,7 +113,7 @@ function bindInfoTipDismiss() {
   };
   /*
    * 用 click 而不是 pointerdown：pointerdown 早于原生的 summary 切换，
-   * 点感叹号本身会变成「先被这里关掉、再被原生打开」，闪一下。
+   * 点信息按钮本身会变成「先被这里关掉、再被原生打开」，闪一下。
    * 点在自己的说明层里不关 —— 里面可能要选中文字或者点链接。
    */
   document.addEventListener('click', (event) => {
@@ -131,10 +131,11 @@ export function infoTip(label, ...children) {
   mark.setAttribute('viewBox', '0 0 12 12');
   mark.setAttribute('aria-hidden', 'true');
   const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  stem.setAttribute('d', 'M6 2.2v4.3');
+  // 小写 i 用路径和圆点绘制，不依赖字体，也不会在不同系统上变成不同字形。
+  stem.setAttribute('d', 'M6 5.1v4.1');
   const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   dot.setAttribute('cx', '6');
-  dot.setAttribute('cy', '9');
+  dot.setAttribute('cy', '2.8');
   dot.setAttribute('r', '.7');
   mark.append(stem, dot);
   const details = h('details.info-tip', null,
@@ -146,7 +147,7 @@ export function infoTip(label, ...children) {
 /*
  * 某些卡片会被账号状态、数据同步或时钟刷新整块重建。普通 infoTip 跟着 DOM
  * 一起销毁是合理的；但卡片级的主要说明刚点开就被一次无关重绘收起，看起来像
- * 感叹号失灵。给这类入口一个稳定 key，把用户主动选择的展开态留在模块内存里。
+ * 信息按钮失灵。给这类入口一个稳定 key，把用户主动选择的展开态留在模块内存里。
  *
  * 点外面、再次点 summary 或按 Escape 仍会改变 details.open；toggle 事件会把
  * 新状态写回集合，因此这里只抵抗“节点被重建”，不会把用户已经关闭的层又打开。

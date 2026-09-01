@@ -254,15 +254,7 @@ try {
       budgetWrapped: budgetCells.some((cell) => cell.scrollWidth > cell.clientWidth + 1
         || cell.getClientRects().length > 1),
       hasCategoryBrowser: !!document.querySelector('.category-browser'),
-      historyPartlyClipped: (() => {
-        const chips = document.querySelector('.fav-chips.collapsed');
-        if (!chips) return false;
-        const bottom = chips.getBoundingClientRect().bottom;
-        return [...chips.children].some((item) => {
-          const rect = item.getBoundingClientRect();
-          return rect.top < bottom - 1 && rect.bottom > bottom + 1;
-        });
-      })(),
+      hasFoodHistory: !!document.querySelector('.fav-row, .fav-chips, .history-chip'),
     };
   });
   const dietProblems = [
@@ -274,42 +266,9 @@ try {
     dietLayout.budgetCells !== 3 && `推荐预算应为三栏，实际 ${dietLayout.budgetCells} 栏`,
     dietLayout.budgetWrapped && '推荐预算文字在手机宽度下折行或溢出',
     dietLayout.hasCategoryBrowser && '搜索框下面仍在显示分类标签',
-    dietLayout.historyPartlyClipped && '历史搜索收起时仍截出半行',
+    dietLayout.hasFoodHistory && '添加食物仍在显示历史记录',
   ].filter(Boolean);
   check('饮食页标题、饮水与推荐预算对齐', dietProblems.length === 0, dietProblems.join('；'));
-
-  // 历史词条的垃圾桶只移除快捷历史，不得删除已经记录的食物。
-  await page.evaluate(async () => {
-    const { addEntry } = await import('./js/lib/store.js');
-    await addEntry({ foodId: 'egg_whole', grams: 55 });
-  });
-  await page.waitForTimeout(300);
-  const historyDeleteBefore = await page.evaluate(async () => {
-    const { state } = await import('./js/lib/store.js');
-    const button = [...document.querySelectorAll('.history-delete')]
-      .find((el) => el.getAttribute('aria-label')?.includes('鸡蛋'));
-    return {
-      hasFavorite: state.favorites.includes('egg_whole'),
-      hasButton: !!button,
-      recorded: state.dietEntries.some((entry) => entry.foodId === 'egg_whole'),
-    };
-  });
-  await page.evaluate(() => [...document.querySelectorAll('.history-delete')]
-    .find((el) => el.getAttribute('aria-label')?.includes('鸡蛋'))?.click());
-  await page.waitForTimeout(300);
-  const historyDeleteAfter = await page.evaluate(async () => {
-    const { state } = await import('./js/lib/store.js');
-    return {
-      hasFavorite: state.favorites.includes('egg_whole'),
-      hasButton: [...document.querySelectorAll('.history-delete')]
-        .some((el) => el.getAttribute('aria-label')?.includes('鸡蛋')),
-      recorded: state.dietEntries.some((entry) => entry.foodId === 'egg_whole'),
-    };
-  });
-  check('历史垃圾桶只删除快捷词条',
-    historyDeleteBefore.hasFavorite && historyDeleteBefore.hasButton && historyDeleteBefore.recorded
-      && !historyDeleteAfter.hasFavorite && !historyDeleteAfter.hasButton && historyDeleteAfter.recorded,
-    `${JSON.stringify(historyDeleteBefore)} → ${JSON.stringify(historyDeleteAfter)}`);
 
   /*
    * 健康数据的格子排布。

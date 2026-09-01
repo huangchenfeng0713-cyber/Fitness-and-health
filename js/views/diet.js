@@ -13,7 +13,7 @@ import { macroBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
-  restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, removeFavorite, portionMemory,
+  restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip, isEstimated,
@@ -37,7 +37,6 @@ const ui = {
   sugar: DEFAULT_SUGAR_LEVEL,   // 茶饮糖度
   mix: {},        // 清补凉等复合食物的 { foodId: g/ml }
   showCustomForm: false,
-  historyOpen: false,   // 历史是否展开
   moreResults: false,   // 搜索结果是否已展开全部
   focus: null,          // 'protein' | 'fiber' —— 从今日页的提示跳过来时的筛选
   /*
@@ -72,7 +71,6 @@ const RESULT_PREVIEW = 10;
 function buildShell(root) {
   clearEl(root);
 
-  nodes.favRow = h('div.slot');
   nodes.results = h('div.slot');
   nodes.portion = h('div.slot');
   nodes.customBox = h('div.slot');
@@ -134,7 +132,6 @@ function buildShell(root) {
         nodes.customToggle)),
     h('div.search-row.search-row-full', null, nodes.searchInput),
     nodes.customBox,
-    nodes.favRow,
     nodes.results,
     nodes.basketBar.el);
 
@@ -153,82 +150,6 @@ function buildShell(root) {
  * 那才是做决定的时刻；而「今天整体怎么样」是今日页的问题。
  * 摆在这儿只是把同一批数字提前念一遍，还把搜索框顶到了首屏之外。
  */
-
-/*
- * 历史：记过的食物，点一下直接回到份量面板。
- *
- * 默认只露两行。这些名字长短差得很远（「米饭（白米）」和
- * 「肯德基 乒乒乓乓冰球杯（柠檬味）」不是一个量级），按个数截断会时多时少，
- * 所以用高度截断，再按实际有没有溢出决定要不要出「展开」。
- */
-const HISTORY_LIMIT = 24;
-
-function trashIcon() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', 'M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7m4 4v5m4-5v5');
-  svg.append(path);
-  return svg;
-}
-
-function historyChip(food) {
-  return h('span.history-chip', null,
-    h('button.history-pick', {
-      type: 'button',
-      onclick: () => selectFood(food),
-    }, food.name),
-    h('button.history-delete', {
-      type: 'button',
-      'aria-label': `从历史中删除${food.name}`,
-      title: '从历史中删除',
-      onclick: async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        await removeFavorite(food.id);
-      },
-    }, trashIcon()));
-}
-
-function refreshFav() {
-  clearEl(nodes.favRow);
-  if (ui.query || ui.focus) return;
-  const history = state.favorites.map(findFood).filter(Boolean).slice(0, HISTORY_LIMIT);
-  if (!history.length) return;
-  const chips = h('div.fav-chips', { class: `fav-chips${ui.historyOpen ? '' : ' collapsed'}` },
-    history.map(historyChip));
-  const toggle = h('button.text-btn.fav-toggle', {
-    hidden: true,
-    onclick: () => { ui.historyOpen = !ui.historyOpen; refreshFav(); },
-  }, ui.historyOpen ? '收起' : '展开');
-  mount(nodes.favRow, h('div.fav-row', null,
-    h('span.fav-label', null, '历史'),
-    chips,
-    toggle));
-
-  /*
-   * 两行高度必须从真实按钮量出来，不能再写死 70px。
-   * 全局按钮最小高度改过一次以后，两行实际是 36 + 6 + 36 = 78px；旧值会把
-   * 第二行削掉一截，看起来像下面还有一层内容压在卡片里。
-   */
-  const items = [...chips.children];
-  const chipTop = chips.getBoundingClientRect().top;
-  const measurements = items.map((item) => ({ item, rect: item.getBoundingClientRect() }));
-  // 同一行在高分屏上可能相差小数像素，用 1px 容差归为同一行。
-  const rowTops = measurements.reduce((rows, { rect }) => {
-    if (!rows.some((top) => Math.abs(top - rect.top) <= 1)) rows.push(rect.top);
-    return rows;
-  }, []).sort((a, b) => a - b);
-  if (rowTops.length > 1) {
-    const secondTop = rowTops[1];
-    const visible = measurements.filter(({ rect }) => rect.top <= secondTop + 1);
-    const bottom = Math.max(...visible.map(({ rect }) => rect.bottom));
-    chips.style.setProperty('--fav-collapse-height', `${Math.ceil(bottom - chipTop)}px`);
-  }
-  // 没有第三行就不需要展开；只比较 scrollHeight 会受 1px 舍入误差干扰。
-  toggle.hidden = rowTops.length <= 2;
-}
 
 /** 今日提示可直接带着“补蛋白 / 补纤维”意图进入结果，不再额外铺分类按钮。 */
 function pickFocus(focus = null) {
@@ -357,7 +278,6 @@ function refreshBasket() {
 
 function refreshResults() {
   clearEl(nodes.results);
-  refreshFav();
   if (!ui.query && !ui.focus) { refreshAdvice(); return; }
   refreshAdvice();
 

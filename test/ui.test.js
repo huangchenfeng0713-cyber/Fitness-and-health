@@ -103,7 +103,7 @@ test('同一批数字不在两页各写一遍', () => {
     assert.ok(new RegExp(`${key}:\\s*'M`).test(metrics), `指标 ${key} 没有图标`);
   }
 
-  // 目标依据收进圈里的感叹号，但「你现在看到的数字不对」这几条不许收
+  // 目标依据收进圈里的信息 i，但「你现在看到的数字不对」这几条不许收
   assert.match(dashboard, /function heroInfo\(/, '目标依据应收进主卡右上角');
   for (const keep of ['profileError', 'demoMode', 'missingObservationTime']) {
     assert.ok(new RegExp(`energyFreshness[\\s\\S]*${keep}`).test(dashboard),
@@ -184,26 +184,19 @@ test('搜索先出十条，换词或提示筛选时收回展开；没找到时�
   assert.match(diet, /【食物库缺条目】搜索词：/, '反馈模板没带上搜到的词');
 });
 
-test('历史按高度折叠两行，支持图标删除，没溢出就不出「展开」', () => {
-  // 名字长短差得远（「米饭（白米）」和「肯德基 乒乒乓乓冰球杯（柠檬味）」），
-  // 按个数截会时多时少，两行看起来像三行
+test('添加食物不再采集或展示历史，升级时清理旧设置', () => {
   const diet = read('js/views/diet.js');
   const css = read('css/app.css');
-  assert.match(diet, /const HISTORY_LIMIT = 24/);
-  assert.match(diet, /h\('span\.fav-label', null, '历史'\)/, '标签没有精简成“历史”');
-  assert.match(diet, /function historyChip\(food\)/, '历史词条没有独立选择与删除操作');
-  assert.match(diet, /removeFavorite\(food\.id\)/, '历史记录删除没有持久化');
-  assert.match(diet, /function trashIcon\(\)/, '删除仍在使用手打字符而不是图标');
-  assert.match(css, /grid-template-areas: 'label chips' '\. toggle'/,
-    '展开入口没有固定在历史区右下角');
-  assert.match(diet, /measurements = items\.map\(\(item\) => \(\{ item, rect: item\.getBoundingClientRect\(\) \}\)\)/,
-    '没有按真实按钮边界测量折叠高度');
-  assert.match(diet, /Math\.abs\(top - rect\.top\) <= 1/,
-    '高分屏的小数像素会被误判成额外一行');
-  assert.match(diet, /--fav-collapse-height/, '没有把两行真实高度交给样式');
-  assert.match(diet, /toggle\.hidden = rowTops\.length <= 2/, '没出现第三行时不该挂“展开”');
-  assert.match(css, /\.fav-chips\.collapsed\s*\{[^}]*--fav-collapse-height/s,
-    '折叠仍在使用会切出半行的固定高度');
+  const store = read('js/lib/store.js');
+  assert.doesNotMatch(diet, /favRow|historyChip|refreshFav|HISTORY_LIMIT|removeFavorite/,
+    '添加食物仍在渲染历史入口');
+  assert.doesNotMatch(css, /\.fav-row|\.fav-chips|\.history-chip|\.history-delete/,
+    '历史记录的废弃样式仍在打包');
+  assert.doesNotMatch(store, /touchFavorite|state\.favorites|export async function removeFavorite/,
+    '记下食物后仍在采集快捷历史');
+  assert.match(store, /db\.getSetting\('favorites', null\)/, '升级时没有读取旧历史以便迁移');
+  assert.match(store, /db\.del\(db\.STORES\.settings, 'favorites'\)/,
+    '升级时没有删除已经保存的旧历史');
 });
 
 test('食物搜索不再铺分类标签，今日提示仍可直达营养筛选', () => {
@@ -309,11 +302,11 @@ test('今日健康数据钉死今天，只有体重可使用最近记录', () =>
   assert.match(metrics, /latestHealthEntry\('weightKg', today\)/, '没有取截至今天最近一次体重');
   assert.match(metrics, /latestWeight,/, '最近体重没有交给健康卡状态层');
 
-  // 格子保持简洁，测量日期收在右上角感叹号里。
+  // 格子保持简洁，测量日期收在右上角信息按钮里。
   assert.ok(!/`体重 \$\{/.test(metrics), '又把沿用的日期标回格子里了');
   assert.match(metrics, /体重默认显示截至今天最近一次有效记录/, '说明层没有解释最近体重口径');
   assert.match(metrics, /function lastSeenLines\(/, '最近一次测量没有地方可查');
-  assert.match(metrics, /infoTip\(/, '同步情况和最近一次测量要收在感叹号里');
+  assert.match(metrics, /infoTip\(/, '同步情况和最近一次测量要收在信息按钮里');
 
   // 「已同步」说的是今天同步过没有，不是「有没有缺项」
   const core = strip(read('js/core/health-card.js'));
@@ -1191,12 +1184,18 @@ test('「已选动作」只记录选了什么，不在这里给建议', () => {
   assert.match(card, /volume\.sets/, '组数统计没了');
 });
 
-test('说明层点外面就收起来，不必回去再点一次感叹号', () => {
+test('说明层使用 SVG 小写 i，点外面即可收起', () => {
   /*
    * <details> 原生只认 summary 上的点击：说明打开之后，用户以为随便点一下别处
    * 就能关掉，结果它一直挂在那儿。
    */
   const utils = read('js/lib/utils.js');
+  assert.match(utils, /stem\.setAttribute\('d', 'M6 5\.1v4\.1'\)/,
+    '信息符号的 i 竖笔没有使用 SVG 路径');
+  assert.match(utils, /dot\.setAttribute\('cy', '2\.8'\)/,
+    '信息符号的圆点应位于竖笔上方');
+  assert.doesNotMatch(utils, /h\([^\n]*['"]i['"]\)/,
+    '信息符号不能用手打字体字符');
   assert.match(utils, /document\.addEventListener\('click'/, '没有装「点外面收起来」的监听');
   assert.match(utils, /closeOthers\(event\.target\.closest\?\.\('details\.info-tip'\) \|\| null\)/,
     '判断点在不在自己里面应当用 closest —— 点说明层内部（选字、点链接）不该关掉它');
@@ -1210,11 +1209,11 @@ test('说明层点外面就收起来，不必回去再点一次感叹号', () =>
   assert.match(utils, /if \(infoTipDismissBound\) return;\s*\n\s*infoTipDismissBound = true;/,
     '只装一次的保护写得不对');
 
-  // 用 click 不用 pointerdown：pointerdown 早于原生的 summary 切换，点感叹号会闪一下
+  // 用 click 不用 pointerdown：pointerdown 早于原生的 summary 切换，点信息按钮会闪一下
   // 注释里解释「为什么不用 pointerdown」的那句话不算，只看真正会跑的代码
   const bind = utils.slice(utils.indexOf('function bindInfoTipDismiss'), utils.indexOf('export function infoTip'))
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
-  assert.ok(!/pointerdown/.test(bind), 'pointerdown 早于原生切换，点感叹号本身会先关再开，闪一下');
+  assert.ok(!/pointerdown/.test(bind), 'pointerdown 早于原生切换，点信息按钮本身会先关再开，闪一下');
 });
 
 test('卡片级说明层在无关重绘后保持用户选择的展开态', () => {

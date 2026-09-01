@@ -154,7 +154,7 @@ test('recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一�
   const ok = { sex: 'male', age: 30, heightCm: 178, weightKg: 80, activity: 'moderate', goal: 'cut' };
   const blank = () => ({
     profile: {}, healthDays: [], healthByDate: new Map(), dietEntries: [], dietDaily: [],
-    day: '2026-08-28', trainingDays: [], portionMemory: {}, favorites: [], customFoods: [],
+    day: '2026-08-28', trainingDays: [], portionMemory: {}, customFoods: [],
   });
   const cases = {
     空档案: { profile: {} },
@@ -183,7 +183,7 @@ test('身体信息算不出目标时退回默认档案，并把原因交给界�
   Object.assign(state, {
     profile: { sex: 'male', age: 30, heightCm: 5, weightKg: 5, activity: 'moderate', goal: 'cut' },
     healthDays: [], healthByDate: new Map(), dietEntries: [], dietDaily: [],
-    day: '2026-08-28', trainingDays: [], portionMemory: {}, favorites: [], customFoods: [],
+    day: '2026-08-28', trainingDays: [], portionMemory: {}, customFoods: [],
   });
   recompute();
   assert.ok(state.derived.profileError, '没有把失败原因记进 derived，界面就无话可说');

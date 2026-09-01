@@ -51,7 +51,6 @@ export const state = {
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
-  favorites: [],         // 常吃食物 id
   portionMemory: {},     // { foodId: 克数 } —— 用户自己改过的份量
   lastImport: null,
   derived: null,
@@ -98,9 +97,9 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, favorites, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
+  const [profile, legacyFoodHistory, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
     db.getSetting('profile', null),
-    db.getSetting('favorites', []),
+    db.getSetting('favorites', null),
     db.getSetting('portionMemory', {}),
     db.getSetting('lastImport', null),
     db.getAll(db.STORES.customFoods),
@@ -120,7 +119,15 @@ async function hydrateStore({ notify = false } = {}) {
       if (error?.code !== 'account_data_locked') throw error;
     }
   }
-  state.favorites = favorites || [];
+  // v2.11.4 起不再收集或展示“添加食物”历史；升级时删除旧快捷历史数据。
+  if (legacyFoodHistory !== null) {
+    try {
+      await db.del(db.STORES.settings, 'favorites');
+    } catch (error) {
+      // 账号切换的写锁优先于清理；即使暂时删不掉，旧数据也不会再读取或展示。
+      if (error?.code !== 'account_data_locked') throw error;
+    }
+  }
   state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
   state.customFoods = customFoods || [];
@@ -455,7 +462,6 @@ export async function addEntry({
   const id = await db.put(db.STORES.diet, entry);
   entry.id = id;
   state.dietEntries = [...state.dietEntries, entry];
-  await touchFavorite(food.id);
   await rememberPortion(food, entry.grams);
   await refreshDietDaily();
   recompute();
@@ -542,23 +548,6 @@ export async function copyDay(fromDate) {
 
 async function refreshDietDaily() {
   rebuildDietDaily(await db.getAll(db.STORES.diet));
-}
-
-async function touchFavorite(foodId) {
-  if (!foodId) return;
-  const next = [foodId, ...state.favorites.filter((f) => f !== foodId)].slice(0, 24);
-  await db.setSetting('favorites', next);
-  state.favorites = next;
-}
-
-/** 从“历史”快捷入口移除一项；不会删除已经记下的饮食记录或自定义食物。 */
-export async function removeFavorite(foodId) {
-  if (!foodId || !state.favorites.includes(foodId)) return false;
-  const next = state.favorites.filter((id) => id !== foodId);
-  await db.setSetting('favorites', next);
-  state.favorites = next;
-  emit();
-  return true;
 }
 
 // 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
@@ -692,7 +681,6 @@ export async function clearAllData() {
   state.dietEntries = [];
   state.dietDaily = [];
   state.customFoods = [];
-  state.favorites = [];
   state.portionMemory = {};
   state.lastImport = null;
   recompute();

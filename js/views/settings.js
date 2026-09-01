@@ -157,7 +157,7 @@ function signedOutAccount(account) {
     h('p.account-lead', null, '登录后数据会同步到账号的云端空间。'),
     form,
     /*
-     * 两条账号合并的说明收进感叹号：说的是「同一个邮箱用两种方式登录会怎样」，
+     * 两条账号合并的说明收进信息按钮：说的是「同一个邮箱用两种方式登录会怎样」，
      * 真碰上的时候才需要，平时挂在表单下面每次都要跳过。
      */
     h('div.account-note-row', null,
