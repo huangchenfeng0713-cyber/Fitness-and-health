@@ -1,4 +1,4 @@
-/* v2.11.5：统一估算弱标签，并把依据与误差集中到信息面板。 */
+/* v2.11.6：信息层跟随入口避让视口，筛选摘要横贯内容区顶部。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
@@ -122,10 +122,11 @@
   position: sticky;
   top: 0;
   z-index: 4;
-  width: 100%;
+  width: calc(100% + var(--card-pad) + var(--card-pad) + var(--view-inline-pad) + var(--view-inline-pad) + var(--safe-left) + var(--safe-right));
   height: 40px;
-  margin: 0 0 -40px;
-  padding: 0 var(--space-1);
+  margin: 0 0 -40px calc(0px - var(--card-pad) - var(--view-inline-pad) - var(--safe-left));
+  padding: 0 calc(var(--card-pad) + var(--view-inline-pad) + var(--safe-right))
+    0 calc(var(--card-pad) + var(--view-inline-pad) + var(--safe-left));
   display: flex;
   align-items: center;
   justify-content: space-between;

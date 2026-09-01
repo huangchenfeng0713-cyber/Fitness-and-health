@@ -697,6 +697,15 @@ test('名称与 id 不重复，四个历史错配已纠正并补回原食物', (
   for (const id of ['braised_prawns', 'youpo_noodle', 'shengjian_bao', 'oat_latte']) {
     assert.ok(FOOD_BY_ID.has(id), `修正错配后漏补 ${id}`);
   }
+  for (const id of ['flatbread', 'croissant', 'gailan', 'mixue_lemon', 'nuomiji']) {
+    assert.ok(!FOOD_BY_ID.has(id), `同义旧条目 ${id} 仍在搜索库里造成重复`);
+  }
+  for (const id of ['shouzhuabing', 'croissant_plain', 'chinese_broccoli',
+    'mixue_lemonade', 'lotus_glutinous_chicken']) {
+    assert.ok(FOOD_BY_ID.has(id), `去重后漏掉保留项 ${id}`);
+  }
+  assert.equal(FOOD_BY_ID.get('blackberry').name, '黑莓');
+  assert.equal(FOOD_BY_ID.get('raspberry').name, '树莓');
 });
 
 test('高价值合并项已拆分，汤汁与带壳食物的估算边界明确', () => {
@@ -1059,6 +1068,50 @@ test('海底捞番茄牛肉粒拌饭按可解释配方估算并可直接搜索',
   for (const term of ['海底捞拌饭', '番茄牛肉饭', '牛肉粒拌饭', 'haidilao']) {
     assert.ok(searchFoods(term).some((item) => item.id === food.id), `搜不到“${term}”`);
   }
+});
+
+test('海底捞拌饭菜单扩充可搜索，全部透明标为配方估算', () => {
+  const ids = [
+    'haidilao_beef_belly_sauce_rice',
+    'haidilao_spicy_krill_rice',
+    'haidilao_tomato_brisket_rice',
+    'haidilao_spicy_meat_shrimp_rice',
+    'haidilao_shallot_cartilage_fried_rice',
+    'haidilao_truffle_roe_beef_rice',
+  ];
+  for (const id of ids) {
+    const food = FOOD_BY_ID.get(id);
+    assert.ok(food, `缺少 ${id}`);
+    assert.equal(food.source?.type, 'recipe', `${food.name} 不应冒充官方营养标签`);
+    assert.equal(food.source?.accessed, '2026-09-01');
+    assert.ok(isEstimated(food), `${food.name} 没有估算标记`);
+    assert.match(food.note, /估算|误差|改变|影响/, `${food.name} 没说明误差边界`);
+  }
+  for (const term of ['五花牛肉酱拌饭', '麻辣磷虾', '番茄牛腩饭', '香辣肉酱虾仁',
+    '红葱脆骨蛋炒饭', '黑松露鱼籽牛肉炒饭']) {
+    assert.ok(searchFoods(term).some((food) => ids.includes(food.id)), `搜不到“${term}”`);
+  }
+});
+
+test('刘文祥麻辣烫按实际自选配料逐项计算，而不是套固定一碗', () => {
+  const food = FOOD_BY_ID.get('liuwenxiang_malatang_mix');
+  assert.ok(food, '缺少刘文祥麻辣烫');
+  assert.ok(hasFoodMix(food));
+  assert.equal(food.source?.type, 'recipe');
+  assert.equal(food.source?.accessed, '2026-09-01');
+  assert.ok(isEstimated(food));
+  const defaults = defaultFoodMix(food);
+  assert.equal(defaults.liuwenxiang_yellow_noodle, 80);
+  assert.equal(defaults.liuwenxiang_gluten_noodle, 50);
+  assert.equal(defaults.liuwenxiang_sesame_broth, 180);
+  const bowl = foodMixNutrition(food);
+  assert.equal(bowl.grams, 525);
+  assert.ok(bowl.nutrients.kcal >= 500 && bowl.nutrients.kcal <= 540,
+    `默认组合热量异常：${bowl.nutrients.kcal}`);
+  assert.ok(bowl.nutrients.sodium >= 1500, '麻酱骨汤与丸类的钠被低估');
+  assert.ok(searchFoods('刘文祥麻辣烫').some((item) => item.id === food.id));
+  assert.ok(searchFoods('huangmian').some((item) => item.id === 'liuwenxiang_yellow_noodle'));
+  assert.ok(searchFoods('niujinmian').some((item) => item.id === 'liuwenxiang_gluten_noodle'));
 });
 
 test('每个估算菜品都有统一的依据与误差披露，精确标签项不误标', () => {

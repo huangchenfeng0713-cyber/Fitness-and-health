@@ -102,6 +102,70 @@ export function field(label, control, hint, extraClass = '') {
  * 不能每建一个 infoTip 就装一个 —— 列表里几十条记录就是几十个监听器。
  */
 let infoTipDismissBound = false;
+let infoTipPositionFrame = 0;
+
+function infoTipViewport() {
+  const viewport = window.visualViewport;
+  return {
+    left: viewport?.offsetLeft || 0,
+    top: viewport?.offsetTop || 0,
+    width: viewport?.width || window.innerWidth,
+    height: viewport?.height || window.innerHeight,
+  };
+}
+
+function placeInfoTip(details) {
+  if (!details?.open || !details.isConnected) return;
+  const summary = details.querySelector(':scope > summary');
+  const panel = details.querySelector(':scope > .info-tip-panel');
+  if (!summary || !panel) return;
+
+  const viewport = infoTipViewport();
+  const margin = 12;
+  const gap = 8;
+  const viewportRight = viewport.left + viewport.width;
+  const viewportBottom = viewport.top + viewport.height;
+  const anchor = summary.getBoundingClientRect();
+
+  /*
+   * 先把说明层放进可见区域再测量。visibility:hidden 仍参与布局，既不会闪到
+   * 屏幕左上角，也能拿到真实宽高。随后选择空间更充足的一侧，并把横向位置
+   * 夹在可视视口内。iOS 键盘出现时 visualViewport 会缩小，这里也会跟着避让。
+   */
+  panel.dataset.positioned = 'false';
+  panel.style.left = `${viewport.left + margin}px`;
+  panel.style.top = `${viewport.top + margin}px`;
+  panel.style.maxHeight = '';
+
+  const below = Math.max(0, viewportBottom - anchor.bottom - gap - margin);
+  const above = Math.max(0, anchor.top - viewport.top - gap - margin);
+  const naturalHeight = Math.min(panel.scrollHeight, 420);
+  const placeBelow = below >= Math.min(naturalHeight, 180) || below >= above;
+  const available = Math.max(96, placeBelow ? below : above);
+  panel.style.maxHeight = `${Math.floor(available)}px`;
+
+  const measured = panel.getBoundingClientRect();
+  const left = Math.min(
+    Math.max(anchor.left + (anchor.width - measured.width) / 2, viewport.left + margin),
+    Math.max(viewport.left + margin, viewportRight - measured.width - margin),
+  );
+  const top = placeBelow
+    ? Math.min(anchor.bottom + gap, viewportBottom - measured.height - margin)
+    : Math.max(viewport.top + margin, anchor.top - gap - measured.height);
+
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.top = `${Math.round(top)}px`;
+  panel.dataset.positioned = 'true';
+}
+
+function queueInfoTipPositions(details = null) {
+  if (infoTipPositionFrame) cancelAnimationFrame(infoTipPositionFrame);
+  infoTipPositionFrame = requestAnimationFrame(() => {
+    infoTipPositionFrame = 0;
+    if (details) placeInfoTip(details);
+    else document.querySelectorAll('details.info-tip[open]').forEach(placeInfoTip);
+  });
+}
 
 function bindInfoTipDismiss() {
   if (infoTipDismissBound) return;
@@ -122,6 +186,11 @@ function bindInfoTipDismiss() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeOthers(null);
   });
+  /* 滚动与旋转屏幕后，说明层继续锚定原来的 i，而不是留在旧坐标。 */
+  document.addEventListener('scroll', () => queueInfoTipPositions(), true);
+  window.addEventListener('resize', () => queueInfoTipPositions());
+  window.visualViewport?.addEventListener('resize', () => queueInfoTipPositions());
+  window.visualViewport?.addEventListener('scroll', () => queueInfoTipPositions());
 }
 
 export function infoTip(label, ...children) {
@@ -141,6 +210,11 @@ export function infoTip(label, ...children) {
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, mark),
     h('div.info-tip-panel', { role: 'note' }, children));
+  details.addEventListener('toggle', () => {
+    const panel = details.querySelector(':scope > .info-tip-panel');
+    if (panel) panel.dataset.positioned = 'false';
+    if (details.open) queueInfoTipPositions(details);
+  });
   return details;
 }
 
@@ -158,6 +232,7 @@ export function persistentInfoTip(key, label, ...children) {
   const stableKey = String(key);
   const details = infoTip(label, ...children);
   details.open = persistentInfoTipOpen.has(stableKey);
+  if (details.open) queueInfoTipPositions(details);
   details.addEventListener('toggle', () => {
     if (details.open) persistentInfoTipOpen.add(stableKey);
     else persistentInfoTipOpen.delete(stableKey);

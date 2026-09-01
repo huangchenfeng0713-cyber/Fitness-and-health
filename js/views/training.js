@@ -367,13 +367,15 @@ function pickerCard(rerender) {
     modeTabs(rerender),
     byGroup ? groupTabs(rerender) : splitTabs(rerender));
   const compactScope = byGroup ? group.label : split.label;
+  let card = null;
   const compactSummary = h('button.picker-compact-summary', {
     type: 'button',
-    'aria-label': `当前筛选：${byGroup ? '身体部位' : '动作模式'} ${compactScope}，${filter.label}；返回调整筛选`,
-    onclick: () => controls.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+    hidden: showRecommend,
+    'aria-label': `当前筛选：${byGroup ? '身体部位' : '动作模式'} ${compactScope}，${filter.label}；回到顶部`,
+    onclick: () => card?.scrollIntoView({ block: 'start', behavior: 'smooth' }),
   },
   h('span', null, `${byGroup ? '身体部位' : '动作模式'} · ${compactScope} · ${filter.label}`),
-  h('span.picker-compact-action', null, '调整'));
+  h('span.picker-compact-action', null, '回到顶部'));
 
   const countNode = h('span.card-tag', null, showRecommend
     ? `${rec.items.length} 个推荐`
@@ -381,7 +383,7 @@ function pickerCard(rerender) {
   const searchInput = h('input.search-input.exercise-search-input', {
     type: 'search',
     value: exerciseQuery,
-    placeholder: '搜索动作，支持拼音',
+    placeholder: '输入内容以搜索',
     'aria-label': '搜索动作，支持中文、拼音或英文',
     autocomplete: 'off',
     enterkeyhint: 'search',
@@ -404,7 +406,7 @@ function pickerCard(rerender) {
     const query = exerciseQuery.trim();
     const searching = Boolean(query);
     controls.hidden = searching;
-    compactSummary.hidden = searching;
+    compactSummary.hidden = searching || showRecommend;
     toolbar.hidden = searching;
     normalContent.hidden = searching;
     searchContent.hidden = !searching;
@@ -426,7 +428,7 @@ function pickerCard(rerender) {
     updateSearch();
   });
 
-  const card = h('section.card.exercise-picker-card', null,
+  card = h('section.card.exercise-picker-card', null,
     h('div.card-head.picker-card-head', null,
       h('h3', null, '选择动作'),
       h('div.card-head-actions', null,

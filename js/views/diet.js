@@ -86,7 +86,7 @@ function buildShell(root) {
     autocapitalize: 'off',
     autocorrect: 'off',
     spellcheck: false,
-    placeholder: '搜索食物，支持拼音',
+    placeholder: '输入内容以搜索',
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
       ui.query = e.target.value;
@@ -512,10 +512,11 @@ function refreshMixedPortion(food) {
 
   mount(nodes.portion, h('div.portion-panel.mix-picker', null,
     h('div.portion-head', null,
-      h('div', null,
-        h('strong', null, food.name),
-        estimateTag(food),
-        h('span.chip', null, CATEGORIES[food.cat]),
+      h('div.portion-head-main', null,
+        h('div.portion-title-line', null,
+          h('strong', null, food.name),
+          estimateTag(food),
+          h('span.chip', null, CATEGORIES[food.cat])),
         h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
       h('div.portion-head-actions', null,
         foodInfoTip(food, { label: '查看估算依据与误差' }),
@@ -738,10 +739,11 @@ function refreshPortion() {
 
   mount(nodes.portion, h('div.portion-panel', null,
     h('div.portion-head', null,
-      h('div', null,
-        h('strong', null, food.name),
-        estimateTag(food),
-        h('span.chip', null, CATEGORIES[food.cat] || '自定义'),
+      h('div.portion-head-main', null,
+        h('div.portion-title-line', null,
+          h('strong', null, food.name),
+          estimateTag(food),
+          h('span.chip', null, CATEGORIES[food.cat] || '自定义')),
         h('div.portion-per100', null,
           `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
       h('div.portion-head-actions', null,

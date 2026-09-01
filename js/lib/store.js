@@ -90,8 +90,24 @@ export function allFoods() {
   return [...state.customFoods, ...FOODS];
 }
 
+/*
+ * 同义食物去重后，旧日记仍可能保存着历史 id。只在读取时映射到保留项，
+ * 不复制一份食物回搜索库；这样既不会让结果重复，也不会让旧记录变成未知食物。
+ */
+export const LEGACY_FOOD_ID_REDIRECTS = Object.freeze({
+  flatbread: 'shouzhuabing',
+  croissant: 'croissant_plain',
+  gailan: 'chinese_broccoli',
+  mixue_lemon: 'mixue_lemonade',
+  nuomiji: 'lotus_glutinous_chicken',
+});
+
 export function findFood(id) {
-  return state.customFoods.find((f) => f.id === id) || FOOD_BY_ID.get(id) || null;
+  const custom = state.customFoods.find((f) => f.id === id);
+  if (custom) return custom;
+  return FOOD_BY_ID.get(id)
+    || FOOD_BY_ID.get(LEGACY_FOOD_ID_REDIRECTS[id])
+    || null;
 }
 
 // ---------------------------------------------------------------- 初始化

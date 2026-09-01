@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { FOODS } from '../js/data/foods.js';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -385,6 +386,12 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
     '一行式摘要没有跟随真实滚动位置');
   assert.match(polish, /\.picker-controls-collapsed \.picker-compact-summary/,
     '筛选摘要没有可见态');
+  assert.match(training, /hidden: showRecommend/,
+    '推荐组合视图不应显示全部动作的筛选摘要');
+  assert.match(training, /picker-compact-action', null, '回到顶部'/,
+    '筛选摘要没有明确说明会回到顶部');
+  assert.match(polish, /\.picker-compact-summary\s*\{[^}]*top:\s*0[^}]*width:\s*calc\(100% \+ var\(--card-pad\)/s,
+    '筛选摘要没有贴住滚动区顶部并横贯应用宽度');
 });
 
 /*
@@ -455,7 +462,9 @@ test('选择动作顶部使用与食物一致的搜索框，输入时只更新�
     '选择动作没有复用动作库的中文、拼音与英文搜索');
   assert.match(training, /input\.search-input\.exercise-search-input/,
     '动作搜索框没有复用添加食物的 search-input 样式');
-  assert.match(training, /placeholder: '搜索动作，支持拼音'/);
+  assert.match(training, /placeholder: '输入内容以搜索'/);
+  assert.match(read('js/views/diet.js'), /placeholder: '输入内容以搜索'/,
+    '食物和动作搜索框没有统一占位文案');
   assert.match(training, /searchInput\.addEventListener\('input',[\s\S]*?updateSearch\(\)/,
     '输入搜索词后没有即时更新结果');
   assert.doesNotMatch(training, /searchInput\.addEventListener\('input',[\s\S]{0,180}?rerender\(/,
@@ -713,9 +722,18 @@ test('普通食物记录失败会恢复按钮，条目说明不会被底栏截�
   const css = read('css/app.css');
   assert.ok(diet.includes('runLocalAction'));
   assert.ok(utils.includes('control.disabled = wasDisabled'));
-  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*position: fixed/);
-  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*bottom: calc\(78px \+ var\(--safe-bottom\)\)/);
-  assert.match(css, /\.entry-name \.info-tip-panel \{[\s\S]*max-height: min\(38vh, 280px\)/);
+  assert.match(css, /\.info-tip-panel \{[\s\S]*position: fixed/,
+    '所有说明层都应使用同一套视口定位');
+  assert.match(css, /\.info-tip-panel \{[\s\S]*overflow-y: auto/,
+    '长说明层没有自身滚动，仍可能超出屏幕');
+  assert.match(utils, /function placeInfoTip\(details\)/,
+    '说明层没有跟随原信息入口');
+  assert.match(utils, /window\.visualViewport/,
+    '说明层没有避让 iOS 的可视视口');
+  assert.match(utils, /panel\.dataset\.positioned = 'true'/,
+    '说明层可能在完成定位前闪到错误位置');
+  assert.doesNotMatch(css, /\.entry-name \.info-tip-panel \{[\s\S]{0,260}?bottom:/,
+    '食物行说明仍被钉在底部，没有跟随原文字');
 });
 
 test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
@@ -988,8 +1006,7 @@ test('添加食物标题不展示总数，README 的库规模仍有测试盯着'
 
   const readme = read('README.md');
   const claimed = Number(readme.match(/内置 (\d+) 种常见食物/)?.[1]);
-  const source = read('js/data/foods.js');
-  const actual = (source.match(/\{ id: '/g) || []).length;
+  const actual = FOODS.length;
   assert.ok(Number.isFinite(claimed), 'README 里找不到食物数量');
   assert.ok(Math.abs(claimed - actual) <= 5,
     `README 写 ${claimed} 种，实际约 ${actual} 种`);

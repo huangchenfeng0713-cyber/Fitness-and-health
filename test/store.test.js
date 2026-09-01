@@ -1,8 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  compositionNote, migrateStoredProfile, resolveEnergyObservation, recompute, state,
+  compositionNote, findFood, LEGACY_FOOD_ID_REDIRECTS,
+  migrateStoredProfile, resolveEnergyObservation, recompute, state,
 } from '../js/lib/store.js';
+
+test('食物库去重后旧 id 仍能读取到保留项', () => {
+  const expected = {
+    flatbread: 'shouzhuabing',
+    croissant: 'croissant_plain',
+    gailan: 'chinese_broccoli',
+    mixue_lemon: 'mixue_lemonade',
+    nuomiji: 'lotus_glutinous_chicken',
+  };
+  assert.deepEqual(LEGACY_FOOD_ID_REDIRECTS, expected);
+  for (const [legacy, current] of Object.entries(expected)) {
+    assert.equal(findFood(legacy)?.id, current, `${legacy} 没有迁移到 ${current}`);
+  }
+});
 
 test('普通食物没有自选配料时也能生成记录说明', () => {
   assert.equal(compositionNote(null), '');

@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.5"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.5'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.5/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.5\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.6"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.6'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.6/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.6\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -111,6 +111,14 @@ test('估算菜品统一使用弱标签，误差来源集中到信息面板', ()
     '估算标签不应使用警告色');
   assert.match(sw, /\.\/js\/views\/cards\/food-estimate\.js/,
     '估算呈现模块没有进入离线应用外壳');
+  assert.ok((diet.match(/div\.portion-title-line/g) || []).length >= 2,
+    '普通与复合食物的菜名、估算和分类没有共用标题行');
+  assert.match(css, /\.portion-title-line\s*\{[^}]*column-gap:\s*6px/s,
+    '估算与分类标签之间没有稳定留白');
+  assert.match(css, /\.info-tip-panel strong\s*\{[^}]*font-size:\s*inherit/s,
+    '信息面板的黑体说明仍会擅自放大字号');
+  assert.doesNotMatch(css, /\.estimate-disclosure-list\s*\{[^}]*overflow-y:\s*auto/s,
+    '估算列表和外层面板形成了双重滚动');
 });
 
 test('筛选菜单不会在切换栏目后把旧健身页画回来', () => {
