@@ -174,12 +174,12 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
   assert.match(card, /饮料、汤、粥、水果和饭菜里的水分同样被人体吸收/, '没有说清这个数的口径');
 });
 
-test('搜索先出十条，换词收回展开；没找到时给反馈入口', () => {
+test('搜索先出十条，换词或提示筛选时收回展开；没找到时给反馈入口', () => {
   const diet = read('js/views/diet.js');
   assert.match(diet, /const RESULT_PREVIEW = 10/);
-  // 换搜索词、换分类都要收回「显示更多」，否则搜下一个词还是一次铺满
+  // 换搜索词、从今日提示进入补蛋白/纤维结果时都要收回「显示更多」
   const resets = diet.match(/ui\.moreResults = false/g) || [];
-  assert.ok(resets.length >= 2, `换词和换分类都要收回展开：只找到 ${resets.length} 处`);
+  assert.ok(resets.length >= 2, `换词和换提示筛选都要收回展开：只找到 ${resets.length} 处`);
   assert.match(diet, /function feedbackLink\(query\)/, '没有反馈入口');
   assert.match(diet, /【食物库缺条目】搜索词：/, '反馈模板没带上搜到的词');
 });
@@ -191,9 +191,27 @@ test('历史搜索按高度折叠两行，没溢出就不出「展开」', () =>
   const css = read('css/app.css');
   assert.match(diet, /const HISTORY_LIMIT = 10/);
   assert.match(diet, /'历史搜索'/, '标签没改成历史搜索');
-  assert.match(diet, /toggle\.hidden = !ui\.historyOpen && chips\.scrollHeight <= chips\.clientHeight/,
-    '没溢出时不该挂一个「展开」');
-  assert.match(css, /\.fav-chips\.collapsed \{[^}]*max-height/, '折叠不是按高度截的');
+  assert.match(diet, /measurements = items\.map\(\(item\) => \(\{ item, rect: item\.getBoundingClientRect\(\) \}\)\)/,
+    '没有按真实按钮边界测量折叠高度');
+  assert.match(diet, /Math\.abs\(top - rect\.top\) <= 1/,
+    '高分屏的小数像素会被误判成额外一行');
+  assert.match(diet, /--fav-collapse-height/, '没有把两行真实高度交给样式');
+  assert.match(diet, /toggle\.hidden = rowTops\.length <= 2/, '没出现第三行时不该挂“展开”');
+  assert.match(css, /\.fav-chips\.collapsed\s*\{[^}]*--fav-collapse-height/s,
+    '折叠仍在使用会切出半行的固定高度');
+});
+
+test('食物搜索不再铺分类标签，今日提示仍可直达营养筛选', () => {
+  const diet = read('js/views/diet.js');
+  const css = read('css/app.css');
+  assert.doesNotMatch(diet, /category-browser|nodes\.categories|refreshCategories/,
+    '搜索框下仍在渲染分类标签');
+  assert.doesNotMatch(css, /\.category-browser|\.category-scroll/,
+    '已移除的分类标签样式仍残留');
+  assert.match(diet, /function pickFocus\(focus = null\)/,
+    '今日提示的补蛋白/补纤维入口被分类标签一起删掉了');
+  assert.match(diet, /focusFoods\(ui\.focus, allFoods\(\), 60\)/,
+    '提示筛选没有继续生成食物结果');
 });
 
 test('缺数据的指标画一道杠，不是整格消失', () => {
@@ -357,6 +375,18 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
     '身体部位没有把实际列数交给样式');
   assert.match(training, /style: \{ '--picker-cols': String\(SPLITS\.length\) \}/,
     '动作模式没有把实际列数交给样式');
+  assert.match(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(100% - 24px\)[^}]*margin-inline:\s*auto/s,
+    '红圈内两排控件没有缩窄并居中');
+  assert.match(polish, /\.picker-mode-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
+    '顶部模式控件仍然过厚');
+  assert.match(polish, /\.picker-scope-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
+    '动作范围控件仍然过厚');
+  assert.match(training, /function setupPickerCompact\(root\)/,
+    '筛选滚出视野后没有一行式摘要');
+  assert.match(training, /pickerCompactObserver = new IntersectionObserver/,
+    '一行式摘要没有跟随真实滚动位置');
+  assert.match(polish, /\.picker-controls-collapsed \.picker-compact-summary/,
+    '筛选摘要没有可见态');
 });
 
 /*
@@ -402,6 +432,18 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
   assert.ok(metaCalls.length >= 3, `定义外，全部动作和推荐组合都应调用同一渲染器，只找到 ${metaCalls.length - 1} 处`);
   assert.match(css, /\.exercise-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
   assert.match(css, /\.exercise-meta-tag\s*\{[^}]*border-radius:/s);
+  assert.match(training, /const classes = \['pattern', 'muscle', 'type'\]/,
+    '三个标签没有建立动作模式 / 肌肉 / 类型的视觉层级');
+  assert.match(css, /\.exercise-meta-tag\.type\s*\{[^}]*border-color:/s,
+    '动作类型没有使用最轻的描边层级');
+  assert.match(training, /button\.ex-row\.exercise-choice-row/,
+    '全部动作没有使用共用动作行');
+  assert.match(training, /button\.rec-pick\.exercise-choice-row/,
+    '推荐组合没有使用共用动作行');
+  assert.match(css, /\.exercise-choice-row\s*\{[^}]*padding:\s*10px var\(--space-2\)/s,
+    '两个视图的文字位置与行内边距没有统一');
+  assert.match(css, /\.exercise-choice-action\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/s,
+    '两个视图的右侧加号没有统一');
   // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
   assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
 });
@@ -582,6 +624,22 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
   assert.ok(charts.includes("emptyText = '数据不足'"));
   assert.match(trends, /h\('div\.trend-insufficient',[\s\S]*INSUFFICIENT_DATA_TEXT\)/,
     '样本不足时没有收敛成单一空状态');
+  assert.match(read('css/app.css'), /\.trend-insufficient\s*\{[^}]*min-height:\s*156px/s,
+    '“数据不足”空状态仍占着接近整张图的高度');
+});
+
+test('高频页面使用统一间距，深色次级信息不再过暗', () => {
+  const css = read('css/app.css');
+  const polish = read('css/ux-polish.css');
+  for (const token of ['--space-1: 4px', '--space-2: 8px', '--space-3: 12px', '--space-4: 16px']) {
+    assert.ok(css.includes(token), `缺少间距基元 ${token}`);
+  }
+  assert.match(css, /--card-pad:\s*var\(--space-4\)/, '卡片内边距没有归入统一节奏');
+  assert.match(css, /--section-gap:\s*var\(--space-4\)/, '卡片间距没有归入统一节奏');
+  assert.match(css, /@media \(prefers-color-scheme: dark\)[\s\S]*--faint-readable:\s*#a9b3b8/,
+    '深色模式没有单独抬高信息性次级文字');
+  assert.match(polish, /\.exercise-meta-tag,[\s\S]*\.form-hint \{ color: var\(--faint-readable\); \}/,
+    '深色模式的信息性标签仍在使用过暗的装饰文字颜色');
 });
 
 test('趋势页统计图统一为折线图，漏记日断线而不是虚构连续数据', () => {
@@ -1016,7 +1074,8 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
 
   // 健身：勾选只动 pending 和这一行的 DOM，不能碰 updateSession
   assert.match(training, /let pending = new Set\(\)/, '健身页没有待加入的一批');
-  const rowBody = training.slice(training.indexOf('function exerciseRow'), training.indexOf('h(\'div.ex-main\''));
+  const rowBody = training.slice(training.indexOf('function exerciseRow'),
+    training.indexOf("h('div.ex-main.exercise-choice-main'"));
   // 注释里解释「为什么不能 rerender」的那句话不算，只看真正会跑的代码
   const rowCode = rowBody.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
   assert.match(rowCode, /if \(pending\.has\(e\.id\)\) pending\.delete\(e\.id\); else pending\.add\(e\.id\);/,
@@ -1415,6 +1474,10 @@ test('健身选择栏常驻应用壳底部并紧邻底栏', () => {
     '选择栏仍在动作卡内做 sticky 定位');
   assert.match(dock, /margin:\s*0/, '固定栏仍带着卡片内负边距');
   assert.match(dock, /border-radius:\s*0/, '固定栏仍长得像卡片的一部分');
+  assert.match(dock, /backdrop-filter:\s*saturate\(145%\) blur\(18px\)/,
+    '固定栏没有使用轻量毛玻璃降低实体横幅的厚重感');
+  assert.match(dock, /background:\s*color-mix\(in srgb, var\(--card\) 90%, transparent\)/,
+    '固定栏仍是完全不透明的大色块');
 });
 
 /*

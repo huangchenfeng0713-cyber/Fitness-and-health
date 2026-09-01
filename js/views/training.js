@@ -47,6 +47,7 @@ let showRecommend = false;
  */
 let pending = new Set();
 let pickerBar = null;
+let pickerCompactObserver = null;
 
 /*
  * 健身页固定记**今天**，不跟今日 / 饮食页选的日期走。
@@ -191,15 +192,17 @@ function clashLine(e) {
  * 三个圆角标签，看起来像在表达两套不同的信息。
  */
 function exerciseMeta(tags) {
+  const classes = ['pattern', 'muscle', 'type'];
   return h('div.exercise-meta', null,
-    tags.map((tag) => h('span.exercise-meta-tag', null, tag)));
+    tags.map((tag, index) => h(`span.exercise-meta-tag.${classes[index] || 'detail'}`, null, tag)));
 }
 
 function exerciseRow(e, rerender, lastDone) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
   // 单独留住这两个节点，勾选时只改它们，不重建整行
-  const pickNode = h('span.ex-pick', null, chosen || marked ? '✓' : '＋');
+  const pickNode = h('span.ex-pick.exercise-choice-action', { 'aria-hidden': 'true' },
+    chosen || marked ? '✓' : '＋');
   const clashNode = h('span.ex-clash-slot', {
     onclick: (event) => {
       const detail = clashNode.dataset.detail;
@@ -209,7 +212,7 @@ function exerciseRow(e, rerender, lastDone) {
       toast(detail, 'info');
     },
   });
-  const row = h('button.ex-row', {
+  const row = h('button.ex-row.exercise-choice-row', {
     class: `ex-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
     type: 'button',
     'aria-pressed': String(chosen || marked),
@@ -234,7 +237,7 @@ function exerciseRow(e, rerender, lastDone) {
       if (pickerBar) pickerBar.render();
     },
   },
-  h('div.ex-main', null,
+  h('div.ex-main.exercise-choice-main', null,
     h('div.ex-name', null, h('strong', null, e.name)),
     /*
      * 默认只给三个短标签：主要动作模式 / 主要肌肉 / 动作类型。
@@ -263,6 +266,29 @@ function exerciseRow(e, rerender, lastDone) {
   };
   row.syncClash();
   return row;
+}
+
+/**
+ * 原来的两排筛选离开可视区后，只留一行当前范围摘要。
+ * 摘要不制造新的筛选状态，点它只把原控件滚回视野；真正的选择仍由上面的
+ * 分段控件完成，避免桌面和手机各养一套交互。
+ */
+function setupPickerCompact(root) {
+  pickerCompactObserver?.disconnect();
+  pickerCompactObserver = null;
+
+  const card = root.querySelector('.exercise-picker-card');
+  const controls = card?.querySelector('.picker-controls');
+  const scrollRoot = root.closest('.view') || document.querySelector('main.view');
+  if (!card || !controls || !scrollRoot || typeof IntersectionObserver === 'undefined') return;
+
+  pickerCompactObserver = new IntersectionObserver(([entry]) => {
+    if (!card.isConnected) return;
+    const rootTop = scrollRoot.getBoundingClientRect().top;
+    const above = !entry.isIntersecting && entry.boundingClientRect.bottom <= rootTop + 1;
+    card.classList.toggle('picker-controls-collapsed', above);
+  }, { root: scrollRoot, threshold: 0 });
+  pickerCompactObserver.observe(controls);
 }
 
 function equipMenu(rerender, all) {
@@ -339,6 +365,18 @@ function pickerCard(rerender) {
       }, label);
     }));
 
+  const controls = h('div.picker-controls', null,
+    modeTabs(rerender),
+    byGroup ? groupTabs(rerender) : splitTabs(rerender));
+  const compactScope = byGroup ? group.label : split.label;
+  const compactSummary = h('button.picker-compact-summary', {
+    type: 'button',
+    'aria-label': `当前筛选：${byGroup ? '身体部位' : '动作模式'} ${compactScope}，${filter.label}；返回调整筛选`,
+    onclick: () => controls.scrollIntoView({ block: 'start', behavior: 'smooth' }),
+  },
+  h('span', null, `${byGroup ? '身体部位' : '动作模式'} · ${compactScope} · ${filter.label}`),
+  h('span.picker-compact-action', null, '调整'));
+
   return h('section.card.exercise-picker-card', null,
     h('div.card-head', null,
       h('h3', null, '选择动作'),
@@ -347,8 +385,8 @@ function pickerCard(rerender) {
           ? `${rec.items.length} 个推荐`
           : `${list.length} 个动作`),
         showRecommend ? recommendTip() : null)),
-    modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    compactSummary,
+    controls,
     h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all)),
     showRecommend
       ? recommendBody(rec)
@@ -633,8 +671,13 @@ function recommendBody(rec) {
           ...(items.some((i) => i.id === o.id) ? [] : [{ id: o.id, sets: [], done: false }]),
         ]),
       }, h('span', null, `换成 ${o.name}`)))))),
-    h('div.rec-picks', null, rec.items.map((item) => h('div.rec-pick', null,
-      h('div.rec-pick-main', null,
+    h('div.rec-picks', null, rec.items.map((item) => h('button.rec-pick.exercise-choice-row', {
+      type: 'button', 'aria-label': `加入 ${item.name}`,
+      onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
+        ? items
+        : [...items, { id: item.id, sets: [], done: false }])),
+    },
+      h('div.rec-pick-main.exercise-choice-main', null,
         h('div.ex-name', null, h('strong', null, item.name)),
         // 理由用短标签，不写长句：五条推荐写成五段话，读完比自己翻列表还慢
         exerciseMeta(item.tags)),
@@ -642,12 +685,7 @@ function recommendBody(rec) {
        * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
        * 而这一屏真正的主要动作是下面那个「全部加入」。
        */
-      h('button.rec-add', {
-        type: 'button', 'aria-label': `加入 ${item.name}`,
-        onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
-          ? items
-          : [...items, { id: item.id, sets: [], done: false }])),
-      }, '＋')))),
+      h('span.rec-add.exercise-choice-action', { 'aria-hidden': 'true' }, '＋')))),
     rec.items.length > 1 ? h('button.secondary-btn.full', {
       style: { marginTop: '12px' },
       onclick: () => updateSession((items) => [
@@ -697,6 +735,7 @@ export function renderTraining(root) {
     adviceCard(rerender),
     weeklyCard(rerender),
   );
+  setupPickerCompact(root);
   if (actionSlot) {
     actionSlot.hidden = false;
     mount(actionSlot, pickerBar.el);

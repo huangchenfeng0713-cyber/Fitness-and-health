@@ -79,8 +79,28 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('健身'))?.click());
   await page.waitForTimeout(400);
-  const allTagCounts = await page.$$eval('.ex-row .exercise-meta', (rows) => rows
-    .map((row) => row.querySelectorAll('.exercise-meta-tag').length));
+  const allState = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.ex-row .exercise-meta')];
+    const row = document.querySelector('.ex-row:not([aria-pressed="true"])')
+      || document.querySelector('.ex-row');
+    const name = row?.querySelector('.ex-name');
+    const action = row?.querySelector('.exercise-choice-action');
+    const card = document.querySelector('.exercise-picker-card');
+    const controls = document.querySelector('.picker-controls');
+    const controlRows = [...document.querySelectorAll('.picker-controls > .range-switch')];
+    const rect = (el) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    };
+    return {
+      tagCounts: rows.map((meta) => meta.querySelectorAll('.exercise-meta-tag').length),
+      commonRow: !!row?.classList.contains('exercise-choice-row'),
+      row: rect(row), name: rect(name), action: rect(action),
+      font: name ? getComputedStyle(name).fontSize : '',
+      symbol: action?.textContent || '',
+      card: rect(card), controls: rect(controls), controlRows: controlRows.map(rect),
+    };
+  });
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
     .find((x) => x.textContent.includes('推荐组合'))?.click());
   await page.waitForTimeout(300);
@@ -89,6 +109,22 @@ try {
       .map((row) => row.querySelectorAll('.exercise-meta-tag').length),
     hasOldTags: !!document.querySelector('.rec-tag, .rec-pick-tags'),
     hasTip: !!document.querySelector('.exercise-picker-card .info-tip > summary'),
+    commonRow: !!document.querySelector('.rec-pick.exercise-choice-row'),
+    row: (() => {
+      const r = document.querySelector('.rec-pick')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    name: (() => {
+      const r = document.querySelector('.rec-pick .ex-name')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    action: (() => {
+      const r = document.querySelector('.rec-pick .exercise-choice-action')?.getBoundingClientRect();
+      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
+    })(),
+    font: document.querySelector('.rec-pick .ex-name')
+      ? getComputedStyle(document.querySelector('.rec-pick .ex-name')).fontSize : '',
+    symbol: document.querySelector('.rec-pick .exercise-choice-action')?.textContent || '',
   }));
   await page.evaluate(() => document.querySelector('.exercise-picker-card .info-tip > summary')?.click());
   await page.waitForTimeout(100);
@@ -100,12 +136,35 @@ try {
   await page.waitForTimeout(100);
   const openAfterRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
   const trainingProblems = [
-    !allTagCounts.length && '全部动作没有渲染',
-    allTagCounts.some((n) => n !== 3) && `全部动作标签数不是 3：${allTagCounts.join('/')}`,
+    !allState.tagCounts.length && '全部动作没有渲染',
+    allState.tagCounts.some((n) => n !== 3) && `全部动作标签数不是 3：${allState.tagCounts.join('/')}`,
     !recommendState.tagCounts.length && '推荐组合没有渲染',
     recommendState.tagCounts.some((n) => n !== 3)
       && `推荐组合标签数不是 3：${recommendState.tagCounts.join('/')}`,
     recommendState.hasOldTags && '推荐组合仍在使用旧标签样式',
+    !allState.commonRow && '全部动作没有使用共用动作行',
+    !recommendState.commonRow && '推荐组合没有使用共用动作行',
+    allState.row && recommendState.row && Math.abs(allState.row.left - recommendState.row.left) > 1
+      && `两种动作行左边错开：${allState.row.left.toFixed(1)} / ${recommendState.row.left.toFixed(1)}`,
+    allState.name && recommendState.name && Math.abs(allState.name.left - recommendState.name.left) > 1
+      && `两种动作名起点错开：${allState.name.left.toFixed(1)} / ${recommendState.name.left.toFixed(1)}`,
+    allState.action && recommendState.action
+      && (Math.abs(allState.action.width - recommendState.action.width) > 1
+        || Math.abs(allState.action.height - recommendState.action.height) > 1)
+      && `两种加号大小不同：${allState.action.width.toFixed(1)}×${allState.action.height.toFixed(1)} / ${recommendState.action.width.toFixed(1)}×${recommendState.action.height.toFixed(1)}`,
+    allState.font !== recommendState.font
+      && `两种动作名字号不同：${allState.font} / ${recommendState.font}`,
+    allState.symbol !== recommendState.symbol
+      && `两种加号字符不同：${allState.symbol} / ${recommendState.symbol}`,
+    allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
+    allState.controlRows.some((row) => row.height > 41)
+      && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
+    allState.controls && allState.controlRows.some((row) =>
+      Math.abs((row.left + row.width / 2) - (allState.controls.left + allState.controls.width / 2)) > 1)
+      && '缩窄后的筛选控件没有保持居中',
+    allState.controls && allState.controlRows.some((row) =>
+      allState.controls.width - row.width < 22 || allState.controls.width - row.width > 26)
+      && `筛选控件没有按约 24px 缩窄：${allState.controlRows.map((row) => row.width.toFixed(1)).join('/')}`,
     !recommendState.hasTip && '推荐说明入口缺失',
     !openBeforeRender && '推荐说明点击后没有展开',
     !openAfterRender && '推荐说明被一次无关重绘自动收起',
@@ -144,6 +203,16 @@ try {
       budgetCells: budgetCells.length,
       budgetWrapped: budgetCells.some((cell) => cell.scrollWidth > cell.clientWidth + 1
         || cell.getClientRects().length > 1),
+      hasCategoryBrowser: !!document.querySelector('.category-browser'),
+      historyPartlyClipped: (() => {
+        const chips = document.querySelector('.fav-chips.collapsed');
+        if (!chips) return false;
+        const bottom = chips.getBoundingClientRect().bottom;
+        return [...chips.children].some((item) => {
+          const rect = item.getBoundingClientRect();
+          return rect.top < bottom - 1 && rect.bottom > bottom + 1;
+        });
+      })(),
     };
   });
   const dietProblems = [
@@ -154,6 +223,8 @@ try {
       && `饮水色 ${dietLayout.waterColor} 没有统一成主绿色 ${dietLayout.accentColor}`,
     dietLayout.budgetCells !== 3 && `推荐预算应为三栏，实际 ${dietLayout.budgetCells} 栏`,
     dietLayout.budgetWrapped && '推荐预算文字在手机宽度下折行或溢出',
+    dietLayout.hasCategoryBrowser && '搜索框下面仍在显示分类标签',
+    dietLayout.historyPartlyClipped && '历史搜索收起时仍截出半行',
   ].filter(Boolean);
   check('饮食页标题、饮水与推荐预算对齐', dietProblems.length === 0, dietProblems.join('；'));
 

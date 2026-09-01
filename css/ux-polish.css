@@ -1,11 +1,8 @@
-/* v2.11.1：高频交互与可读性精修。只覆盖视图层，不改变营养或训练算法。 */
+/* v2.11.2：搜索、动作选择与空状态的视觉收尾；不改变营养或训练算法。 */
 
 /* 9a：数据页同步状态只留在“今日健康数据”卡，不在顶栏重复。 */
 .ux-health-page .topbar-context-note { display: none; }
 .ux-health-page .topbar-page-context { justify-content: center; }
-
-/* 5：真正输入搜索词时，把分类让位给结果；清空搜索会自动恢复。 */
-.search-card:has(.search-input:not(:placeholder-shown)) .category-browser { display: none; }
 
 /* 17：视觉图标保持原大小，实际热区接近 iOS 44pt。 */
 .nav-arrow,
@@ -23,7 +20,7 @@
   border-radius: 50%;
 }
 
-/* 16：导航与操作图标统一一套描边粗细；文字加号也统一成圆形操作点。 */
+/* 16：导航与操作图标统一一套描边粗细。动作加号由共用行组件负责。 */
 .tab-icon svg,
 .topbar-settings-btn svg,
 .nav-arrow svg,
@@ -31,23 +28,9 @@
 .meal-icon {
   stroke-width: 1.8;
 }
-.ex-pick,
-.rec-add {
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid var(--border);
-  border-radius: 50%;
-  background: transparent;
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
-}
-.ex-row[aria-pressed='true'] .ex-pick,
-.ex-row.chosen .ex-pick,
-.ex-row.marked .ex-pick {
+.ex-row[aria-pressed='true'] .exercise-choice-action,
+.ex-row.chosen .exercise-choice-action,
+.ex-row.marked .exercise-choice-action {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
@@ -72,7 +55,7 @@
 .trend-summary,
 .form-hint { font-size: 13px; }
 
-/* 8b：空趋势仍保留图表高度，但给一枚很轻的“待形成走势”视觉锚点。 */
+/* 空趋势缩短到 156px；不再用大面积留白放大“没有数据”这件事。 */
 .chart-wrap:has(.chart-empty) { position: relative; }
 .chart-wrap:has(.chart-empty)::before {
   content: '';
@@ -99,10 +82,18 @@
 /* 12a/13a：健身挑选器由 training.js 原生渲染，不再做 DOM 二次改造。 */
 .picker-mode-switch .chip-btn {
   flex: 1 1 0;
-  min-height: 44px;
+  min-height: var(--control-sm);
 }
+.picker-controls {
+  display: grid;
+  gap: var(--space-2);
+}
+.picker-controls .range-switch {
+  width: calc(100% - 24px);
+  margin-inline: auto;
+}
+.picker-controls .range-switch + .range-switch { margin-top: 0; }
 .picker-scope-switch {
-  width: 100%;
   display: grid;
   grid-template-columns: repeat(var(--picker-cols), minmax(0, 1fr));
   gap: 4px;
@@ -111,16 +102,49 @@
 .picker-scope-switch .chip-btn {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  padding: 6px 4px;
+  min-height: var(--control-sm);
+  padding: 4px;
 }
+
+/* 两排筛选滚出视野后，在卡片顶部只留一行当前范围；点击可回到原筛选。 */
+.picker-compact-summary {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  width: 100%;
+  height: 40px;
+  margin: 0 0 -40px;
+  padding: 0 var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  -webkit-backdrop-filter: saturate(140%) blur(16px);
+  backdrop-filter: saturate(140%) blur(16px);
+  color: var(--muted);
+  font: 600 var(--fs-small)/1.3 var(--font);
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .14s ease;
+}
+.picker-controls-collapsed .picker-compact-summary {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.picker-compact-action { flex: none; color: var(--accent); font-weight: 650; }
 
 .picker-list-toolbar {
   position: relative;
   display: flex;
   align-items: stretch;
-  gap: 10px;
-  margin-top: 10px;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
   border-bottom: 1px solid var(--hairline);
 }
 .picker-view-switch {
@@ -129,6 +153,7 @@
   display: flex;
   gap: 18px;
 }
+.picker-list-toolbar .picker-view-switch { margin-top: 0; }
 .picker-view-switch .chip-btn {
   flex: 0 0 auto;
   min-height: 44px;
@@ -278,6 +303,14 @@
 
 @media (prefers-color-scheme: dark) {
   .chart-wrap:has(.chart-empty)::before { opacity: .24; filter: brightness(1.45); }
+  .exercise-meta-tag,
+  .card-tag,
+  .metric-row-note,
+  .week-row-note,
+  .trend-summary,
+  .ex-last,
+  .fav-label,
+  .form-hint { color: var(--faint-readable); }
 }
 
 

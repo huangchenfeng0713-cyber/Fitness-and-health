@@ -30,10 +30,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.1"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.1'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.1/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.1\*\*/);
+  assert.match(text('package.json'), /"version": "2\.11\.2"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.2'/);
+  assert.match(text('sw.js'), /health-diet-v2\.11\.2/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.2\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -63,6 +63,8 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   assert.match(diet, /section\.card\.search-card/, '食物搜索卡缺少控制输入态样式的锚点');
   const searchHead = diet.slice(diet.indexOf("h('div.card-head.search-card-head"), diet.indexOf("h('div.search-row.search-row-full"));
   assert.doesNotMatch(searchHead, /allFoods\(\)\.length| 种/, '添加食物标题又显示库内数量');
+  assert.doesNotMatch(diet, /category-browser|nodes\.categories/,
+    '添加食物搜索框下又出现分类标签');
 
   assert.match(mealAdvice, /div\.recommend-budget/, '推荐预算又挤回标题右边');
   assert.match(polish, /\.recommend-budget span\s*\{[^}]*white-space:\s*nowrap/s,

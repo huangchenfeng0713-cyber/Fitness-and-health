@@ -29,7 +29,6 @@ import { recommendCard, waterCard } from './cards/meal-advice.js';
 
 const ui = {
   query: '',
-  category: null,
   meal: null,
   selected: null,
   grams: 100,
@@ -74,7 +73,6 @@ function buildShell(root) {
   clearEl(root);
 
   nodes.favRow = h('div.slot');
-  nodes.categories = h('div.slot');
   nodes.results = h('div.slot');
   nodes.portion = h('div.slot');
   nodes.customBox = h('div.slot');
@@ -95,10 +93,8 @@ function buildShell(root) {
       ui.query = e.target.value;
       // 换了搜索词就收回「显示更多」，否则搜下一个词还是一次铺满
       ui.moreResults = false;
-      if (ui.category || ui.focus) {
-        ui.category = null;
+      if (ui.focus) {
         ui.focus = null;
-        refreshCategories();
       }
       refreshResults();
     }, 160),
@@ -139,7 +135,6 @@ function buildShell(root) {
     h('div.search-row.search-row-full', null, nodes.searchInput),
     nodes.customBox,
     nodes.favRow,
-    nodes.categories,
     nodes.results,
     nodes.basketBar.el);
 
@@ -170,7 +165,7 @@ const HISTORY_LIMIT = 10;
 
 function refreshFav() {
   clearEl(nodes.favRow);
-  if (ui.query || ui.category) return;
+  if (ui.query || ui.focus) return;
   const history = state.favorites.map(findFood).filter(Boolean).slice(0, HISTORY_LIMIT);
   if (!history.length) return;
   const chips = h('div.fav-chips', { class: `fav-chips${ui.historyOpen ? '' : ' collapsed'}` },
@@ -183,38 +178,37 @@ function refreshFav() {
     h('span.fav-label', null, '历史搜索'),
     chips,
     toggle));
-  // 折叠按钮只在真的放不下时出现——没溢出还挂个「展开」是骗人的
-  toggle.hidden = !ui.historyOpen && chips.scrollHeight <= chips.clientHeight + 2;
+
+  /*
+   * 两行高度必须从真实按钮量出来，不能再写死 70px。
+   * 全局按钮最小高度改过一次以后，两行实际是 36 + 6 + 36 = 78px；旧值会把
+   * 第二行削掉一截，看起来像下面还有一层内容压在卡片里。
+   */
+  const items = [...chips.children];
+  const chipTop = chips.getBoundingClientRect().top;
+  const measurements = items.map((item) => ({ item, rect: item.getBoundingClientRect() }));
+  // 同一行在高分屏上可能相差小数像素，用 1px 容差归为同一行。
+  const rowTops = measurements.reduce((rows, { rect }) => {
+    if (!rows.some((top) => Math.abs(top - rect.top) <= 1)) rows.push(rect.top);
+    return rows;
+  }, []).sort((a, b) => a - b);
+  if (rowTops.length > 1) {
+    const secondTop = rowTops[1];
+    const visible = measurements.filter(({ rect }) => rect.top <= secondTop + 1);
+    const bottom = Math.max(...visible.map(({ rect }) => rect.bottom));
+    chips.style.setProperty('--fav-collapse-height', `${Math.ceil(bottom - chipTop)}px`);
+  }
+  // 没有第三行就不需要展开；只比较 scrollHeight 会受 1px 舍入误差干扰。
+  toggle.hidden = rowTops.length <= 2;
 }
 
-/** 换一种筛法：清掉另外两种，别让三个条件叠在一起 */
-function pickFilter({ category = null, focus = null }) {
-  ui.category = category;
+/** 今日提示可直接带着“补蛋白 / 补纤维”意图进入结果，不再额外铺分类按钮。 */
+function pickFocus(focus = null) {
   ui.focus = focus;
   ui.query = '';
   ui.moreResults = false;
   if (nodes.searchInput) nodes.searchInput.value = '';
-  refreshCategories();
   refreshResults();
-}
-
-function refreshCategories() {
-  clearEl(nodes.categories);
-  mount(nodes.categories, h('div.category-browser', null,
-    h('span.category-label', null, '分类'),
-    h('div.category-scroll', null,
-      /*
-       * 「补蛋白 / 补纤维」排在分类前面：它们回答的是「我现在缺什么」，
-       * 而分类回答的是「我知道要找什么」。今日页那两条提示点过来落的就是这里。
-       */
-      Object.entries(FOCUS_LABEL).map(([key, label]) => h('button.chip-btn.chip-focus', {
-        class: `chip-btn chip-focus${ui.focus === key ? ' active' : ''}`,
-        onclick: () => pickFilter({ focus: ui.focus === key ? null : key }),
-      }, label)),
-      Object.entries(CATEGORIES).map(([key, label]) => h('button.chip-btn', {
-        class: ui.category === key ? 'active' : '',
-        onclick: () => pickFilter({ category: ui.category === key ? null : key }),
-      }, label)))));
 }
 
 /**
@@ -336,7 +330,7 @@ function refreshBasket() {
 function refreshResults() {
   clearEl(nodes.results);
   refreshFav();
-  if (!ui.query && !ui.category && !ui.focus) { refreshAdvice(); return; }
+  if (!ui.query && !ui.focus) { refreshAdvice(); return; }
   refreshAdvice();
 
   /*
@@ -346,9 +340,7 @@ function refreshResults() {
    */
   const all = ui.query
     ? searchFoods(ui.query, allFoods(), 60)
-    : ui.focus
-      ? focusFoods(ui.focus, allFoods(), 60)
-      : allFoods().filter((food) => food.cat === ui.category);
+    : focusFoods(ui.focus, allFoods(), 60);
   const results = ui.moreResults ? all.slice(0, 60) : all.slice(0, RESULT_PREVIEW);
   if (!all.length) {
     mount(nodes.results,
@@ -357,7 +349,6 @@ function refreshResults() {
     return;
   }
   mount(nodes.results,
-    ui.category ? h('div.result-caption', null, `${CATEGORIES[ui.category]} · ${all.length} 项`) : null,
     // 说清这张表是按什么排的，否则「为什么鳕鱼排在鸡胸肉前面」没人猜得到
     ui.focus ? h('div.result-caption', null,
       `${FOCUS_LABEL[ui.focus]} · ${all.length} 项，按每 100 kcal 含量从高到低`) : null,
@@ -1165,7 +1156,6 @@ export function renderDiet(root) {
   if (nodes.root?.parentNode !== root) {
     buildShell(root);
     refreshCustomForm();
-    refreshCategories();
     refreshResults();
     refreshPortion();
   }
@@ -1179,7 +1169,7 @@ export function renderDiet(root) {
    */
   const intent = takeIntent();
   if (intent?.focus && FOCUS_LABEL[intent.focus]) {
-    pickFilter({ focus: intent.focus });
+    pickFocus(intent.focus);
     nodes.searchCard?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 }

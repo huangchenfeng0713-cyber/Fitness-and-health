@@ -6,6 +6,7 @@
   --text: #171b1f;
   --muted: #626c73;
   --faint: #667078;
+  --faint-readable: #667078;
   --border: #e1e7e4;
   --track: #e9eeec;
 
@@ -39,10 +40,15 @@
   --safe-bottom: var(--env-bottom);
   --safe-left: var(--env-left);
   --safe-right: var(--env-right);
-  --view-inline-pad: 14px;
-  --view-bottom-pad: 18px;
-  --card-pad: 18px;
-  --section-gap: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --view-inline-pad: var(--space-4);
+  --view-bottom-pad: var(--space-4);
+  --card-pad: var(--space-4);
+  --section-gap: var(--space-4);
   --control-lg: 48px;
   --control-md: 44px;
   --control-sm: 36px;
@@ -89,6 +95,8 @@
     --text: #eef2f1;
     --muted: #a0aaa8;
     --faint: #98a3aa;
+    /* 只抬高承载信息的次级标签；装饰性弱文字仍继续使用 --faint。 */
+    --faint-readable: #a9b3b8;
     --border: #293137;
     --track: #283036;
 
@@ -236,7 +244,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 .view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
-  padding: 14px calc(var(--view-inline-pad) + var(--safe-right)) var(--view-bottom-pad) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: var(--section-gap); }
+  padding: var(--space-4) calc(var(--view-inline-pad) + var(--safe-right)) var(--view-bottom-pad) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: var(--section-gap); }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
 
@@ -251,8 +259,10 @@ html, body { height: 100%; overflow: hidden; }
 /* 健身页的批量选择栏是应用壳的一层，始终位于内容区与底部导航之间。 */
 .actionbar-slot {
   flex: none;
-  background: var(--card);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
   border-top: 1px solid var(--hairline);
+  -webkit-backdrop-filter: saturate(145%) blur(18px);
+  backdrop-filter: saturate(145%) blur(18px);
 }
 .actionbar-slot[hidden] { display: none; }
 .actionbar-slot .select-bar {
@@ -262,7 +272,7 @@ html, body { height: 100%; overflow: hidden; }
     9px calc(var(--view-inline-pad) + var(--card-pad) + var(--safe-left));
   border: 0;
   border-radius: 0;
-  background: var(--card);
+  background: transparent;
 }
 .actionbar-slot .select-bar-list { max-height: min(32vh, 240px); }
 .tab {
@@ -341,7 +351,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 .card-head {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 10px; margin-bottom: 12px;
+  gap: var(--space-2); margin-bottom: var(--space-3);
 }
 .card-head > div { min-width: 0; }
 .card-head h3 { margin: 0; font-size: 17px; line-height: 1.35; font-weight: 680; letter-spacing: 0; }
@@ -891,26 +901,37 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   color: var(--accent);
 }
 
-/* 动作推荐：一行一个动作，理由压成三个短标签 */
-.rec-picks { display: flex; flex-direction: column; }
-.rec-pick {
+/* 全部动作 / 推荐组合共用同一行结构，文字起点、行距与右侧动作完全一致。 */
+.rec-picks,
+.ex-list { display: flex; flex-direction: column; margin-top: var(--space-1); }
+.exercise-choice-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 0; border-bottom: 1px solid var(--border);
+  width: 100%; padding: 10px var(--space-2);
+  border: 0; border-bottom: 1px solid var(--border);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.rec-pick:last-child { border-bottom: 0; }
-.rec-pick-main { flex: 1; min-width: 0; }
+.exercise-choice-row:last-child { border-bottom: 0; }
+.exercise-choice-main { flex: 1; min-width: 0; }
+.exercise-choice-action {
+  flex: none; width: 40px; height: 40px; min-width: 40px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--border); border-radius: 50%;
+  background: transparent; color: var(--muted);
+  font: 500 17px/1 var(--font);
+}
+.rec-pick:active .exercise-choice-action {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 /* 全部动作与推荐组合共用：主要动作模式 / 主要肌肉 / 动作类型 */
 .exercise-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .exercise-meta-tag {
-  font-size: var(--fs-caption); color: var(--faint);
-  background: var(--card-2); border-radius: var(--r-xs); padding: 1px 6px;
+  font-size: var(--fs-caption); color: var(--faint-readable);
+  background: var(--card-2); border: 1px solid transparent;
+  border-radius: var(--r-xs); padding: 1px 6px;
 }
-.rec-add {
-  flex: none; width: 30px; height: 30px; border-radius: 999px; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: none; color: var(--accent); font-size: 17px; line-height: 1;
-}
-.rec-add:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.exercise-meta-tag.pattern { color: var(--muted); font-weight: 560; }
+.exercise-meta-tag.muscle { color: var(--faint-readable); }
+.exercise-meta-tag.type { background: transparent; border-color: var(--border); color: var(--faint); }
 /* 已经选了高度重合的一对时，把「换掉哪个」直接摆出来 */
 .rec-swap {
   background: var(--card-2); border-radius: var(--r-sm);
@@ -998,16 +1019,11 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  * 按个数截会时多时少，两行看起来像三行。
  */
 .fav-chips { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.fav-chips.collapsed { max-height: 70px; overflow: hidden; }
-.fav-toggle { flex: none; padding-top: 6px; font-size: 12.5px; }
-.category-browser { margin-top: 10px; }
-.category-label { display: block; margin-bottom: 6px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
-.category-scroll {
-  display: flex; gap: 6px; overflow-x: auto; padding: 0 1px 3px;
-  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+.fav-chips.collapsed {
+  max-height: var(--fav-collapse-height, calc(var(--control-sm) * 2 + 6px));
+  overflow: hidden;
 }
-.category-scroll::-webkit-scrollbar { display: none; }
-.category-scroll .chip-btn { flex: none; }
+.fav-toggle { flex: none; padding-top: 6px; font-size: 12.5px; }
 .result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: 11.5px; font-weight: 600; }
 
 /*
@@ -1681,7 +1697,7 @@ body.sheet-open {
  * 它们各自 margin: 0，直接摞在一起就是两条灰槽贴着边，看着像一块被割开的色块，
  * 分不出「这是两组不同的选择」—— 截图里圈出来的就是这个。
  */
-.range-switch + .range-switch { margin-top: 6px; }
+.range-switch + .range-switch { margin-top: var(--space-2); }
 .body-part-switch { gap: 5px; }
 /* 没有数据的图仍可点开——点进去会说明缺什么，比直接藏起来好找 */
 .chip-btn.empty { opacity: .45; }
@@ -1904,20 +1920,12 @@ body.sheet-open {
 .primary-btn:disabled { opacity: .4; cursor: default; }
 
 /* 视图里的占位容器：只换里面的内容，外层节点保持不动 */
-.view-stack { display: flex; flex-direction: column; gap: 14px; }
+.view-stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .slot:empty { display: none; }
 
 
 /* ============ 健身建议 ============ */
-.ex-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
-.ex-row {
-  display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 10px 8px; border: 0; border-bottom: 1px solid var(--border);
-  background: none; color: inherit; font-family: inherit; text-align: left; cursor: pointer;
-}
-.ex-row:last-child { border-bottom: 0; }
 .ex-row.chosen { background: var(--accent-soft); border-radius: var(--radius-sm); }
-.ex-main { flex: 1; min-width: 0; }
 .ex-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 15px; }
 .ex-tag {
   font-size: 11px; color: var(--muted); background: var(--card-2);
@@ -1932,7 +1940,6 @@ body.sheet-open {
  */
 .ex-clash { font-size: 12.5px; color: var(--warn); margin-top: 3px; }
 .ex-clash.soft { color: var(--muted); }
-.ex-pick { flex: none; width: 26px; text-align: center; font-size: 17px; color: var(--accent); }
 
 .plan-list { display: flex; flex-direction: column; }
 .plan-row {
@@ -2033,8 +2040,8 @@ h1, h2, h3 { letter-spacing: -.02em; }
   font-variant-numeric: tabular-nums;
 }
 .trend-insufficient {
-  min-height: 190px; display: grid; place-items: center;
-  color: var(--faint); font-size: var(--fs-small); text-align: center;
+  min-height: 156px; display: grid; place-items: center;
+  color: var(--faint-readable); font-size: var(--fs-small); text-align: center;
 }
 .picker-view-switch { margin-top: 10px; }
 .plan-start { width: 100%; margin-top: 10px; }
