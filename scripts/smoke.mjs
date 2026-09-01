@@ -111,6 +111,10 @@ try {
     !openAfterRender && '推荐说明被一次无关重绘自动收起',
   ].filter(Boolean);
   check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
+  // 后续用例会在「全部动作」中选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
+  await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
+    .find((x) => x.textContent.includes('全部动作'))?.click());
+  await page.waitForTimeout(200);
 
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
