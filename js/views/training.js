@@ -324,21 +324,32 @@ function setupPickerCompact(root) {
   pickerCompactObserver.observe(controls);
 }
 
-function equipMenu(rerender, all) {
+/*
+ * 器械筛选 + 当前有多少个动作，合成卡头右边那一个控件。
+ *
+ * 它原先和「全部动作 / 推荐组合」并排在列表工具条上，把那一排挤得只有半屏宽 ——
+ * 而那一排是「胸 / 肩臂 / 背…」的下一级，理应和它一样宽。
+ * 挪到卡头之后两件事也归了位：筛的是范围，「18 个动作」正是这个范围筛出来的数量，
+ * 本来就该是同一个控件说的同一句话。
+ */
+function equipMenu(rerender, all, countLabel) {
   const active = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
-  return h('div.equip-filter-wrap', null,
+  const label = h('span.equip-filter-label', null, `${active.label} · ${countLabel}`);
+  const wrap = h('div.equip-filter-wrap', null,
     h('button.equip-filter-btn', {
       type: 'button',
       'aria-haspopup': 'menu',
       'aria-expanded': String(equipMenuOpen),
+      'aria-label': `器械筛选，当前${active.label}，${countLabel}`,
       onclick: (event) => {
         event.stopPropagation();
         equipMenuOpen = !equipMenuOpen;
         rerender();
       },
     },
-    h('span', null, active.label),
-    h('span.equip-filter-caret', { 'aria-hidden': 'true' }, '⌄')),
+    label,
+    // 展开箭头也是画出来的：打出来的 ⌄ 在三个平台上是三种字形，和旁边的图标对不齐
+    h('span.equip-filter-caret', { 'aria-hidden': 'true' }, icon('chevron'))),
     equipMenuOpen ? h('div.equip-filter-menu', { role: 'menu', 'aria-label': '器械筛选' },
       EQUIP_FILTERS.map((f) => {
         const n = all.filter(f.match).length;
@@ -359,6 +370,8 @@ function equipMenu(rerender, all) {
         h('span.equip-filter-count', null, String(n)),
         h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? icon('check') : null));
       })) : null);
+  wrap.setLabel = (text) => { label.textContent = `${active.label} · ${text}`; };
+  return wrap;
 }
 
 function pickerCard(rerender) {
@@ -401,9 +414,18 @@ function pickerCard(rerender) {
       }, label);
     }));
 
+  /*
+   * 三排都在这里，宽度也一样：
+   *   身体部位 / 动作模式  ← 挑法
+   *   胸 肩臂 背 腿 腹      ← 范围
+   *   全部动作 / 推荐组合   ← 在这个范围里看哪一组
+   * 第三排是第二排的下一级，原先它和器械筛选并排在列表工具条上，
+   * 只占半屏宽，看起来像另一套东西。
+   */
   const controls = h('div.picker-controls', null,
     modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender));
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    viewTabs);
   const compactScope = byGroup ? group.label : split.label;
   let card = null;
   const compactSummary = h('button.picker-compact-summary', {
@@ -415,9 +437,8 @@ function pickerCard(rerender) {
   h('span', null, `${byGroup ? '身体部位' : '动作模式'} · ${compactScope} · ${filter.label}`),
   h('span.picker-compact-action', null, '回到顶部'));
 
-  const countNode = h('span.card-tag', null, showRecommend
-    ? `${rec.items.length} 个推荐`
-    : `${list.length} 个动作`);
+  const countLabel = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`;
+  const equip = equipMenu(rerender, all, countLabel);
   const search = searchField({
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',
@@ -425,7 +446,6 @@ function pickerCard(rerender) {
     ariaLabel: '搜索动作，支持中文、拼音或英文',
   });
   const searchInput = search.input;
-  const toolbar = h('div.picker-list-toolbar', null, viewTabs, equipMenu(rerender, all));
   const normalContent = h('div.picker-normal-results', null,
     showRecommend
       ? recommendBody(rec)
@@ -444,16 +464,16 @@ function pickerCard(rerender) {
     const searching = Boolean(query);
     controls.hidden = searching;
     compactSummary.hidden = searching || showRecommend;
-    toolbar.hidden = searching;
     normalContent.hidden = searching;
     searchContent.hidden = !searching;
     clearEl(searchContent);
     if (!searching) {
-      countNode.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`;
+      equip.setLabel(showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`);
       return;
     }
+    // 搜索是全库搜的，器械档位这时候不参与筛选，所以只报结果数
     const matches = searchExercises(query);
-    countNode.textContent = `${matches.length} 个结果`;
+    equip.setLabel(`${matches.length} 个结果`);
     mount(searchContent,
       matches.length
         ? h('div.ex-list', null,
@@ -469,12 +489,11 @@ function pickerCard(rerender) {
     h('div.card-head.picker-card-head', null,
       h('h3', null, '选择动作'),
       h('div.card-head-actions', null,
-        countNode,
+        equip,
         showRecommend ? recommendTip() : null)),
     search.el,
     compactSummary,
     controls,
-    toolbar,
     normalContent,
     searchContent);
   updateSearch();

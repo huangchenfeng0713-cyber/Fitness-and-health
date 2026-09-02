@@ -104,7 +104,6 @@ try {
     const head = document.querySelector('.exercise-picker-card .picker-card-head');
     const search = document.querySelector('.exercise-picker-card .exercise-search-row');
     const controls = document.querySelector('.picker-controls');
-    const toolbar = document.querySelector('.picker-list-toolbar');
     const controlRows = [...document.querySelectorAll('.picker-controls > .range-switch')];
     const rect = (el) => {
       const r = el?.getBoundingClientRect();
@@ -117,7 +116,8 @@ try {
       font: name ? getComputedStyle(name).fontSize : '',
       symbol: action?.textContent || '',
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
-      toolbar: rect(toolbar), controlRows: controlRows.map(rect),
+      controlRows: controlRows.map(rect),
+      equip: rect(document.querySelector('.picker-card-head .equip-filter-btn')),
     };
   });
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
@@ -138,10 +138,6 @@ try {
     })(),
     controls: (() => {
       const r = document.querySelector('.exercise-picker-card .picker-controls')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    toolbar: (() => {
-      const r = document.querySelector('.exercise-picker-card .picker-list-toolbar')?.getBoundingClientRect();
       return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
     })(),
     tip: (() => {
@@ -195,12 +191,23 @@ try {
       && `两种动作名字号不同：${allState.font} / ${recommendState.font}`,
     allState.symbol !== recommendState.symbol
       && `两种加号字符不同：${allState.symbol} / ${recommendState.symbol}`,
-    ...['head', 'search', 'controls', 'toolbar'].map((key) => (
+    ...['head', 'search', 'controls'].map((key) => (
       allState[key] && recommendState[key] && Math.abs(allState[key].top - recommendState[key].top) > 1
         ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
         : null
     )),
-    allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
+    allState.controlRows.length !== 3 && `筛选控件不是三排：${allState.controlRows.length}`,
+    /*
+     * 「全部动作 / 推荐组合」是「胸 / 肩臂 / 背…」的下一级，必须和它一样宽。
+     * 它原先和器械筛选并排，只占半屏，看起来像另一套东西。
+     */
+    (() => {
+      const widths = allState.controlRows.map((row) => row.width);
+      const spread = Math.max(...widths) - Math.min(...widths);
+      return spread > 1 && `三排筛选控件宽度不一致：${widths.map((w) => w.toFixed(1)).join('/')}`;
+    })(),
+    allState.equip && allState.controls && allState.equip.top > allState.controls.top
+      && '器械筛选没有收到卡头里，仍然和视图切换抢同一行',
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
     allState.controls && allState.controlRows.some((row) =>
@@ -230,12 +237,11 @@ try {
     resultText: document.querySelector('.exercise-search-results')?.innerText || '',
     resultCount: document.querySelectorAll('.exercise-search-results .exercise-choice-row').length,
     controlsHidden: document.querySelector('.picker-controls')?.hidden === true,
-    toolbarHidden: document.querySelector('.picker-list-toolbar')?.hidden === true,
   }));
   check('动作搜索支持拼音且不丢失输入焦点',
     exerciseSearch.inputFocused && exerciseSearch.resultCount > 0
       && exerciseSearch.resultText.includes('硬拉')
-      && exerciseSearch.controlsHidden && exerciseSearch.toolbarHidden,
+      && exerciseSearch.controlsHidden,
     JSON.stringify(exerciseSearch));
   await page.fill('.exercise-search-input', '');
   await page.waitForTimeout(100);

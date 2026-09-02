@@ -1164,7 +1164,27 @@ function refreshEntries() {
     h('div.card-head', null,
       h('h3', null, '饮食记录'),
       h('div.card-head-actions', null,
-        estimateGroupInfoTip(entries.map((entry) => findFood(entry.foodId)), '查看本日估算菜品说明'),
+        /*
+         * 这张卡只留这一个说明入口。
+         *
+         * 每一行各挂一个 ⓘ 的时候，十几条记录就是十几个按钮，而它们说的多半是
+         * 同一句话。这里按当前实际显示的这几条汇总：估算菜品的依据、
+         * 「记录是记账当时的快照」，以及真有食物查不到时那句解释。
+         */
+        estimateGroupInfoTip(
+          entries.map((entry) => findFood(entry.foodId)),
+          '查看本日记录说明',
+          {
+            extra: [
+              h('p', null, '每条记录保存的是记账当时的营养数值；之后食物库更新不会回填已经记下的记录。'),
+              entries.some((entry) => !findFood(entry.foodId))
+                ? h('p', null, '标着「食物已删除」的那几条，食物已经不在库里了'
+                  + '（可能被删掉了，或者换设备时没带过来）。记录本身完整保留，'
+                  + '克数、餐次照样能改，也可以删除。')
+                : null,
+            ],
+          },
+        ),
         h('span.card-tag', null,
           `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
         h('button.text-btn', {
@@ -1243,27 +1263,23 @@ function entryRow(e, editing) {
     ? h('p.entry-record-note', null, h('strong', null, '本次记录：'), e.note)
     : null;
   /*
-   * 「这条按记录当时的营养值保存」得说出来：改了食物库不会回填历史记录，
-   * 这是对的，但没人猜得到。查不到食物时更要说，否则那枚标签看着像出错了。
+   * 这一行不再各挂一个信息按钮。
+   *
+   * 十几条记录就是十几个 ⓘ，而它们说的多半是同一件事（「估算」的依据、
+   * 「按记账当时的数值保存」）。卡片右上角本来就有一个统一入口，
+   * 它会按当前实际显示的这几条动态汇总 —— 依据只该有一个入口，
+   * 这条规矩在「今日提示」那张卡上已经立过一次了。
+   * 每次记录时填的备注是这一条独有的，留在行里，但只在编辑态展开。
    */
-  const snapshotNote = h('p.entry-record-note', null,
-    food
-      ? '这条记录保存的是记账当时的营养数值；之后食物库更新不会回填这一条。'
-      : '这个食物已经不在食物库里（可能被删掉了，或者换设备时没带过来）。'
-        + '记录本身完整保留，克数、餐次照样能改，也可以删除。');
   return h('div.entry-row', { class: `entry-row${editing ? ' editing' : ''}` },
     h('div.entry-main', null,
       h('div.entry-name', null, e.name,
         estimateTag(food),
-        food ? null : weakTag('食物已删除', { tone: 'outline', className: 'chip-missing' }),
-        foodInfoTip(food, {
-          label: '查看估算与记录说明',
-          extra: [recordNote, snapshotNote],
-          fallback: true,
-        })),
+        food ? null : weakTag('食物已删除', { tone: 'outline', className: 'chip-missing' })),
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
-        ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
+        ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`),
+      editing ? recordNote : null),
     editing ? h('div.entry-actions', null,
       h('input.entry-grams', {
         type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',

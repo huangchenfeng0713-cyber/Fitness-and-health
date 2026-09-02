@@ -2281,7 +2281,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .exercise-search-results[hidden],
 .picker-normal-results[hidden],
 .picker-controls[hidden],
-.picker-list-toolbar[hidden],
 .picker-compact-summary[hidden] { display: none !important; }
 .picker-controls .range-switch {
   width: calc(100% - 24px);
@@ -2341,16 +2340,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 .picker-compact-action { flex: none; color: var(--accent); font-weight: 650; }
 
-.picker-list-toolbar {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-}
-/* 分段控件的样子全部来自 .range-switch，这里只管它在工具条里怎么占位 */
-.picker-view-switch { flex: 1 1 auto; min-width: 0; }
-.picker-list-toolbar .picker-view-switch { margin-top: 0; }
+/*
+ * 「全部动作 / 推荐组合」是「胸 / 肩臂 / 背…」的下一级：同宽、同一套分段控件，
+ * 只在上面多留一道缝表示它换了一层意思（上面两排选范围，这一排选看哪一组）。
+ */
+.picker-view-switch { margin-top: var(--space-1); }
 .picker-view-switch .chip-btn { min-height: var(--control-sm); }
 
 .equip-filter-wrap {
@@ -2358,15 +2352,14 @@ h1, h2, h3 { letter-spacing: -.02em; }
   flex: none;
   display: flex;
   align-items: center;
-  padding-bottom: 5px;
 }
 .equip-filter-btn {
-  min-height: 44px;
-  max-width: 132px;
-  padding: 0 10px;
+  min-height: var(--control-sm);
+  max-width: 168px;
+  padding: 0 6px 0 8px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 2px;
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
@@ -2377,11 +2370,15 @@ h1, h2, h3 { letter-spacing: -.02em; }
   white-space: nowrap;
   cursor: pointer;
 }
+.equip-filter-label { overflow: hidden; text-overflow: ellipsis; }
 .equip-filter-btn[aria-expanded='true'] {
   color: var(--accent);
   background: var(--accent-soft);
 }
-.equip-filter-caret { font-size: var(--fs-caption); transform: translateY(-1px); }
+/* 展开箭头是右向的 chevron 转 90°，和设置页那个用的是同一个形 */
+.equip-filter-caret { display: grid; place-items: center; color: var(--faint); }
+.equip-filter-caret svg { width: 13px; height: 13px; transform: rotate(90deg); }
+.equip-filter-btn[aria-expanded='true'] .equip-filter-caret svg { transform: rotate(-90deg); }
 .equip-filter-menu {
   position: absolute;
   z-index: 30;
@@ -2498,12 +2495,22 @@ h1, h2, h3 { letter-spacing: -.02em; }
 /* 高频搜索优先，自定义食物退到标题区。 */
 .search-card-head .card-head-actions { gap: 7px; }
 .search-card-head { align-items: center; }
+/*
+ * 「＋ 自定义」退回中性灰。
+ *
+ * 它不是这一屏的主要动作 —— 主要动作是下面那个搜索框。染成主色之后，
+ * 一个一天用不到一次的入口比搜索还抢眼，而卡里已经有一块绿了（喝水那条）。
+ * 加号本身也压到和文字一样的字重，别让那一笔比字还重。
+ */
 .search-card-head .text-btn {
   min-height: 36px;
   padding: 0 7px;
   font-size: var(--fs-footnote);
   white-space: nowrap;
+  color: var(--muted);
 }
+.search-card-head .text-btn .icon-slot svg { width: .95em; height: .95em; color: var(--faint); }
+.search-card-head .text-btn:active { color: var(--accent); }
 .search-row.search-row-full .search-input {
   flex: 1 1 auto;
   width: 100%;
@@ -2531,9 +2538,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 
 @media (max-width: 360px) {
-  .picker-list-toolbar { gap: 6px; }
-  .picker-view-switch { gap: 12px; }
-  .equip-filter-btn { max-width: 116px; padding-inline: 8px; }
+  .equip-filter-btn { max-width: 136px; }
 }
 
 /* 统一常用控件的点击尺寸。紧凑标签仍保留较小的视觉体量。 */
