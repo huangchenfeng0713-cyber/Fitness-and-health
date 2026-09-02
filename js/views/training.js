@@ -230,7 +230,7 @@ function lastLine(exercise) {
   return h('div.ex-last', null, `上次 ${last.date.slice(5)} · ${parts.join(' ')}`);
 }
 
-function exerciseRow(e, rerender) {
+function exerciseRow(e, rerender, scopeMuscles = null) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
   // 单独留住这两个节点，勾选时只改它们，不重建整行
@@ -279,7 +279,7 @@ function exerciseRow(e, rerender) {
      * 十几行叠起来全是同一批肌肉名，扫的时候反而找不到动作名在哪。
      * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
      */
-    exerciseMeta(exerciseTags(e)),
+    exerciseMeta(exerciseTags(e, { scopeMuscles })),
     lastLine(e),
     clashNode),
   pickNode);
@@ -325,34 +325,35 @@ function setupPickerCompact(root) {
 }
 
 /*
- * 器械筛选 + 当前有多少个动作，合成卡头右边那一个控件。
+ * 器械筛选。
  *
- * 它原先和「全部动作 / 推荐组合」并排在列表工具条上，把那一排挤得只有半屏宽 ——
- * 而那一排是「胸 / 肩臂 / 背…」的下一级，理应和它一样宽。
- * 挪到卡头之后两件事也归了位：筛的是范围，「18 个动作」正是这个范围筛出来的数量，
- * 本来就该是同一个控件说的同一句话。
+ * 它得**看得出是能点的**。上一版把它和计数合成一句话塞进卡头（`全部 · 18 个动作`），
+ * 道理上没错——筛的是范围，计数正是筛出来的数量——可它长成了一个标签，
+ * 用户当场就以为「固定器械 / 徒手」那几档被删掉了。
+ * 现在给回按钮外形（浅底 + 漏斗图标 + 箭头），并且只写档位，
+ * 计数交给列表头那一行去说。
  */
-function equipMenu(rerender, all, countLabel) {
+function equipMenu(rerender, allInScope) {
   const active = EQUIP_FILTERS.find((f) => f.key === equipFilter) || EQUIP_FILTERS[0];
-  const label = h('span.equip-filter-label', null, `${active.label} · ${countLabel}`);
   const wrap = h('div.equip-filter-wrap', null,
     h('button.equip-filter-btn', {
       type: 'button',
       'aria-haspopup': 'menu',
       'aria-expanded': String(equipMenuOpen),
-      'aria-label': `器械筛选，当前${active.label}，${countLabel}`,
+      'aria-label': `按器械筛选，当前是${active.label}`,
       onclick: (event) => {
         event.stopPropagation();
         equipMenuOpen = !equipMenuOpen;
         rerender();
       },
     },
-    label,
+    icon('filter', 'equip-filter-icon'),
+    h('span.equip-filter-label', null, active.label),
     // 展开箭头也是画出来的：打出来的 ⌄ 在三个平台上是三种字形，和旁边的图标对不齐
     h('span.equip-filter-caret', { 'aria-hidden': 'true' }, icon('chevron'))),
     equipMenuOpen ? h('div.equip-filter-menu', { role: 'menu', 'aria-label': '器械筛选' },
       EQUIP_FILTERS.map((f) => {
-        const n = all.filter(f.match).length;
+        const n = allInScope.filter(f.match).length;
         const selected = equipFilter === f.key;
         return h('button.equip-filter-option', {
           class: `equip-filter-option${selected ? ' active' : ''}${n ? '' : ' empty'}`,
@@ -370,7 +371,6 @@ function equipMenu(rerender, all, countLabel) {
         h('span.equip-filter-count', null, String(n)),
         h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? icon('check') : null));
       })) : null);
-  wrap.setLabel = (text) => { label.textContent = `${active.label} · ${text}`; };
   return wrap;
 }
 
@@ -382,6 +382,12 @@ function pickerCard(rerender) {
   const group = GROUPS.find((g) => g.key === activeGroup);
   const split = SPLITS.find((sp) => sp.key === activeSplit);
   const scopeLabel = byGroup ? group.label : `${split.label}的动作`;
+  /*
+   * 当前范围覆盖的肌肉。行里那句「主练 XX」如果说的就是筛选条件本身，
+   * 就省掉它 —— 筛到「胸」的时候五行全写「主练胸大肌中部」，
+   * 重复五遍反而把真正有区别的那两条挤淡了。按模式挑时范围太宽，照写。
+   */
+  const scopeMuscles = byGroup ? group.muscles : null;
   /*
    * 收起时也不能把已选的动作藏掉：这一行的 ✓ 就是取消选择的入口，
    * 藏起来等于选了就撤不掉。排在第 8 个之后的已选项直接接到末尾，
@@ -415,17 +421,18 @@ function pickerCard(rerender) {
     }));
 
   /*
-   * 三排都在这里，宽度也一样：
-   *   身体部位 / 动作模式  ← 挑法
-   *   胸 肩臂 背 腿 腹      ← 范围
-   *   全部动作 / 推荐组合   ← 在这个范围里看哪一组
-   * 第三排是第二排的下一级，原先它和器械筛选并排在列表工具条上，
-   * 只占半屏宽，看起来像另一套东西。
+   * 「2 + 1」，不是三级。
+   *
+   * 上面两排是**筛**：挑法（身体部位 / 动作模式）和范围（胸 肩臂 背 腿 腹），
+   * 后者是前者的下一级，紧挨着放。
+   *
+   * 「全部动作 / 推荐组合」不属于这条下钻链 —— 它换的是同一批动作的**呈现方式**，
+   * 不是把范围再切细。上一版把三排做成同宽同层，等于宣称三者是一条链；
+   * 现在它跟着列表头走，和「这张列表是什么」摆在一起。
    */
   const controls = h('div.picker-controls', null,
     modeTabs(rerender),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender),
-    viewTabs);
+    byGroup ? groupTabs(rerender) : splitTabs(rerender));
   const compactScope = byGroup ? group.label : split.label;
   let card = null;
   const compactSummary = h('button.picker-compact-summary', {
@@ -437,8 +444,16 @@ function pickerCard(rerender) {
   h('span', null, `${byGroup ? '身体部位' : '动作模式'} · ${compactScope} · ${filter.label}`),
   h('span.picker-compact-action', null, '回到顶部'));
 
-  const countLabel = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`;
-  const equip = equipMenu(rerender, all, countLabel);
+  /*
+   * 列表头：这张列表是什么（范围名 + 个数），右边是还能怎么筛（器械）。
+   * 计数放在这儿而不是卡头 —— 它说的是下面这一列，不是整张卡。
+   */
+  const scopeName = h('strong.picker-scope-name', null, byGroup ? `${group.label}部动作` : `${split.label}的动作`);
+  const scopeCount = h('span.picker-scope-count', null,
+    showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`);
+  const listHead = h('div.picker-list-head', null,
+    h('div.picker-scope', null, scopeName, scopeCount),
+    equipMenu(rerender, all));
   const search = searchField({
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',
@@ -446,12 +461,14 @@ function pickerCard(rerender) {
     ariaLabel: '搜索动作，支持中文、拼音或英文',
   });
   const searchInput = search.input;
+  /* 搜索时列表头整块让位，结果数临时挂到卡头 —— 那时范围和器械都不参与筛选 */
+  const searchCount = h('span.card-tag', { hidden: true });
   const normalContent = h('div.picker-normal-results', null,
     showRecommend
       ? recommendBody(rec)
       : [
         list.length
-          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender)))
+          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, scopeMuscles)))
           : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
         list.length > LIST_PREVIEW ? h('button.more-btn', {
           onclick: () => { showAllExercises = !showAllExercises; rerender(); },
@@ -467,13 +484,16 @@ function pickerCard(rerender) {
     normalContent.hidden = searching;
     searchContent.hidden = !searching;
     clearEl(searchContent);
+    listHead.hidden = searching;
+    viewTabs.hidden = searching;
+    searchCount.hidden = !searching;
     if (!searching) {
-      equip.setLabel(showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个动作`);
+      scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
       return;
     }
-    // 搜索是全库搜的，器械档位这时候不参与筛选，所以只报结果数
+    // 搜索是全库搜的，器械档位这时候不参与筛选，所以列表头整块让位
     const matches = searchExercises(query);
-    equip.setLabel(`${matches.length} 个结果`);
+    searchCount.textContent = `${matches.length} 个结果`;
     mount(searchContent,
       matches.length
         ? h('div.ex-list', null,
@@ -489,11 +509,13 @@ function pickerCard(rerender) {
     h('div.card-head.picker-card-head', null,
       h('h3', null, '选择动作'),
       h('div.card-head-actions', null,
-        equip,
+        searchCount,
         showRecommend ? recommendTip() : null)),
     search.el,
     compactSummary,
     controls,
+    listHead,
+    viewTabs,
     normalContent,
     searchContent);
   updateSearch();

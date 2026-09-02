@@ -1226,13 +1226,20 @@ body.sheet-open {
   color: inherit; font: inherit; text-decoration: underline;
 }
 /* 饮水动作与全应用的主绿色一致，靠浅底控制视觉重量。 */
+/*
+ * 描边，不填充。
+ *
+ * 左边的状态条已经是中性灰了，右边再来一块浅绿填充，两块加起来还是一条色带。
+ * 描边 + 绿字既留下「这里能点」的暗示，又不会在一张以灰为底的卡上砸一块颜色。
+ */
 .water-add {
   flex: none; white-space: nowrap; cursor: pointer;
-  padding: 10px 14px; border: 0; border-radius: var(--r-md);
-  background: color-mix(in srgb, var(--water) 16%, transparent);
+  padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--water) 35%, var(--border));
+  border-radius: var(--r-md);
+  background: transparent;
   color: var(--water); font-size: var(--fs-small); font-weight: 600;
 }
-.water-add:active { background: color-mix(in srgb, var(--water) 26%, transparent); }
+.water-add:active { background: color-mix(in srgb, var(--water) 12%, transparent); }
 
 /* 只读态：位置和编辑态一样宽，切换时行不会跳 */
 .entry-actions.readonly { justify-content: flex-end; }
@@ -1284,12 +1291,31 @@ body.sheet-open {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .select-bar-detail { display: block; font-size: var(--fs-caption); color: var(--muted); }
-.select-bar-caret { flex: none; color: var(--faint); font-size: var(--fs-caption); }
 .select-bar-clear { display: block; width: 100%; padding: 8px 0; font-size: var(--fs-caption); }
 .select-bar-go {
   flex: none; width: auto; min-height: 40px; padding: 0 14px; margin: 0;
   font-size: var(--fs-small); white-space: nowrap;
 }
+/*
+ * 点不动的主按钮就该是灰的。
+ *
+ * 原先禁用只是把实心绿调淡，结果它看起来像一个「可以点的次按钮」——
+ * 而这排横幅在一个动作都没选时一直挂着，人第一眼看到的就是这个状态。
+ */
+.select-bar-go:disabled {
+  background: var(--track); color: var(--faint); opacity: 1; cursor: default;
+}
+
+/*
+ * D9：没选动作时横幅收薄。
+ *
+ * 「尚未选择动作 / 可连续选择多个动作」两行字没有信息量，却常驻压着列表 ——
+ * 实测占掉约 90px。空状态只留一行，选中之后再展开成两行。
+ */
+.select-bar.is-empty .select-bar-detail { display: none; }
+.select-bar.is-empty .select-bar-main { gap: 6px; }
+.actionbar-slot .select-bar.is-empty { padding-top: 6px; padding-bottom: 6px; }
+.select-bar.is-empty .select-bar-go { min-height: var(--control-sm); }
 /* 展开后逐项列出：多选之后最想确认的就是「我到底选了什么」 */
 .select-bar-list {
   max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
@@ -2341,10 +2367,26 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .picker-compact-action { flex: none; color: var(--accent); font-weight: 650; }
 
 /*
- * 「全部动作 / 推荐组合」是「胸 / 肩臂 / 背…」的下一级：同宽、同一套分段控件，
- * 只在上面多留一道缝表示它换了一层意思（上面两排选范围，这一排选看哪一组）。
+ * 「2 + 1」：上面两排是筛（挑法 → 范围），这里往下是「这张列表本身」。
+ * 中间留一整档空，把两块分开 —— 它们回答的不是同一个问题。
  */
-.picker-view-switch { margin-top: var(--space-1); }
+.picker-list-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.picker-list-head[hidden] { display: none; }
+.picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.picker-scope-name {
+  font-size: var(--fs-value); font-weight: 650; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.picker-scope-count {
+  flex: none; color: var(--faint); font-size: var(--fs-footnote);
+  font-variant-numeric: tabular-nums;
+}
+/* 视图切换跟着列表头走，不再是筛选区的第三排 */
+.picker-view-switch { margin-top: var(--space-2); }
+.picker-view-switch[hidden] { display: none; }
 .picker-view-switch .chip-btn { min-height: var(--control-sm); }
 
 .equip-filter-wrap {
@@ -2353,16 +2395,20 @@ h1, h2, h3 { letter-spacing: -.02em; }
   display: flex;
   align-items: center;
 }
+/*
+ * 有底、有图标、有箭头 —— 三样加起来才看得出「这是能点的」。
+ * 上一版它是裸文字，用户当场以为器械那几档被删掉了。
+ */
 .equip-filter-btn {
   min-height: var(--control-sm);
-  max-width: 168px;
-  padding: 0 6px 0 8px;
+  max-width: 160px;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-2);
   color: var(--muted);
   font: inherit;
   font-size: var(--fs-footnote);
@@ -2370,6 +2416,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
   white-space: nowrap;
   cursor: pointer;
 }
+.equip-filter-btn[aria-expanded='true'] {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
+}
+.equip-filter-icon { flex: none; }
+.equip-filter-btn .equip-filter-icon svg { width: 14px; height: 14px; }
 .equip-filter-label { overflow: hidden; text-overflow: ellipsis; }
 .equip-filter-btn[aria-expanded='true'] {
   color: var(--accent);
@@ -2632,3 +2683,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
   border-left: 2px solid var(--border);
 }
 .entry-merged-list .entry-row { opacity: .8; }
+
+/* 展开/收起箭头：同一个 chevron 转 90° / -90°，不打 ⌄ ⌃ 两个字符 */
+.select-bar-caret { display: grid; place-items: center; color: var(--faint); flex: none; }
+.select-bar-caret svg { width: 13px; height: 13px; transform: rotate(-90deg); }
+.select-bar-caret.open svg { transform: rotate(90deg); }

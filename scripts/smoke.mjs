@@ -117,7 +117,11 @@ try {
       symbol: action?.textContent || '',
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
       controlRows: controlRows.map(rect),
-      equip: rect(document.querySelector('.picker-card-head .equip-filter-btn')),
+      listHead: rect(document.querySelector('.picker-list-head')),
+      equipBordered: (() => {
+        const btn = document.querySelector('.picker-list-head .equip-filter-btn');
+        return btn ? getComputedStyle(btn).borderTopWidth !== '0px' : false;
+      })(),
     };
   });
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
@@ -172,10 +176,18 @@ try {
   const openAfterRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
   const trainingProblems = [
     !allState.tagCounts.length && '全部动作没有渲染',
-    allState.tagCounts.some((n) => n !== 3) && `全部动作标签数不是 3：${allState.tagCounts.join('/')}`,
+    /*
+     * 标签数按范围走：按部位挑时省掉「主练 XX」（那句就是筛选条件本身，
+     * 筛到「胸」时五行会一模一样），所以是 2；按模式挑范围太宽，仍是 3。
+     * 真正要卡住的是**两个视图必须一致** —— 见下面那条。
+     */
+    allState.tagCounts.some((n) => n !== 2) && `按部位挑时标签数不是 2：${allState.tagCounts.join('/')}`,
     !recommendState.tagCounts.length && '推荐组合没有渲染',
-    recommendState.tagCounts.some((n) => n !== 3)
-      && `推荐组合标签数不是 3：${recommendState.tagCounts.join('/')}`,
+    recommendState.tagCounts.some((n) => n !== 2)
+      && `推荐组合标签数不是 2：${recommendState.tagCounts.join('/')}`,
+    // 两个视图看的是同一批动作，标签数不一样会让人以为它们说的不是一回事
+    allState.tagCounts[0] !== recommendState.tagCounts[0]
+      && `两个视图的标签数不一致：${allState.tagCounts[0]} / ${recommendState.tagCounts[0]}`,
     recommendState.hasOldTags && '推荐组合仍在使用旧标签样式',
     !allState.commonRow && '全部动作没有使用共用动作行',
     !recommendState.commonRow && '推荐组合没有使用共用动作行',
@@ -196,18 +208,22 @@ try {
         ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
         : null
     )),
-    allState.controlRows.length !== 3 && `筛选控件不是三排：${allState.controlRows.length}`,
+    allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
     /*
-     * 「全部动作 / 推荐组合」是「胸 / 肩臂 / 背…」的下一级，必须和它一样宽。
-     * 它原先和器械筛选并排，只占半屏，看起来像另一套东西。
+     * 「2 + 1」：上面两排是筛，宽度必须一致；「全部动作 / 推荐组合」跟着列表头走，
+     * 不进 picker-controls —— 它换的是呈现方式，不是把范围再切细。
      */
     (() => {
       const widths = allState.controlRows.map((row) => row.width);
       const spread = Math.max(...widths) - Math.min(...widths);
-      return spread > 1 && `三排筛选控件宽度不一致：${widths.map((w) => w.toFixed(1)).join('/')}`;
+      return spread > 1 && `两排筛选控件宽度不一致：${widths.map((w) => w.toFixed(1)).join('/')}`;
     })(),
-    allState.equip && allState.controls && allState.equip.top > allState.controls.top
-      && '器械筛选没有收到卡头里，仍然和视图切换抢同一行',
+    !allState.listHead && '缺少「这张列表是什么」那一行',
+    allState.listHead && allState.controls
+      && allState.listHead.top < allState.controls.top + allState.controls.height
+      && '列表头没有排在筛选区下面',
+    // 器械筛选要看得出能点：有边框才算
+    !allState.equipBordered && '器械筛选又变回了一行裸文字，看不出能点',
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
     allState.controls && allState.controlRows.some((row) =>
