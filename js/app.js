@@ -20,7 +20,7 @@ import { iconSvg } from './lib/icons.js';
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
   { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
-  { key: 'diet', label: '饮食', icon: 'plus', render: renderDiet, dated: true },
+  { key: 'diet', label: '饮食', icon: 'diet', render: renderDiet, dated: true },
   { key: 'health', label: '数据', icon: 'pulse', render: renderHealth },
   { key: 'training', label: '健身', icon: 'training', render: renderTraining },
 ];

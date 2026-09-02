@@ -9,15 +9,14 @@ import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
 import { clamp, round, ATWATER } from './nutrition.js';
 import { macroSplit } from './metrics.js';
 import { formatDuration } from './duration.js';
+import { MEALS, paceNote, DEFAULT_RHYTHM_MODE } from './eating-rhythm.js';
+import { todayKey } from './day.js';
 
-/** 餐次定义：时间窗 + 该餐在全天热量中的默认占比 */
-export const MEALS = [
-  { key: 'breakfast', label: '早餐', endHour: 10.5, share: 0.25 },
-  { key: 'lunch', label: '午餐', endHour: 14.5, share: 0.35 },
-  { key: 'snack', label: '加餐', endHour: 17.5, share: 0.10 },
-  { key: 'dinner', label: '晚餐', endHour: 21, share: 0.30 },
-  { key: 'late', label: '夜宵', endHour: 24, share: 0.05 },
-];
+/*
+ * 餐次定义搬去了 core/eating-rhythm.js —— 时间窗和供能比就是「进食节奏」本身，
+ * 那边的曲线要用它。这里再导出一遍，视图和测试的 import 路径不必跟着改。
+ */
+export { MEALS };
 
 export const MEAL_LABEL = Object.fromEntries(MEALS.map((m) => [m.key, m.label]));
 
@@ -389,6 +388,8 @@ export function buildAdvice(input) {
     // 看历史日期时「今天还没同步」「今天还没记饮水」这类提醒都不该出现
     isToday = true,
     waterCount = null,
+    // 近三周的饮食记录，只有「按我平常」那套口径要用（判断这个钟点该吃到多少）
+    rhythmEntries = [],
   } = input;
 
   const gaps = {};
@@ -447,7 +448,10 @@ export function buildAdvice(input) {
   // ---- 状态判定 ----
   const hasIntake = (entries || []).length > 0
     || ['kcal', 'protein', 'fat', 'carb'].some((key) => Number(gaps[key]?.eaten) > 0);
-  const status = judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake });
+  const status = judgeStatus({
+    gaps, kcalLeft, hour, targets, budget, hasIntake,
+    rhythmMode: profile.rhythmMode, rhythmEntries, asOf: todayKey(now),
+  });
 
   // ---- 洞察 ----
   const insights = buildInsights({
@@ -476,10 +480,23 @@ export function buildAdvice(input) {
  * 而且会把热量的结论挤掉（钠超标 11% 就能顶掉「今天还差 900 kcal」）。
  * 蛋白、钠、纤维、糖一律归 buildInsights。
  */
-export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake = true }) {
-  const dayProgress = clamp((hour - 6) / 16, 0, 1); // 6:00~22:00
+export function judgeStatus({
+  gaps, kcalLeft, hour, targets, budget, hasIntake = true,
+  rhythmMode = DEFAULT_RHYTHM_MODE, rhythmEntries = [], asOf = null,
+}) {
   const kcalPct = gaps.kcal.pct;
-  const expected = round(dayProgress * 100);
+  /*
+   * 这个钟点该吃到多少，由 core/eating-rhythm.js 说了算。
+   *
+   * 原先这里是 `(hour-6)/16` —— 一条匀速直线，等于假设人从早到晚均匀地吃。
+   * 没有一个人是这样的：按它算，中午 12 点该吃到 37.5%，而三餐比例下
+   * 一顿午饭吃完就该到 60%，同一个人会被这条直线判成「吃得快了」。
+   */
+  const pace = paceNote({
+    mode: rhythmMode, hour, eatenPct: kcalPct, entries: rhythmEntries, asOf,
+  });
+  const dayProgress = pace.share;
+  const expected = pace.should;
 
   if (kcalLeft < -targets.kcal * 0.12) {
     return {
@@ -528,25 +545,10 @@ export function judgeStatus({ gaps, kcalLeft, hour, targets, budget, hasIntake =
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
-  /*
-   * 天还没亮的时候不拿「时间参考」说事。
-   *
-   * 6:00 之前 expected 是 0%，于是清早吃了顿早饭就会读到
-   * 「记录量高于当前时间参考（0%）」—— 那句话没有任何信息，
-   * 只是把一个必然成立的算术结果念了一遍。
-   */
-  const pace = kcalPct - expected;
-  const paceText = dayProgress < 0.15
-    ? '一天才刚开始，按平时的节奏吃就行'
-    : Math.abs(pace) <= 12
-      ? `记录量与当前时间参考（${expected}%）大致接近`
-      : pace > 0
-        ? `记录量高于当前时间参考（${expected}%），后面餐次按剩余量安排即可`
-        : `记录量低于当前时间参考（${expected}%），先确认是否漏记，别把缺口全留到晚上`;
   return {
     level: 'good',
     headline: `还有 ${kcalLeft} kcal 热量余量`,
-    detail: `热量完成 ${kcalPct}%，${paceText}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
+    detail: `热量完成 ${kcalPct}%，${pace.text}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
   };
 }
 

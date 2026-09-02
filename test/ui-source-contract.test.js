@@ -42,11 +42,23 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
     '可选云请求会让 networkidle 永远等不到，启动冒烟应以 DOM 与应用节点为准');
 });
 
+/*
+ * 版本号只在 package.json 里写一次，其余三处必须跟上。
+ *
+ * 原先这条测试把版本号也硬编码了一遍，于是每次发版要改五个地方 ——
+ * 而它本来要防的是「改了 package.json 忘了改 sw.js，离线外壳不更新」。
+ * 从 package.json 读出来再比对，改一处就够，约束还在。
+ */
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "3\.1\.0"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '3\.1\.0'/);
-  assert.match(text('sw.js'), /health-diet-v3\.1\.0/);
-  assert.match(text('README.md'), /当前版本：\*\*v3\.1\.0\*\*/);
+  const version = JSON.parse(text('package.json')).version;
+  assert.match(version, /^\d+\.\d+\.\d+$/, `package.json 的版本号不对：${version}`);
+  const esc = version.replace(/\./g, '\\.');
+  assert.match(text('js/core/feedback.js'), new RegExp(`APP_VERSION = '${esc}'`),
+    'feedback.js 的版本号没跟上');
+  assert.match(text('sw.js'), new RegExp(`health-diet-v${esc}`),
+    'sw.js 的缓存键没跟上 —— 漏了这个，用户拿到的还是上一版的离线外壳');
+  assert.match(text('README.md'), new RegExp(`当前版本：\\*\\*v${esc}\\*\\*`),
+    'README 的版本号没跟上');
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -90,7 +102,13 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   assert.match(mealAdvice, /div\.recommend-budget/, '推荐预算又挤回标题右边');
   assert.match(polish, /\.recommend-budget span\s*\{[^}]*white-space:\s*nowrap/s,
     '推荐预算仍可能折到第二行');
-  assert.match(css, /--water:\s*var\(--accent\)/, '饮水没有统一成主绿色');
+  /*
+   * 数据色和语义色是两套：语义色说「好不好」，数据色说「这是哪一项」。
+   * 饮水属于后者，所以它有自己的蓝，而不再借用主绿 ——
+   * 借用的时候，主卡上「符合计划的绿」和「饮水这一项的绿」是同一个颜色。
+   */
+  assert.match(css, /--water: #[0-9a-f]{6}/, '饮水没有自己的数据色');
+  assert.doesNotMatch(css, /--water:\s*var\(--accent\)/, '数据色又借用了语义色');
   assert.doesNotMatch(mealAdvice, /\*\*直接饮水\*\*/, 'DOM 文案里混入了不会渲染的 Markdown');
 });
 
