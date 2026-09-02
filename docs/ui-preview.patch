@@ -1,0 +1,304 @@
+diff --git a/css/app.css b/css/app.css
+index f49600c..a0d0c65 100644
+--- a/css/app.css
++++ b/css/app.css
+@@ -20,7 +20,9 @@
+    */
+   --protein: #6d5bd0;
+   --carb: #e0932f;
+-  /* 饮水和全应用主操作使用同一套绿色，不再单独引入一块蓝色。 */
++  /* 脂肪用青灰，避开警告橙，也不和主绿抢角色。只出现在配比条和图例，不进按钮。 */
++  --fat: #3d7a93;
++  /* 饮水和全应用主操作使用同一套绿色。 */
+   --water: var(--accent);
+   --warn: #d9822b;
+   --danger: #d64545;
+@@ -108,6 +110,7 @@
+     --accent-soft: #102c25;
+     --protein: #9787f0;
+     --carb: #eeae55;
++    --fat: #6aa7bd;
+     --water: var(--accent);
+     --warn: #e8a04d;
+     --danger: #f06a6a;
+@@ -607,11 +610,14 @@ html, body { height: 100%; overflow: hidden; }
+ }
+ .split-bar-band {
+   position: absolute; top: 0; bottom: 0;
+-  background: color-mix(in srgb, var(--accent) 24%, transparent);
++  background: color-mix(in srgb, var(--carb) 22%, transparent);
+   border-radius: 999px;
+ }
+ /* 落在参考区间里就把区间点亮一点，落在外面区间保持中性——它是参考，不是评价 */
+-.split-bar.met .split-bar-band { background: color-mix(in srgb, var(--accent) 34%, transparent); }
++.split-bar.met .split-bar-band { background: color-mix(in srgb, var(--carb) 34%, transparent); }
++.split-bar:not(:has(.split-bar-point)) .split-bar-band {
++  background: color-mix(in srgb, var(--carb) 12%, transparent);
++}
+ .split-bar-point {
+   position: absolute; top: 50%; left: 0; width: 12px; height: 12px;
+   margin: -6px 0 0 -6px; border-radius: 999px;
+@@ -1071,6 +1077,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
+   display: grid; place-items: center;
+   border: 0; background: none; color: var(--faint); cursor: pointer;
+ }
++.search-clear[hidden] { display: none; }
+ .search-clear svg { width: 16px; height: 16px; }
+ .search-clear:active { color: var(--text); }
+ /* 给叉让出位置，否则长搜索词会从它底下穿过去 */
+@@ -1873,6 +1880,11 @@ body.sheet-open {
+ .onboard h2 { margin: 0 0 6px; font-size: var(--fs-headline); }
+ .onboard p { margin: 0 0 10px; font-size: var(--fs-body); color: var(--muted); line-height: 1.6; }
+ .onboard .primary-btn { margin-top: 0; }
++.hero.empty-day .status-pill {
++  background: var(--card-2); color: var(--muted);
++}
++.hero.empty-day .hero-ring { opacity: .72; }
++.metric-row .metric-row-value { font-variant-numeric: tabular-nums; }
+ .update-notice {
+   margin: 10px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left));
+   padding: 10px 12px; border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+@@ -2037,7 +2049,10 @@ body.sheet-open {
+ }
+ .dirty-mark[hidden] { display: none; }
+ 
+-.primary-btn:disabled { opacity: .4; cursor: default; }
++.primary-btn:disabled {
++  background: var(--card-2); color: var(--muted);
++  opacity: 1; cursor: default; box-shadow: none;
++}
+ 
+ /* 视图里的占位容器：只换里面的内容，外层节点保持不动 */
+ .view-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+diff --git a/index.html b/index.html
+index 1149456..8ece3c9 100644
+--- a/index.html
++++ b/index.html
+@@ -3,8 +3,8 @@
+ <head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+-<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+-<meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
++<meta name="theme-color" content="#0d1014" media="(prefers-color-scheme: dark)">
++<meta name="theme-color" content="#f2f5f4" media="(prefers-color-scheme: light)">
+ <meta name="description" content="同步 Apple 健康数据、记录每日饮食，实时判断热量与蛋白摄入并给出该吃什么、该避开什么的建议。">
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <!-- 用 default 而不是 black-translucent：后者会让网页整块伸到状态栏底下，
+diff --git a/js/app.js b/js/app.js
+index a3ac3b2..15b778e 100644
+--- a/js/app.js
++++ b/js/app.js
+@@ -20,7 +20,7 @@ import { iconSvg } from './lib/icons.js';
+ const TABS = [
+   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
+   { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
+-  { key: 'diet', label: '饮食', icon: 'plus', render: renderDiet, dated: true },
++  { key: 'diet', label: '饮食', icon: 'dinner', render: renderDiet, dated: true },
+   { key: 'health', label: '数据', icon: 'pulse', render: renderHealth },
+   { key: 'training', label: '健身', icon: 'training', render: renderTraining },
+ ];
+@@ -372,7 +372,8 @@ function syncOnboarding() {
+   if (!slot) return;
+   const existing = slot.querySelector('.onboard');
+   // 人已经在设置抽屉填表了，横幅只会碍事
+-  if (state.profile.onboarded || settingsOpen || accountDataLocked()) {
++  // 资料引导只出现在今日：饮食 / 数据 / 健身再挂一遍是同一句话重复三遍。
++  if (state.profile.onboarded || settingsOpen || accountDataLocked() || current !== 'today') {
+     existing?.remove();
+     return;
+   }
+diff --git a/js/lib/icons.js b/js/lib/icons.js
+index 499e98d..5f6519c 100644
+--- a/js/lib/icons.js
++++ b/js/lib/icons.js
+@@ -42,7 +42,8 @@ export const ICON_SHAPES = {
+   upload: path('M12 15.5V4M8 7.5 12 4l4 3.5M4.6 14v4.4a1.6 1.6 0 0 0 1.6 1.6h11.6a1.6 1.6 0 0 0 1.6-1.6V14'),
+ 
+   // ——— 底栏与顶栏 ———
+-  today: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.7 1.7"/>',
++  /* 日历而不是钟：钟和「锻炼分钟」的秒表、以及「现在几点」抢语义。 */
++  today: '<rect x="5" y="6.5" width="14" height="13" rx="2"/><path d="M8 4.5v4M16 4.5v4M5 10.5h14"/>',
+   pulse: path('M4 13h3l2-6 4 11 2-5h5'),
+   training: path('M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10'),
+   settings: '<path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/>',
+diff --git a/js/views/cards/weekly-summary.js b/js/views/cards/weekly-summary.js
+index 430930e..b121997 100644
+--- a/js/views/cards/weekly-summary.js
++++ b/js/views/cards/weekly-summary.js
+@@ -14,19 +14,26 @@ export function weeklySummaryCard() {
+   });
+   if (!s) return null;
+ 
++  const empty = s.loggedDays === 0 && s.pairedDays === 0
++    && s.rows.every((r) => r.key === 'logged' || r.value === '—');
++  const tip = infoTip('近 7 日怎么算的', h('div', null,
++    h('p', null, '统计截至昨天的 7 个完整日，不含今天，也不跟着「今日 / 饮食」页选的日期走。'),
++    h('p', null, '摄入类只按有饮食记录的天数计算；漏记的日子不会被当成 0 kcal。'),
++    h('p', null, '累计收支只算同时有饮食记录和设备消耗的日期；配对不足时直接显示数据不足。'),
++    h('p', null, '「日均锻炼」来自 Apple 健康的锻炼分钟；力量训练动作和组数留在健身页查看。')));
++
+   return h('section.card', null,
+     h('div.card-head', null,
+       h('h3', null, '近 7 日速览'),
+       h('div.card-head-actions', null,
+         h('span.card-tag', null, `${s.from.slice(5)} – ${s.to.slice(5)}`),
+-        infoTip('近 7 日怎么算的', h('div', null,
+-          h('p', null, '统计截至昨天的 7 个完整日，不含今天，也不跟着「今日 / 饮食」页选的日期走。'),
+-          h('p', null, '摄入类只按有饮食记录的天数计算；漏记的日子不会被当成 0 kcal。'),
+-          h('p', null, '累计收支只算同时有饮食记录和设备消耗的日期；配对不足时直接显示数据不足。'),
+-          h('p', null, '「日均锻炼」来自 Apple 健康的锻炼分钟；力量训练动作和组数留在健身页查看。'))))),
+-    h('div.week-rows', null, s.rows.map((r) => h(`div.week-row.${r.tone}`, null,
+-      h('span.week-row-label', null, r.label),
+-      h('div.week-row-main', null,
+-        h('strong.week-row-value', null, String(r.value)),
+-        r.note ? h('span.week-row-note', null, r.note) : null)))));
++        tip)),
++    empty
++      ? h('p.empty-hint', null,
++        '记满 3 天饮食，并同步健康数据后，这里会给出日均摄入、体重方向和累计收支。现在数据还不够，先不用看这一块。')
++      : h('div.week-rows', null, s.rows.map((r) => h(`div.week-row.${r.tone}`, null,
++        h('span.week-row-label', null, r.label),
++        h('div.week-row-main', null,
++          h('strong.week-row-value', null, String(r.value)),
++          r.note ? h('span.week-row-note', null, r.note) : null)))));
+ }
+diff --git a/js/views/dashboard.js b/js/views/dashboard.js
+index 897f1ae..2f748cd 100644
+--- a/js/views/dashboard.js
++++ b/js/views/dashboard.js
+@@ -20,8 +20,8 @@ function moreToggle(key, total, shown, rerender) {
+ }
+ 
+ const KIND_COLOR = {
+-  kcal: 'var(--accent)', protein: 'var(--accent)', fat: 'var(--accent)',
+-  carb: 'var(--accent)', fiber: 'var(--accent)', sodium: 'var(--muted)',
++  kcal: 'var(--accent)', protein: 'var(--protein)', fat: 'var(--fat)',
++  carb: 'var(--carb)', fiber: 'var(--muted)', sodium: 'var(--muted)',
+   sugar: 'var(--muted)', water: 'var(--water)',
+ };
+ const CHIP_KEYS = ['fiber', 'sodium', 'sugar', 'water'];
+@@ -84,15 +84,24 @@ function heroCard(advice, targets, derived) {
+   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
+ 
+   /* 热量环表达进度，不把“还没吃到目标”本身画成警告。 */
+-  const ringColor = status.level === 'good' ? 'var(--accent)' : 'var(--warn)';
+-
+-  return h(`section.card.hero.${status.level}`, null,
++  const eatenKcal = Number(kcal.eaten) || 0;
++  const emptyDay = eatenKcal <= 0;
++  const ringColor = emptyDay
++    ? 'var(--track)'
++    : status.level === 'good' ? 'var(--accent)' : 'var(--warn)';
++  const pill = emptyDay ? '还没开始' : LEVEL_TEXT[status.level];
++  const headline = emptyDay ? '今天还没记饮食' : status.headline;
++  const detail = emptyDay
++    ? (status.detail || '记第一笔之后，这里会显示剩余热量和下一餐怎么安排。')
++    : status.detail;
++
++  return h(`section.card.hero.${emptyDay ? 'empty-day' : status.level}`, null,
+     h('div.hero-head', null,
+       h('div.hero-head-main', null,
+-        h('span.status-pill', null, LEVEL_TEXT[status.level]),
+-        h('h2', null, status.headline)),
++        h('span.status-pill', null, pill),
++        h('h2', null, headline)),
+       heroInfo(derived, targets)),
+-    h('p.hero-detail', null, status.detail),
++    h('p.hero-detail', null, detail),
+ 
+     h('div.hero-body', null,
+       h('div.hero-ring', null,
+@@ -109,7 +118,7 @@ function heroCard(advice, targets, derived) {
+     h('div.metric-list', null,
+       metricRow(by.protein),
+       splitRow(macroSplit(targets, gaps))),
+-    h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
++    emptyDay ? null : h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
+     energyFreshness(derived),
+   );
+ }
+diff --git a/js/views/diet.js b/js/views/diet.js
+index 0a14501..d539a55 100644
+--- a/js/views/diet.js
++++ b/js/views/diet.js
+@@ -86,6 +86,7 @@ function buildShell(root) {
+   nodes.advice = h('div.slot');
+ 
+   const search = searchField({
++    placeholder: '搜食物、品牌或拼音',
+     ariaLabel: '搜索食物，支持中文或拼音',
+     // 只刷新结果区，绝不重建这个 input 本身
+     oninput: debounce((e) => {
+@@ -1152,7 +1153,7 @@ function refreshEntries() {
+     mount(nodes.entries, h('section.card', null,
+       h('div.card-head', null, h('h3', null, '饮食记录')),
+       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
+-      copyRow()));
++      copyRow({ allowClear: false })));
+     return;
+   }
+ 
+@@ -1379,7 +1380,7 @@ function pickMealsToCopy(counts) {
+   });
+ }
+ 
+-function copyRow() {
++function copyRow({ allowClear = true } = {}) {
+   return h('div.copy-row', null,
+     h('button.text-btn', {
+       /*
+@@ -1401,7 +1402,7 @@ function copyRow() {
+         toast(`已复制昨天的 ${result.value} 条记录`, 'ok');
+       },
+     }, '和昨天一样'),
+-    h('button.text-btn.danger', {
++    allowClear ? h('button.text-btn.danger', {
+       onclick: async (ev) => {
+         if (!state.dietEntries.length) return;
+         if (!confirmAction(`确定清空 ${state.day} 的全部 ${state.dietEntries.length} 条记录？`)) return;
+@@ -1410,7 +1411,7 @@ function copyRow() {
+         }, '清空记录');
+         if (result.ok) toast('已清空');
+       },
+-    }, '清空这一天'),
++    }, '清空这一天') : null,
+   );
+ }
+ 
+diff --git a/js/views/training.js b/js/views/training.js
+index f62336d..5dbc9c6 100644
+--- a/js/views/training.js
++++ b/js/views/training.js
+@@ -442,6 +442,7 @@ function pickerCard(rerender) {
+   const search = searchField({
+     className: 'exercise-search-row',
+     inputClassName: 'exercise-search-input',
++    placeholder: '搜动作、部位或拼音',
+     value: exerciseQuery,
+     ariaLabel: '搜索动作，支持中文、拼音或英文',
+   });
+@@ -516,7 +517,7 @@ function buildPickerBar() {
+     detail: () => [...pending]
+       .map((id) => EXERCISE_BY_ID.get(id)?.name).filter(Boolean).join('、')
+       || '可连续选择多个动作',
+-    actionLabel: () => '加入计划',
++    actionLabel: () => pending.size ? `加入 ${pending.size} 个` : '加入计划',
+     actionAriaLabel: () => pending.size ? `把已选的 ${pending.size} 个动作加入计划` : '请先选择动作',
+     items: () => [...pending].map((id) => {
+       const e = EXERCISE_BY_ID.get(id);
+diff --git a/manifest.webmanifest b/manifest.webmanifest
+index 6c6b698..051a276 100644
+--- a/manifest.webmanifest
++++ b/manifest.webmanifest
+@@ -6,8 +6,8 @@
+   "scope": "./",
+   "display": "standalone",
+   "orientation": "portrait",
+-  "background_color": "#0f1115",
+-  "theme_color": "#0f9d76",
++  "background_color": "#f2f5f4",
++  "theme_color": "#0d8f70",
+   "lang": "zh-CN",
+   "icons": [
+     { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
