@@ -9,6 +9,7 @@
  */
 
 import { h, clearEl, mount, num, todayKey, toast } from '../lib/utils.js';
+import { icon, setIcon } from '../lib/icons.js';
 import { listRow, persistentInfoTip, searchField, weakTag } from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
@@ -195,14 +196,17 @@ function clashLine(e) {
  * 这里接收已经整理好的三项语义（主要动作模式 / 主要肌肉 / 动作类型），
  * 避免两个视图各自拼字：一边写成「股四头肌 · 深蹲 + 复合」，另一边又是
  * 三个圆角标签，看起来像在表达两套不同的信息。
+ *
+ * 写成一行文字，不用 weakTag —— 胶囊留给「可以选的状态」。
+ * 这三条点不动也选不了，做成灰底小块之后一屏十几个色块比动作名还抢眼；
+ * 筛到「胸」的时候，五行的三个标签还一模一样，纯粹是噪音。
  */
 function exerciseMeta(tags) {
   const classes = ['pattern', 'muscle', 'type'];
   return h('div.exercise-meta', null,
-    tags.map((tag, index) => weakTag(tag, {
-      tone: index === 2 ? 'outline' : 'soft',
-      className: `exercise-meta-tag ${classes[index] || 'detail'}`,
-    })));
+    tags.map((tag, index) => h('span', {
+      class: `exercise-meta-tag ${classes[index] || 'detail'}`,
+    }, tag)));
 }
 
 function exerciseRow(e, rerender) {
@@ -210,7 +214,7 @@ function exerciseRow(e, rerender) {
   const marked = pending.has(e.id);
   // 单独留住这两个节点，勾选时只改它们，不重建整行
   const pickNode = h('span.ex-pick.exercise-choice-action', { 'aria-hidden': 'true' },
-    chosen || marked ? '✓' : '＋');
+    icon(chosen || marked ? 'check' : 'plus'));
   const clashNode = h('span.ex-clash-slot', {
     onclick: (event) => {
       const detail = clashNode.dataset.detail;
@@ -240,7 +244,7 @@ function exerciseRow(e, rerender) {
       const on = pending.has(e.id);
       row.classList.toggle('marked', on);
       row.setAttribute('aria-pressed', String(on));
-      pickNode.textContent = on ? '✓' : '＋';
+      setIcon(pickNode, on ? 'check' : 'plus');
       // 勾中一个会改变其它行「和已选的重不重」，所以整列的提示都要跟一下
       for (const other of row.parentNode?.children || []) other.syncClash?.();
       if (pickerBar) pickerBar.render();
@@ -331,7 +335,7 @@ function equipMenu(rerender, all) {
         },
         h('span', null, f.label),
         h('span.equip-filter-count', null, String(n)),
-        h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? '✓' : ''));
+        h('span.equip-filter-check', { 'aria-hidden': 'true' }, selected ? icon('check') : null));
       })) : null);
 }
 
@@ -520,7 +524,7 @@ function setRow(item, index, set) {
         });
       },
       'aria-label': '删除这一组',
-    }, '×'));
+    }, icon('close')));
 }
 
 function planRow(exercise, index) {
@@ -618,7 +622,7 @@ function tipAction(a, rerender) {
       });
     },
   },
-  h('span', null, `＋ ${a.label}`),
+  h('span', null, icon('plus'), a.label),
   a.note ? h('span.tip-action-note', null, a.note) : null);
 }
 
@@ -733,7 +737,7 @@ function recommendBody(rec) {
        * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
        * 而这一屏真正的主要动作是下面那个「全部加入」。
        */
-      h('span.rec-add.exercise-choice-action', { 'aria-hidden': 'true' }, '＋')))),
+      h('span.rec-add.exercise-choice-action', { 'aria-hidden': 'true' }, icon('plus'))))),
     rec.items.length > 1 ? h('button.secondary-btn.full', {
       style: { marginTop: '12px' },
       onclick: () => updateSession((items) => [

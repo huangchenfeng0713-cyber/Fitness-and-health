@@ -7,6 +7,7 @@
  */
 
 import { h, num, toast, runLocalAction } from '../../lib/utils.js';
+import { icon } from '../../lib/icons.js';
 import { infoTip, listRow, weakTag } from '../../lib/ui.js';
 import { state, addEntry, saveHealthDay } from '../../lib/store.js';
 import { CATEGORIES } from '../../data/foods.js';
@@ -44,7 +45,7 @@ function recRow(item, meal) {
         if (!result.ok) return;
         toast(`已记录 ${f.name} ${item.grams}${unit}`, 'ok');
       },
-    }, '＋'),
+    }, icon('plus')),
   );
 }
 
@@ -115,17 +116,7 @@ function closeUndoWindow() {
   clearTimeout(undoTimer);
 }
 
-const dropletIcon = () => {
-  const ns = 'http://www.w3.org/2000/svg';
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('class', 'water-drop');
-  svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', 'M12 3.2c3.4 4 5.4 6.7 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-2.5 2-5.2 5.4-9.2Z');
-  svg.append(path);
-  return svg;
-};
+const dropletIcon = () => icon('waterMl', 'water-drop');
 
 export function waterCard(rerender) {
   const d = state.derived;
@@ -173,5 +164,5 @@ export function waterCard(rerender) {
           const r = await runLocalAction(ev.currentTarget, () => bumpWater(1), '记录饮水');
           if (r.ok) { openUndoWindow(rerender); rerender(); }
         },
-      }, '＋饮水')));
+      }, icon('plus'), '饮水')));
 }

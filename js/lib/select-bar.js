@@ -14,6 +14,7 @@
  */
 
 import { h, mount, clearEl } from './utils.js';
+import { icon } from './icons.js';
 
 /**
  * 建一个多选条。返回的对象只有 render 和 el —— 数据留在调用方，
@@ -57,7 +58,7 @@ export function selectBar({
           h('button.icon-btn', {
             type: 'button', 'aria-label': `去掉 ${it.label}`,
             onclick: () => { onRemove(it.key); render(); },
-          }, '×'))),
+          }, icon('close')))),
         // 「清空」收在展开区里：收起时那一行只该有摘要和主操作，挤三个东西会换行
         h('button.text-btn.select-bar-clear', {
           type: 'button', onclick: () => { onClear(); open = false; render(); },

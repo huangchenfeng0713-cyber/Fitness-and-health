@@ -6,10 +6,8 @@ const text = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 
 test('健身器械筛选由 training view 自己管理状态', () => {
   const training = text('js/views/training.js');
-  const polish = text('js/ux-polish.js');
   assert.match(training, /let equipMenuOpen = false/);
   assert.match(training, /equip-filter-menu/);
-  assert.doesNotMatch(polish, /enhanceTraining|ux-equip-filter|固定器械\|自由重量\|徒手/);
 });
 
 test('移动端选择动作控制区保持三层结构', () => {
@@ -30,10 +28,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "2\.11\.7"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.11\.7'/);
-  assert.match(text('sw.js'), /health-diet-v2\.11\.7/);
-  assert.match(text('README.md'), /当前版本：\*\*v2\.11\.7\*\*/);
+  assert.match(text('package.json'), /"version": "2\.12\.0"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '2\.12\.0'/);
+  assert.match(text('sw.js'), /health-diet-v2\.12\.0/);
+  assert.match(text('README.md'), /当前版本：\*\*v2\.12\.0\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -42,7 +40,7 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
   const mealAdvice = text('js/views/cards/meal-advice.js');
   const training = text('js/views/training.js');
   const css = text('css/app.css');
-  const polish = text('css/ux-polish.css');
+  const polish = text('css/app.css');
 
   assert.doesNotMatch(dashboard, /h\('summary'[^\n]*'为什么'/, '今日页又出现成排“为什么”');
   assert.match(dashboard,

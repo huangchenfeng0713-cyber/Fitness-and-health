@@ -6,6 +6,7 @@
  */
 
 import { h, num, toast, confirmAction, download, todayKey } from '../../lib/utils.js';
+import { icon } from '../../lib/icons.js';
 import { infoTip } from '../../lib/ui.js';
 import { state, saveHealthDay, saveProfile, clearAllData, db } from '../../lib/store.js';
 import { isPlausibleHealthValue } from '../../core/health.js';
@@ -202,7 +203,7 @@ function backupPanel(rerender) {
           },
         }, '导出')),
       h('div.data-action', null,
-        h('div.data-action-icon', null, '↺'),
+        h('div.data-action-icon', null, icon('restore')),
         h('div.data-action-copy', null,
           h('strong', null, '恢复完整备份'),
           h('span', null, connected
@@ -210,7 +211,7 @@ function backupPanel(rerender) {
             : '会先确认再整体替换当前本地数据，不与现有数据混合。')),
         h('label.secondary-btn.compact', null, '选择备份', restoreInput)),
       h('div.data-action.danger', null,
-        h('div.data-action-icon', null, '×'),
+        h('div.data-action-icon', null, icon('close')),
         h('div.data-action-copy', null,
           h('strong', null, connected ? '清空当前账号数据' : '清空本机数据'),
           h('span', null, connected
@@ -293,7 +294,7 @@ function syncFieldPanel() {
     h('div.sync-field-chips', null,
       SYNC_FIELDS.map(([key, label]) => h('span', {
         class: `sync-field${has(key) ? ' got' : ''}`,
-      }, `${has(key) ? '✓' : '—'} ${label}`))),
+      }, icon(has(key) ? 'check' : 'minus'), label))),
     missing.length && viaShortcut
       ? h('div.sync-field-fix', null,
         h('strong', null, `${missing.map(([, l]) => l).join('、')}没有收到`),
@@ -468,7 +469,7 @@ function importPanel(rerender) {
       if (file) handleImport({ file }, rerender);
     },
   },
-  h('div.dropzone-icon', null, '↥'),
+  h('div.dropzone-icon', null, icon('upload')),
   h('strong', null, '选择 Apple 健康导出文件'),
   h('span', null, '首次同步可选“导出.zip”；日常同步也支持 JSON / CSV'),
   h('div.file-types', null, ['ZIP', 'XML', 'JSON', 'CSV'].map((type) => h('span', null, type))),
@@ -658,14 +659,14 @@ function rememberedDetails(key, spec, ...children) {
   }, ...children);
 }
 
-function managerSection(key, icon, title, subtitle, content) {
+function managerSection(key, iconName, title, subtitle, content) {
   return rememberedDetails(key, 'details.manager-section',
     h('summary', null,
-      h('span.manager-icon', null, icon),
+      h('span.manager-icon', null, icon(iconName)),
       h('span.manager-summary-copy', null,
         h('strong', null, title),
         h('span', null, subtitle)),
-      h('span.manager-chevron', { 'aria-hidden': 'true' }, '›')),
+      h('span.manager-chevron', { 'aria-hidden': 'true' }, icon('chevron'))),
     h('div.manager-panel', null, content));
 }
 
@@ -693,11 +694,11 @@ export function dataManagerCard(rerender) {
             ? '文件在当前设备读取；解析或恢复后的数据会同步到当前登录账号。'
             : '文件只在当前设备读取；未登录时不会上传个人数据。')))),
     h('div.manager-list', null,
-      managerSection('import', '↥', '同步 Apple 健康', lastHint, importPanel(rerender)),
-      managerSection('manual', '＋', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
-      managerSection('backup', '↺', '本应用备份与恢复', connected
+      managerSection('import', 'upload', '同步 Apple 健康', lastHint, importPanel(rerender)),
+      managerSection('manual', 'plus', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
+      managerSection('backup', 'restore', '本应用备份与恢复', connected
         ? '导出、恢复或清空当前账号数据'
         : '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
-      managerSection('guide', '?', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
+      managerSection('guide', 'help', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),
   );
 }

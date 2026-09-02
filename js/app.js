@@ -9,37 +9,21 @@ import { renderHealth } from './views/health.js';
 import { renderTraining } from './views/training.js';
 import { renderSettings } from './views/settings.js';
 import { APP_VERSION } from './core/feedback.js';
-import { initCloud, getAccountState, subscribeAccount } from './lib/account.js';
+import {
+  initCloud, getAccountState, subscribeAccount,
+  accountSessionMayExist, accountOwnershipUncertain,
+} from './lib/account.js';
 import { pullAccountHealth, resetHealthCloudState } from './lib/health-cloud-sync.js';
 import { inspectCloudConfig } from './config/cloud.js';
+import { iconSvg } from './lib/icons.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
   { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
-  { key: 'diet', label: '饮食', icon: 'add', render: renderDiet, dated: true },
-  { key: 'health', label: '数据', icon: 'data', render: renderHealth },
+  { key: 'diet', label: '饮食', icon: 'plus', render: renderDiet, dated: true },
+  { key: 'health', label: '数据', icon: 'pulse', render: renderHealth },
   { key: 'training', label: '健身', icon: 'training', render: renderTraining },
 ];
-
-const TAB_ICON = {
-  today: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.7 1.7"/></svg>',
-  add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
-  data: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h3l2-6 4 11 2-5h5"/></svg>',
-  training: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>',
-  settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h6M14 7h6M4 17h9M17 17h3"/><circle cx="12" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>',
-};
-
-/*
- * 「回今天」后面那个返回箭头，画出来而不是打出来。
- *
- * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
- * 而且它跟着字号走、粗细也没法和别的图标统一。和底栏、健康数据那几个一样，
- * 用一条描边路径：弯回去的形状认得出是「回到」，和左右两个 ‹ › 也分得开。
- */
-const RETURN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.5 4.5 10 9 14.5M4.5 10h9.5a4.8 4.8 0 0 1 0 9.6h-1.6"/></svg>';
-const PREV_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7"/></svg>';
-const NEXT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7"/></svg>';
-const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 let current = 'today';
 let viewRoot = null;
@@ -63,7 +47,7 @@ function ensureSettingsDrawer() {
   h('div.settings-drawer-head', null,
     h('h2#settings-drawer-title', null, '设置'),
     h('button.settings-close', { onclick: () => closeSettings(), 'aria-label': '收起设置' },
-      h('span', { html: CLOSE_ICON }))),
+      h('span', { html: iconSvg('close') }))),
   settingsRoot);
 
   drawer.addEventListener('click', (event) => {
@@ -135,14 +119,6 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-function syncContextNote() {
-  const at = new Date(state.lastImport?.at || '');
-  if (Number.isNaN(at.getTime()) || todayKey(at) !== todayKey()) return '今日未同步';
-  return `已同步 ${at.toLocaleTimeString('zh-CN', {
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  })}`;
-}
-
 function trainingContextNote() {
   const row = state.trainingDays?.find((day) => day.date === todayKey());
   const count = Array.isArray(row?.items) ? row.items.length : 0;
@@ -166,7 +142,7 @@ function renderTopbar() {
     onclick: openSettings,
     'aria-label': '打开设置',
     title: '设置',
-  }, h('span', { html: TAB_ICON.settings }));
+  }, h('span', { html: iconSvg('settings') }));
 
   if (!tab.dated) {
     context.classList.add('topbar-page-context');
@@ -174,10 +150,16 @@ function renderTopbar() {
      * 这两页都不跟今日 / 饮食的日期走，所以副标题里不许出现「数据截至 X」——
      * 那句话会让人以为翻回昨天，数据页和健身页也跟着翻。
      */
-    const noteText = tab.key === 'training' ? trainingContextNote() : syncContextNote();
+    /*
+     * 数据页不写副标题：同步状态在「今日健康数据」卡的右上角已经有一条，
+     * 顶栏再印一遍就是同一句话在一屏里说两次。
+     * （原先照写不误，再靠一条 .ux-health-page 的 CSS 把它藏起来 ——
+     * 副标题的措辞因此每次都要改两个地方才生效。）
+     */
+    const noteText = tab.key === 'training' ? trainingContextNote() : '';
     context.append(
       h('h1', null, tab.label),
-      h('span.topbar-context-note', null, noteText),
+      noteText && h('span.topbar-context-note', null, noteText),
     );
     bar.append(context, settingsButton);
     return;
@@ -193,7 +175,7 @@ function renderTopbar() {
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
       'aria-label': '前一天',
-    }, h('span', { html: PREV_ICON })),
+    }, h('span', { html: iconSvg('back') })),
     h('button.topbar-day', {
       onclick: () => !heading.isToday && setDay(todayKey()),
       title: heading.isToday ? '' : '回到今天',
@@ -201,12 +183,12 @@ function renderTopbar() {
     h('strong', null, heading.title),
     h('span.topbar-date', { class: heading.backToToday ? 'topbar-date back' : 'topbar-date' },
       heading.sub,
-      heading.backToToday ? h('span.topbar-back-icon', { html: RETURN_ICON }) : null)),
+      heading.backToToday ? h('span.topbar-back-icon', { html: iconSvg('return') }) : null)),
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, 1)),
       disabled: heading.isToday,
       'aria-label': '后一天',
-    }, h('span', { html: NEXT_ICON })),
+    }, h('span', { html: iconSvg('chevron') })),
   );
   bar.append(context, settingsButton);
 }
@@ -220,7 +202,7 @@ function renderTabs() {
       onclick: () => switchTab(tab.key),
       'aria-current': current === tab.key ? 'page' : null,
       'aria-label': tab.label,
-    }, h('span.tab-icon', { html: TAB_ICON[tab.icon] }), h('span.tab-label', null, tab.label)));
+    }, h('span.tab-icon', { html: iconSvg(tab.icon) }), h('span.tab-label', null, tab.label)));
   }
 }
 
@@ -275,12 +257,9 @@ document.addEventListener('focusout', () => {
   }, 0);
 });
 
+/* 判断本身在 lib/account.js，设置页用的是同一个 —— 别在这儿另写一份。 */
 function accountDataLocked(account = getAccountState()) {
-  return accountBootstrapPending
-    || account.ownershipPending === true
-    || account.status === 'locked'
-    || (account.status === 'loading' && !account.user)
-    || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
+  return accountBootstrapPending || accountOwnershipUncertain(account);
 }
 
 function renderAccountLock() {
@@ -530,10 +509,17 @@ async function boot() {
     return;
   }
 
-  // 不等待网络即可先画出明确的启动状态，但必须在任何可交互 UI 出现前启动
-  // 账号归属检查。initialize() 会同步把公开状态切成 loading，设置抽屉因此也
-  // 使用与主视图相同的保护门，不会在这几秒里闪现旧账号的身体资料。
-  accountBootstrapPending = inspectCloudConfig().configured;
+  /*
+   * 不等待网络即可先画出明确的启动状态，但必须在任何可交互 UI 出现前启动
+   * 账号归属检查。initialize() 会同步把公开状态切成 loading，设置抽屉因此也
+   * 使用与主视图相同的保护门，不会在这几秒里闪现旧账号的身体资料。
+   *
+   * 但这道门只在**这台设备存过账号会话**时才该落下来。
+   * 从没登录过的人没有「上一份记录」可闪，却要盯着「正在确认账号与本机记录」
+   * 等云端握手 —— 实测网络不通时是 8.2 秒，而这几秒里他的本地数据一直都在，
+   * 只是被一次可选的网络请求挡着。云账号是可选增强，不该是看自己数据的前置条件。
+   */
+  accountBootstrapPending = inspectCloudConfig().configured && accountSessionMayExist();
   void registerServiceWorker({ waitForControl: false });
   const cloudInitialization = initCloud();
   window.addEventListener('online', () => {

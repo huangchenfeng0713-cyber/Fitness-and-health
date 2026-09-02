@@ -14,48 +14,15 @@
  */
 
 import { h, num, formatDuration, todayKey } from '../../lib/utils.js';
+import { icon, ICON_SHAPES } from '../../lib/icons.js';
 import { infoTip } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
 import { setIntent } from '../../lib/nav.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
 
-const svg = (path, { fill = false } = {}) => {
-  const ns = 'http://www.w3.org/2000/svg';
-  const el = document.createElementNS(ns, 'svg');
-  el.setAttribute('viewBox', '0 0 24 24');
-  el.setAttribute('class', 'metric-icon');
-  el.setAttribute('aria-hidden', 'true');
-  const p = document.createElementNS(ns, 'path');
-  p.setAttribute('d', path);
-  p.setAttribute('fill', fill ? 'currentColor' : 'none');
-  if (!fill) {
-    p.setAttribute('stroke', 'currentColor');
-    p.setAttribute('stroke-width', '1.7');
-    p.setAttribute('stroke-linecap', 'round');
-    p.setAttribute('stroke-linejoin', 'round');
-  }
-  el.append(p);
-  return el;
-};
 
-/* 一笔画得出来的形，不用图标库——外部依赖一个都不引 */
 /** 缺数据时占位的那道杠。用长破折号，不用连字符——后者太短，像个减号 */
 const DASH = '—';
-
-const ICONS = {
-  steps: 'M9 4.5c1.6 0 2.4 1.2 2.4 3 0 1.4-.4 2.6-.4 4 0 1.2.6 2 .6 3.2 0 1.5-.9 2.3-2.3 2.3s-2.3-.9-2.3-2.4c0-1.4.5-2.4.5-3.6 0-1.5-.6-2.3-.6-3.6 0-1.7.8-2.9 2.1-2.9ZM7.6 19.5h3.4M16.5 8c1.3 0 2 1 2 2.5 0 1.2-.4 2.2-.4 3.3 0 1 .5 1.7.5 2.7 0 1.2-.7 1.9-1.9 1.9s-1.9-.8-1.9-2c0-1.2.4-2 .4-3 0-1.2-.5-1.9-.5-3 0-1.4.6-2.4 1.8-2.4Z',
-  activeEnergy: 'M12 3s1 3.2 3 5.2 3.3 3.2 3.3 5.8A6.3 6.3 0 0 1 12 20.5a6.3 6.3 0 0 1-6.3-6.5c0-2.2 1.4-3.6 2.4-5.3M12 20.5c-1.6 0-2.8-1.2-2.8-2.8 0-1.7 1.6-2.4 2.4-4.2.9 1.5 3.2 2.5 3.2 4.2 0 1.6-1.2 2.8-2.8 2.8Z',
-  exerciseMinutes: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3.2 2',
-  /*
-   * 睡眠画 Zzz，不画月亮。月亮那个形和「夜间模式」「勿扰」撞得太狠，
-   * 在一排身体指标里会被读成一个开关；Zzz 只表示睡觉这一件事。
-   */
-  sleepMinutes: 'M4.5 6.5h5l-5 6h5M12.5 3.5h4l-4 5h4M12 14.5h7l-7 6h7',
-  weightKg: 'M5.6 8h12.8l1.6 11.5a1.4 1.4 0 0 1-1.4 1.5H5.4A1.4 1.4 0 0 1 4 19.5L5.6 8ZM12 3.5A2.6 2.6 0 0 1 14.6 6c0 .8-.3 1.4-.8 2h-3.6c-.5-.6-.8-1.2-.8-2A2.6 2.6 0 0 1 12 3.5Z',
-  bodyFatPct: 'M12 3.5c3.4 3.3 5.5 5.9 5.5 8.7a5.5 5.5 0 0 1-11 0c0-2.8 2.1-5.4 5.5-8.7Z',
-  waterMl: 'M12 3.2c3.4 4 5.4 6.7 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-2.5 2-5.2 5.4-9.2Z',
-  restingHR: 'M3.5 12.5h3l1.8-4 2.7 8 2.4-6 1.6 3.4h5',
-};
 
 /*
  * 列数按项数挑，别让末行只剩一个。
@@ -105,7 +72,10 @@ export function healthMetricsCard() {
   const seen = new Set();
   for (const row of state.healthDays) {
     for (const key of Object.keys(row)) {
-      if (Number.isFinite(Number(row[key]))) seen.add(key);
+      // 先剔 null / 空串再转数字：Number(null) 是 0，而 0 是有限数 ——
+      // 一条空值字段会让体脂、饮水这类 optIn 指标凭空常驻一格，天天挂着一道杠。
+      const value = row[key];
+      if (value != null && String(value).trim() !== '' && Number.isFinite(Number(value))) seen.add(key);
     }
   }
   const info = healthCardState({
@@ -163,7 +133,7 @@ export function healthMetricsCard() {
        */
       ? h('div.metric-grid', { class: `metric-grid cols-${cols}`, style: { '--metric-cols': String(cols) } },
         info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
-          svg(ICONS[cell.key] || ICONS.steps),
+          icon(ICON_SHAPES[cell.key] ? cell.key : 'steps', 'metric-icon'),
           h('div.metric-body', null,
             h('div.metric-value', null, fmt(cell),
               cell.value != null && cell.unit ? h('span.metric-unit', null, cell.unit) : null),
