@@ -44,6 +44,13 @@ export function selectBar({
     const empty = list.length === 0;
     // 饮食清单没内容时收起；健身固定栏则保留，并把提交按钮置灰。
     el.hidden = empty && !alwaysVisible;
+    /*
+     * 一个都没选时把横幅收薄。
+     *
+     * 「尚未选择动作 / 可连续选择多个动作」两行字没有信息量，却常驻压着列表
+     * （实测约 90px）。空状态只留一行，选中之后再展开成两行。
+     */
+    el.classList.toggle('is-empty', empty);
     if (empty) open = false;
     if (el.hidden) return;
     const sub = detail ? detail() : '';
@@ -72,7 +79,9 @@ export function selectBar({
         h('span.select-bar-summary-text', null,
           h('strong', null, summary()),
           sub ? h('span.select-bar-detail', null, sub) : null),
-        empty ? null : h('span.select-bar-caret', { 'aria-hidden': 'true' }, open ? '⌄' : '⌃')),
+        empty ? null : h('span.select-bar-caret', {
+          'aria-hidden': 'true', class: open ? 'open' : '',
+        }, icon('chevron'))),
         h('button.primary-btn.select-bar-go', {
           type: 'button',
           disabled: empty,

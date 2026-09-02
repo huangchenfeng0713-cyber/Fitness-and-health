@@ -10,15 +10,27 @@ test('健身器械筛选由 training view 自己管理状态', () => {
   assert.match(training, /equip-filter-menu/);
 });
 
-test('移动端选择动作控制区保持三层结构', () => {
+test('选择动作是「2 + 1」，不是三级下钻', () => {
   const training = text('js/views/training.js');
   assert.match(training, /picker-mode-switch/);
   assert.match(training, /picker-scope-switch/);
-  // 「全部动作 / 推荐组合」收进 picker-controls，和上面两排同宽同一层
-  assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\),\s*\n\s*viewTabs\)/,
-    '视图切换没有和范围选择放在同一组控件里');
+  /*
+   * 上面两排是筛（挑法 → 范围），picker-controls 里只有这两排。
+   * 「全部动作 / 推荐组合」换的是同一批动作的呈现方式，不是把范围再切细 ——
+   * 塞进同一组控件等于宣称三者是一条下钻链。
+   */
+  assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\)\);/,
+    'picker-controls 里不该有第三排');
+  assert.match(training, /const listHead = h\('div\.picker-list-head'/,
+    '缺少「这张列表是什么」那一行');
+  assert.match(training, /listHead,\s*\n\s*viewTabs,/,
+    '视图切换没有跟着列表头走');
   assert.ok(!/picker-list-toolbar/.test(training), '列表工具条应当已经取消');
   assert.doesNotMatch(training, /equipTabs\(rerender, all\)/);
+  // 器械筛选得看得出是能点的：图标 + 文字 + 箭头，不是一行裸文字
+  assert.match(training, /icon\('filter', 'equip-filter-icon'\)/, '器械筛选没有图标');
+  assert.match(text('css/app.css'), /\.equip-filter-btn \{[^}]*border: 1px solid/s,
+    '器械筛选没有可点的外形');
 });
 
 test('冒烟测试从当前主卡判断热量超出状态', () => {
@@ -31,10 +43,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "3\.0\.1"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '3\.0\.1'/);
-  assert.match(text('sw.js'), /health-diet-v3\.0\.1/);
-  assert.match(text('README.md'), /当前版本：\*\*v3\.0\.1\*\*/);
+  assert.match(text('package.json'), /"version": "3\.1\.0"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '3\.1\.0'/);
+  assert.match(text('sw.js'), /health-diet-v3\.1\.0/);
+  assert.match(text('README.md'), /当前版本：\*\*v3\.1\.0\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -56,8 +68,14 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '集中后的提示依据在手机上可能长出屏幕');
   assert.match(training, /h\('h3', null, '选择动作'\)/);
   assert.doesNotMatch(training, /h\('h3', null, '挑动作'\)/);
-  assert.match(training, /exerciseMeta\(exerciseTags\(e\)\)/,
+  /*
+   * 标签仍由 exerciseTags 统一给；只是把「主练 XX」在它等于筛选条件本身时省掉 ——
+   * 筛到「胸」的时候五行全写「主练胸大肌中部」，重复五遍反而把有区别的那两条挤淡了。
+   */
+  assert.match(training, /exerciseMeta\(exerciseTags\(e, \{ scopeMuscles \}\)\)/,
     '全部动作没有使用主要动作模式、主要肌肉、动作类型标签');
+  assert.match(training, /const scopeMuscles = byGroup \? group\.muscles : null;/,
+    '没有把当前范围传给标签渲染');
   assert.match(training, /exerciseMeta\(item\.tags\)/,
     '推荐组合没有使用同一个标签渲染器');
 

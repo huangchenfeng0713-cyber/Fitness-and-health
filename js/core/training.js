@@ -317,6 +317,9 @@ export function recommendFor({
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
+  const scopeMuscles = byGroup
+    ? (GROUPS.find((g) => g.key === groupKey)?.muscles || null)
+    : null;
   const inScope = byGroup ? exercisesForGroup(groupKey) : exercisesForSplit(splitKey);
   // 器械档位也得算进去：列表里全是徒手动作、推荐位却在推杠铃，那不叫推荐
   const pool = inScope.filter(equipFilterOf(equip).match);
@@ -354,7 +357,14 @@ export function recommendFor({
 
   return {
     scopeKey,
-    items: combo.map((e) => ({ id: e.id, name: e.name, tags: exerciseTags(e) })),
+    /*
+     * 标签和「全部动作」那一列必须一致 —— 两个视图看的是同一批动作，
+     * 标签数不一样会让人以为它们说的不是一回事。所以范围也一起传进去：
+     * 按部位挑时省掉「主练 XX」（那就是筛选条件本身），按模式挑时照写。
+     */
+    items: combo.map((e) => ({
+      id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }),
+    })),
     replacements,
   };
 }
@@ -366,11 +376,23 @@ export const RECOMMEND_SIZE = Object.freeze({ group: 5, split: 6 });
  * 推荐理由压成三个短标签：动作模式 · 主练哪儿 · 复合还是孤立。
  * 写成整句的话，五条推荐就是五段话，读完比自己翻列表还慢。
  */
-export function exerciseTags(exercise) {
+/**
+ * 动作行下面那几个短标签。
+ *
+ * `scopeMuscles` 是当前筛选范围覆盖的肌肉。筛到「胸」的时候，五行全写着
+ * 「主练胸大肌中部」—— 这句话是筛选条件本身，重复了五遍，
+ * 反而把真正有区别的那两条（模式、复合还是孤立）挤淡了。
+ * 所以主动肌已经落在当前范围里时就省掉它；搜索结果里没有范围可言，照写不误。
+ */
+export function exerciseTags(exercise, { scopeMuscles = null } = {}) {
   if (!exercise) return [];
+  const primary = exercise.primary?.[0];
+  const scopeSaysIt = primary && scopeMuscles?.length === 1 && scopeMuscles[0] === primary;
+  const redundant = primary && Array.isArray(scopeMuscles) && scopeMuscles.includes(primary)
+    && scopeMuscles.length <= 3;
   return [
     PATTERNS[exercise.pattern],
-    exercise.primary?.[0] ? `主练${MUSCLES[exercise.primary[0]]}` : null,
+    primary && !(scopeSaysIt || redundant) ? `主练${MUSCLES[primary]}` : null,
     exercise.compound ? '复合动作' : '孤立动作',
   ].filter(Boolean);
 }
