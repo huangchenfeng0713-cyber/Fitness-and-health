@@ -1,4 +1,4 @@
-import { createCloudAuth, CloudAuthError } from './cloud-auth.js';
+import { createCloudAuth, CloudAuthError, hasStoredSession } from './cloud-auth.js';
 import {
   createCloudSync, CloudConflictError, MAX_CLOUD_SNAPSHOT_BYTES,
 } from './cloud-sync.js';
@@ -527,3 +527,37 @@ export function signOutPreservingLocal(...args) {
 }
 
 export const signOut = signOutSafely;
+
+/*
+ * 「这台设备可能牵扯到某个账号」。
+ *
+ * 首次调用时看 localStorage 里有没有存过会话；一旦本次运行里出现过登录用户，
+ * 之后就一直算 true —— 退出登录、切换账号那几秒同样不能把上一份数据露出来。
+ */
+let sessionMayExist = null;
+
+export function accountSessionMayExist(account = getAccountState()) {
+  if (sessionMayExist === null) sessionMayExist = hasStoredSession();
+  if (account?.user) sessionMayExist = true;
+  return sessionMayExist;
+}
+
+/**
+ * 「这些数据现在归谁，还说不准」——启动闸门和设置页共用同一个判断。
+ *
+ * 冲突、待确认归属、被锁定是真的说不准，必须把本机数据挡住。
+ * 但「还在 loading」只有在这台设备**存过账号会话**时才算：从没登录过的人
+ * 没有上一份记录可闪，却要为一次可选的云端握手把界面挡住 —— 实测握手
+ * 要 7.5~8.2 秒，这几秒里首页停在「正在确认账号与本机记录」，
+ * 设置页则连身体信息、导入备份、反馈都点不进去，只剩一张账号卡。
+ * 云账号是可选增强，不该是看自己数据的前置条件。
+ *
+ * 两处必须共用这一个函数：早先各写各的，app.js 收紧过一次而 settings.js 没有，
+ * 于是首页已经能用了，设置页还空着。
+ */
+export function accountOwnershipUncertain(account = getAccountState()) {
+  return account.ownershipPending === true
+    || account.status === 'locked'
+    || (accountSessionMayExist(account) && account.status === 'loading' && !account.user)
+    || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
+}

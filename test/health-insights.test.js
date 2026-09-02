@@ -353,3 +353,27 @@ test('「涨得太快」的门槛比「掉得太快」严：两者受的限制�
   assert.ok(fastTip(series(-1.2), -0.5), '每周掉 1.2% 体重没有被判为偏快');
   assert.ok(!fastTip(series(-0.9), -0.5), '每周掉 0.9% 体重仍在 1% 以内，不该报警');
 });
+
+test('字段全是 null 的空壳日不算测量，不把分析窗口拉过去', () => {
+  /*
+   * `Number(null)` 是 0，而 `Number.isFinite(0)` 是 true —— 直接转数字判断的话，
+   * 一条清空过的手动补录（或只带同步元信息的行）会被当成「这天测到了东西」，
+   * 窗口终点被拉到那天，前面真实的记录整批被挤出窗口。
+   */
+  const real = [];
+  for (let i = 0; i < 6; i += 1) {
+    real.push({ date: `2026-08-2${i}`, weightKg: 70 - i * 0.1, steps: 8000 });
+  }
+  const hollow = { date: '2026-08-31', weightKg: null, steps: null, sleepMinutes: '', source: 'manual' };
+  // 不给截止日期时窗口终点取「最后一条有测量的记录日」，空壳日正是从这儿混进去的
+  const before = weightTrendStats(real, 7);
+  const after = weightTrendStats([...real, hollow], 7);
+  assert.equal(before.records, 6, '六天称重本来都该在窗口里');
+  assert.equal(after.records, before.records,
+    '空壳日把窗口终点拉到了 08-31，前面六天的称重被挤出去');
+
+  // 有一个真实数值时仍然算测量，别把判断收得太紧
+  const measured = { ...hollow, waterMl: 900 };
+  assert.equal(weightTrendStats([...real, measured], 7).records, 1,
+    '这天真的测到了饮水，窗口就该跟过去（只剩窗口内的 08-25 那次称重）');
+});

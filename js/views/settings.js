@@ -10,6 +10,7 @@
 
 import { h, clearEl, toast, mount, num, confirmAction, field, todayKey } from '../lib/utils.js';
 import { infoTip } from '../lib/ui.js';
+import { icon, iconSvg } from '../lib/icons.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
@@ -18,7 +19,7 @@ import { GOALS } from '../core/nutrition.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
   resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
-  resolveConflict, syncNow, initCloud,
+  resolveConflict, syncNow, initCloud, accountOwnershipUncertain,
 } from '../lib/account.js';
 import {
   APP_VERSION, FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
@@ -486,32 +487,6 @@ function feedbackCard({ about = null } = {}) {
  */
 let openSection = null;
 
-const SECTION_ICON = {
-  body: 'M12 3.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4ZM12 8.4v7M8 10.5l4-1.4 4 1.4M9.5 20.4 12 15.4l2.5 5',
-  account: 'M12 12.4a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4.5 20.4c.8-3.4 3.8-5.4 7.5-5.4s6.7 2 7.5 5.4',
-  data: 'M12 3.6c4.1 0 7.4 1.2 7.4 2.7S16.1 9 12 9 4.6 7.8 4.6 6.3 7.9 3.6 12 3.6ZM4.6 6.3v11.4c0 1.5 3.3 2.7 7.4 2.7s7.4-1.2 7.4-2.7V6.3M4.6 12c0 1.5 3.3 2.7 7.4 2.7s7.4-1.2 7.4-2.7',
-  calc: 'M6.4 3.6h11.2c.9 0 1.6.7 1.6 1.6v13.6c0 .9-.7 1.6-1.6 1.6H6.4c-.9 0-1.6-.7-1.6-1.6V5.2c0-.9.7-1.6 1.6-1.6ZM8 7.6h8M8 12h2.5M8 16.2h2.5M14 12h2M14 16.2h2',
-  about: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5.5M12 7.4v.1',
-};
-const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7"/></svg>';
-const BACK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 5-7 7 7 7"/></svg>';
-
-function sectionIcon(key) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const el = document.createElementNS(ns, 'svg');
-  el.setAttribute('viewBox', '0 0 24 24');
-  el.setAttribute('class', 'set-icon');
-  el.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS(ns, 'path');
-  path.setAttribute('d', SECTION_ICON[key] || SECTION_ICON.about);
-  path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', 'currentColor');
-  path.setAttribute('stroke-width', '1.6');
-  path.setAttribute('stroke-linecap', 'round');
-  path.setAttribute('stroke-linejoin', 'round');
-  el.append(path);
-  return el;
-}
 
 /** 每行右边那句「现在设成什么了」。不用点进去就知道 */
 function sectionStatus(key, account) {
@@ -548,10 +523,10 @@ function sectionRow(section, account, rerender) {
     type: 'button',
     onclick: () => { openSection = section.key; rerender(); },
   },
-  sectionIcon(section.key),
+  icon(section.key, 'set-icon'),
   h('span.set-title', null, section.label),
   h('span.set-status', null, sectionStatus(section.key, account)),
-  h('span.set-chevron', { html: CHEVRON_ICON }));
+  h('span.set-chevron', { html: iconSvg('chevron') }));
 }
 
 const SECTIONS = [
@@ -567,7 +542,7 @@ function backBar(label, rerender) {
     h('button.set-back-btn', {
       type: 'button',
       onclick: () => { openSection = null; rerender(); },
-    }, h('span.set-back-icon', { html: BACK_ICON }), h('span', null, '设置')),
+    }, h('span.set-back-icon', { html: iconSvg('back') }), h('span', null, '设置')),
     h('strong', null, label));
 }
 
@@ -586,10 +561,7 @@ export function renderSettings(root) {
    * 账号冲突、待确认归属、锁定这几种情况必须整屏摆出来，不能收进某一组里：
    * 它们说的是「你的数据现在有风险」，藏在二级页面等于没提示。
    */
-  const protectedAccountData = account.ownershipPending === true
-    || account.status === 'locked'
-    || (account.status === 'loading' && !account.user)
-    || (account.status === 'conflict' && account.conflict?.reason === 'orphan-local-data');
+  const protectedAccountData = accountOwnershipUncertain(account);
   if (protectedAccountData) {
     openSection = null;
     mount(root, slot);

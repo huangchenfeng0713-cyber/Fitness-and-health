@@ -54,7 +54,20 @@ try {
   await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForSelector('.tab', { timeout: 15000 });
   await page.evaluate(() => document.querySelector('.onboard .text-btn, .onboard button:last-child')?.click());
+  /*
+   * 等启动闸门放行再往下走。
+   *
+   * 这一条不是等待技巧，是修一个真的漏检：闸门抬着的时候 #view 里是
+   * 「正在确认账号与本机记录」那张卡 —— 它不空、也没有脏值，
+   * 于是下面四个栏目检查全都对着同一张启动卡打了勾，而真正的页面一个都没测。
+   * 后面那条动作选择的检查因此才炸出来（找不到 .exercise-picker-card）。
+   */
+  await page.waitForFunction(() => !document.querySelector('.account-data-lock'), null, { timeout: 30000 })
+    .catch(() => {});
   await page.waitForTimeout(400);
+  check('启动闸门放行后才是真页面',
+    !(await page.evaluate(() => !!document.querySelector('.account-data-lock'))),
+    '30 秒后仍停在「正在确认账号与本机记录」');
   const tabs = await page.$$eval('.tab', (t) => t.map((x) => x.textContent.trim()));
   check('启动并渲染底部栏目', tabs.length === 4, tabs.join(' / '));
 
@@ -68,11 +81,13 @@ try {
         empty: text.trim().length < 20,
         dirty: ['undefined', 'NaN', '[object', 'Infinity'].filter((s) => text.includes(s)),
         overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        // 启动闸门那张卡不空也没有脏值，不排掉的话这个检查等于没做
+        gated: !!document.querySelector('.account-data-lock'),
       };
     });
-    check(`栏目「${tabs[i]}」`, !r.empty && !r.dirty.length && !r.overflow,
-      [r.empty && '内容为空', r.dirty.length && `脏值 ${r.dirty}`, r.overflow && '横向溢出']
-        .filter(Boolean).join('，'));
+    check(`栏目「${tabs[i]}」`, !r.empty && !r.dirty.length && !r.overflow && !r.gated,
+      [r.empty && '内容为空', r.dirty.length && `脏值 ${r.dirty}`, r.overflow && '横向溢出',
+        r.gated && '看到的是启动闸门，不是这个栏目'].filter(Boolean).join('，'));
   }
 
   // ---- 全部动作与推荐组合共用标签；推荐说明不会被一次无关重绘收起 ----

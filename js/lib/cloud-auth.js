@@ -95,6 +95,31 @@ function withTimeout(promise, timeoutMs, message) {
   ]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * 这台设备上有没有存过账号会话。
+ *
+ * Supabase 开了 persistSession，登录后会往 localStorage 里写一条
+ * `sb-<项目>-auth-token`。启动时靠它区分两种情况：
+ *
+ *  - 存过 → 这次启动可能要恢复某个账号，得等归属确认完再显示数据，
+ *    否则会闪一下上一个账号的记录；
+ *  - 没存过 → 根本没有别人的数据可闪，本地记录应当立刻显示。
+ *
+ * 读 localStorage 可能抛（无痕模式、站点数据被禁），抛了就当「存过」——
+ * 多等几秒，总好过把别人的数据露出来。
+ */
+export function hasStoredSession() {
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && /^sb-.*-auth-token$/.test(key)) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export function createCloudAuth({
   client = null, createClient = null, config = {}, timeoutMs = 8000,
 } = {}) {

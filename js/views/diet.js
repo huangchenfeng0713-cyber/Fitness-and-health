@@ -10,7 +10,8 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
 import { listRow, searchField, weakTag } from '../lib/ui.js';
-import { macroBar } from '../lib/charts.js';
+import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
+import { macroBar, splitBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
   state, addEntry, removeEntry, updateEntry, copyDay,
@@ -23,6 +24,7 @@ import {
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal, focusFoods, FOCUS_LABEL } from '../core/advisor.js';
 import { initialPortion } from '../core/portion.js';
+import { macroSplit } from '../core/metrics.js';
 import { selectBar } from '../lib/select-bar.js';
 import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
@@ -99,10 +101,10 @@ function buildShell(root) {
   nodes.customToggle = h('button.text-btn', {
     onclick: () => {
       ui.showCustomForm = !ui.showCustomForm;
-      nodes.customToggle.textContent = ui.showCustomForm ? '收起' : '+ 自定义';
+      setCustomToggleLabel();
       refreshCustomForm();
     },
-  }, '+ 自定义');
+  }, icon('plus'), '自定义');
 
   nodes.basketBar = selectBar({
     /*
@@ -230,6 +232,13 @@ async function recordBasket() {
   refreshBasket();
 }
 
+/* 加号是图标，所以换文案不能再写 textContent —— 那会把图标一起抹掉。 */
+function setCustomToggleLabel() {
+  if (!nodes.customToggle) return;
+  clearEl(nodes.customToggle);
+  mount(nodes.customToggle, ui.showCustomForm ? '收起' : [icon('plus'), '自定义']);
+}
+
 /** 份量已经确认后，清掉弹层状态并回到搜索入口。 */
 function finishPortion() {
   ui.selected = null;
@@ -259,7 +268,21 @@ async function recordOne(control, {
     ...(composition ? { composition } : {}),
   }), '记录饮食');
   if (!result.ok) return;
-  toast(`已记录到${MEAL_LABEL[meal]}`, 'ok');
+  /*
+   * 撤销必须由这里给出。
+   *
+   * 早先它挂在一个全局 click 监听里：按钮文字以「记录到」开头就算数，
+   * 然后 rAF 轮询 state.dietEntries 最多 1800ms 去找刚写进去的那条。
+   * 两个后果都真的会发生 —— 落库慢过 1800ms 就彻底没有撤销；
+   * 而这里本来已经先弹过一次不带撤销的提示，那个监听再覆盖一次，
+   * 同一次操作的提示会当着人的面改写一遍。
+   * addEntry 本来就把新记录返回了（runLocalAction 原样放在 value 里），
+   * 根本不用去 DOM 和 store 里找。
+   */
+  const entry = result.value;
+  const unit = food.basis === '100ml' ? 'ml' : 'g';
+  toast(`已记录到${MEAL_LABEL[meal]} · ${entry.name} ${num(entry.grams)}${unit}`, 'ok',
+    entry.id == null ? null : { label: '撤销', onClick: () => removeEntry(entry.id) });
   finishPortion();
 }
 
@@ -328,7 +351,7 @@ function refreshResults() {
           refreshResults();
           refreshBasket();
         },
-      }, '✓') : null);
+      }, icon('check')) : null);
     })),
     all.length > results.length ? h('button.more-btn', {
       onclick: () => { ui.moreResults = true; refreshResults(); },
@@ -442,13 +465,13 @@ function refreshMixedPortion(food) {
         h('button.mix-step', {
           type: 'button', 'aria-label': `减少${component.label}`,
           onclick: () => setAmount((Number(ui.mix[component.foodId]) || 0) - step),
-        }, '−'),
+        }, icon('minus')),
         input,
         h('span.mix-unit', null, unit),
         h('button.mix-step', {
           type: 'button', 'aria-label': `增加${component.label}`,
           onclick: () => setAmount((Number(ui.mix[component.foodId]) || 0) + step),
-        }, '+')));
+        }, icon('plus'))));
 
     const clampAmount = (value) => {
       const finite = Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -460,7 +483,7 @@ function refreshMixedPortion(food) {
       const active = amount > 0;
       row.className = `mix-row${active ? ' active' : ''}`;
       toggle.className = `mix-toggle${active ? ' active' : ''}`;
-      toggle.textContent = active ? '✓' : '+';
+      setIcon(toggle, active ? 'check' : 'plus');
       toggle.setAttribute('aria-pressed', String(active));
       if (writeInput) input.value = String(amount);
     };
@@ -521,7 +544,7 @@ function refreshMixedPortion(food) {
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
-        }, '×'))),
+        }, icon('close')))),
 
     h('div.mix-summary', null,
       h('div', null, h('span', null, '当前总量'), totalAmount),
@@ -749,7 +772,7 @@ function refreshPortion() {
         h('button.icon-btn', {
           'aria-label': '取消',
           onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
-        }, '×'))),
+        }, icon('close')))),
 
     sugarRow && h('div.field-label', null, '糖度'),
     sugarRow,
@@ -758,9 +781,9 @@ function refreshPortion() {
     unitRow,
 
     h('div.qty-stepper', null,
-      h('button.step-btn.round', { 'aria-label': '减少', onclick: () => bump(-1) }, '−'),
+      h('button.step-btn.round', { 'aria-label': '减少', onclick: () => bump(-1) }, icon('minus')),
       h('div.qty-readout', null, qtyValue, qtyUnit, gramsHint),
-      h('button.step-btn.round', { 'aria-label': '增加', onclick: () => bump(1) }, '+')),
+      h('button.step-btn.round', { 'aria-label': '增加', onclick: () => bump(1) }, icon('plus'))),
 
     quickChips,
     gramInputWrap,
@@ -790,9 +813,6 @@ function impactBlock(n) {
   const rows = [
     ['热量', 'kcal', gaps.kcal, n.kcal, 'var(--accent)', 0, true],
     ['蛋白', 'g', gaps.protein, n.protein, 'var(--protein)', 1, false],
-    ['碳水', 'g', gaps.carb, n.carb, 'var(--carb)', 1, false],
-    ['脂肪上限', 'g', { ...gaps.fat, target: gaps.fat.upper || gaps.fat.target },
-      n.fat, 'var(--accent)', 1, true],
   ];
 
   const kcalAfter = gaps.kcal.eaten + n.kcal;
@@ -822,7 +842,44 @@ function impactBlock(n) {
           h('span.impact-target', null, `/${num(g.target, 0)}${unit}`)),
         macroBar({ value: g.eaten, delta: add, target: g.target, color, overIsBad }));
     }),
+    impactSplitRow(n),
     note);
+}
+
+/*
+ * 碳水和脂肪合用一根刻度，和今日主卡是同一根。
+ *
+ * 分成两行画时它们能同时「在范围内」而总量对不上账（主卡上量到过 796 kcal 的差），
+ * 所以这里也只画一根：横轴是碳水占这块热量的百分比。
+ *
+ * 这段一度长在一个 MutationObserver 里，靠 `.impact-to` 的文本把两个数字
+ * 再读回来算一遍 —— 而 n 和 gaps 就在手边。回读一旦碰上改文案、换单位、
+ * 数字带千分位就会静默失效，界面上只表现为「那一行忽然变回两行」。
+ */
+function impactSplitRow(n) {
+  const gaps = state.derived?.advice?.gaps;
+  const targets = state.derived?.targets;
+  if (!gaps || !targets) return null;
+  const split = macroSplit(targets, {
+    ...gaps,
+    carb: { ...gaps.carb, eaten: gaps.carb.eaten + n.carb },
+    fat: { ...gaps.fat, eaten: gaps.fat.eaten + n.fat },
+  });
+  return h('div.impact-split-row', null,
+    h('div.impact-split-head', null,
+      h('span', null, '碳水 / 脂肪'),
+      h('strong', null, split.carbPct == null ? '—' : `${split.carbPct}% / ${split.fatPct}%`),
+      h('span', null, split.label)),
+    splitBar({
+      carbPct: split.carbPct,
+      carbBandLo: split.bandLo,
+      carbBandHi: split.bandHi,
+      level: split.level,
+    }),
+    h('div.impact-split-grams', null,
+      h('span', null, `碳水 ${num(split.carbG)}g`),
+      h('span', null, split.note),
+      h('span', null, `脂肪 ${num(split.fatG)}g`)));
 }
 
 function refreshPreview(pending = false, nutrientOverride = null) {
@@ -880,7 +937,7 @@ function refreshCustomForm() {
         });
         toast(`已添加「${name}」`, 'ok');
         ui.showCustomForm = false;
-        nodes.customToggle.textContent = '+ 自定义';
+        setCustomToggleLabel();
         refreshCustomForm();
         selectFood(food);
       },
@@ -890,47 +947,17 @@ function refreshCustomForm() {
         h('button', {
           'aria-label': `删除 ${f.name}`,
           onclick: async () => { await removeCustomFood(f.id); refreshCustomForm(); },
-        }, '×')))) : null,
+        }, icon('close'))))) : null,
   ));
 }
 
 
 /*
  * 餐次图标。五个标题原先只有两个汉字，滑到一半分不出看的是哪一餐。
- *
- * 一律单色线条，不用彩色 emoji：emoji 在 iOS / Android / 桌面上是三套画风，
- * 摆在一列灰字里像是从别的应用粘过来的。
+ * 形和别的图标一起放在 lib/icons.js —— 描边粗细要跟底栏、健康数据对齐。
  */
-const MEAL_ICON = {
-  // 日出：地平线上半个太阳，加一支向上的箭头
-  breakfast: 'M3.5 19h17M7 19a5 5 0 0 1 10 0M12 3v5M9.4 5.6 12 3l2.6 2.6M3.5 15h2.2M18.3 15h2.2',
-  // 正午的太阳：整圈加八道光
-  lunch: 'M12 16.2a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4ZM12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7',
-  // 刀叉：晚饭是坐下来吃的那一顿
-  dinner: 'M7 3v6.5a2 2 0 0 0 2 2v9.5M7 3v6M9.6 3v6M16.8 3c-1.1 0-2 1.8-2 4.2s.9 4.2 2 4.2V21',
-  // 苹果：加餐多半是水果或一小份点心
-  snack: 'M12 8c-.9-1.4-2.4-2-3.7-1.5C6.5 7.2 5.6 9.3 6.3 12c.7 2.5 2.2 5.1 3.9 5.1.7 0 1.2-.4 1.8-.4s1.1.4 1.8.4c1.7 0 3.2-2.6 3.9-5.1.7-2.7-.2-4.8-2-5.5-1.3-.5-2.8.1-3.7 1.5ZM12 8V5.9c0-.9.7-1.6 1.8-1.8',
-  // 星星：夜宵
-  late: 'm12 3.8 2.3 4.7 5.2.8-3.8 3.6.9 5.2-4.6-2.5-4.6 2.5.9-5.2-3.8-3.6 5.2-.8L12 3.8Z',
-};
-
 function mealIcon(meal) {
-  const path = MEAL_ICON[meal];
-  if (!path) return null;
-  const ns = 'http://www.w3.org/2000/svg';
-  const el = document.createElementNS(ns, 'svg');
-  el.setAttribute('viewBox', '0 0 24 24');
-  el.setAttribute('class', 'meal-icon');
-  el.setAttribute('aria-hidden', 'true');
-  const p = document.createElementNS(ns, 'path');
-  p.setAttribute('d', path);
-  p.setAttribute('fill', 'none');
-  p.setAttribute('stroke', 'currentColor');
-  p.setAttribute('stroke-width', '1.6');
-  p.setAttribute('stroke-linecap', 'round');
-  p.setAttribute('stroke-linejoin', 'round');
-  el.append(p);
-  return el;
+  return ICON_SHAPES[meal] ? icon(meal, 'meal-icon') : null;
 }
 
 function refreshEntries() {
@@ -1056,7 +1083,7 @@ function entryRow(e, editing) {
             },
           });
         },
-      }, '×'))
+      }, icon('close')))
       // 只读时仍要看得到吃了多少，只是不能改
       : h('div.entry-actions.readonly', null,
         h('span.entry-grams-text', null, `${num(e.grams)} ${unit}`)));
@@ -1089,9 +1116,11 @@ function copyRow() {
 /* ---------------------------------------------------------------- 入口 */
 
 /*
- * 「当前饮食推荐 / 现在别碰 / 喝水」从今日页搬过来。
- * 今日页回答「我今天怎么样」，这三张回答「我现在该做什么」——
+ * 「当前饮食推荐 / 喝水」从今日页搬过来。
+ * 今日页回答「我今天怎么样」，这两张回答「我现在该做什么」——
  * 真要照着做的时候人已经在这一页了，隔着一次切页反而多余。
+ *（「现在别碰」那张连同 buildAvoidList 已经删了：它说的是「别做什么」，
+ * 和这一页要回答的「该吃什么」是反过来的，而且一次列五条几乎每天都一样。）
  */
 function refreshAdvice() {
   clearEl(nodes.water);

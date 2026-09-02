@@ -99,9 +99,9 @@ test('同一批数字不在两页各写一遍', () => {
   assert.match(diet, /editing \? '完成' : '编辑'/, '记录卡缺少编辑开关');
 
   // 健康数据每项配一个图标：六项全是数字加两个汉字，扫一眼分不出哪个是哪个
-  const metrics = read('js/views/cards/health-metrics.js');
+  const icons = read('js/lib/icons.js');
   for (const key of ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'weightKg', 'restingHR']) {
-    assert.ok(new RegExp(`${key}:\\s*'M`).test(metrics), `指标 ${key} 没有图标`);
+    assert.ok(new RegExp(`${key}: path\\('M`).test(icons), `指标 ${key} 没有图标`);
   }
 
   // 目标依据收进圈里的信息 i，但「你现在看到的数字不对」这几条不许收
@@ -346,7 +346,12 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
   const app = strip(read('js/app.js'));
   assert.match(app, /return count \? `今日 \$\{count\} 个动作` : '今日未记录'/,
     '健身页副标题应显示今天真正记录了几个动作');
-  assert.match(app, /return '今日未同步'/, '数据页副标题应明确今天是否同步');
+  /*
+   * 数据页顶栏不写副标题：同步状态在「今日健康数据」卡右上角已经有一条。
+   * 原先照写不误，再靠 .ux-health-page 那条 CSS 藏起来，措辞要改两处才生效。
+   */
+  assert.match(app, /tab\.key === 'training' \? trainingContextNote\(\) : ''/,
+    '数据页顶栏又开始写副标题了，会和今日健康数据卡上的同步状态重复');
   assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
   assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
@@ -360,7 +365,7 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
    * 就成了一行说不出理由的空白。趋势卡早就改用下拉，那套样式已无人使用。
    */
   const css = read('css/app.css');
-  const polish = read('css/ux-polish.css');
+  const polish = read('css/app.css');
   const training = read('js/views/training.js');
   assert.match(css, /\.range-switch \+ \.range-switch\s*\{[^}]*margin-top/s, '摞起来的分段控件之间没有缝');
   assert.ok(!css.includes('.chart-switch'), '.chart-switch 已无人使用，应当删掉');
@@ -441,11 +446,18 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
   const metaCalls = training.match(/exerciseMeta\(/g) || [];
   assert.ok(metaCalls.length >= 3, `定义外，全部动作和推荐组合都应调用同一渲染器，只找到 ${metaCalls.length - 1} 处`);
   assert.match(css, /\.exercise-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
-  assert.match(css, /\.exercise-meta-tag\s*\{[^}]*border-radius:/s);
+  /*
+   * 这三条是说明，不是可选状态 —— 所以写成一行文字，不做成胶囊。
+   * 十几行灰底小块排成阵列比动作名还抢眼，筛到「胸」时五行的标签还一模一样。
+   */
+  assert.ok(!/\.exercise-meta-tag\s*\{[^}]*background:/s.test(css),
+    '动作说明标签又做成了胶囊；胶囊留给可选择的状态');
+  assert.match(css, /\.exercise-meta-tag \+ \.exercise-meta-tag::before\s*\{[^}]*content: '·'/s,
+    '三条说明之间缺少分隔');
   assert.match(training, /const classes = \['pattern', 'muscle', 'type'\]/,
     '三个标签没有建立动作模式 / 肌肉 / 类型的视觉层级');
-  assert.match(css, /\.exercise-meta-tag\.type\s*\{[^}]*border-color:/s,
-    '动作类型没有使用最轻的描边层级');
+  assert.match(css, /\.exercise-meta-tag\.type\s*\{[^}]*color: var\(--faint\)/s,
+    '动作类型没有使用最轻的一档灰');
   assert.match(training, /className: `ex-row exercise-choice-row/,
     '全部动作没有使用共用动作行');
   assert.match(training, /className: 'rec-pick exercise-choice-row'/,
@@ -464,7 +476,7 @@ test('选择动作顶部使用与食物一致的搜索框，输入时只更新�
   const training = read('js/views/training.js');
   const diet = read('js/views/diet.js');
   const ui = read('js/lib/ui.js');
-  const polish = read('css/ux-polish.css');
+  const polish = read('css/app.css');
   assert.match(training, /EXERCISE_BY_ID, searchExercises/,
     '选择动作没有复用动作库的中文、拼音与英文搜索');
   assert.match(training, /const search = searchField\(\{/,
@@ -514,7 +526,7 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
 
 test('信息符号视觉减半但保留可触达区域', () => {
   const css = read('css/app.css');
-  const polish = read('css/ux-polish.css');
+  const polish = read('css/app.css');
   const utils = read('js/lib/utils.js');
   assert.match(css, /--info-size:\s*14px/, '信息符号没有从 28px 缩小到一半');
   assert.match(utils, /createElementNS\('http:\/\/www\.w3\.org\/2000\/svg', 'svg'\)/,
@@ -647,11 +659,26 @@ test('账号归属未确认时锁定业务界面和设置，只允许原账号�
   assert.ok(app.includes('accountDataLocked'), '应用入口缺少账号数据隐私锁');
   assert.ok(app.includes('账号数据已锁定'));
   assert.ok(!app.includes('先导出备份'), '未重新认证时不应允许导出原账号健康数据');
-  assert.ok(settings.includes("account.status === 'locked'"));
-  assert.ok(app.includes('account.ownershipPending === true'));
-  assert.ok(settings.includes('account.ownershipPending === true'));
-  assert.ok(app.includes("account.status === 'loading' && !account.user"), '账号初始化异常时可能 fail-open 显示旧数据');
-  assert.ok(settings.includes("account.conflict?.reason === 'orphan-local-data'"));
+  /*
+   * 判断只有一份，在 lib/account.js 里。原先 app.js 和 settings.js 各写各的，
+   * app.js 收紧过一次而 settings.js 没有，结果首页已经能用了、设置页还空着 ——
+   * 所以这里要求两边都调用同一个函数，谁也别再抄一遍。
+   */
+  const account = read('js/lib/account.js');
+  assert.ok(account.includes("account.status === 'locked'"));
+  assert.ok(account.includes('account.ownershipPending === true'));
+  assert.ok(account.includes("account.status === 'loading' && !account.user"), '账号初始化异常时可能 fail-open 显示旧数据');
+  assert.ok(account.includes("account.conflict?.reason === 'orphan-local-data'"));
+  assert.ok(app.includes('accountOwnershipUncertain(account)'), '启动闸门没有走共用判断');
+  assert.ok(settings.includes('accountOwnershipUncertain(account)'), '设置页没有走共用判断');
+  assert.ok(!/protectedAccountData =[^;]*ownershipPending/s.test(settings),
+    '设置页又抄了一份归属判断，两边迟早会走散');
+  /*
+   * 「还在 loading」必须先问这台设备存没存过会话：从没登录过的人没有旧数据可闪，
+   * 却要为一次可选的云端握手把首页和设置页一起挡住（实测 7.5~8.2 秒）。
+   */
+  assert.ok(/accountSessionMayExist\(account\)\s*&&\s*account\.status === 'loading'/.test(account),
+    'loading 态没有先判断本机存没存过账号会话，会把没登录过的人也挡在启动页外');
   assert.ok(settings.includes('mount(root, slot)'), '锁定时设置页仍可能显示身体资料与目标');
   assert.ok(settings.includes('原账号的数据仍锁定在这台设备上'));
   assert.ok(settings.includes('云账号暂时不可用，原账号数据已锁定'));
@@ -706,7 +733,7 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
 
 test('高频页面使用统一间距，深色次级信息不再过暗', () => {
   const css = read('css/app.css');
-  const polish = read('css/ux-polish.css');
+  const polish = read('css/app.css');
   for (const token of ['--space-1: 4px', '--space-2: 8px', '--space-3: 12px', '--space-4: 16px']) {
     assert.ok(css.includes(token), `缺少间距基元 ${token}`);
   }
@@ -1455,16 +1482,48 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
  * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
  * 而且它跟着字号走，粗细没法和别的图标统一。
  */
-test('返回箭头是描边图标，不是打出来的字符', () => {
+test('图标是画出来的，不是打出来的，而且只有一套', () => {
   const app = strip(read('js/app.js'));
-  assert.match(app, /const RETURN_ICON = '<svg/, '返回箭头没有做成图标');
+  const icons = read('js/lib/icons.js');
+  assert.match(icons, /return: path\('M/, '返回箭头没有做成图标');
   assert.match(app, /heading\.backToToday \? h\('span\.topbar-back-icon'/, '图标没有挂到顶栏上');
   // 文案里不许再夹着箭头字符
   assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(strip(read('js/core/day.js'))), '措辞里还夹着打出来的箭头');
   assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(app));
-  // 和底栏、设置那几个图标同一套描边参数
+
+  /*
+   * 排版字符不是图标：× ＋ − ✓ › 在三个平台上是三种字形、三种基线，
+   * 粗细跟着字重走，和旁边描边画出来的图标凑不到一块儿。
+   * ↩ 早就为此改成了描边，同样的字符当时还留在关闭键、加号、勾选和二级页箭头上。
+   */
+  const VIEWS = [
+    'js/app.js', 'js/lib/select-bar.js', 'js/views/diet.js', 'js/views/training.js',
+    'js/views/dashboard.js', 'js/views/settings.js', 'js/views/cards/data-manager.js',
+    'js/views/cards/meal-advice.js', 'js/views/cards/health-metrics.js',
+  ];
+  for (const file of VIEWS) {
+    const body = strip(read(file));
+    const glyphs = body.match(/'[×＋✓−›‹↺↥]'/g);
+    assert.ok(!glyphs, `${file} 里还把 ${glyphs && glyphs.join('')} 当图标打出来`);
+  }
+
+  /*
+   * 同一个形不许有两份：app.js 的前后箭头和 settings.js 的返回/展开箭头
+   * 曾经是逐字节相同的两串路径，改一个另一个不动。
+   */
+  for (const file of VIEWS.filter((f) => f !== 'js/lib/icons.js')) {
+    assert.ok(!/<svg viewBox/.test(read(file)), `${file} 里又自带了一份 SVG，图标应当只在 lib/icons.js`);
+  }
+
+  // 描边粗细只在 .icon 上写一次；原先 1.6/1.7/1.8/1.9/2.1 五个值散在五处
   const css = read('css/app.css');
-  assert.match(css, /\.topbar-back-icon svg \{[^}]*stroke: currentColor/s, '图标没有走描边样式');
+  assert.match(css, /\.icon \{[^}]*stroke-width: 1\.8/s, '图标没有统一的描边样式');
+  const strayIconStroke = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter(([, selector, body]) => /stroke-width/.test(body)
+      && /(-icon|icon-|\bsvg\b)/.test(selector) && !/^\s*\.icon\s*$/.test(selector))
+    .map(([, selector]) => selector.trim().replace(/\s+/g, ' '));
+  assert.deepEqual(strayIconStroke, [],
+    `图标的描边粗细又各写各的：${strayIconStroke.join(' / ')}`);
 });
 
 /*
@@ -1640,4 +1699,45 @@ test('搜索结果整行开份量面板，份量确认后可直接记录或继�
   assert.match(diet, /recordOne\(directBtn, item\(\)\)/, '普通与复合食物没有接到单项记录路径');
   assert.match(diet, /actionLabel: \(\) => `记录\$\{ui\.basket\.length\}样到/,
     '批量确认仍使用含糊的符号，没有写清动作结果');
+});
+
+test('记录一笔食物只弹一次提示，撤销由 recordOne 自己给', () => {
+  /*
+   * 原先弹两次：recordOne 先弹一条不带撤销的，一帧之后一个全局 click 监听
+   * （按钮文字以「记录到」开头就算数）再覆盖一条带撤销的 —— 同一次操作的提示
+   * 当着人的面改写一遍。那个监听还要 rAF 轮询 state.dietEntries 最多 1800ms
+   * 去找刚写进去的记录，落库慢过 1800ms 就彻底没有撤销。
+   */
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /const entry = result\.value;/,
+    'addEntry 返回的就是新记录，不该再去 store 里找');
+  assert.match(diet, /toast\(`已记录到\$\{MEAL_LABEL\[meal\]\}[^`]*`, 'ok',[\s\S]{0,160}label: '撤销'/,
+    '记录成功的提示里没有撤销');
+  assert.equal((diet.match(/toast\(`已记录到/g) || []).length, 1,
+    '「已记录到…」的提示不止一处，会互相覆盖');
+
+  // 精修层整个删掉了：别再在视图外面用监听器和 MutationObserver 补渲染
+  for (const gone of ['js/ux-polish.js', 'css/ux-polish.css']) {
+    assert.throws(() => read(gone), `${gone} 又回来了；样式和渲染各只有一层`);
+  }
+  const html = read('index.html');
+  assert.ok(!/ux-polish/.test(html), 'index.html 又挂上了精修层');
+  assert.ok(!/ux-polish/.test(read('sw.js')), 'sw.js 的 SHELL 里还留着精修层');
+});
+
+test('份量弹层的碳水脂肪刻度直接算，不从渲染结果里读回数字', () => {
+  /*
+   * 这段一度长在一个 MutationObserver 里，靠 `.impact-to` 的文本正则出两个数
+   * 再算一遍 —— 而 n 和 gaps 就在手边。回读一旦碰上改文案、换单位、
+   * 数字带千分位就会静默失效，界面上只表现为「那一行忽然变回两行」。
+   */
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /function impactSplitRow\(n\) \{/, '份量弹层缺少碳水/脂肪那根刻度');
+  assert.match(diet, /carb: \{ \.\.\.gaps\.carb, eaten: gaps\.carb\.eaten \+ n\.carb \}/,
+    '刻度没有直接用 gaps 和这一笔的营养算');
+  assert.match(diet, /impactSplitRow\(n\)/, '刻度没有挂进 impactBlock');
+  // 分开的两行不能再出现：它们能同时「在范围内」而总量对不上账
+  assert.ok(!/'脂肪上限', 'g'/.test(diet), '脂肪又单独占了一行');
+  assert.ok(!/querySelector\('\.impact-to'\)|impact-to'\)\?\.textContent/.test(diet),
+    '又开始从渲染结果里读数字了');
 });

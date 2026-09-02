@@ -28,8 +28,20 @@ const FAST_PCT = { loss: MAX_LOSS_RATE_PCT * 100, gain: MAX_GAIN_RATE_PCT * 100 
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+/*
+ * 这一天到底有没有测到东西。
+ *
+ * 必须先剔掉 null / undefined / 空串再转数字 —— `Number(null)` 是 0，
+ * 而 `Number.isFinite(0)` 是 true。一条「字段全是 null 的空壳」（清空过的手动补录、
+ * 只带同步元信息的行）会被当成有测量，于是窗口终点被拉到那天：
+ * 近 7 日体重从 6 条实测变成 1 条，斜率、达标率跟着一起失真。
+ * 下面 series() 早就这么筛了，这里漏了一处。
+ */
+const MEASURED_KEYS_EXCLUDED = ['date', 'source'];
 const hasHealthMeasurement = (day) => Object.entries(day).some(([key, value]) => (
-  !['date', 'source'].includes(key) && Number.isFinite(Number(value))
+  !MEASURED_KEYS_EXCLUDED.includes(key)
+  && value != null && String(value).trim() !== ''
+  && Number.isFinite(Number(value))
 ));
 
 /** 只接受真实存在的 YYYY-MM-DD，避免 Date 对无效日期的宽松纠正。 */
