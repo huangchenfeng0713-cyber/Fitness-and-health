@@ -59,7 +59,7 @@ export function foodInfoTip(food, {
  * 一张卡里可能同时出现多道估算菜品。只放一个信息入口，并在面板内按菜名汇总，
  * 避免推荐列表或饮食记录每一行都长出一个 i。
  */
-export function estimateGroupInfoTip(foods, label = '查看估算说明') {
+export function estimateGroupInfoTip(foods, label = '查看估算说明', { extra = null } = {}) {
   const unique = [];
   const seen = new Set();
   for (const food of foods || []) {
@@ -69,13 +69,19 @@ export function estimateGroupInfoTip(foods, label = '查看估算说明') {
     seen.add(key);
     unique.push({ food, disclosure });
   }
-  if (!unique.length) return null;
+  const extras = Array.isArray(extra) ? extra.filter(Boolean) : (extra ? [extra] : []);
+  if (!unique.length && !extras.length) return null;
 
   return infoTip(label,
-    h('p.estimate-disclosure-intro', null,
-      '列表中标有“估算”的菜品不是当前官方营养标签或实验室实测值；误差来源集中列在这里。'),
-    h('div.estimate-disclosure-list', null, unique.map(({ food, disclosure }) =>
-      h('section.estimate-disclosure-item', null,
-        h('strong.estimate-disclosure-name', null, food.name),
-        disclosureRows(disclosure)))));
+    unique.length
+      ? h('p.estimate-disclosure-intro', null,
+        '列表中标有“估算”的菜品不是当前官方营养标签或实验室实测值；误差来源集中列在这里。')
+      : null,
+    unique.length
+      ? h('div.estimate-disclosure-list', null, unique.map(({ food, disclosure }) =>
+        h('section.estimate-disclosure-item', null,
+          h('strong.estimate-disclosure-name', null, food.name),
+          disclosureRows(disclosure))))
+      : null,
+    extras);
 }

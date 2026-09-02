@@ -496,7 +496,8 @@ test('选择动作顶部使用与食物一致的搜索框，输入时只更新�
     '输入搜索词后没有即时更新结果');
   assert.doesNotMatch(training, /searchInput\.addEventListener\('input',[\s\S]{0,180}?rerender\(/,
     '搜索输入时重绘整页会打断键盘和焦点');
-  assert.match(training, /controls\.hidden = searching;[\s\S]*?toolbar\.hidden = searching;/,
+  // 三排筛选现在都在 picker-controls 里，一次就藏干净
+  assert.match(training, /controls\.hidden = searching;[\s\S]*?normalContent\.hidden = searching;/,
     '搜索时旧筛选内容仍会和结果挤在一起');
   assert.match(polish, /\.exercise-search-input\s*\{\s*width:\s*100%/,
     '动作搜索框没有铺满可用宽度');

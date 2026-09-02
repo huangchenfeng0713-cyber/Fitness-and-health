@@ -14,7 +14,10 @@ test('移动端选择动作控制区保持三层结构', () => {
   const training = text('js/views/training.js');
   assert.match(training, /picker-mode-switch/);
   assert.match(training, /picker-scope-switch/);
-  assert.match(training, /picker-list-toolbar/);
+  // 「全部动作 / 推荐组合」收进 picker-controls，和上面两排同宽同一层
+  assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\),\s*\n\s*viewTabs\)/,
+    '视图切换没有和范围选择放在同一组控件里');
+  assert.ok(!/picker-list-toolbar/.test(training), '列表工具条应当已经取消');
   assert.doesNotMatch(training, /equipTabs\(rerender, all\)/);
 });
 
@@ -28,10 +31,10 @@ test('冒烟测试从当前主卡判断热量超出状态', () => {
 });
 
 test('应用版本与离线缓存键同步', () => {
-  assert.match(text('package.json'), /"version": "3\.0\.0"/);
-  assert.match(text('js/core/feedback.js'), /APP_VERSION = '3\.0\.0'/);
-  assert.match(text('sw.js'), /health-diet-v3\.0\.0/);
-  assert.match(text('README.md'), /当前版本：\*\*v3\.0\.0\*\*/);
+  assert.match(text('package.json'), /"version": "3\.0\.1"/);
+  assert.match(text('js/core/feedback.js'), /APP_VERSION = '3\.0\.1'/);
+  assert.match(text('sw.js'), /health-diet-v3\.0\.1/);
+  assert.match(text('README.md'), /当前版本：\*\*v3\.0\.1\*\*/);
 });
 
 test('截图反馈对应的移动端文案与布局不会回退', () => {
@@ -97,8 +100,14 @@ test('估算菜品统一使用弱标签，误差来源集中到信息面板', ()
   assert.match(mealAdvice, /estimateTag\(f\)/, '当前饮食推荐没有统一估算标签');
   assert.match(mealAdvice, /estimateGroupInfoTip\(all\.map/,
     '推荐中的误差来源没有集中到卡片级信息面板');
-  assert.match(diet, /estimateGroupInfoTip\(entries\.map/,
+  assert.match(diet, /estimateGroupInfoTip\(\s*\n\s*entries\.map/,
     '饮食记录中的估算项没有集中说明');
+  /*
+   * 每一行不许再各挂一个信息按钮：十几条记录就是十几个 ⓘ，
+   * 而它们说的多半是同一句话。依据只该有一个入口。
+   */
+  assert.ok(!/foodInfoTip\(food, \{\s*\n?\s*label: '查看估算与记录说明'/.test(diet),
+    '饮食记录又给每一行挂了一个信息按钮');
   assert.doesNotMatch(diet, /按配料估算/, '复合食物仍使用不一致的标签文字');
   assert.doesNotMatch(diet, /营养会随配方、烹调或品牌而变化，以上数值为估算参考/,
     '估算误差仍散落在份量面板正文');
