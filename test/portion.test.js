@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PORTION_MEMORY_LIMIT, rememberedPortion, isPresetPortion, nextPortionMemory, initialPortion,
+  PORTION_MEMORY_LIMIT, rememberedPortion, rememberedChoice,
+  isPresetPortion, nextPortionMemory, initialPortion,
 } from '../js/core/portion.js';
 
 const rice = { id: 'rice_white', s: [['1 碗', 150], ['1 小碗', 100]] };
@@ -16,9 +17,35 @@ test('照着库里现成份量记的不进记忆表', () => {
 
 test('改过一次就记住，下次选中直接用这个数', () => {
   const m = nextPortionMemory({}, rice, 420);
-  assert.deepEqual(m, { rice_white: 420 });
+  assert.deepEqual(m, { rice_white: { grams: 420, sugarLevel: null, meal: null } });
   assert.equal(rememberedPortion(m, 'rice_white'), 420);
   assert.equal(initialPortion(rice, m).grams, 420);
+});
+
+test('老数据是个裸克数，照读不误', () => {
+  // 一条记忆现在是对象，早先是数字。不迁移，读的时候当成 { grams } 就行
+  assert.equal(rememberedPortion({ rice_white: 420 }, 'rice_white'), 420);
+  assert.equal(initialPortion(rice, { rice_white: 420 }).grams, 420);
+  assert.deepEqual(rememberedChoice({ rice_white: 420 }, 'rice_white'),
+    { grams: 420, sugarLevel: null, meal: null });
+});
+
+test('糖度和餐次跟着克数一起记', () => {
+  const m = nextPortionMemory({}, rice, 420, { sugarLevel: 'three', meal: 'dinner' });
+  assert.deepEqual(rememberedChoice(m, 'rice_white'),
+    { grams: 420, sugarLevel: 'three', meal: 'dinner' });
+  const start = initialPortion(rice, m);
+  assert.equal(start.sugarLevel, 'three');
+  assert.equal(start.meal, 'dinner');
+});
+
+test('克数照默认、但糖度变了，仍然值得记一笔', () => {
+  // 同一杯奶茶一直点三分糖，克数却一直是库里那一档 —— 只看克数就永远不记
+  const m = nextPortionMemory({}, rice, 150, { sugarLevel: 'half' });
+  assert.equal(rememberedChoice(m, 'rice_white').sugarLevel, 'half');
+  assert.equal(rememberedChoice(m, 'rice_white').grams, null, '照默认记的克数不该被钉死');
+  // 三个都没变才是真的没必要写库
+  assert.equal(nextPortionMemory(m, rice, 150, { sugarLevel: 'half' }), null);
 });
 
 test('已经改过的食物，改回默认份量也要记', () => {
@@ -27,7 +54,7 @@ test('已经改过的食物，改回默认份量也要记', () => {
    * 漏掉这一步的话下次又跳回 420g，用户会觉得改不动。
    */
   const m = nextPortionMemory({ rice_white: 420 }, rice, 150);
-  assert.deepEqual(m, { rice_white: 150 });
+  assert.deepEqual(m, { rice_white: { grams: 150, sugarLevel: null, meal: null } });
 });
 
 test('和上次记的一样就不用再写一次库', () => {
@@ -50,7 +77,7 @@ test('表不会无限长，先记的先掉', () => {
   for (let i = 0; i < PORTION_MEMORY_LIMIT; i += 1) many[`f${i}`] = 200;
   const next = nextPortionMemory(many, rice, 420);
   assert.equal(Object.keys(next).length, PORTION_MEMORY_LIMIT);
-  assert.equal(next.rice_white, 420, '刚记的这条必须在');
+  assert.equal(next.rice_white.grams, 420, '刚记的这条必须在');
   assert.equal(next.f0, undefined, '最早的那条该被挤掉');
 });
 

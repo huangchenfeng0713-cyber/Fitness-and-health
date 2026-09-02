@@ -13,7 +13,7 @@
  * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
  */
 
-import { h, num, formatDuration, todayKey } from '../../lib/utils.js';
+import { h, num, formatDuration, todayKey, unitGap } from '../../lib/utils.js';
 import { icon, ICON_SHAPES } from '../../lib/icons.js';
 import { infoTip } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
@@ -136,7 +136,14 @@ export function healthMetricsCard() {
           icon(ICON_SHAPES[cell.key] ? cell.key : 'steps', 'metric-icon'),
           h('div.metric-body', null,
             h('div.metric-value', null, fmt(cell),
-              cell.value != null && cell.unit ? h('span.metric-unit', null, cell.unit) : null),
+              /*
+               * 单位和数字之间空不空格由 unitGap 定（西文空、中文和 g/ml 不空），
+               * 不再是所有单位一律 margin-left: 2px —— 那会把「30 分钟」写成
+               * 带空格，而同一页的「34分钟」（formatDuration）又是不带的。
+               */
+              cell.value != null && cell.unit
+                ? h('span.metric-unit', { class: unitGap(cell.unit) ? 'gap' : '' }, cell.unit)
+                : null),
             h('div.metric-label', null, cell.label)))))
       // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
       : h('p.empty-hint', null,

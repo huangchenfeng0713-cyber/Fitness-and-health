@@ -51,7 +51,7 @@ export const state = {
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
-  portionMemory: {},     // { foodId: 克数 } —— 用户自己改过的份量
+  portionMemory: {},     // { foodId: { grams, sugarLevel, meal } } —— 用户自己的选择
   lastImport: null,
   derived: null,
 };
@@ -471,6 +471,14 @@ export async function addEntry({
     grams: Number(grams) || 0,
     // 字段名不能叫 sugar：下面展开的 nutrients 里 sugar 是糖的克数，会把档位覆盖掉
     sugarLevel,
+    /*
+     * 单位随记录一起存。
+     *
+     * 一条记录得是自洽的：以后食物被删掉、换设备没带过来，
+     * 这一行仍然要知道自己该显示 150ml 还是 150g，而不是回头去查食物库。
+     * 老记录没有这个字段，读的时候仍按查到的食物兜底。
+     */
+    unit: food.basis === '100ml' ? 'ml' : 'g',
     note: note || compositionNote(savedComposition),
     ...(savedComposition ? { composition: savedComposition } : {}),
     ...nutrients,
@@ -478,7 +486,8 @@ export async function addEntry({
   const id = await db.put(db.STORES.diet, entry);
   entry.id = id;
   state.dietEntries = [...state.dietEntries, entry];
-  await rememberPortion(food, entry.grams);
+  // 糖度和餐次跟克数一起记：同一杯奶茶总是三分糖，同一样早餐总是记到早餐
+  await rememberPortion(food, entry.grams, { sugarLevel, meal: entry.meal });
   await refreshDietDaily();
   recompute();
   emit();
@@ -546,9 +555,27 @@ export async function restoreEntry(entry) {
   return restored;
 }
 
-/** 把某一天的记录整批复制到当前日期（"和昨天一样"） */
-export async function copyDay(fromDate) {
+/** 某一天有哪几餐、各几条 —— 复制之前先让用户挑 */
+export async function dayMealCounts(fromDate) {
   const rows = await db.getDietByDate(fromDate);
+  const counts = new Map();
+  for (const row of rows) {
+    const meal = row.meal || 'snack';
+    counts.set(meal, (counts.get(meal) || 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * 把某一天的记录复制到当前日期（"和昨天一样"）。
+ *
+ * meals 为空表示整天都要；给了就只复制这几餐 —— 昨天吃了 8 样，
+ * 今天可能只想照搬早餐那 3 样，原先只能整天复制再一条条删。
+ */
+export async function copyDay(fromDate, meals = null) {
+  const all = await db.getDietByDate(fromDate);
+  const wanted = meals?.length ? new Set(meals) : null;
+  const rows = wanted ? all.filter((r) => wanted.has(r.meal || 'snack')) : all;
   if (!rows.length) return 0;
   for (const row of rows) {
     const { id: _oldId, ...rest } = row;
@@ -571,8 +598,8 @@ export function portionMemory() {
   return state.portionMemory;
 }
 
-async function rememberPortion(food, grams) {
-  const next = nextPortionMemory(state.portionMemory, food, grams);
+async function rememberPortion(food, grams, choice = {}) {
+  const next = nextPortionMemory(state.portionMemory, food, grams, choice);
   if (!next) return;
   await db.setSetting('portionMemory', next);
   state.portionMemory = next;

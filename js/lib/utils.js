@@ -289,6 +289,13 @@ export const num = (v, d = 0) => {
 };
 
 /*
+ * 数字和单位之间空不空格由 core/units.js 说了算，这里只是再导出一遍
+ * （视图不该为了拼一个单位去 import core 里的一堆东西）。
+ * 规矩本身是判断，得能写测试，所以住在 core。
+ */
+export { withUnit, unitGap } from '../core/units.js';
+
+/*
  * 时长的写法搬去了 core/duration.js —— 主卡的提示和数据页的卡片要说同一句话，
  * 而 core 里的 buildInsights 不能 import lib。这里再导出一遍。
  *

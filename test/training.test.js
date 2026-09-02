@@ -7,7 +7,7 @@ import {
   overlapScore, overlapLevel, findOverlaps, coverage,
   replacementsFor, exercisesForGroup, exercisesForMuscles, planAdvice, starterCombo, starterSplitCombo,
   normalizeSession, sessionVolume, weeklyVolume, recentExercises,
-  splitOf, exercisesForSplit, SPLITS,
+  splitOf, exercisesForSplit, SPLITS,  lastPerformance,
 } from '../js/core/training.js';
 
 test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
@@ -532,4 +532,30 @@ test('近 7 日训练记录：一行一个动作，数字全来自实际记录',
 
   assert.deepEqual(recentTrainingRows([], '2026-08-29'), []);
   assert.deepEqual(recentTrainingRows(days, ''), []);
+});
+
+test('上次这个动作练了多少，取最近一次真的记了数的', () => {
+  const sessions = [
+    { date: '2026-08-20', items: [{ id: 'bench_press_bb', sets: [{ weightKg: 60, reps: 8 }, { weightKg: 60, reps: 8 }, { weightKg: 60, reps: 6 }] }] },
+    // 勾了动作但一组都没填：不该顶掉上面那次，否则给出来的是「上次 —」
+    { date: '2026-08-26', items: [{ id: 'bench_press_bb', sets: [] }] },
+  ];
+  const last = lastPerformance(sessions, 'bench_press_bb');
+  assert.equal(last.date, '2026-08-20');
+  assert.equal(last.weightLabel, '60kg');
+  // 次数逐组列出来，不压成区间：8,8,6 和 6–8 说的不是一回事
+  assert.equal(last.repsLabel, '8,8,6');
+  assert.equal(last.setCount, 3);
+});
+
+test('递减组的重量写成区间；没练过的返回 null', () => {
+  const sessions = [
+    { date: '2026-08-25', items: [{ id: 'squat_bb', sets: [{ weightKg: 100, reps: 5 }, { weightKg: 80, reps: 8 }] }] },
+  ];
+  assert.equal(lastPerformance(sessions, 'squat_bb').weightLabel, '80–100kg');
+  assert.equal(lastPerformance(sessions, 'bench_press_bb'), null);
+  assert.equal(lastPerformance([], 'squat_bb'), null);
+  assert.equal(lastPerformance(sessions, null), null);
+  // before 用来排掉今天自己刚记的那次
+  assert.equal(lastPerformance(sessions, 'squat_bb', { before: '2026-08-25' }), null);
 });

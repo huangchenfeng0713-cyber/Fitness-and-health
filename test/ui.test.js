@@ -427,7 +427,12 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
   assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
   assert.match(training, /\['all', '全部动作'\], \['recommend', '推荐组合'\]/,
     '列表 / 推荐仍是语义含糊的单个开关');
-  assert.match(training, /'aria-pressed': String\(active\)/, '两段式切换没有按下态');
+  /*
+   * 互斥选择的读屏语义要说清「这是一组、现在选中的是哪个」。
+   * aria-pressed 说的是「五个各自独立的切换按钮」，不是同一件事。
+   */
+  assert.match(training, /segmentedItemProps\(active\)/, '两段式切换没有 tab 语义');
+  assert.match(read('js/lib/ui.js'), /'aria-selected'/, '统一组件里没有选中态语义');
   assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
 
   const core = strip(read('js/core/training.js'));
@@ -511,9 +516,9 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(ui, /export function weakTag\(/, '缺少统一弱标签组件');
   assert.match(ui, /export function listRow\(/, '缺少统一列表行组件');
   assert.match(ui, /export \{ infoTip, persistentInfoTip \}/, '信息入口没有从统一 UI 模块导出');
-  assert.match(diet, /import \{ listRow, searchField, weakTag \} from '\.\.\/lib\/ui\.js'/,
+  assert.match(diet, /listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,[\s\S]{0,40}from '\.\.\/lib\/ui\.js'/,
     '添加食物没有接入统一组件');
-  assert.match(training, /import \{ listRow, persistentInfoTip, searchField, weakTag \} from '\.\.\/lib\/ui\.js'/,
+  assert.match(training, /listRow, persistentInfoTip, searchField, weakTag,[\s\S]{0,80}from '\.\.\/lib\/ui\.js'/,
     '选择动作没有接入统一组件');
   assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
   assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
@@ -809,8 +814,14 @@ test('脂肪计划值不再冒充上限，液体条目始终使用 ml', () => {
   assert.match(read('js/core/nutrition.js'), /const fatLower = round\(\(kcal \* 0\.20\) \/ ATWATER\.fat\)/);
   assert.ok(dashboard.includes('参考上限'), '脂肪的参考上限依据要写清楚');
   // 记录行搬到饮食页之后，液体用 ml 这条也跟着搬了过去
-  assert.match(diet, /const food = findFood\(e\.foodId\);[\s\S]*?food\?\.basis === '100ml'/,
-    '记录行应复用已查到的食物，并按 basis 决定 ml/g');
+  /*
+   * 单位随记录一起存：食物被删掉之后这一行仍要知道自己是 ml 还是 g。
+   * 老记录没有这个字段，才回头看查到的食物。
+   */
+  assert.match(read('js/lib/store.js'), /unit: food\.basis === '100ml' \? 'ml' : 'g'/,
+    '记录没有把单位一起存下来');
+  assert.match(diet, /const food = findFood\(e\.foodId\);[\s\S]*?e\.unit \? e\.unit === 'ml' : food\?\.basis === '100ml'/,
+    '记录行没有优先用记录自带的单位');
   assert.ok(diet.includes("basis === '100ml' ? '100ml' : '100g'"));
   assert.ok(diet.includes("isLiquid ? '毫升数' : '克数'"));
   assert.ok(advisor.includes("food.basis === '100ml' ? 'ml' : 'g'"));
@@ -1740,4 +1751,54 @@ test('份量弹层的碳水脂肪刻度直接算，不从渲染结果里读回�
   assert.ok(!/'脂肪上限', 'g'/.test(diet), '脂肪又单独占了一行');
   assert.ok(!/querySelector\('\.impact-to'\)|impact-to'\)\?\.textContent/.test(diet),
     '又开始从渲染结果里读数字了');
+});
+
+test('饮食记录不依赖能不能查到食物，查不到也不崩', () => {
+  /*
+   * 一条记录是自洽的：名字、克数、单位和七项营养在记账那一刻就存进去了。
+   * 原先渲染那一行要先 findFood，查不到就把 null 一路传给 estimateTag →
+   * isEstimated（它第一行防了空、第二行直接读 food.cat），整个饮食页
+   * 被错误边界接管 —— 而饮食页正是唯一能删掉那条记录的地方。
+   */
+  const foods = read('js/data/foods.js');
+  assert.match(foods, /export function isEstimated\(food\) \{\s*\n\s*if \(!food\) return false;/,
+    'isEstimated 没有防空，一条查不到食物的记录就能崩掉整页');
+  const diet = page('diet');
+  assert.match(diet, /food \? null : weakTag\('食物已删除'/, '查不到食物时没有说出来');
+  assert.match(diet, /e\.unit \? e\.unit === 'ml' : food\?\.basis === '100ml'/,
+    '单位没有优先用记录自带的');
+
+  // 崩溃卡要有出口：换一页，或者把错误连同环境复制出去
+  const app = read('js/app.js');
+  assert.match(app, /'回到今日'/, '崩溃卡没有出口');
+  assert.match(app, /buildDiagnostics\(\{/, '崩溃卡不能把诊断信息带出去');
+  assert.ok(!/appVersion: [^,\n]*weightKg/.test(app), '诊断信息里不许带身体数值');
+});
+
+test('自定义食物能改，能量能按 kJ 填', () => {
+  const diet = page('diet');
+  assert.match(diet, /const KJ_PER_KCAL = 4\.184/, '缺少 kJ 换算');
+  assert.match(diet, /customDraft\.energyUnit = customDraft\.energyUnit === 'kj' \? 'kcal' : 'kj'/,
+    '单位开关不会切换');
+  // 切换要把已填的数字一起换算，不能清空 —— 照着标签填了 1569 才发现填错单位
+  assert.match(diet, /const kcal = customDraft\.energyUnit === 'kj' \? before \* KJ_PER_KCAL : before \/ KJ_PER_KCAL/,
+    '切单位没有换算已填的数字');
+  // 改一条已有的要沿用同一个 id，否则会多出一条重名食物而旧记录还指着旧 id
+  assert.match(diet, /\.\.\.\(customDraft\.id \? \{ id: customDraft\.id \} : \{\}\)/,
+    '修改自定义食物时没有沿用原 id');
+  assert.match(diet, /还有 \$\{used\} 条饮食记录/, '删自定义食物前没有说它还挂着几条记录');
+  // 契约：纤维和糖都不能超过碳水
+  assert.match(diet, /if \(fiber > carb\)/);
+  assert.match(diet, /if \(sugar > carb\)/);
+});
+
+test('搜索框有清除键，两页共用一个组件', () => {
+  const ui = read('js/lib/ui.js');
+  assert.match(ui, /search-clear/, '搜索框没有清除键');
+  assert.match(ui, /clear\.hidden = !input\.value/, '空的时候不该摆一个点不动的叉');
+  assert.match(ui, /new Event\('input', \{ bubbles: true \}\)/,
+    '清空之后没有触发搜索刷新，结果列表会停在原地');
+  const css = read('css/app.css');
+  assert.match(css, /\.search-input::-webkit-search-cancel-button/,
+    '没有藏掉原生小叉，桌面上会出现两个');
 });

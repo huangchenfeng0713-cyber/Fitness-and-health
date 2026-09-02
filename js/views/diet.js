@@ -9,12 +9,14 @@
 import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
-import { listRow, searchField, weakTag } from '../lib/ui.js';
+import {
+  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,
+} from '../lib/ui.js';
 import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
 import { macroBar, splitBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
-  state, addEntry, removeEntry, updateEntry, copyDay,
+  state, addEntry, removeEntry, updateEntry, copyDay, dayMealCounts,
   restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
@@ -25,6 +27,7 @@ import {
 import { MEALS, MEAL_LABEL, currentMeal, focusFoods, FOCUS_LABEL } from '../core/advisor.js';
 import { initialPortion } from '../core/portion.js';
 import { macroSplit } from '../core/metrics.js';
+import { mergeSameEntries } from '../core/diet-log.js';
 import { selectBar } from '../lib/select-bar.js';
 import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
@@ -396,6 +399,15 @@ function selectFood(food) {
   ui.unitIdx = start.unitIdx;
   ui.grams = start.grams;
   ui.qty = start.qty;
+  /*
+   * 糖度和餐次也照记忆来。
+   *
+   * 糖度只在这个食物有档位时才用得上；餐次只在这次还没手动选过餐次时才让位 ——
+   * 用户如果已经在备选条上选了「记到晚餐」，不能因为下一样食物平时是早餐吃的
+   * 就把整批拽回早餐。没有记忆时仍然按钟点猜。
+   */
+  if (start.sugarLevel && hasSugarLevel(food)) ui.sugar = start.sugarLevel;
+  if (start.meal && !ui.meal && !ui.basket.length) ui.meal = start.meal;
   refreshPortion();
 }
 
@@ -420,6 +432,7 @@ function refreshMixedPortion(food) {
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
+      ...segmentedItemProps(guessMeal() === m.key, 'radio'),
       onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
     }, m.label)));
     directBtn.textContent = ui.basket.length
@@ -694,13 +707,23 @@ function refreshPortion() {
     });
   }
 
-  const quickChips = h('div.qty-quick');
+  /*
+   * 快捷份量只在「按克输入」时出现。
+   *
+   * 按份数选的时候，0.5 / 1 / 1.5 / 2 / 3 就是步进器按几下的结果 ——
+   * 同一个数字给两套控件，中间还夹着步进器本身，三层加起来在 390px 上
+   * 占掉约 450px，「记下这一笔会推进到哪」被顶到首屏之外。
+   * 按克的 50 / 100 / 150 / 200 / 300 不一样：步长是 10，那几个是真的快捷键。
+   */
+  const quickChips = h('div.qty-quick', segmentedGroupProps('快捷份量', 'radio'));
   function refreshQuickChips() {
-    const presets = gramMode() ? [50, 100, 150, 200, 300] : [0.5, 1, 1.5, 2, 3];
-    mount(clearEl(quickChips), presets.map((v) => h('button', {
+    quickChips.hidden = !gramMode();
+    if (!gramMode()) { clearEl(quickChips); return; }
+    mount(clearEl(quickChips), [50, 100, 150, 200, 300].map((v) => h('button', {
       class: `chip-btn${Math.abs(ui.qty - v) < 1e-6 ? ' active' : ''}`,
+      ...segmentedItemProps(Math.abs(ui.qty - v) < 1e-6, 'radio'),
       onclick: () => { ui.qty = v; syncReadouts(); refreshQuickChips(); },
-    }, gramMode() ? `${v}${isLiquid ? 'ml' : 'g'}` : `${v} ${unitLabel(servings[ui.unitIdx][0])}`)));
+    }, `${v}${isLiquid ? 'ml' : 'g'}`)));
   }
 
   const gramInputWrap = h('div.gram-input-wrap', null,
@@ -709,16 +732,17 @@ function refreshPortion() {
   function toggleGramInput() { gramInputWrap.hidden = !gramMode(); }
 
   nodes.preview = h('div.preview-slot');
-  nodes.mealRow = h('div.portion-meal', null);
+  nodes.mealRow = h('div.portion-meal', segmentedGroupProps('记到哪一餐', 'radio'));
   const directBtn = h('button.primary-btn', null);
   const queueBtn = h('button.secondary-btn', null, '继续添加');
 
   // 茶饮的糖度：同一杯全糖和三分糖能差 100 多千卡，必须能选
-  const sugarRow = hasSugarLevel(food) ? h('div.sugar-row') : null;
+  const sugarRow = hasSugarLevel(food) ? h('div.sugar-row', segmentedGroupProps('糖度', 'radio')) : null;
   const refreshSugarChips = () => {
     if (!sugarRow) return;
     mount(clearEl(sugarRow), SUGAR_LEVELS.map((l) => h('button', {
       class: `chip-btn${ui.sugar === l.key ? ' active' : ''}`,
+      ...segmentedItemProps(ui.sugar === l.key, 'radio'),
       title: l.alias ? `也叫「${l.alias}」` : '',
       onclick: () => { ui.sugar = l.key; refreshSugarChips(); syncReadouts(); },
     }, l.alias ? `${l.label} / ${l.alias}` : l.label)));
@@ -732,6 +756,7 @@ function refreshPortion() {
   const refreshMealChips = () => {
     mount(clearEl(nodes.mealRow), MEALS.map((m) => h('button', {
       class: `chip-btn${guessMeal() === m.key ? ' active' : ''}`,
+      ...segmentedItemProps(guessMeal() === m.key, 'radio'),
       onclick: () => { ui.meal = m.key; refreshMealChips(); refreshBasket(); },
     }, m.label)));
     directBtn.textContent = ui.basket.length
@@ -898,55 +923,189 @@ function refreshPreview(pending = false, nutrientOverride = null) {
     pending ? null : impactBlock(n));
 }
 
+/*
+ * 自定义食物的编辑草稿。
+ *
+ * 模块级而不是 refreshCustomForm 的局部变量：后台任何一次落库都会重跑
+ * renderDiet，填了一半的表单不能就这么没了。id 非空表示在改一条已有的，
+ * 保存时沿用同一个 id —— 否则「改一个数」会变成「多出一条重名食物」，
+ * 而旧记录还指着旧 id。
+ */
+const customDraft = { id: null, energyUnit: 'kcal' };
+
+/* 标签上写 kJ 的比写 kcal 的多。1 kcal = 4.184 kJ（GB 28050 用的就是这个数）。 */
+const KJ_PER_KCAL = 4.184;
+
+function resetCustomDraft() {
+  customDraft.id = null;
+  customDraft.energyUnit = 'kcal';
+}
+
+const CUSTOM_NUM_FIELDS = [
+  ['protein', '蛋白 g', 0],
+  ['fat', '脂肪 g', 1],
+  ['carb', '碳水 g', 2],
+  ['fiber', '膳食纤维 g', 3],
+  ['sugar', '糖 g', 4],
+  ['sodium', '钠 mg', 5],
+];
+
 function refreshCustomForm() {
   clearEl(nodes.customBox);
   if (!ui.showCustomForm) return;
 
-  const fields = [
-    ['name', '名称', 'text'],
-    ['kcal', '热量 kcal', 'number'],
-    ['protein', '蛋白 g', 'number'],
-    ['fat', '脂肪 g', 'number'],
-    ['carb', '碳水 g', 'number'],
-    ['sodium', '钠 mg', 'number'],
-  ];
+  const editing = customDraft.id
+    ? state.customFoods.find((f) => f.id === customDraft.id)
+    : null;
+  if (customDraft.id && !editing) resetCustomDraft();
+
+  const n = editing?.n || [];
   const inputs = {};
-  const grid = h('div.form-grid', null, fields.map(([key, label, type]) => {
+  const numInput = (key, label, value) => {
     const input = h('input', {
-      type, placeholder: label, step: '0.1',
-      inputmode: type === 'number' ? 'decimal' : 'text',
+      type: 'number', placeholder: label, step: '0.1', inputmode: 'decimal',
+      value: value == null ? '' : String(value),
     });
     inputs[key] = input;
     return h('label.form-field', null, h('span', null, label), input);
-  }));
+  };
+
+  inputs.name = h('input', {
+    type: 'text', placeholder: '名称', value: editing?.name || '',
+  });
+
+  /*
+   * 能量那一格自带单位开关：点一下在 kcal / kJ 之间切，已经填的数字跟着换算。
+   * 换算而不是清空 —— 照着标签把 1569 填进去、发现填错了单位，
+   * 再让人自己按计算器除 4.184 是没道理的。
+   */
+  const energyValue = () => {
+    const raw = Number(inputs.energy.value);
+    if (!Number.isFinite(raw)) return null;
+    return customDraft.energyUnit === 'kj' ? raw / KJ_PER_KCAL : raw;
+  };
+  inputs.energy = h('input', {
+    type: 'number', placeholder: '能量', step: '0.1', inputmode: 'decimal',
+    value: n[0] == null ? '' : String(n[0]),
+  });
+  const unitBtn = h('button.energy-unit-btn', {
+    type: 'button',
+    'aria-label': '切换能量单位',
+  }, customDraft.energyUnit === 'kj' ? 'kJ' : 'kcal');
+  unitBtn.onclick = () => {
+    const before = Number(inputs.energy.value);
+    customDraft.energyUnit = customDraft.energyUnit === 'kj' ? 'kcal' : 'kj';
+    if (Number.isFinite(before) && inputs.energy.value !== '') {
+      const kcal = customDraft.energyUnit === 'kj' ? before * KJ_PER_KCAL : before / KJ_PER_KCAL;
+      inputs.energy.value = String(Math.round(kcal * 10) / 10);
+    }
+    unitBtn.textContent = customDraft.energyUnit === 'kj' ? 'kJ' : 'kcal';
+    inputs.energy.focus();
+  };
+
+  inputs.cat = h('select', null, Object.entries(CATEGORIES).map(([key, label]) =>
+    h('option', { value: key }, label)));
+  // 挂进 select 之后再设 value：给还没插入的 option 设 selected 会被打回第一项
+  inputs.cat.value = editing?.cat || 'other';
+
+  inputs.liquid = h('input', { type: 'checkbox', checked: editing?.basis === '100ml' });
+  inputs.portionName = h('input', {
+    type: 'text', placeholder: '一份',
+    value: editing?.s?.[0]?.[0] || '',
+  });
+  inputs.portionGrams = h('input', {
+    type: 'number', placeholder: '100', step: '1', inputmode: 'numeric',
+    value: editing?.s?.[0]?.[1] == null ? '' : String(editing.s[0][1]),
+  });
+
+  const save = async () => {
+    const name = inputs.name.value.trim();
+    const kcal = energyValue();
+    if (!name || kcal == null) { toast('至少填写名称和每 100g 能量', 'warn'); return; }
+    const val = (key) => Math.max(0, Number(inputs[key].value) || 0);
+    const carb = val('carb');
+    const fiber = val('fiber');
+    const sugar = val('sugar');
+    // 食物库自己的契约：纤维和糖都不能超过碳水，否则营养汇总会算出负的可用碳水
+    if (fiber > carb) { toast('膳食纤维不能超过碳水', 'warn'); return; }
+    if (sugar > carb) { toast('糖不能超过碳水', 'warn'); return; }
+    const grams = Math.round(Number(inputs.portionGrams.value) || 100);
+    if (!(grams > 0 && grams <= 1000)) { toast('常用份量要在 1~1000 之间', 'warn'); return; }
+    const liquid = inputs.liquid.checked;
+
+    const food = await addCustomFood({
+      ...(customDraft.id ? { id: customDraft.id } : {}),
+      name, alias: '', cat: inputs.cat.value, custom: true,
+      n: [Math.round(kcal * 10) / 10, val('protein'), val('fat'), carb, fiber, sugar, val('sodium')],
+      s: [[inputs.portionName.value.trim() || '一份', grams]],
+      ...(liquid ? { basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total' } : {}),
+      f: [],
+    });
+    toast(customDraft.id ? `已保存「${name}」` : `已添加「${name}」`, 'ok');
+    const wasEditing = Boolean(customDraft.id);
+    resetCustomDraft();
+    ui.showCustomForm = false;
+    setCustomToggleLabel();
+    refreshCustomForm();
+    refreshResults();
+    refreshEntries();
+    if (!wasEditing) selectFood(food);
+  };
 
   mount(nodes.customBox, h('div.custom-form', null,
-    h('p.form-hint', null, '按包装上的「营养成分表（每 100 克）」填写即可。'),
-    grid,
-    h('button.primary-btn', {
-      onclick: async () => {
-        const name = inputs.name.value.trim();
-        const kcal = Number(inputs.kcal.value);
-        if (!name || !Number.isFinite(kcal)) { toast('至少填写名称和每 100g 热量', 'warn'); return; }
-        const food = await addCustomFood({
-          name, alias: '', cat: 'other', custom: true,
-          n: [kcal, Number(inputs.protein.value) || 0, Number(inputs.fat.value) || 0,
-            Number(inputs.carb.value) || 0, 0, 0, Number(inputs.sodium.value) || 0],
-          s: [['一份', 100]],
-          f: [],
-        });
-        toast(`已添加「${name}」`, 'ok');
-        ui.showCustomForm = false;
-        setCustomToggleLabel();
-        refreshCustomForm();
-        selectFood(food);
-      },
-    }, '保存到我的食物库'),
+    h('p.form-hint', null, editing
+      ? `正在修改「${editing.name}」。改完之后，之前记过的那几笔仍然保留当时的数值。`
+      : '按包装上的「营养成分表（每 100 克）」填写。能量那一格可以点右边的单位在 kcal 和 kJ 之间切。'),
+    h('div.form-grid', null,
+      h('label.form-field.span-all', null, h('span', null, '名称'), inputs.name),
+      h('label.form-field', null, h('span', null, '分类'), inputs.cat),
+      h('label.form-field', null, h('span', null, '能量'),
+        h('div.energy-field', null, inputs.energy, unitBtn)),
+      CUSTOM_NUM_FIELDS.map(([key, label, idx]) => numInput(key, label, n[idx + 1])),
+      h('label.form-field', null, h('span', null, '常用份量'), inputs.portionName),
+      h('label.form-field', null, h('span', null, '这一份多少克'), inputs.portionGrams),
+      h('label.form-field.span-all.checkbox-field', null, inputs.liquid,
+        h('span', null, '这是饮品，按毫升记'))),
+    h('div.custom-form-actions', null,
+      editing ? h('button.secondary-btn', {
+        type: 'button',
+        onclick: () => { resetCustomDraft(); refreshCustomForm(); },
+      }, '取消修改') : null,
+      h('button.primary-btn', { onclick: save },
+        editing ? '保存修改' : '保存到我的食物库')),
     state.customFoods.length ? h('div.custom-list', null,
-      state.customFoods.map((f) => h('span.custom-chip', null, f.name,
+      state.customFoods.map((f) => h('span.custom-chip', { class: f.id === customDraft.id ? 'active' : '' },
+        /*
+         * 名字本身就是「改这一条」的入口。原先自定义食物存进去就再也改不了，
+         * 填错一个数只能删掉重来 —— 而删掉会让已经记过的那几笔查不到食物。
+         */
+        h('button.custom-chip-name', {
+          type: 'button',
+          'aria-label': `修改 ${f.name}`,
+          onclick: () => {
+            customDraft.id = f.id;
+            customDraft.energyUnit = 'kcal';
+            refreshCustomForm();
+          },
+        }, f.name),
         h('button', {
           'aria-label': `删除 ${f.name}`,
-          onclick: async () => { await removeCustomFood(f.id); refreshCustomForm(); },
+          /*
+           * 删之前先说这个食物还挂着几条记录。
+           *
+           * 不拦 —— 记录是自洽的，删掉食物不该连记录一起丢；但也不能一声不吭，
+           * 那几条记录之后在饮食记录里会标成「食物已删除」，事先知道比事后发现好。
+           */
+          onclick: async () => {
+            const used = state.dietEntries.filter((entry) => entry.foodId === f.id).length;
+            if (used && !confirmAction(
+              `「${f.name}」还有 ${used} 条饮食记录。删掉食物不会删掉这些记录，`
+              + '它们会保留当时的营养数值，只是不能再从库里搜到这个食物。继续吗？',
+            )) return;
+            if (customDraft.id === f.id) resetCustomDraft();
+            await removeCustomFood(f.id);
+            refreshCustomForm();
+          },
         }, icon('close'))))) : null,
   ));
 }
@@ -958,6 +1117,27 @@ function refreshCustomForm() {
  */
 function mealIcon(meal) {
   return ICON_SHAPES[meal] ? icon(meal, 'meal-icon') : null;
+}
+
+/*
+ * 合并后的一行。只有一条时就是原来那一行，多条时折叠起来。
+ *
+ * 用 <details> 而不是自己管展开状态：这张卡每次落库都会重建，
+ * 自己记的话得再挂一份 key→是否展开的表，而 details 用原生行为就够 ——
+ * 收起来是常态，真要看明细的是少数。
+ */
+function mergedRow(group) {
+  if (group.count === 1) return entryRow(group.entries[0], false);
+  return h('details.entry-merged', null,
+    h('summary.entry-row', null,
+      h('div.entry-main', null,
+        h('div.entry-name', null, group.name,
+          h('span.entry-times', null, `×${group.count}`)),
+        h('div.entry-meta', null,
+          h('strong', null, `${num(group.kcal)} kcal`),
+          ` · 蛋 ${num(group.protein, 1)} · 脂 ${num(group.fat, 1)} · 碳 ${num(group.carb, 1)} g`)),
+      h('span.entry-grams-text', null, `${num(group.grams)}${group.unit}`)),
+    h('div.entry-merged-list', null, group.entries.map((e) => entryRow(e, false))));
 }
 
 function refreshEntries() {
@@ -996,7 +1176,13 @@ function refreshEntries() {
         mealIcon(meal),
         h('strong', null, MEAL_LABEL[meal] || meal),
         h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
-      list.map((e) => entryRow(e, editing)))),
+      /*
+       * 只读态把「同一笔」合成一行（`米饭（白米） ×3 · 450g`），点开看明细。
+       * 编辑态一条是一条 —— 删的、改克数的、换餐次的都是某一条具体记录。
+       */
+      editing
+        ? list.map((e) => entryRow(e, true))
+        : mergeSameEntries(list).map(mergedRow))),
     // 「和昨天一样 / 清空这一天」也是改数据，跟着编辑态走
     editing ? copyRow() : null));
 }
@@ -1021,27 +1207,60 @@ function mealSelect(entry) {
       const node = ev.currentTarget;
       const meal = node.value;
       if (meal === entry.meal) return;
+      const before = entry.meal;
       const result = await runLocalAction(node, () => updateEntry(entry.id, { meal }), '更改餐次');
-      if (result.ok) toast(`已移到${MEAL_LABEL[meal] || meal}`, 'ok');
-      else node.value = entry.meal;
+      if (!result.ok) { node.value = before; return; }
+      /*
+       * 改餐次和改克数一样要能撤销：这一行本来就挤（下拉 + 数字框 + 删除），
+       * 滑列表时最容易蹭到的就是这个下拉，而蹭错了原先只能自己再选回去 ——
+       * 可这时候人已经不记得它原来在哪一餐了。
+       */
+      toast(`已移到${MEAL_LABEL[meal] || meal}`, 'ok', {
+        label: '撤销',
+        onClick: () => updateEntry(entry.id, { meal: before }),
+      });
     },
   }, MEALS.map((m) => h('option', { value: m.key }, m.label)));
   select.value = entry.meal;
   return select;
 }
 
+/*
+ * 一条记录是自洽的：名字、克数和七项营养在记账那一刻就存进去了。
+ *
+ * 所以这一行只用记录本身渲染，不依赖还能不能在食物库里查到它。
+ * 原先反过来 —— 查不到就把 null 一路传给 estimateTag，整个饮食页被错误边界
+ * 接管。而饮食页是唯一能删掉那条记录的地方，崩了就永远删不掉了。
+ * 查不到的情形是真实存在的：自定义食物被删、换设备恢复的备份没带上它、
+ * 旧版本留下的 id。这时候明说「食物已删除」，别装作没事，也别崩。
+ */
 function entryRow(e, editing) {
   const food = findFood(e.foodId);
-  const isLiquid = food?.basis === '100ml';
+  // 记录自带单位；老记录没有这个字段，才回头看查到的食物
+  const isLiquid = e.unit ? e.unit === 'ml' : food?.basis === '100ml';
   const unit = isLiquid ? 'ml' : 'g';
   const recordNote = e.note
     ? h('p.entry-record-note', null, h('strong', null, '本次记录：'), e.note)
     : null;
+  /*
+   * 「这条按记录当时的营养值保存」得说出来：改了食物库不会回填历史记录，
+   * 这是对的，但没人猜得到。查不到食物时更要说，否则那枚标签看着像出错了。
+   */
+  const snapshotNote = h('p.entry-record-note', null,
+    food
+      ? '这条记录保存的是记账当时的营养数值；之后食物库更新不会回填这一条。'
+      : '这个食物已经不在食物库里（可能被删掉了，或者换设备时没带过来）。'
+        + '记录本身完整保留，克数、餐次照样能改，也可以删除。');
   return h('div.entry-row', { class: `entry-row${editing ? ' editing' : ''}` },
     h('div.entry-main', null,
       h('div.entry-name', null, e.name,
         estimateTag(food),
-        foodInfoTip(food, { label: '查看估算与记录说明', extra: recordNote })),
+        food ? null : weakTag('食物已删除', { tone: 'outline', className: 'chip-missing' }),
+        foodInfoTip(food, {
+          label: '查看估算与记录说明',
+          extra: [recordNote, snapshotNote],
+          fallback: true,
+        })),
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
         ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`)),
@@ -1054,9 +1273,13 @@ function entryRow(e, editing) {
           const input = ev.currentTarget;
           const g = Number(ev.target.value);
           if (g > 0) {
+            const before = e.grams;
             const result = await runLocalAction(input, () => updateEntry(e.id, { grams: g }), '更新份量');
-            if (result.ok) toast('已更新', 'ok');
-            else input.value = num(e.grams);
+            if (!result.ok) { input.value = num(before); return; }
+            toast(`已改成 ${num(g)}${unit}`, 'ok', {
+              label: '撤销',
+              onClick: () => updateEntry(e.id, { grams: before }),
+            });
             return;
           }
           input.value = num(e.grams);   // 清空或填了非法值就还原，别留个空框
@@ -1089,15 +1312,77 @@ function entryRow(e, editing) {
         h('span.entry-grams-text', null, `${num(e.grams)} ${unit}`)));
 }
 
+/*
+ * 「复制哪几餐」。
+ *
+ * 用弹层而不是 confirm：confirm 只能回答是 / 否，而这里要选的是一个子集。
+ * 默认全选 —— 多数时候人就是想整天照搬，多按一下勾比多勾五下强。
+ */
+function pickMealsToCopy(counts) {
+  return new Promise((resolve) => {
+    const chosen = new Set(counts.keys());
+    let settled = false;
+    const finish = (value) => { if (!settled) { settled = true; resolve(value); } };
+    const rows = MEALS.filter((m) => counts.has(m.key)).map((m) => {
+      const btn = h('button.copy-meal-row', {
+        type: 'button',
+        ...segmentedItemProps(true, 'radio'),
+        onclick: () => {
+          if (chosen.has(m.key)) chosen.delete(m.key); else chosen.add(m.key);
+          const on = chosen.has(m.key);
+          btn.classList.toggle('active', on);
+          btn.setAttribute('aria-checked', String(on));
+          setIcon(mark, on ? 'check' : 'plus');
+          go.disabled = chosen.size === 0;
+          go.textContent = chosen.size
+            ? `复制 ${MEALS.filter((x) => chosen.has(x.key))
+              .reduce((a, x) => a + counts.get(x.key), 0)} 条`
+            : '至少选一餐';
+        },
+      });
+      const mark = icon('check');
+      btn.classList.add('active');
+      mount(btn, mealIcon(m.key), h('span.copy-meal-name', null, m.label),
+        h('span.copy-meal-count', null, `${counts.get(m.key)} 条`), mark);
+      return btn;
+    });
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const go = h('button.primary-btn', {
+      /*
+       * 先 finish 再 closeSheet：closeSheet() 会同步调用 onClose，
+       * 而 onClose 里是 finish(null)。反过来写的话，用户按了「复制」，
+       * 拿到的却是「取消」—— 弹层关掉了，一条都没复制，也没有任何提示。
+       */
+      onclick: () => { finish([...chosen]); closeSheet(); },
+    }, `复制 ${total} 条`);
+    openSheet(h('div.portion-panel', null,
+      h('div.field-label', null, '复制昨天的哪几餐'),
+      h('div.copy-meal-list', segmentedGroupProps('复制哪几餐', 'radio'), rows)),
+    { label: '复制昨天的记录', onClose: () => finish(null) });
+    setSheetFooter(h('div.sheet-action', null, go));
+  });
+}
+
 function copyRow() {
   return h('div.copy-row', null,
     h('button.text-btn', {
+      /*
+       * 复制之前先让人挑餐次。
+       *
+       * 原先是整天照搬：昨天吃了 8 样，今天只想复制早餐那 3 样，
+       * 就得先全复制再一条条删 —— 而删一条是有代价的（要进编辑态）。
+       * 只有一餐时不弹选择，那没什么可挑的。
+       */
       onclick: async (ev) => {
+        const from = shiftDay(state.day, -1);
+        const counts = await dayMealCounts(from);
+        if (!counts.size) { toast('昨天没有记录', 'warn'); return; }
+        const meals = counts.size > 1 ? await pickMealsToCopy(counts) : [...counts.keys()];
+        if (!meals?.length) return;
         const result = await runLocalAction(ev.currentTarget,
-          () => copyDay(shiftDay(state.day, -1)), '复制昨天记录');
+          () => copyDay(from, meals), '复制昨天记录');
         if (!result.ok) return;
-        const n = result.value;
-        toast(n ? `已复制昨天的 ${n} 条记录` : '昨天没有记录', n ? 'ok' : 'warn');
+        toast(`已复制昨天的 ${result.value} 条记录`, 'ok');
       },
     }, '和昨天一样'),
     h('button.text-btn.danger', {

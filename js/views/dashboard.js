@@ -28,7 +28,7 @@ const CHIP_KEYS = ['fiber', 'sodium', 'sugar', 'water'];
 
 function metricRow(m) {
   const { state: st } = m;
-  const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
+  const value = m.display ?? (m.decimals ? num(m.eaten, m.decimals) : num(m.eaten));
   return h('div', { class: `metric-row ${st.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, m.label),
@@ -67,7 +67,7 @@ function splitRow(split) {
 
 function metricChip(m) {
   const { state: st } = m;
-  const value = m.decimals ? num(m.eaten, m.decimals) : num(m.eaten);
+  const value = m.display ?? (m.decimals ? num(m.eaten, m.decimals) : num(m.eaten));
   const unit = m.unit.trim();
   return h('div', { class: `micro-chip ${st.level}${m.kind === KIND.log ? ' log' : ''}` },
     h('span.micro-label', null, m.label),

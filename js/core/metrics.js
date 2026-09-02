@@ -78,7 +78,7 @@ const pctOf = (value, base) => (base > 0 ? (value / base) * 100 : 0);
  *  - markerPct 区间指标里「现在落在哪」的位置，其余为 null
  */
 export function metricState({
-  kind, eaten = 0, target = 0, lo = null, hi = null, unit = 'g', decimals = 0,
+  kind, eaten = 0, target = 0, lo = null, hi = null, unit = 'g', decimals = 0, roundUp = false,
   // 区间是谁定的：热量那条是「你的计划」（目标 ±10%），
   // 脂肪碳水那两条是「文献建议」（IOM AMDR）。措辞不能混。
   rangeWord = '建议',
@@ -93,7 +93,9 @@ export function metricState({
   target = num(target);
   lo = lo == null ? null : num(lo);
   hi = hi == null ? null : num(hi);
-  const n = (v) => `${round(v, decimals)}${unit}`;
+  // 上限类指标向上取整：把已经吃进去的量说少了，比说多了糟糕得多
+  const show = (v) => (roundUp ? Math.ceil(round(v, decimals + 2)) : round(v, decimals));
+  const n = (v) => `${show(v)}${unit}`;
 
   if (kind === KIND.remainder) {
     return {
@@ -342,8 +344,15 @@ export function dailyMetrics(targets, gaps, water = null) {
       eaten: gaps.sodium.eaten, target: targets.sodium,
     },
     {
+      /*
+       * 游离糖跟纤维、钠、饮水并排在主卡的四个方框里，那一排必须是同一种精度。
+       * 原先只有它带一位小数，四个格子里三个写 `0` 一个写 `0.0`。
+       *
+       * 取整用**向上**，不用四舍五入：这是个上限，18.4g 报成 18g 是把
+       * 已经吃进去的糖说少了。宁可显示得比实际严一点，也不该反过来。
+       */
       key: 'sugar', label: '游离糖', unit: 'g', kind: KIND.ceiling,
-      eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 1,
+      eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 0, roundUp: true,
     },
     {
       /*
@@ -354,5 +363,16 @@ export function dailyMetrics(targets, gaps, water = null) {
       key: 'water', label: '饮水', unit: ' 次', kind: KIND.log,
       eaten: Math.max(0, Math.round(Number(water) || 0)), target: 0,
     },
-  ].map((m) => ({ ...m, state: metricState(m) }));
+  ].map((m) => ({
+    ...m,
+    state: metricState(m),
+    /*
+     * 显示值由这里给，视图别再各自 round 一遍。
+     * 上限类（游离糖）向上取整 —— 把已经吃进去的量说少了比说多了糟糕；
+     * 而视图那边只知道 decimals，算不出这件事。
+     */
+    display: m.roundUp
+      ? String(Math.ceil(Math.round(Math.max(0, Number(m.eaten) || 0) * 100) / 100))
+      : null,
+  }));
 }

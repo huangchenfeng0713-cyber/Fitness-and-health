@@ -1,6 +1,7 @@
 /** 近 7 日速览：截至昨天的七个完整日。 */
 
 import { MIN_POINTS_FOR_CLAIM } from './trend-reading.js';
+import { withUnit } from './units.js';
 import { formatDuration } from './duration.js';
 
 const round = (v, d = 0) => {
@@ -73,12 +74,12 @@ export function weeklySummary({
   }
 
   const byDate = new Map(diet.map((d) => [d.date, d]));
+  const hasIntake = (hd) => Number(byDate.get(hd.date)?.kcal) > 0;
+  const hasSpend = (hd) => Number(hd.restingEnergy) > 0
+    && Number.isFinite(Number(hd.activeEnergy)) && Number(hd.activeEnergy) >= 0;
   const paired = health.map((hd) => {
-    const eaten = Number(byDate.get(hd.date)?.kcal);
-    const resting = Number(hd.restingEnergy);
-    const active = Number(hd.activeEnergy);
-    if (!(eaten > 0) || !(resting > 0) || !Number.isFinite(active) || active < 0) return null;
-    return eaten - (resting + active);
+    if (!hasIntake(hd) || !hasSpend(hd)) return null;
+    return Number(byDate.get(hd.date).kcal) - (Number(hd.restingEnergy) + Number(hd.activeEnergy));
   }).filter((v) => v != null);
 
   if (paired.length >= MIN_POINTS_FOR_CLAIM) {
@@ -87,10 +88,18 @@ export function weeklySummary({
       `${total >= 0 ? '盈余' : '缺口'} ${Math.abs(total)} kcal`,
       `依据 ${paired.length} 个完整日`, 'plain'));
   } else {
+    /*
+     * 「配对数据不足」得说清缺的是哪一半。
+     *
+     * 配对日要求那天既有饮食记录、又有设备记的静息与活动能量。只说「不足」，
+     * 用户不知道该去补记饮食，还是该去同步手表 —— 这两件事要做的动作完全不同。
+     * 两个数都是现成的，只是原先没说出来。
+     */
+    const intakeDays = health.filter(hasIntake).length;
+    const spendDays = health.filter(hasSpend).length;
     rows.push(row('balance', '累计收支', '—',
-      paired.length
-        ? `只有 ${paired.length} 天同时有摄入和消耗记录，配对数据不足`
-        : '没有同时记到摄入和消耗的日子，配对数据不足',
+      `近 ${days} 天有 ${spendDays} 天设备记录、${intakeDays} 天饮食记录，`
+      + `两样都有的 ${paired.length} 天，配对数据不足`,
       'plain'));
   }
 
@@ -108,7 +117,7 @@ export function weeklySummary({
 
   const steps = avgOf('steps');
   if (steps) {
-    rows.push(row('steps', '日均步数', `${steps.value} 步`, `按有记录的 ${steps.n} 天算`, 'plain'));
+    rows.push(row('steps', '日均步数', withUnit(steps.value, '步'), `按有记录的 ${steps.n} 天算`, 'plain'));
   }
 
   return { from, to, days, loggedDays: diet.length, pairedDays: paired.length, rows };

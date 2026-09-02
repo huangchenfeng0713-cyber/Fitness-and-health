@@ -11,6 +11,8 @@
  */
 
 /** 肌肉键 → 中文名 */
+import { matchesInitials } from '../core/pinyin.js';
+
 export const MUSCLES = {
   pec_upper: '上胸', pec_mid: '胸大肌中部', pec_lower: '下胸',
   delt_front: '三角肌前束', delt_side: '三角肌中束', delt_rear: '三角肌后束',
@@ -198,11 +200,12 @@ export const EXERCISES = [
 export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));
 export const GROUP_BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
 
-/** 名称 / 拼音 / 英文都能搜 */
+/** 名称 / 拼音 / 拼音首字母 / 英文都能搜；和食物搜索用同一个首字母匹配器 */
 export function searchExercises(query, list = EXERCISES) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
   return list.filter((e) => e.name.toLowerCase().includes(q)
     || e.alias.toLowerCase().includes(q)
+    || matchesInitials(q, e.alias)
     || (MUSCLES[e.primary[0]] || '').includes(q));
 }

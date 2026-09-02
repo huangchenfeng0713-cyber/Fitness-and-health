@@ -186,3 +186,20 @@ test('设备数据太少时不给日均，缺测的日子不进分母', () => {
   assert.ok(!keys.includes('exercise'), '只有一天数据不该报「日均锻炼」');
   assert.ok(!keys.includes('steps'));
 });
+
+test('配对不足时点名缺的是哪一半', () => {
+  /*
+   * 只说「配对数据不足」，用户不知道该去补记饮食还是去同步手表 ——
+   * 这两件事要做的动作完全不同。
+   */
+  const health = [];
+  for (let i = 0; i < 6; i += 1) {
+    health.push({ date: day(i), restingEnergy: 1500, activeEnergy: 400 });
+  }
+  const s = weeklySummary({ endDate: '2026-08-28', healthDays: health, dietDaily: [] });
+  const balance = s.rows.find((r) => r.key === 'balance');
+  assert.equal(balance.value, '—');
+  assert.match(balance.note, /6 天设备记录/, '没说有几天设备记录');
+  assert.match(balance.note, /0 天饮食记录/, '没说有几天饮食记录');
+  assert.match(balance.note, /配对数据不足/);
+});
