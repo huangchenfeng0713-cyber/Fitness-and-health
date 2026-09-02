@@ -38,6 +38,8 @@ function disclosureRows(disclosure) {
 export function foodInfoTip(food, {
   label = '查看食物说明',
   extra = null,
+  // 只有 extra 而没有食物说明时也要给出入口（饮食记录靠它说清「这是快照」）
+  fallback = false,
 } = {}) {
   const disclosure = estimateDisclosure(food);
   const note = String(food?.note || '').trim();
@@ -49,7 +51,7 @@ export function foodInfoTip(food, {
       ? h('p.estimate-disclosure-intro', null,
         '“估算”表示这不是当前官方营养标签或实验室实测值，适合做日常记录参考。')
       : null,
-    disclosure ? disclosureRows(disclosure) : h('p', null, note),
+    disclosure ? disclosureRows(disclosure) : (note ? h('p', null, note) : null),
     extras);
 }
 

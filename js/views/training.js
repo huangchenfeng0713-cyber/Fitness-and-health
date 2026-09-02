@@ -10,7 +10,10 @@
 
 import { h, clearEl, mount, num, todayKey, toast } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
-import { listRow, persistentInfoTip, searchField, weakTag } from '../lib/ui.js';
+import {
+  listRow, persistentInfoTip, searchField, weakTag,
+  segmentedGroupProps, segmentedItemProps,
+} from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
 } from '../data/exercises.js';
@@ -18,7 +21,7 @@ import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
-  recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf,
+  recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
   sessionVolume, recentTrainingRows,
   overlapScore, overlapLevel,
 } from '../core/training.js';
@@ -116,13 +119,14 @@ function muscleLine(e) {
 function groupTabs(rerender) {
   const covered = coveredGroupKeys(picked());
   return h('div.range-switch.body-part-switch.picker-scope-switch', {
+    ...segmentedGroupProps('身体部位'),
     style: { '--picker-cols': String(GROUPS.length) },
   },
     GROUPS.map((g) => {
       const done = covered.has(g.key);
       return h('button', {
         class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
-        type: 'button', 'aria-pressed': String(activeGroup === g.key),
+        ...segmentedItemProps(activeGroup === g.key),
         // 点是纯装饰，读屏软件按这句话来
         'aria-label': done ? `${g.label}（今天已练到）` : g.label,
         onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
@@ -132,21 +136,22 @@ function groupTabs(rerender) {
 
 /** 身体部位 / 动作模式 —— 两种挑法之间切换 */
 function modeTabs(rerender) {
-  return h('div.range-switch.picker-mode-switch', null,
+  return h('div.range-switch.picker-mode-switch', segmentedGroupProps('挑动作的方式'),
     [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
       class: `chip-btn${pickMode === key ? ' active' : ''}`,
-      type: 'button', 'aria-pressed': String(pickMode === key),
+      ...segmentedItemProps(pickMode === key),
       onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
     }, label)));
 }
 
 function splitTabs(rerender) {
   return h('div.range-switch.picker-scope-switch', {
+    ...segmentedGroupProps('动作模式'),
     style: { '--picker-cols': String(SPLITS.length) },
   },
     SPLITS.map((sp) => h('button', {
       class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
-      type: 'button', 'aria-pressed': String(activeSplit === sp.key),
+      ...segmentedItemProps(activeSplit === sp.key),
       onclick: () => { activeSplit = sp.key; showAllExercises = false; rerender(); },
     }, sp.label)));
 }
@@ -209,6 +214,22 @@ function exerciseMeta(tags) {
     }, tag)));
 }
 
+/*
+ * 「上次 60kg × 8,8,6」。
+ *
+ * 排计划的时候最想知道的就是这个，而它原先只写在页面最下面的
+ * 「近 7 日训练记录」里 —— 挑动作要先滚到底、记住数字、再滚回来。
+ *
+ * 写成一行极轻的灰字，不做成第四个标签：那三条已经删掉胶囊了，
+ * 这里再加一块色斑等于把刚清掉的东西又搬回来。没记录就整行不出现。
+ */
+function lastLine(exercise) {
+  const last = lastPerformance(state.trainingDays, exercise.id, { before: todayKey() });
+  if (!last) return null;
+  const parts = [last.weightLabel, last.repsLabel && `× ${last.repsLabel}`].filter(Boolean);
+  return h('div.ex-last', null, `上次 ${last.date.slice(5)} · ${parts.join(' ')}`);
+}
+
 function exerciseRow(e, rerender) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
@@ -259,6 +280,7 @@ function exerciseRow(e, rerender) {
      * 协同肌收进「已选动作建议」那张卡——真要看细节是在排计划的时候，不是在挑的时候。
      */
     exerciseMeta(exerciseTags(e)),
+    lastLine(e),
     clashNode),
   pickNode);
 
@@ -362,12 +384,19 @@ function pickerCard(rerender) {
     mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
     selection: picked(), equip: equipFilter,
   }) : null;
-  const viewTabs = h('div.picker-view-switch.picker-list-tabs', null,
+  /*
+   * 「全部动作 / 推荐组合」和上面两排一样是互斥选择，所以也用分段控件。
+   * 原先它是下划线 tab，而同一屏上「身体部位 / 动作模式」「胸肩臂背腿腹」
+   * 是灰槽白格 —— 三组做同一件事的开关摆出两套视觉语言，
+   * 而 CLAUDE.md 自己写着「互斥的选择一律用分段控件」。
+   */
+  const viewTabs = h('div.range-switch.picker-view-switch.picker-list-tabs',
+    segmentedGroupProps('看全部动作还是推荐组合'),
     [['all', '全部动作'], ['recommend', '推荐组合']].map(([key, label]) => {
       const active = (key === 'recommend') === showRecommend;
       return h('button', {
         class: `chip-btn${active ? ' active' : ''}`,
-        type: 'button', 'aria-pressed': String(active),
+        ...segmentedItemProps(active),
         onclick: () => { showRecommend = key === 'recommend'; rerender(); },
       }, label);
     }));

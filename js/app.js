@@ -1,6 +1,6 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay } from './lib/utils.js';
+import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText } from './lib/utils.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -8,7 +8,7 @@ import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
 import { renderTraining } from './views/training.js';
 import { renderSettings } from './views/settings.js';
-import { APP_VERSION } from './core/feedback.js';
+import { APP_VERSION, buildDiagnostics, formatDiagnostics } from './core/feedback.js';
 import {
   initCloud, getAccountState, subscribeAccount,
   accountSessionMayExist, accountOwnershipUncertain,
@@ -321,9 +321,42 @@ function renderCurrent() {
     tab.render(viewRoot);
   } catch (err) {
     console.error(err);
+    /*
+     * 崩溃卡必须有出口。
+     *
+     * 原先它只有标题和一句英文报错 —— 而人正卡在打不开的那一页上，
+     * 什么都点不了。饮食页崩过一次（一条指向已删除食物的记录），
+     * 而饮食页恰好是唯一能删掉那条记录的地方，于是彻底出不去。
+     * 至少要能换一页，和把这段错误连同版本、环境一起复制出来发给作者。
+     */
+    const message = String(err?.message || err);
     clearEl(viewRoot).append(h('section.card', null,
       h('h3.card-title', null, '这个页面出错了'),
-      h('p.empty-hint', null, String(err?.message || err))));
+      h('p.empty-hint', null, message),
+      h('div.recovery-actions', null,
+        h('button.primary-btn', {
+          onclick: () => { location.hash = 'today'; },
+        }, '回到今日'),
+        h('button.secondary-btn', {
+          onclick: async (ev) => {
+            /*
+             * 只报条数不报数值：这份东西是拿去发给作者的，
+             * 体重体脂生日一个都不能带（buildDiagnostics 本身就是白名单式的）。
+             */
+            const diag = buildDiagnostics({
+              healthDays: state.healthDays.length,
+              dietDays: state.dietDaily.length,
+              customFoods: state.customFoods.length,
+              userAgent: navigator.userAgent,
+              language: navigator.language,
+              standalone: window.matchMedia?.('(display-mode: standalone)').matches
+                || navigator.standalone === true,
+            });
+            const text = `出错页面：${tab.label}\n错误：${message}\n\n${formatDiagnostics(diag)}`;
+            const ok = await copyText(text);
+            toast(ok ? '已复制诊断信息，可粘贴发给作者' : '复制失败，请手动截图', ok ? 'ok' : 'warn');
+          },
+        }, '复制诊断信息'))));
   }
 }
 

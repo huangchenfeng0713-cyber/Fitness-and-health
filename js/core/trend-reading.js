@@ -9,6 +9,7 @@
  */
 
 import { MAX_LOSS_RATE_PCT, MAX_GAIN_RATE_PCT } from './nutrition.js';
+import { withUnit } from './units.js';
 import { formatDuration } from './duration.js';
 
 const round = (v, d = 0) => {
@@ -252,7 +253,7 @@ function readSteps(points) {
   if (!s) return INSUFFICIENT_DATA_TEXT;
   const low = countDays(points, (y) => y < 4000);
   return join([
-    `日均 ${s.avg} 步，区间内 ${s.min} ~ ${s.max} 步。`,
+    `日均 ${withUnit(s.avg, '步')}，区间内 ${s.min} ~ ${withUnit(s.max, '步')}。`,
     s.avg < 5000 ? '处在较低参考区间；没有适用于所有人的统一步数目标，可先在当前基础上逐步增加 500–1000 步/天。'
       : s.avg < 7500 ? '处在中间参考区间；若身体状况允许，可先在当前基础上逐步增加 500–1000 步/天，并根据耐受调整。'
         : '处在较高参考区间；是否继续增加应结合运动强度、久坐时间、症状和个人目标。',

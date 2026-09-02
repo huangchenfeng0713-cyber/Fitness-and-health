@@ -11,10 +11,39 @@
 /** 这张表只留最近改过的那些，别让它无限长 */
 export const PORTION_MEMORY_LIMIT = 200;
 
+/*
+ * 一条记忆现在是 `{ grams, sugarLevel, meal }`，早先是一个裸的克数。
+ *
+ * 老数据不迁移：读的时候把数字当成 `{ grams }` 就行，写的时候自然会补全。
+ * 迁移脚本要么在启动时跑（拖慢启动），要么在同步时跑（两台设备格式不一致），
+ * 而这里读一次的成本是一个 typeof。
+ */
+function entryOf(memory, foodId) {
+  const v = memory?.[foodId];
+  if (v == null) return null;
+  return typeof v === 'object' ? v : { grams: v };
+}
+
 /** 读一条份量记忆；没有、为 0、是脏数据都返回 null */
 export function rememberedPortion(memory, foodId) {
-  const v = Number(memory?.[foodId]);
+  const v = Number(entryOf(memory, foodId)?.grams);
   return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/**
+ * 这个食物上次是怎么记的：多少克、什么糖度、记到哪一餐。
+ *
+ * 糖度和餐次跟克数是同一件事的三个面 —— 同一杯奶茶这个人一直点三分糖，
+ * 同一样早餐食物他一直记到早餐。只记克数，另外两个每次都要重选。
+ * 没记过的返回全 null，调用方各自兜底（餐次回到按钟点猜）。
+ */
+export function rememberedChoice(memory, foodId) {
+  const row = entryOf(memory, foodId);
+  return {
+    grams: rememberedPortion(memory, foodId),
+    sugarLevel: typeof row?.sugarLevel === 'string' && row.sugarLevel ? row.sugarLevel : null,
+    meal: typeof row?.meal === 'string' && row.meal ? row.meal : null,
+  };
 }
 
 /** grams 是不是食物库里现成的某一档份量 */
@@ -31,13 +60,22 @@ export function isPresetPortion(food, grams) {
  * 但**已经改过一次的食物要继续记**：改回默认份量也是一次表态，
  * 不然「250g → 150g（默认）」这一步会被忽略，下次又跳回 250g。
  */
-export function nextPortionMemory(memory, food, grams, limit = PORTION_MEMORY_LIMIT) {
+export function nextPortionMemory(memory, food, grams, choice = {}, limit = PORTION_MEMORY_LIMIT) {
   const g = Number(grams);
   if (!food?.id || !Number.isFinite(g) || g <= 0) return null;
-  const known = rememberedPortion(memory, food.id);
-  if (isPresetPortion(food, g) && known == null) return null;
-  if (known != null && Math.abs(known - g) < 0.5) return null;   // 和上次一样，白写一次库
-  const next = { ...memory, [food.id]: g };
+  const known = rememberedChoice(memory, food.id);
+  const sugarLevel = typeof choice.sugarLevel === 'string' && choice.sugarLevel
+    ? choice.sugarLevel : null;
+  const meal = typeof choice.meal === 'string' && choice.meal ? choice.meal : null;
+  const gramsUnchanged = known.grams != null && Math.abs(known.grams - g) < 0.5;
+  const firstTimeDefault = isPresetPortion(food, g) && known.grams == null;
+  // 克数没什么可记的时候，糖度或餐次变了仍然值得记一笔
+  if ((firstTimeDefault || gramsUnchanged)
+    && sugarLevel === known.sugarLevel && meal === known.meal) return null;
+  const row = { grams: firstTimeDefault ? null : g, sugarLevel, meal };
+  if (row.grams == null) delete row.grams;
+  if (row.grams == null && known.grams != null) row.grams = known.grams;
+  const next = { ...memory, [food.id]: row };
   const keys = Object.keys(next);
   if (keys.length > limit) {
     for (const k of keys.slice(0, keys.length - limit)) delete next[k];
@@ -57,9 +95,11 @@ export function nextPortionMemory(memory, food, grams, limit = PORTION_MEMORY_LI
  */
 export function initialPortion(food, memory) {
   const servings = food?.s || [];
-  const remembered = rememberedPortion(memory, food?.id);
+  const choice = rememberedChoice(memory, food?.id);
+  const remembered = choice.grams;
+  const base = { sugarLevel: choice.sugarLevel, meal: choice.meal };
   if (remembered == null) {
-    return { unitIdx: 0, grams: servings[0]?.[1] || 100, qty: 1, remembered: null };
+    return { unitIdx: 0, grams: servings[0]?.[1] || 100, qty: 1, remembered: null, ...base };
   }
   const matched = servings.findIndex(([, w]) => Math.abs(Number(w) - remembered) < 0.5);
   const gramMode = matched < 0;
@@ -68,5 +108,6 @@ export function initialPortion(food, memory) {
     grams: remembered,
     qty: gramMode ? remembered : 1,
     remembered,
+    ...base,
   };
 }

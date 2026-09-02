@@ -657,6 +657,38 @@ export function recentTrainingRows(sessions = [], endDate, days = 7) {
   return rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
+/**
+ * 这个动作上一次是怎么练的：日期 + 重量区间 + 每组次数。
+ *
+ * 排计划的时候最想知道的就是「上次推了多少」，而它现在只写在页面最下面的
+ * 「近 7 日训练记录」里 —— 挑动作要先滚到底、记住数字、再滚回来。
+ *
+ * 只认真的记了重量或次数的那一次：一次「勾了动作但没填组」不该顶掉
+ * 前面那次填满的记录，否则给出来的是「上次 —」，比不给还糟。
+ * 不限 7 天：上次练胸可能是十天前，那也是「上次」。
+ */
+export function lastPerformance(sessions = [], exerciseId, { before = null } = {}) {
+  if (!exerciseId) return null;
+  const ordered = [...sessions]
+    .filter((s) => s?.date && (!before || s.date < before))
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  for (const raw of ordered) {
+    const item = normalizeSession(raw).items.find((x) => x.id === exerciseId);
+    if (!item?.sets?.length) continue;
+    const weightLabel = spanLabel(item.sets.map((x) => x.weightKg), 'kg');
+    const repsList = item.sets.map((x) => x.reps).filter((v) => Number.isFinite(v) && v > 0);
+    if (!weightLabel && !repsList.length) continue;
+    return {
+      date: raw.date,
+      setCount: item.sets.length,
+      weightLabel,
+      // 次数逐组列出来而不是压成区间：8,8,6 和 6–8 说的不是一回事
+      repsLabel: repsList.length ? repsList.join(',') : null,
+    };
+  }
+  return null;
+}
+
 /** 一组数写成「50kg」或「50–60kg」；一个都没记就不写 */
 function spanLabel(values, unit) {
   const nums = values.filter((v) => Number.isFinite(v) && v > 0);

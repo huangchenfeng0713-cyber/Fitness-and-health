@@ -28,6 +28,8 @@
  *            functional 功能/运动饮料 / caffeinated 含咖啡因
  */
 
+import { matchesInitials } from '../core/pinyin.js';
+
 export const CATEGORIES = {
   staple: '主食',
   meat: '肉禽',
@@ -90,6 +92,11 @@ const SOURCE_POWERADE = Object.freeze({
   type: 'label',
   ref: 'Coca-Cola POWERADE 官方产品营养表代表口味',
   accessed: '2026-08-24',
+});
+const SOURCE_ONES_MEMBER_SKIM = Object.freeze({
+  type: 'label',
+  ref: "one's member 脱脂牛奶粉 1kg 包装营养成分表（每 100g：能量 1569kJ、蛋白 32.0g、脂肪 1.5g、碳水 57.0g、钠 550mg、钙 850mg；GB 19644 脱脂乳粉）",
+  accessed: '2026-09-02',
 });
 const SOURCE_NONGFU_C100 = Object.freeze({
   type: 'label',
@@ -699,6 +706,11 @@ export const FOODS = [
 
   // ---------- 乳制品 / 豆制品（第三批） ----------
   { id: 'milk_powder', name: '全脂奶粉', alias: 'naifen', cat: 'dairy', n: [478, 20.1, 21.2, 51.7, 0, 51.0, 260], s: [['一勺', 25]], f: ['natsugar'] },
+  /*
+   * 奶粉的碳水基本全是乳糖，而乳糖按 WHO 定义不算游离糖 —— 所以糖填到接近碳水，
+   * 同时打 natsugar，它对「游离糖上限」的贡献才是 0。上面的全脂奶粉是同一套口径。
+   */
+  { id: 'milk_powder_skim_ones_member', name: "one's member脱脂牛奶粉", alias: "ones member tuozhi niunaifen skim milk powder 脱脂奶粉 万斯member", cat: 'dairy', n: [375, 32.0, 1.5, 57.0, 0, 56.0, 550], s: [['一勺', 25], ['一杯冲调', 30]], source: SOURCE_ONES_MEMBER_SKIM, basis: '100g', state: 'ready', edibleRatio: 1, carbBasis: 'total', note: '按 1kg 装包装标签录入；每 100g 另含钙 850mg，本库不记录钙。冲调后的浓度由加水量决定，按干粉克数记账', f: ['natsugar', 'quick', 'breakfast'] },
   { id: 'goat_milk', name: '羊奶', alias: 'yangnai', cat: 'dairy', n: [59, 3.6, 3.5, 4.6, 0, 4.6, 50], s: [['一杯', 250]], f: ['natsugar', 'quick'] },
   { id: 'lactose_free_milk', name: '零乳糖牛奶', alias: 'wuruutang niunai', cat: 'dairy', n: [45, 3.5, 1.5, 4.6, 0, 4.6, 55], s: [['一盒', 250]], f: ['natsugar', 'quick', 'late'] },
   { id: 'skyr', name: '冰岛式酸奶 skyr', alias: 'skyr', cat: 'dairy', n: [63, 11.0, 0.2, 4.0, 0, 4.0, 40], s: [['一盒', 150]], f: ['quick', 'late', 'natsugar'] },
@@ -1849,8 +1861,17 @@ export const PORTION_TIPS = {
   other: '普通瓷勺一平勺油 ≈ 10g；啤酒瓶盖一平盖盐 ≈ 5g',
 };
 
-/** 该条营养是否为推算值（品牌未公开完整营养表） */
+/**
+ * 该条营养是否为推算值（品牌未公开完整营养表）。
+ *
+ * 每一处都要防空。这里原先第一行写了 `food?.source?.type`、第二行却直接
+ * `food.cat` —— 一条指向已删除食物的饮食记录传进来就是 `null`，
+ * 整个饮食页当场被错误边界接管（Safari 报「null is not an object
+ * (evaluating 'food.cat')」）。而饮食页正是唯一能删掉那条记录的地方，
+ * 崩了就再也删不掉。查不到食物时按「不是估算」处理，让上层自己决定怎么说。
+ */
 export function isEstimated(food) {
+  if (!food) return false;
   // recipe 和通用复合菜都属于估算；连锁食品只有保存了可复核 label 来源才允许不标估算。
   return food?.source?.type === 'recipe'
     || food.cat === 'dish'
@@ -1918,7 +1939,7 @@ export function macroEnergyPer100(food) {
 }
 
 export function portionTip(food) {
-  return PORTION_TIPS[food.cat] || PORTION_TIPS.other;
+  return PORTION_TIPS[food?.cat] || PORTION_TIPS.other;
 }
 
 /**
@@ -2123,6 +2144,8 @@ export function searchFoods(query, list = FOODS, limit = 30) {
     else if (alias.startsWith(q)) score = 50;
     else if (alias.includes(q)) score = 35;
     else if ((CATEGORIES[f.cat] || '').includes(q)) score = 20;
+    // 首字母缩写：别名里本来就写着全拼，打 tznf 也该找到「脱脂奶粉」
+    else if (matchesInitials(q, alias)) score = 30;
     else if (q.length >= 3) {
       // 兜底：叫法不完全一致时按字符重合度打分。
       // 这样「番茄炒鸡蛋」会把「番茄炒蛋」排在「番茄」前面，
