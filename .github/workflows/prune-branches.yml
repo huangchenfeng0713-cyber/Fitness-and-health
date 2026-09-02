@@ -1,0 +1,31 @@
+name: Prune extra branches
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete branches except the three keepers
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          keep() {
+            case "$1" in
+              main|ui-preview|codex-chat-test-version) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          gh api --paginate "repos/${{ github.repository }}/branches" --jq '.[].name' | while IFS= read -r name; do
+            if keep "$name"; then
+              echo "keep $name"
+              continue
+            fi
+            echo "delete $name"
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${name}"
+          done
