@@ -38,12 +38,16 @@ export function selectBar({
   const el = h('div.select-bar', { hidden: true });
   let open = false;
 
+  const api = { onVisibility: null };
+
   function render() {
     const list = items();
     clearEl(el);
     const empty = list.length === 0;
     // 饮食清单没内容时收起；健身固定栏则保留，并把提交按钮置灰。
     el.hidden = empty && !alwaysVisible;
+    // 调用方可能还要跟着收起外面那层槽位（健身页把横幅挂在应用壳里）
+    api.onVisibility?.(!el.hidden);
     /*
      * 一个都没选时把横幅收薄。
      *
@@ -91,6 +95,8 @@ export function selectBar({
         }, actionLabel())));
   }
 
+  api.el = el;
+  api.render = render;
   render();
-  return { el, render };
+  return api;
 }

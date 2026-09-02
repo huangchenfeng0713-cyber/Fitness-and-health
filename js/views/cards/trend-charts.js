@@ -295,7 +295,7 @@ export function trendCharts(rerender) {
       title: '体重',
       tag: weightSeries.length ? `最新 ${num(weightSeries[weightSeries.length - 1].y, 1)} kg` : null,
       chart: lineChart({
-        data: weightSeries, color: 'var(--accent)', decimals: 1, unit: 'kg', domain: axisDomain, ...pick,
+        data: weightSeries, color: 'var(--text)', decimals: 1, unit: 'kg', domain: axisDomain, ...pick,
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('weight', weightSeries, {
@@ -321,7 +321,7 @@ export function trendCharts(rerender) {
       title: '锻炼时间',
       tag: avgExercise != null ? `已结束日平均 ${formatDuration(avgExercise)}` : null,
       chart: lineChart({
-        data: exerciseSeries, color: 'var(--accent)', unit: '分钟', domain: axisDomain, ...pick,
+        data: exerciseSeries, color: 'var(--carb)', unit: '分钟', domain: axisDomain, ...pick,
         target: 150 / 7, targetLabel: '中等强度参考 150/周',
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
@@ -334,7 +334,7 @@ export function trendCharts(rerender) {
       title: '活动能量',
       tag: avgActive != null ? `已结束日平均 ${avgActive} kcal` : null,
       chart: lineChart({
-        data: activeSeries, color: 'var(--protein)', unit: 'kcal', domain: axisDomain, ...pick,
+        data: activeSeries, color: 'var(--carb)', unit: 'kcal', domain: axisDomain, ...pick,
         target: avgActive, targetLabel: avgActive != null ? `平均 ${avgActive}` : '',
       }),
       note: trendReading('active', activeSeries, {}),
@@ -346,7 +346,7 @@ export function trendCharts(rerender) {
       title: '睡眠',
       tag: avgSleep != null ? `已结束日平均 ${formatDuration(avgSleep * 60)}` : null,
       chart: lineChart({
-        data: sleepSeries, color: 'var(--protein)', target: 7, targetLabel: '建议 7 小时',
+        data: sleepSeries, color: 'var(--water)', target: 7, targetLabel: '建议 7 小时',
         decimals: 1, unit: '小时', domain: axisDomain, ...pick,
       }),
       note: trendReading('sleep', sleepSeries, {}),
@@ -358,7 +358,7 @@ export function trendCharts(rerender) {
       title: '静息心率',
       tag: avgHR != null ? `已结束日平均 ${avgHR} bpm` : null,
       chart: lineChart({
-        data: hrSeries, color: 'var(--water)', unit: 'bpm', domain: axisDomain, ...pick,
+        data: hrSeries, color: 'var(--muted)', unit: 'bpm', domain: axisDomain, ...pick,
         target: avgHR, targetLabel: avgHR != null ? `平均 ${avgHR}` : '',
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>肌肉图原型</title>
+<style>
+  :root {
+    --bg: #f2f2f7; --card: #fff; --text: #1c1c1e; --muted: #6b6b70; --faint: #9a9aa0;
+    --border: #e4e4e9; --accent: #34a853; --accent-soft: rgba(52,168,83,.12);
+    --fill: #d8d8de; --stroke: #b6b6bf;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#000; --card:#1c1c1e; --text:#f2f2f7; --muted:#98989f; --faint:#78787f;
+      --border:#2c2c2e; --fill:#3a3a3c; --stroke:#4d4d52; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif; }
+  .wrap { max-width: 430px; margin: 0 auto; padding: 16px 14px 48px; }
+  h1 { font-size: 22px; margin: 6px 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+  .card { background: var(--card); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card p.desc { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+  .figs { display: flex; justify-content: center; gap: 10px; }
+  .fig { text-align: center; }
+  .fig figcaption { font-size: 12px; color: var(--faint); margin-top: 4px; }
+  svg { display: block; }
+  .sil { fill: var(--fill); opacity: .55; }
+  .m { fill: var(--fill); stroke: var(--stroke); stroke-width: .8; transition: fill .12s; }
+  .m.on { fill: var(--accent); stroke: var(--accent); }
+  .m.soft { fill: var(--accent-soft); stroke: color-mix(in srgb, var(--accent) 45%, var(--stroke)); }
+  .m.dim { fill: var(--fill); }
+  .detail { fill: none; stroke: var(--stroke); stroke-width: .7; opacity: .8; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .legend button {
+    font: inherit; font-size: 13px; padding: 6px 11px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
+  .legend button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .ruler { display: flex; align-items: flex-end; justify-content: center; gap: 18px; }
+  .note { font-size: 13px; color: var(--muted); }
+  .note strong { color: var(--text); }
+  .verdict li { margin-bottom: 8px; font-size: 14px; }
+  code { font-size: 12px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>肌肉图原型</h1>
+  <p class="sub">只是原型，不在主程序里。要回答的问题：这种精细程度画得出来吗？在真机尺寸上还认得出吗？</p>
+
+  <section class="card">
+    <h2>1 · 放大看：形状本身</h2>
+    <p class="desc">正面 / 背面，每块肌肉一条独立路径，可以单独染色。点下面的部位试试。</p>
+    <div class="figs" id="big"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="card">
+    <h2>2 · 真机尺寸：还认得出吗</h2>
+    <p class="desc">同一张图，按它在健身页里真实会占的高度渲染。删掉那版就是 248px 高、两个人一起放。</p>
+    <div class="ruler" id="ruler"></div>
+    <p class="note" id="measure"></p>
+  </section>
+
+  <section class="card">
+    <h2>3 · 说得通的那种用法：一个动作练哪儿</h2>
+    <p class="desc">不常驻在挑动作那一屏，点开某个动作才放大看。深色是主动肌，浅色是协同肌。</p>
+    <div class="legend" id="ex-pick"></div>
+    <div class="figs" id="ex-fig"></div>
+    <p class="note" id="ex-note"></p>
+  </section>
+
+  <section class="card verdict">
+    <h2>4 · 结论</h2>
+    <ul id="verdict"></ul>
+  </section>
+</div>
+
+<script type="module">
+import { VIEWBOX, SILHOUETTE, MUSCLES, DETAIL, GROUP_LABEL } from './muscle-map.js';
+
+const NS = 'http://www.w3.org/2000/svg';
+const [VW, VH] = VIEWBOX;
+const active = new Set();
+
+function mirror(d) {
+  // 按 x=120 翻一份：整条路径塞进一个 <g transform>，比重写坐标可靠
+  return d;
+}
+
+function figure(side, height, { interactive = false } = {}) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${VW} ${VH}`);
+  svg.setAttribute('height', String(height));
+  svg.setAttribute('width', String(Math.round((VW / VH) * height)));
+  for (const part of SILHOUETTE) {
+    const paint = (flip) => {
+      const el = document.createElementNS(NS, 'path');
+      el.setAttribute('d', part.d);
+      el.setAttribute('class', 'sil');
+      if (flip) el.setAttribute('transform', `translate(${VW} 0) scale(-1 1)`);
+      svg.append(el);
+    };
+    paint(false);
+    if (part.mirror) paint(true);
+  }
+  for (const m of MUSCLES[side]) {
+    const paint = (flip) => {
+      const el = document.createElementNS(NS, 'path');
+      el.setAttribute('d', mirror(m.d));
+      el.setAttribute('class', `m${active.has(m.group) ? ' on' : ''}`);
+      if (flip) el.setAttribute('transform', `translate(${VW} 0) scale(-1 1)`);
+      el.dataset.group = m.group;
+      el.dataset.key = m.key;
+      if (interactive) {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', () => toggle(m.group));
+      }
+      svg.append(el);
+    };
+    paint(false);
+    if (m.mirror) paint(true);
+  }
+  for (const d of DETAIL[side]) {
+    const el = document.createElementNS(NS, 'path');
+    el.setAttribute('d', d);
+    el.setAttribute('class', 'detail');
+    svg.append(el);
+  }
+  return svg;
+}
+
+function toggle(group) {
+  if (active.has(group)) active.delete(group); else active.add(group);
+  render();
+}
+
+function render() {
+  const big = document.getElementById('big');
+  big.replaceChildren(
+    fig('front', 300, '正面'),
+    fig('back', 300, '背面'),
+  );
+  const ruler = document.getElementById('ruler');
+  ruler.replaceChildren(
+    fig('front', 248, '248px（删掉那版）'),
+    fig('front', 160, '160px'),
+    fig('front', 110, '110px'),
+  );
+  const legend = document.getElementById('legend');
+  legend.replaceChildren(...Object.entries(GROUP_LABEL).map(([key, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (active.has(key)) b.classList.add('on');
+    b.onclick = () => toggle(key);
+    return b;
+  }));
+  measure();
+}
+
+function fig(side, height, caption) {
+  const f = document.createElement('figure');
+  f.className = 'fig';
+  f.style.margin = '0';
+  f.append(figure(side, height, { interactive: height >= 248 }));
+  const c = document.createElement('figcaption');
+  c.textContent = caption;
+  f.append(c);
+  return f;
+}
+
+function measure() {
+  const el = document.querySelector('#ruler .m[data-group="chest"]');
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  document.getElementById('measure').innerHTML =
+    `248px 高时，一整块<strong>胸大肌</strong>宽 <code>${r.width.toFixed(1)}px</code>、`
+    + `高 <code>${r.height.toFixed(1)}px</code>。`;
+}
+
+/* 几个真实动作，主动肌 / 协同肌照 data/exercises.js 的口径写 */
+const EXERCISES = [
+  { name: '杠铃卧推', prime: ['pec'], synergist: ['delt-front', 'triceps'] },
+  { name: '引体向上', prime: ['lat'], synergist: ['biceps', 'trap', 'delt-rear'] },
+  { name: '深蹲', prime: ['quad'], synergist: ['glute', 'adductor', 'erector'] },
+  { name: '硬拉', prime: ['erector'], synergist: ['glute', 'hamstring', 'trap', 'lat'] },
+];
+let exIndex = 0;
+
+function renderExercise() {
+  const ex = EXERCISES[exIndex];
+  document.getElementById('ex-pick').replaceChildren(...EXERCISES.map((x, i) => {
+    const b = document.createElement('button');
+    b.textContent = x.name;
+    if (i === exIndex) b.classList.add('on');
+    b.onclick = () => { exIndex = i; renderExercise(); };
+    return b;
+  }));
+  /*
+   * 正反两面都要画：几乎每个动作都同时涉及两面（卧推的肱三头肌在背面），
+   * 只画一面就会出现「文字里写了协同肌、图上却没亮」。代价是高度翻倍。
+   */
+  const figs = ['front', 'back'].map((side) => {
+    const svg = figure(side, 260, {});
+    for (const el of svg.querySelectorAll('.m')) {
+      const key = el.dataset.key;
+      el.classList.toggle('on', ex.prime.includes(key));
+      el.classList.toggle('soft', ex.synergist.includes(key));
+    }
+    const f = document.createElement('figure');
+    f.className = 'fig';
+    f.style.margin = '0';
+    f.append(svg);
+    const c = document.createElement('figcaption');
+    c.textContent = side === 'front' ? '正面' : '背面';
+    f.append(c);
+    return f;
+  });
+  document.getElementById('ex-fig').replaceChildren(...figs);
+  const named = (keys) => keys
+    .map((k) => (MUSCLES.front.concat(MUSCLES.back).find((m) => m.key === k) || {}).name)
+    .filter(Boolean).join('、');
+  document.getElementById('ex-note').innerHTML =
+    `<strong>主动肌</strong> ${named(ex.prime)}　·　<strong>协同肌</strong> ${named(ex.synergist)}`;
+}
+
+const VERDICT = [
+  '形状<strong>画得出来</strong>：19 块肌肉、每块一条独立路径，可以按部位单独染色，也能点选。',
+  '问题从来不在画工，在<strong>尺寸</strong>：整图 248px 高时一块胸大肌只有二十来 px 宽，'
+    + '那个尺寸上任何解剖形状都退化成一个色块 —— 下面第 2 节自己量给你看。',
+  '而它<strong>占掉的高度</strong>是实打实的：删掉那版之后，动作列表从 y=1014 提到 y=482，'
+    + '整整一屏。',
+  '它唯一多给的信息是「今天哪儿练了、哪儿空着」，'
+    + '而那件事现在是部位标签上的一个小圆点，占 0px。',
+  '还有一条第 3 节暴露出来的：几乎每个动作都<strong>同时涉及正反两面</strong>'
+    + '（卧推的肱三头肌在背面），只画一面就会「文字里写了协同肌、图上却没亮」。'
+    + '要画就得画两个人，高度再翻一倍。',
+  '所以：<strong>好看的用法只有一种 —— 放大了单独看</strong>（比如点开某个动作看它练哪儿），'
+    + '不能常驻在挑动作那一屏。',
+];
+
+document.getElementById('verdict').innerHTML = VERDICT.map((x) => `<li>${x}</li>`).join('');
+render();
+renderExercise();
+</script>
+</body>
+</html>

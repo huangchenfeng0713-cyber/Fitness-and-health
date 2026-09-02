@@ -125,7 +125,7 @@ try {
     };
   });
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.includes('推荐组合'))?.click());
+    .find((x) => x.textContent.trim() === '推荐')?.click());
   await page.waitForTimeout(300);
   const recommendState = await page.evaluate(() => ({
     tagCounts: [...document.querySelectorAll('.rec-pick .exercise-meta')]
@@ -242,7 +242,7 @@ try {
   check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
   // 后续用例会在「全部动作」中选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.includes('全部动作'))?.click());
+    .find((x) => x.textContent.trim() === '全部')?.click());
   await page.waitForTimeout(200);
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
@@ -677,9 +677,13 @@ try {
       summary: bar?.querySelector('.select-bar-summary')?.textContent.trim() || '',
     };
   });
-  check('健身选择栏空状态常驻且不能误提交',
-    emptyPicker.slotVisible && emptyPicker.barVisible && emptyPicker.disabled
-      && emptyPicker.summary.includes('尚未选择动作'),
+  /*
+   * 一个动作都没选时整条横幅不出现，槽位也跟着收 ——
+   * 「尚未选择动作 / 可连续选择多个动作」加一个点不动的按钮，三样都没有信息量，
+   * 却一直压着列表。留着槽位的话还会剩一道凭空的空白横在列表和底栏之间。
+   */
+  check('没选动作时横幅和槽位一起收起',
+    !emptyPicker.barVisible && !emptyPicker.slotVisible,
     JSON.stringify(emptyPicker));
 
   await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked)')?.click());

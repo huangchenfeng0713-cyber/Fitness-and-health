@@ -9,13 +9,14 @@
  */
 
 import { h, clearEl, toast, mount, num, confirmAction, field, todayKey } from '../lib/utils.js';
-import { infoTip } from '../lib/ui.js';
+import { infoTip, segmentedGroupProps, segmentedItemProps } from '../lib/ui.js';
 import { icon, iconSvg } from '../lib/icons.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
 import { takeIntent } from '../lib/nav.js';
 import { GOALS } from '../core/nutrition.js';
+import { RHYTHM_MODES, rhythmMode, expectedShare } from '../core/eating-rhythm.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
   resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
@@ -25,7 +26,39 @@ import {
   APP_VERSION, FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
 } from '../core/feedback.js';
 
-function toggleCard() {
+/*
+ * 「这个钟点该吃到多少」按哪套口径算。
+ *
+ * 两套都不是匀速直线（见 core/eating-rhythm.js）。默认走膳食指南：
+ * 新用户没有记录，「按我平常」也无从算起。
+ */
+function rhythmPicker(rerender) {
+  const current = rhythmMode(state.profile.rhythmMode).key;
+  const chosen = rhythmMode(current);
+  const sample = expectedShare({
+    mode: current, hour: 12, entries: state.dietRhythm, asOf: todayKey(),
+  });
+  return h('div.setting-choice', null,
+    h('div.setting-choice-head', null,
+      h('strong', null, '进食节奏参照'),
+      h('p', null, '主卡上「热量完成 45%」拿来和什么比。')),
+    h('div.range-switch', segmentedGroupProps('进食节奏参照', 'radio'),
+      RHYTHM_MODES.map((m) => h('button', {
+        class: `chip-btn${current === m.key ? ' active' : ''}`,
+        ...segmentedItemProps(current === m.key, 'radio'),
+        onclick: async () => { await saveProfile({ rhythmMode: m.key }); rerender(); },
+      }, m.label))),
+    h('p.setting-choice-desc', null, chosen.desc),
+    // 退回这件事必须说出来：否则用户以为看的是自己的节奏，其实是指南的
+    sample.fellBack
+      ? h('p.setting-choice-desc.warn', null,
+        sample.days > 0
+          ? `目前只有 ${sample.days} 天有记录，还算不出你自己的分布，暂时按膳食指南比对。`
+          : '还没有饮食记录，算不出你自己的分布，暂时按膳食指南比对。')
+      : null);
+}
+
+function toggleCard(rerender) {
   const p = state.profile;
   const toggle = (key, label, desc) => h('label.toggle-row', null,
     h('div', null, h('strong', null, label), h('p', null, desc)),
@@ -36,13 +69,15 @@ function toggleCard() {
   return h('section.card', null,
     h('div.card-head', null,
       h('div', null,
-        h('h3', null, '热量计算方式'),
-        h('p.card-desc', null, '选择每日目标是否跟随设备记录。')),
+        h('h3', null, '计算方式'),
+        h('p.card-desc', null, '每日目标怎么算、进度和什么比。')),
       infoTip('查看计算方式说明',
         h('p', null, '开启设备消耗后，有可靠记录时采用静息能量与活动能量；缺失时自动回到公式估算。'),
+        h('p', null, '进食节奏只影响主卡上那句「这个钟点大约该吃到多少」，不改动热量目标本身。'),
         h('p', null, '这些选项只影响之后显示的目标，不会改动饮食记录。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
+    rhythmPicker(rerender),
   );
 }
 
@@ -579,7 +614,7 @@ export function renderSettings(root) {
       body: () => profileCard(rerender),
       account: () => slot,
       data: () => dataManagerCard(rerender),
-      calc: () => toggleCard(),
+      calc: () => toggleCard(rerender),
       about: () => feedbackCard({
         about: h('div.about-block', null,
           h('p', null, `版本 v${APP_VERSION}`),

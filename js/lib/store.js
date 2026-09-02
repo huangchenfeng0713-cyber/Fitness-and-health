@@ -9,6 +9,7 @@ import {
   dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
+import { DEFAULT_RHYTHM_MODE } from '../core/eating-rhythm.js';
 import { normalizeSession } from '../core/training.js';
 import { nextPortionMemory } from '../core/portion.js';
 import {
@@ -32,6 +33,7 @@ export const DEFAULT_PROFILE = {
   goal: 'maintain',
   rateKgPerWeek: null,
   proteinPerKg: null,
+  rhythmMode: DEFAULT_RHYTHM_MODE, // 「这个钟点该吃到多少」按哪套口径算
   useAppleEnergy: true,   // 用 Apple 设备记录动态估算热量预算
   syncWeightFromApple: true,
   appleSourcePriority: [], // 可选：export.xml sourceName 的统一优先顺序
@@ -49,6 +51,7 @@ export const state = {
   healthByDate: new Map(),
   dietEntries: [],       // 当前日期的饮食条目
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
+  dietRhythm: [],        // 近三周 { date, kcal, time }，只给进食节奏曲线用
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
   portionMemory: {},     // { foodId: { grams, sugarLevel, meal } } —— 用户自己的选择
@@ -183,7 +186,19 @@ function rebuildDietDaily(entries) {
   state.dietDaily = [...byDate.entries()]
     .map(([date, list]) => ({ date, ...sumNutrients(list), count: list.length }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
+  /*
+   * 「按我平常」那条曲线要的是钟点，日汇总里没有，所以另存一份精简样本。
+   * 只留 date / kcal / time 三个字段：整份记录挂在内存里，几个月之后就是
+   * 几千条带七项营养和配料快照的对象，而这条曲线只用得上其中三个数。
+   */
+  const from = shiftDay(state.day, -RHYTHM_WINDOW_DAYS);
+  state.dietRhythm = entries
+    .filter((e) => e.date >= from && Number(e.kcal) > 0 && e.time)
+    .map((e) => ({ date: e.date, kcal: Number(e.kcal), time: e.time }));
 }
+
+/* 取三周而不是两周：曲线用近 14 个「有记录的天」，中间漏记几天也还够 */
+const RHYTHM_WINDOW_DAYS = 21;
 
 // ---------------------------------------------------------------- 计算
 
@@ -333,6 +348,7 @@ export function recompute(now = new Date()) {
     now: isToday ? now : pinnedNow(state.day, now),
     isToday,
     waterCount: health.waterCount,
+    rhythmEntries: state.dietRhythm,
   });
 
   state.derived = {
@@ -404,6 +420,8 @@ function countProteinHitDays(target, windowDays = 7) {
 export async function setDay(dayKey) {
   state.day = dayKey;
   state.dietEntries = cleanEntries(await db.getDietByDate(dayKey));
+  // 节奏窗口的起点跟着所选日期走，翻到上个月不能拿本月的记录去比
+  await refreshDietDaily();
   recompute();
   emit();
 }
@@ -723,6 +741,7 @@ export async function clearAllData() {
   state.healthByDate = new Map();
   state.dietEntries = [];
   state.dietDaily = [];
+  state.dietRhythm = [];
   state.customFoods = [];
   state.portionMemory = {};
   state.lastImport = null;

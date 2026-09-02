@@ -19,9 +19,19 @@ function moreToggle(key, total, shown, rerender) {
   }, expanded[key] ? '收起' : `展开其余 ${total - shown} 项`);
 }
 
+/*
+ * 营养条用**数据色**，不是语义色。
+ *
+ * 这些颜色回答的是「这一条画的是哪一项」，不是「做得好不好」——
+ * 好不好由条的填充位置和 `state.level` 说。原先蛋白、碳水、纤维全是主绿，
+ * 于是主卡上「符合计划的绿」和「蛋白这一项的绿」是同一个颜色，
+ * 而热量环也绿，一屏下来只剩一种颜色，几条不同的信息挤在一起分不开。
+ *
+ * 上限类（钠、游离糖）仍走中性灰：它们没有「自己的身份」，只有超没超。
+ */
 const KIND_COLOR = {
-  kcal: 'var(--accent)', protein: 'var(--accent)', fat: 'var(--accent)',
-  carb: 'var(--accent)', fiber: 'var(--accent)', sodium: 'var(--muted)',
+  kcal: 'var(--accent)', protein: 'var(--protein)', fat: 'var(--carb)',
+  carb: 'var(--carb)', fiber: 'var(--accent)', sodium: 'var(--muted)',
   sugar: 'var(--muted)', water: 'var(--water)',
 };
 const CHIP_KEYS = ['fiber', 'sodium', 'sugar', 'water'];

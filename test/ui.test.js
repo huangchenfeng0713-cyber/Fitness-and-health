@@ -425,7 +425,7 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
 
   assert.ok(!/function scopeCard\(/.test(training), '范围选择又被拆成了独立卡片');
   assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
-  assert.match(training, /\['all', '全部动作'\], \['recommend', '推荐组合'\]/,
+  assert.match(training, /\['all', '全部'\], \['recommend', '推荐'\]/,
     '列表 / 推荐仍是语义含糊的单个开关');
   /*
    * 互斥选择的读屏语义要说清「这是一组、现在选中的是哪个」。
@@ -471,8 +471,18 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
     '两个视图的文字位置与行内边距没有统一');
   assert.match(css, /\.exercise-choice-row\s*\{[^}]*min-height:\s*76px/s,
     '两个视图的动作行没有统一最小高度');
-  assert.match(css, /\.exercise-choice-action\s*\{[^}]*width:\s*40px[^}]*height:\s*40px/s,
-    '两个视图的右侧加号没有统一');
+  /*
+   * 饮食页的 ＋ 和健身页的 ＋ 做的是同一件事（把这一行加进来），必须同样大。
+   * 断言写成「都从 --control-inline 取值」而不是「都等于 40px」：
+   * 各写一个字面量的话，改一处漏一处仍然过得了这条。
+   */
+  for (const sel of ['\\.add-btn', '\\.exercise-choice-action']) {
+    assert.match(
+      css,
+      new RegExp(`${sel}\\s*\\{[^}]*width:\\s*var\\(--control-inline\\)[^}]*height:\\s*var\\(--control-inline\\)`, 's'),
+      `${sel} 没有走 --control-inline，两个视图的右侧加号会不一样大`,
+    );
+  }
   // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
   assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
 });
@@ -1182,7 +1192,14 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
   }
   assert.match(bar, /el\.hidden = empty && !alwaysVisible/,
     '共用多选条没有区分普通收起态与固定操作栏');
-  assert.match(training, /alwaysVisible: true/, '健身页没有让选择栏在空状态也保持可见');
+  /*
+   * 健身页不再让空状态的横幅常驻：「尚未选择动作 / 可连续选择多个动作」
+   * 加一个点不动的按钮，三样都没有信息量，却一直压着列表。
+   * 选了动作它才出来，那时说的才是有用的话。
+   */
+  assert.doesNotMatch(training, /alwaysVisible: true/, '健身页的空状态横幅又常驻了');
+  assert.match(training, /pickerBar\.onVisibility = \(visible\) =>/,
+    '槽位没有跟着横幅一起收，会留下一道凭空的空白');
   assert.ok(!/alwaysVisible:\s*true/.test(diet), '饮食页空清单仍应收起，不能常驻一条空横幅');
 
   // 饮食：单项是高频路径，可确认份量后直接记；多项仍保留清单批量确认
@@ -1282,8 +1299,12 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
    * 就能关掉，结果它一直挂在那儿。
    */
   const utils = read('js/lib/utils.js');
-  assert.match(utils, /stem\.setAttribute\('d', 'M6 5\.1v4\.1'\)/,
+  // 形状能调，「不能拿字体打出来」这件事不能变，所以只锁到路径本身
+  assert.match(utils, /stem\.setAttribute\('d', 'M6 [\d.]+v[\d.]+'\)/,
     '信息符号的 i 竖笔没有使用 SVG 路径');
+  assert.match(utils, /dot\.setAttribute\('r', '([\d.]+)'\)/, '信息符号缺少那一点');
+  assert.ok(Number(utils.match(/dot\.setAttribute\('r', '([\d.]+)'\)/)[1]) >= 0.9,
+    '那一点太小，渲染出来不到一个像素，整个记号会读成一道杂线');
   assert.match(utils, /dot\.setAttribute\('cy', '2\.8'\)/,
     '信息符号的圆点应位于竖笔上方');
   assert.doesNotMatch(utils, /h\([^\n]*['"]i['"]\)/,
@@ -1539,6 +1560,127 @@ test('图标是画出来的，不是打出来的，而且只有一套', () => {
 });
 
 /*
+ * 字号、图标尺寸、控件高度是三条阶梯，每一档都得看得出区别。
+ *
+ * 这条是从三件事上长出来的：
+ *  - 字号最底下三档曾是 12 / 12.5 / 13，肉眼分不出，却占掉全应用 68% 的文字。
+ *    分不出大小的层级不是层级。
+ *  - 图标尺寸有十种（12~22），而且 .settings-close svg 被写了两遍（20 一遍、
+ *    18 一遍，后者赢）—— 和当年五个描边粗细散在五段 CSS 是同一件事。
+ *  - 控件高度既有 --control-* 又有裸 px，.chip-btn 的 min-height 写了 32 和 36 两遍。
+ */
+test('字号、图标、控件三条阶梯，每档都看得出区别，也不许写第二遍', () => {
+  const css = read('css/app.css');
+  const tokens = (prefix) => [...css.matchAll(
+    new RegExp(`--${prefix}-([a-z]+): *([0-9.]+)px`, 'g'),
+  )].map(([, name, px]) => [name, Number(px)]);
+
+  const fs = tokens('fs');
+  assert.ok(fs.length >= 6 && fs.length <= 8, `字号档位数不对：${fs.length}`);
+  const sizes = fs.map(([, px]) => px);
+  assert.deepEqual([...sizes].sort((a, b) => a - b), sizes, '字号 token 没有按从小到大排');
+  for (let i = 1; i < sizes.length; i += 1) {
+    assert.ok(sizes[i] - sizes[i - 1] >= 1,
+      `${fs[i - 1][0]}(${sizes[i - 1]}px) 和 ${fs[i][0]}(${sizes[i]}px) 差不到 1px，分不出层级`);
+  }
+  assert.equal(Math.min(...sizes), 12, '可读下限必须是 12px');
+  assert.ok(!/--fs-small/.test(css.replace(/\/\*[\s\S]*?\*\//g, '')),
+    '--fs-small 又回来了，它和 --fs-footnote 是同一档');
+
+  // 字号一律走 token，不写裸 px
+  const rawFont = [...css.matchAll(/font-size: *([0-9.]+)px/g)].map((m) => m[1]);
+  assert.deepEqual(rawFont, [], `还有裸 px 字号：${rawFont.join(' / ')}`);
+
+  // 图标尺寸同样只从阶梯里挑
+  const icons = tokens('icon');
+  assert.ok(icons.length >= 3, '图标尺寸还没有收成阶梯');
+  const rawIcon = [...css.matchAll(/svg *\{[^}]*width: *([0-9.]+)px/g)].map((m) => m[1]);
+  assert.deepEqual(rawIcon, [], `还有裸 px 图标尺寸：${rawIcon.join(' / ')}`);
+
+  /*
+   * 同一个选择器不许把同一个属性写两遍。
+   * .chip-btn 的 min-height 曾经先写 32、末尾又写 36，看代码的人得先算层叠
+   * 顺序才知道按钮到底多高；.settings-close svg 和 .water-add 的 font-size 同理。
+   */
+  const decls = new Map();
+  // @media 里的覆写是正当的第二次声明（窄屏改字号、改宽度），不算重复。
+  // 注释要先剥掉：不剥的话「/* ===== 按钮 ===== */ .primary-btn」和裸的
+  // 「.primary-btn」会被当成两个不同的选择器，重复声明就漏过去了。
+  const base = css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+  for (const [, selector, body] of base.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+    const key = selector.trim().replace(/\s+/g, ' ');
+    if (!key || key.startsWith('%') || /^[0-9]/.test(key)) continue;
+    for (const [, prop] of body.matchAll(/(?:^|;)\s*(min-height|font-size|width|height):/g)) {
+      const id = `${key} { ${prop} }`;
+      decls.set(id, (decls.get(id) || 0) + 1);
+    }
+  }
+  const dupes = [...decls].filter(([, n]) => n > 1).map(([id]) => id);
+  assert.deepEqual(dupes, [], `同一个属性被写了两遍：${dupes.join(' / ')}`);
+});
+
+/*
+ * 按钮上的字只有三档，而且并排的两个按钮必须同档。
+ * 「继续添加 | 记录到午餐」那一行里，次按钮曾比旁边的实心主按钮小一档 ——
+ * 两个并排的按钮字不一样大，一眼就看得出没对齐。
+ */
+/*
+ * 两层颜色，别混着用。
+ *
+ *  - **语义层**（accent / warn / danger / 灰）回答「好不好」：够了、接近、超了。
+ *  - **数据层**（protein 紫 / carb 橙黄 / water 蓝）回答「这是哪一项」，
+ *    只在图表和营养条上用 —— 那儿有好几条线要分开，非用颜色不可。
+ *
+ * 混起来的代价是具体的：主卡那排四个方框里，另外三个的颜色说的是「到了/超了」，
+ * 饮水却涂着数据蓝，一排四个三个说 A 语言一个说 B 语言；「纤维不足」那条提示
+ * 的左边杠用碳水的橙黄，夹在绿和红中间就像第三种严重程度。
+ */
+test('数据色只出现在图表和营养条上，不进语义层', () => {
+  const css = read('css/app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const DATA = ['--protein', '--carb', '--water'];
+  // 允许用数据色的地方：图表系列、营养条、以及环形图
+  const CHART_OK = /(chart|ring|bar|track|fill|series|spark)/i;
+  const bad = [];
+  for (const [, selector, body] of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+    if (!DATA.some((t) => body.includes(`var(${t})`))) continue;
+    const sel = selector.trim().replace(/\s+/g, ' ');
+    if (sel.startsWith(':root') || sel.includes('--')) continue;   // token 定义本身
+    if (CHART_OK.test(sel)) continue;
+    bad.push(sel);
+  }
+  assert.deepEqual(bad, [], `数据色跑到语义层去了：${bad.join(' / ')}`);
+
+  // 反过来：图表那边确实在用，否则这三个 token 就成了摆设
+  const views = ['js/views/cards/trend-charts.js', 'js/views/dashboard.js']
+    .map((f) => read(f)).join('');
+  for (const token of DATA) {
+    assert.ok(views.includes(`var(${token})`), `${token} 没有任何图表在用`);
+  }
+});
+
+test('按钮字号只用三档，主次按钮同档', () => {
+  const css = read('css/app.css');
+  const sizeOf = (sel) => {
+    const m = css.match(new RegExp(`(^|\\})\\s*${sel}\\s*\\{([^}]*)\\}`, 'm'));
+    return m && (m[2].match(/font-size: *var\(--(fs-[a-z]+)\)/) || [])[1];
+  };
+  assert.equal(sizeOf('\\.primary-btn'), 'fs-value', '主按钮不是 --fs-value');
+  assert.equal(sizeOf('\\.secondary-btn'), 'fs-value',
+    '次按钮和主按钮不同档 —— 它们常常并排站在同一行里');
+  for (const [sel, want] of [
+    ['\\.chip-btn', 'fs-footnote'], ['\\.mini-btn', 'fs-footnote'],
+    ['\\.more-btn', 'fs-body'], ['\\.text-btn', 'fs-body'],
+  ]) {
+    assert.equal(sizeOf(sel), want, `${sel} 的字号不在约定档位上`);
+  }
+  // 12px 是可读下限，按钮上的字不许压到那一档
+  assert.ok(!/\.(chip|mini|more|text|primary|secondary)-btn[^{}]*\{[^}]*font-size: *var\(--fs-caption\)/s
+    .test(css), '按钮上的字压到了 12px 的可读下限');
+});
+
+/*
  * 设置面板每次落库、每次账号状态刷新都会整个重建（app.js 的 subscribe），
  * 而 <details open> 是 DOM 上的状态 —— 重建一次就全收起来了。
  * 表现就是「点一下同步，刚展开的那几节自己收了回去」，
@@ -1631,9 +1773,10 @@ test('健身选择栏常驻应用壳底部并紧邻底栏', () => {
     '健身选择栏仍挂在动作卡内部');
   assert.match(training, /clearEl\(actionSlot\);\s*actionSlot\.hidden = true;/,
     '健身页内部重绘前没有清掉旧横幅，会越切筛选越多');
-  assert.match(training, /actionSlot\.hidden = false;\s*mount\(actionSlot, pickerBar\.el\);/,
+  assert.match(training, /mount\(actionSlot, pickerBar\.el\);\s*\n\s*actionSlot\.hidden = pickerBar\.el\.hidden;/,
     '健身页没有把选择栏挂进固定槽位');
-  assert.match(training, /alwaysVisible: true/, '没选动作时横幅仍会消失');
+  // 反过来了：没选动作时横幅**就该**消失，槽位跟着一起收
+  assert.doesNotMatch(training, /alwaysVisible: true/, '空状态横幅又常驻了');
   const dock = css.slice(css.indexOf('.actionbar-slot {'), css.indexOf('.tab {'));
   assert.match(dock, /flex:\s*none/, '选择栏会被内容区挤压');
   assert.match(dock, /\.actionbar-slot \.select-bar\s*\{[\s\S]*?position:\s*static/,

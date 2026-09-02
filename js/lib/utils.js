@@ -205,11 +205,15 @@ export function infoTip(label, ...children) {
   mark.setAttribute('aria-hidden', 'true');
   const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   // 小写 i 用路径和圆点绘制，不依赖字体，也不会在不同系统上变成不同字形。
-  stem.setAttribute('d', 'M6 5.1v4.1');
+  stem.setAttribute('d', 'M6 5.3v4.4');
   const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   dot.setAttribute('cx', '6');
   dot.setAttribute('cy', '2.8');
-  dot.setAttribute('r', '.7');
+  /*
+   * 点要比笔画粗一圈才认得出是「i」。
+   * 早先 r=.7 配 8px 的框，渲染出来只有半个像素，整个记号看着像一道杂线。
+   */
+  dot.setAttribute('r', '1');
   mark.append(stem, dot);
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, mark),
