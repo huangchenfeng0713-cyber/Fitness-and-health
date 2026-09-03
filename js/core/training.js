@@ -287,7 +287,12 @@ export function starterSplitCombo(splitKey, size = null) {
  * 推荐位却还在推杠铃卧推 —— 推荐就成了和这一屏无关的东西。
  */
 export const EQUIP_FILTERS = [
-  { key: 'all', label: '全部', match: () => true },
+  /*
+   * 叫「全部器械」不叫「全部」：这枚筛选紧挨着「全部 / 推荐」那排分段控件，
+   * 两个「全部」上下相邻，一个说的是不限器械、一个说的是不限动作，
+   * 光看字分不出按下去会发生什么。
+   */
+  { key: 'all', label: '全部器械', match: () => true },
   { key: 'machine', label: '固定器械', match: (e) => e.equipment === 'machine' || e.equipment === 'cable' },
   { key: 'free', label: '自由重量', match: (e) => e.equipment === 'barbell' || e.equipment === 'dumbbell' || e.equipment === 'kettlebell' },
   { key: 'bodyweight', label: '徒手', match: (e) => e.equipment === 'bodyweight' || e.equipment === 'band' },

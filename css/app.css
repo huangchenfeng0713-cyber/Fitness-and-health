@@ -590,6 +590,11 @@ html, body { height: 100%; overflow: hidden; }
   margin: 2px 0 12px; font-size: var(--fs-caption); color: var(--muted);
 }
 .ring-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/*
+ * 9px 见方，圆角只能是 2px：阶梯最低的 --r-xs 是 6px，扣在 9px 的方块上
+ * 直接把它磨成一个圆点，图例就分不出「这是一段弧」还是「这是个点」了。
+ * 这是全表唯一一处不走阶梯的矩形圆角。
+ */
 .ring-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; background: currentColor; }
 .ring-swatch.ring-seg-solid { color: var(--accent); }
 .ring-swatch.ring-seg-mid { color: color-mix(in srgb, var(--accent) 45%, transparent); }
@@ -599,8 +604,9 @@ html, body { height: 100%; overflow: hidden; }
   background: repeating-linear-gradient(112deg, currentColor 0 2px, transparent 2px 4px);
 }
 /* 溢出走外圈细轨，图例也画成一条细的，别和「已摄入」那块实心撞 */
+/* 细条一律 999px 收圆头，和 .macro-bar、.progress-track 那几条一样 */
 .ring-swatch.ring-seg-thin {
-  color: var(--accent); height: 3px; border-radius: 2px; align-self: center;
+  color: var(--accent); height: 3px; border-radius: 999px; align-self: center;
 }
 
 .hero-macros { flex: 1; display: grid; gap: 10px; min-width: 0; }
@@ -936,7 +942,7 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ============ 训练记录 ============ */
 .plan-row-wrap { border-bottom: 1px solid var(--border); }
-.plan-row-wrap:last-child { border-bottom: 0; }
+.plan-row-wrap:last-child { border-bottom-color: transparent; }
 .plan-row-wrap .plan-row { border-bottom: 0; }
 .text-btn.has-sets { color: var(--accent); font-weight: 600; }
 /* 一行四列本来就挤：按钮不换行、不参与收缩，把宽度全留给动作名和肌肉行 */
@@ -1094,10 +1100,18 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* grid 子项默认 min-width:auto，日期输入的固有宽度会把格子撑破 */
 .form-grid > * { min-width: 0; }
 .form-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-footnote); color: var(--muted); min-width: 0; }
+/*
+ * 同一张表里输入框和下拉必须一样高。
+ *
+ * 只给一样的 padding 是不够的：<select> 的行盒由浏览器自己算，实测比 <input>
+ * 高出 2px（42 对 40）。性别、身高、日常活动量在同一个 form-grid 里上下排着，
+ * 一行 40 一行 42，整张表看着像没对齐。高度显式钉在阶梯的 --control-inline 上。
+ */
 .form-field input, .form-field select {
   padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-md);
   background: var(--card-2); color: var(--text);
   width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
+  height: var(--control-inline); line-height: 1.2;
   font-size: var(--fs-headline);   /* iOS Safari 对小于 16px 的输入框会自动放大页面 */
 }
 /* iOS 的原生日期控件自带内边距和固有宽度，不压一下会溢出容器 */
@@ -1175,7 +1189,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   border: 0; border-bottom: 1px solid var(--border);
   background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
-.exercise-choice-row:last-child { border-bottom: 0; }
+.exercise-choice-row:last-child { border-bottom-color: transparent; }
 .exercise-choice-main { flex: 1; min-width: 0; }
 .exercise-choice-action {
   flex: none; width: var(--control-inline); height: var(--control-inline);
@@ -1222,7 +1236,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* 近 7 日训练记录：一行一个动作，点开才看每组明细 */
 .log-list { display: flex; flex-direction: column; }
 .log-item { border-bottom: 1px solid var(--border); }
-.log-item:last-child { border-bottom: 0; }
+.log-item:last-child { border-bottom-color: transparent; }
 .log-row {
   width: 100%; display: flex; align-items: baseline; gap: 8px;
   border: 0; background: none; padding: 10px 0; text-align: left; cursor: pointer;
@@ -1250,7 +1264,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   padding: 14px 14px; border: 0; background: none; cursor: pointer;
   border-bottom: 1px solid var(--border); text-align: left;
 }
-.set-row:last-child { border-bottom: 0; }
+.set-row:last-child { border-bottom-color: transparent; }
 .set-row:active { background: var(--card-2); }
 .set-icon { width: 19px; height: 19px; flex: none; color: var(--muted); }
 .set-title { flex: none; font-size: var(--fs-body); color: var(--text); }
@@ -1262,8 +1276,16 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .set-chevron svg, .set-back-icon svg { width: var(--icon-sm); height: var(--icon-sm); }
 
 .set-back { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+/*
+ * 返回键要给够手指。
+ *
+ * 原先是 26×46px —— 全应用最矮的一个可点元素，比控件阶梯最低的一档还矮 10px。
+ * 而它是每个设置二级页**唯一**的出口：点不中就只能靠系统手势退出去。
+ * 左边不加内边距，箭头仍然和下面表单的左边缘对齐；热区靠高度和右边补。
+ */
 .set-back-btn {
-  border: 0; background: none; padding: 4px 0; cursor: pointer;
+  border: 0; background: none; padding: 0 8px 0 0; cursor: pointer;
+  min-height: var(--control-sm);
   color: var(--accent); font-size: var(--fs-body); display: inline-flex;
   align-items: center; gap: 2px;
 }
@@ -1312,6 +1334,14 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   width: 100%; min-width: 0; min-height: var(--control-md); color: inherit; font-family: inherit;
   border-bottom-color: var(--hairline);
 }
+/*
+ * 列表最后一行的分隔线一律**染透明**，不是 `border-bottom: 0`。
+ *
+ * 去掉边框会让最后一行比上面每一行矮 1px：实测同一列动作里前七行 65.3px、
+ * 第八行 64.3px，设置的五行里最后一条 47px、其余 48px。一行行看不出来，
+ * 但一整列排下来最后那一格就是差着一点没对齐。
+ * 全文件十一处原本写着两种写法，现在只留这一种。
+ */
 .ui-list-row:last-child { border-bottom-color: transparent; }
 
 .result-caption {
@@ -1402,16 +1432,38 @@ body.sheet-open {
  * 钉在 .view 上而不是视口上 —— 视口底部是 tab 栏的位置。
  */
 /* 一周小结：一行一项，值和说明左右分栏 */
-.week-rows { display: flex; flex-direction: column; }
-.week-row {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 9px 0; border-bottom: 1px solid var(--hairline);
+/*
+ * 一张三列的表，不是七个各自排版的行。
+ *
+ * 每行各自 flex 的时候，数值那格按自己的内容分宽：「0 / 7 天」占 61px、
+ * 「—」占 22px，后面的注释就有两个起点。数值列改成整张表统一的 max-content，
+ * 七行的注释才对得上一条竖线。
+ *
+ * 列间距不用 column-gap 而用 padding-right：底下那道分隔线是每格各画一段的，
+ * gap 会在格与格之间把它切出两道缺口。
+ */
+.week-rows {
+  display: grid;
+  grid-template-columns: 68px max-content minmax(0, 1fr);
 }
-.week-row:last-child { border-bottom: 0; }
-.week-row-label { flex: none; width: 68px; font-size: var(--fs-footnote); color: var(--muted); }
-.week-row-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-.week-row-value { flex: none; font-size: var(--fs-body); font-weight: 600; }
-.week-row-note { flex: 1 1 auto; font-size: var(--fs-caption); color: var(--faint); }
+.week-row { display: contents; }
+/*
+ * 三格拉平到同一高度（网格默认的 stretch），不能按各自内容排 baseline。
+ *
+ * 分隔线是三格各画一段接起来的：按 baseline 对齐时每格只有自己内容那么高，
+ * 三段线落在三个不同的 y 上，一行分隔线就断成三截 —— 「累计收支」那行注释
+ * 有三行，它那一段直接掉到下面去了。
+ * 拉平之后文字改成顶对齐，三格行高统一，首行基线差不到 1px，看不出来。
+ */
+.week-row > * {
+  padding: 9px 0; line-height: 1.5;
+  border-bottom: 1px solid var(--hairline);
+}
+.week-row:last-child > * { border-bottom-color: transparent; }
+.week-row-label { padding-right: 10px; font-size: var(--fs-footnote); color: var(--muted); }
+.week-row-value { padding-right: 8px; font-size: var(--fs-body); font-weight: 600; white-space: nowrap; }
+/* 字号和颜色由下面那条「抬高真正承担信息的小字」统一给，这里只管排版 */
+.week-row-note { min-width: 0; }
 /* 只有两档着色：做到了给绿，该留意给橙。小结不是体检报告，不上红色 */
 .week-row.good .week-row-value { color: var(--ok, var(--accent)); }
 .week-row.warn .week-row-value { color: var(--warn); }
@@ -1591,7 +1643,7 @@ body.sheet-open {
   display: flex; align-items: center; gap: 8px; padding: 7px 0;
   border-bottom: 1px solid var(--hairline);
 }
-.select-bar-item:last-child { border-bottom: 0; }
+.select-bar-item:last-child { border-bottom-color: transparent; }
 .select-bar-item-main { flex: 1 1 auto; min-width: 0; }
 .select-bar-item-title { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .select-bar-item-main strong { font-size: var(--fs-footnote); font-weight: 500; }
@@ -1722,7 +1774,7 @@ body.sheet-open {
   align-items: center; gap: 8px; min-height: 54px; padding: 7px 8px;
   border-bottom: 1px solid var(--border); transition: background .15s;
 }
-.mix-row:last-child { border-bottom: 0; }
+.mix-row:last-child { border-bottom-color: transparent; }
 .mix-row.active { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
 .mix-toggle {
   width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
@@ -1806,7 +1858,7 @@ body.sheet-open {
   border: 1px solid var(--border); border-radius: var(--r-xs);
   background: var(--card-2); color: var(--muted); font-size: var(--fs-caption);
 }
-.entry-row:last-child { border-bottom: 0; }
+.entry-row:last-child { border-bottom-color: transparent; }
 .entry-main { flex: 1; min-width: 0; }
 .entry-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-body); font-weight: 550; }
 .entry-name .info-tip > summary { width: var(--info-size); height: var(--info-size); }
@@ -1833,7 +1885,7 @@ body.sheet-open {
 .data-manager { border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); }
 .manager-list { border-top: 1px solid var(--border); }
 .manager-section { border-bottom: 1px solid var(--border); }
-.manager-section:last-child { border-bottom: 0; }
+.manager-section:last-child { border-bottom-color: transparent; }
 .manager-section > summary {
   list-style: none; display: grid; grid-template-columns: 38px minmax(0, 1fr) 22px;
   gap: 10px; align-items: center; min-height: 66px; cursor: pointer;
@@ -1984,7 +2036,16 @@ body.sheet-open {
 .paste-block summary::-webkit-details-marker { display: none; }
 .paste-block summary::before { content: '▸ '; }
 .paste-block[open] summary::before { content: '▾ '; }
-.secondary-btn.full { width: 100%; margin-top: 8px; }
+/*
+ * 撑满一行的次按钮和撑满一行的主按钮**摞在一起**，所以要一样高。
+ *
+ * 次按钮平时是 --control-md（44），比主按钮的 48 矮一档，那是它们并排站时
+ * 该有的层次。但「打开 GitHub 提交」下面紧跟着「复制反馈内容」、
+ * 「登录」下面跟着「使用 Google 登录」时，两个等宽的块一个 48 一个 44，
+ * 看着就是下面那个没做完。
+ */
+.secondary-btn.full,
+.secondary-btn.account-google-btn { width: 100%; margin-top: 8px; min-height: var(--control-lg); }
 .paste-area {
   width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-md);
   background: var(--card-2); color: var(--text); resize: vertical; font-size: var(--fs-footnote);
@@ -2039,12 +2100,16 @@ body.sheet-open {
 .data-action-copy strong { display: block; font-size: var(--fs-body); }
 .data-action-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.45; }
 /*
- * 紧凑次按钮比常规的小一档就够了，不能一路压到 --fs-caption：
- * 12px 是全应用的可读下限，那是给单位和角标用的，不是给按下去会发生事情的东西。
+ * 紧凑次按钮走「普通按钮」那一档，和它旁边那行标题一样大。
+ *
+ * 原先是 --fs-footnote，于是同一个 .secondary-btn 在全应用里同时印成 15px 和 13px，
+ * 落在按钮字号阶梯的两端。13px 那一档本来是留给胶囊和筛选的，
+ * 而「导出 / 清空 / 选择备份」是这一行真正要人按的动作，不是一枚标签。
+ * 「紧凑」指的是内边距和最小宽度收窄，不是把字压小。
  */
 .secondary-btn.compact {
   flex: none; min-width: 72px; padding: 8px 10px;
-  font-size: var(--fs-footnote); white-space: nowrap;
+  font-size: var(--fs-body); white-space: nowrap;
 }
 
 .method { padding: 12px 0; border-top: 1px solid var(--border); }
@@ -2198,7 +2263,6 @@ body.sheet-open {
 }
 .account-offline-signout span { color: var(--muted); font-size: var(--fs-caption); line-height: 1.45; }
 .account-offline-signout .text-btn { flex: none; }
-.account-google-btn { width: 100%; margin-top: 8px; }
 .account-link-row { display: flex; justify-content: flex-end; margin-top: 5px; }
 .account-identity {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
@@ -2257,7 +2321,7 @@ body.sheet-open {
   display: grid; grid-template-columns: minmax(72px, 1fr) auto; gap: 10px;
   padding: 8px 0; border-bottom: 1px solid var(--border); align-items: baseline;
 }
-.target-row:last-child { border-bottom: 0; }
+.target-row:last-child { border-bottom-color: transparent; }
 .target-key { font-size: var(--fs-body); color: var(--muted); }
 .target-val { font-size: var(--fs-value); font-variant-numeric: tabular-nums; }
 
@@ -2342,7 +2406,19 @@ body.sheet-open {
 
 /* ============ 健身建议 ============ */
 .ex-row.chosen { background: var(--accent-soft); border-radius: var(--r-md); }
-.ex-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--fs-value); }
+/*
+ * 行高必须落在整像素上，否则分隔线会一条深一条浅。
+ *
+ * 正文继承的 line-height 是 1.55，15px 的动作名算出来是 23.25px，一行连
+ * 内边距和边框是 65.25px。屏幕是 2 倍图时，各行的下边缘落在 130.5 / 261 /
+ * 391.5 / 522…… 半像素那几条边框被摊到两个物理像素上，颜色淡掉一半 ——
+ * 而 --hairline 本来就很淡，淡一半就等于没有。八行动作看下来就是隔一条少一条。
+ * 1.6 在 15px 上正好是 24px，整行变成 66px，每条边框都压在整像素上。
+ */
+.ex-name {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-value); line-height: 1.6;
+}
 .ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ex-muscle-old { font-size: var(--fs-footnote); color: var(--faint); margin-top: 3px; }
 /*
@@ -2357,7 +2433,7 @@ body.sheet-open {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--border);
 }
-.plan-row:last-child { border-bottom: 0; }
+.plan-row:last-child { border-bottom-color: transparent; }
 .plan-index {
   flex: none; width: 22px; height: 22px; border-radius: 999px;
   background: var(--card-2); color: var(--muted);
@@ -2462,9 +2538,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 .trend-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .trend-select-caret {
-  position: absolute; right: 11px; top: 50%; transform: translateY(-60%);
-  pointer-events: none; color: var(--faint); font-size: var(--fs-value);
+  position: absolute; right: 11px; top: 50%;
+  /* 画出来的 chevron 本身指右，转 90° 朝下；居中靠 translate，不靠视觉微调 */
+  transform: translateY(-50%) rotate(90deg);
+  pointer-events: none; color: var(--faint); display: grid; place-items: center;
 }
+.trend-select-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
 .trend-card .chart-wrap { margin-top: 6px; }
 .trend-summary {
   margin: 8px 2px 0; color: var(--muted); font-size: var(--fs-footnote);
@@ -2585,10 +2664,17 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .exercise-search-input { width: 100%; }
 .exercise-search-results .ex-list { margin-top: 0; }
 .exercise-search-empty { margin: 14px 2px 4px; }
-.picker-controls .range-switch {
-  width: calc(100% - 24px);
-  margin-inline: auto;
-}
+/*
+ * 三排分段控件必须一样宽。
+ *
+ * 这两排原先左右各内缩 12px，而下面「全部 / 推荐」那排齐着卡片内容边 ——
+ * 三个做同一件事的开关摆出两种宽度，看着像谁没对齐，而不像谁是谁的下一级。
+ * 「2 + 1」的层级由**位置**表达（这两排贴在一起，那一排跟着列表头走），
+ * 不靠一道 12px 的缩进说 —— 缩进只在同一处上下相邻时才读得出来。
+ *
+ * 间距由 .picker-controls 的 grid gap 给，所以这里要把基础规则那条 margin 归零，
+ * 否则两排之间是 gap + margin 两份。
+ */
 .picker-controls .range-switch + .range-switch { margin-top: 0; }
 .picker-scope-switch {
   display: grid;

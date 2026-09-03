@@ -469,7 +469,8 @@ function pickerCard(rerender) {
       : [
         list.length
           ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, scopeMuscles)))
-          : h('p.empty-hint', null, `${scopeLabel}里没有${filter.label}动作，换个器械档位看看。`),
+          /* 别把档位名嵌进句子：「胸里没有全部器械动作」念不通 */
+          : h('p.empty-hint', null, `${scopeLabel}里没有符合当前器械档位的动作，换一档看看。`),
         list.length > LIST_PREVIEW ? h('button.more-btn', {
           onclick: () => { showAllExercises = !showAllExercises; rerender(); },
         }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,

@@ -191,7 +191,7 @@ function backupPanel(rerender) {
 
   return h('div.data-actions', null,
       h('div.data-action', null,
-        h('div.data-action-icon', null, '↓'),
+        h('div.data-action-icon', null, icon('download')),
         h('div.data-action-copy', null,
           h('strong', null, '导出当前完整备份'),
           h('span', null, '下载到“文件”，换设备或清缓存前保存一份。')),

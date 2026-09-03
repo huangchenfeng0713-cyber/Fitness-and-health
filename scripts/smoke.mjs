@@ -117,6 +117,7 @@ try {
       symbol: action?.textContent || '',
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
       controlRows: controlRows.map(rect),
+      viewSwitch: rect(document.querySelector('.picker-view-switch')),
       listHead: rect(document.querySelector('.picker-list-head')),
       equipBordered: (() => {
         const btn = document.querySelector('.picker-list-head .equip-filter-btn');
@@ -226,12 +227,22 @@ try {
     !allState.equipBordered && '器械筛选又变回了一行裸文字，看不出能点',
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
-    allState.controls && allState.controlRows.some((row) =>
-      Math.abs((row.left + row.width / 2) - (allState.controls.left + allState.controls.width / 2)) > 1)
-      && '缩窄后的筛选控件没有保持居中',
-    allState.controls && allState.controlRows.some((row) =>
-      allState.controls.width - row.width < 22 || allState.controls.width - row.width > 26)
-      && `筛选控件没有按约 24px 缩窄：${allState.controlRows.map((row) => row.width.toFixed(1)).join('/')}`,
+    /*
+     * 三排分段控件一样宽、一样起点。
+     *
+     * 上面两排曾经左右各缩 12px，而「全部 / 推荐」那排齐着卡片内容边 ——
+     * 三个做同一件事的开关摆出两种宽度，看着是「谁没对齐」，
+     * 而不是「谁是谁的下一级」。层级由位置表达，不靠缩进。
+     */
+    (() => {
+      const rows = [...allState.controlRows, allState.viewSwitch].filter(Boolean);
+      if (rows.length !== 3) return `选择动作里的分段控件不是三排：${rows.length}`;
+      const spread = Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width));
+      const offset = Math.max(...rows.map((r) => r.left)) - Math.min(...rows.map((r) => r.left));
+      return (spread > 1 || offset > 1)
+        && `三排分段控件没对齐：宽 ${rows.map((r) => r.width.toFixed(1)).join('/')}，`
+          + `左 ${rows.map((r) => r.left.toFixed(1)).join('/')}`;
+    })(),
     !recommendState.hasTip && '推荐说明入口缺失',
     recommendState.tip && (Math.abs(recommendState.tip.width - 14) > 1
       || Math.abs(recommendState.tip.height - 14) > 1)
