@@ -537,13 +537,15 @@ html, body { height: 100%; overflow: hidden; }
 }
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
 .ring-tick { stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; opacity: .6; }
-.ring-tick.strong { stroke: #ffffff; stroke-width: 3.2; opacity: 1; }
+.ring-tick.strong { stroke-width: 3.2; opacity: 1; }
+.ring-tick.eaten { stroke: #ffffff; }
+.ring-tick.burned { stroke: #e8c84a; }
 .ring-tick-label { fill: var(--faint); font-weight: 600; }
 .ring-tick-label.strong { fill: var(--muted); }
 .ring-overflow { stroke: var(--accent); stroke-linecap: round; }
 .ring-burn { stroke: #e8c84a; }
 .ring-burn-wrap { stroke: #c9a20c; }
-.ring-burn-track { stroke: #efe3a8; }
+.ring-burn-track { stroke: var(--track); }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——

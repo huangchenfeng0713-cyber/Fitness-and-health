@@ -13,7 +13,7 @@ function el(tag, attrs = {}) {
 
 export function energyRingChart({ model, size = 152, stroke = 14 }) {
   const padX = 78;
-  const padY = 22;
+  const padY = 28;
   const vbW = size + padX * 2;
   const vbH = size + padY * 2;
   const cx = vbW / 2;
@@ -37,7 +37,7 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     if (cls.includes('ring-seg-wrap')) return { stroke: '#147a5c' };
     if (cls.includes('ring-seg-deep')) return { stroke: '#0b4f3c' };
     if (cls.includes('ring-burn-wrap')) return { stroke: '#c9a20c' };
-    if (cls.includes('ring-burn-track')) return { stroke: '#efe3a8' };
+    if (cls.includes('ring-burn-track')) return {};
     if (cls.includes('ring-burn')) return { stroke: '#e8c84a' };
     if (cls.includes('ring-seg-solid')) return { stroke: '#22c55e' };
     return {};
@@ -77,21 +77,39 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     x: sx - 2.4, y: sy - 2.4, width: 4.8, height: 4.8, rx: 1, class: 'ring-origin',
   }));
 
-  for (const tick of model.ticks || []) {
+  const tickTone = {
+    intake: { stroke: '#ffffff', fill: '#ffffff', inner: false },
+    burn: { stroke: '#e8c84a', fill: '#e8c84a', inner: true },
+  };
+  const placed = (model.ticks || []).map((tick) => {
+    const tone = tickTone[tick.tone] || tickTone.intake;
     const deg = angleOf(tick.pct);
-    const [x1, y1] = point(deg, burnR);
-    const [x2, y2] = point(deg, r + stroke * 0.55);
+    const r0 = tone.inner ? burnR : r;
+    const r1 = tone.inner ? r + stroke * 0.2 : r + stroke * 0.55;
+    return { tick, tone, deg, r0, r1 };
+  });
+  for (let i = 0; i < placed.length; i++) {
+    const { tick, tone, deg, r0, r1 } = placed[i];
+    const [x1, y1] = point(deg, r0);
+    const [x2, y2] = point(deg, r1);
     svg.append(el('line', {
-      x1, y1, x2, y2, class: 'ring-tick strong', stroke: '#ffffff', 'stroke-width': 3.2,
+      x1, y1, x2, y2, class: `ring-tick strong ${tick.key}`,
+      stroke: tone.stroke, 'stroke-width': 3.2,
     }));
     svg.append(el('circle', {
-      cx: x1, cy: y1, r: 2.6, fill: '#ffffff', stroke: 'var(--text)', 'stroke-width': 1.2,
+      cx: x1, cy: y1, r: 2.7, fill: tone.fill, stroke: 'var(--text)', 'stroke-width': 1.2,
     }));
+    let labelR = r + stroke * 0.72 + 8;
+    const other = placed.find((_, j) => j !== i);
+    if (other) {
+      const d = Math.abs(tick.pct - other.tick.pct);
+      if (Math.min(d, 100 - d) < 12) labelR += i * 16;
+    }
+    const [tx, ty] = point(deg, labelR);
     const norm = ((deg % 360) + 360) % 360;
     const onLeft = norm > 90 && norm < 270;
-    const [tx, ty] = point(deg, r + stroke * 0.72 + 8);
     const text = el('text', {
-      x: tx, y: ty, class: 'ring-tick-label strong',
+      x: tx, y: ty, class: `ring-tick-label strong ${tick.key}`,
       'text-anchor': onLeft ? 'end' : 'start',
       'dominant-baseline': 'middle',
       'font-size': 13,

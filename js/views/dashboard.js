@@ -121,14 +121,10 @@ function heroCard(advice, targets, derived) {
     h('p.hero-detail', null, status.detail),
 
     /*
-     * 环占满一行，数字排在下面。
-     *
-     * 两条刻度各带一个外圈文字，环左右两边都要留出地方 ——
-     * 再把三个数挤在右边，环就只剩不到一半宽度，字会互相压。
+     * 环占满一行。两条刻度各带一个外圈文字，环左右两边都要留出地方。
      */
     h('div.hero-body', null,
-      h('div.hero-ring', null, energyRingChart({ model: ringModel })),
-      h('p.hero-ring-note', null, ringModel.scaleCaption)),
+      h('div.hero-ring', null, energyRingChart({ model: ringModel }))),
 
     h('div.metric-list', null,
       metricRow(by.protein),
