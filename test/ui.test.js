@@ -51,7 +51,7 @@ test('栏目分工：数据页看数据与走势，设置页放身体信息与�
   assert.ok(!read('js/views/health.js').includes('profileCard'),
     '数据页不该再挂身体信息表单');
   // 同步、备份、补录都是维护性操作，收进设置页
-  for (const text of ['同步 Apple 健康', '本应用备份与恢复', '手动补录']) {
+  for (const text of ['同步 Apple 健康', '备份与恢复', '手动补录']) {
     assert.ok(settings.includes(text), `设置页缺少“${text}”`);
   }
   assert.ok(!read('js/views/health.js').includes('dataManagerCard'),
@@ -647,7 +647,7 @@ test('数据页只留健康数据和趋势，解读收到每张图下面', () =>
     '身体信息应排在数据管理之前');
 
   const manager = read('js/views/cards/data-manager.js');
-  for (const label of ['同步 Apple 健康', '手动补录', '本应用备份与恢复', '同步帮助']) {
+  for (const label of ['同步 Apple 健康', '手动补录', '备份与恢复', '同步帮助']) {
     assert.ok(manager.includes(label), `统一数据管理卡缺少“${label}”`);
   }
   assert.match(css, /\.view > \* \{ flex: 0 0 auto; \}/);
@@ -1804,6 +1804,18 @@ test('设置里展开的折叠块不会被一次落库收回去', () => {
    * 翻一天就换一个键，昨天展开的那一节今天又是收着的。
    */
   assert.ok(!/openSections\.(has|add)\(title\)/.test(dm), '拿标题当键了');
+});
+
+test('关掉设置后所有展开项都收起', () => {
+  const app = strip(read('js/app.js'));
+  const settings = strip(read('js/views/settings.js'));
+  const dm = strip(read('js/views/cards/data-manager.js'));
+  assert.match(settings, /export function resetSettingsExpand/, '设置页没有统一的收起入口');
+  assert.match(dm, /export function collapseManagerSections/, '折叠块没有清空函数');
+  assert.match(dm, /openSections\.clear\(\)/, '关掉后没有清掉展开键');
+  assert.match(app, /resetSettingsExpand\(\)/, '点叉关闭时没有收起展开项');
+  assert.match(app, /settingsOpen = false;\s*resetSettingsExpand\(\)/,
+    '收起必须发生在关闭设置时，不能拖到下次打开');
 });
 
 /*

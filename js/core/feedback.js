@@ -9,7 +9,7 @@
  */
 
 /** 与 package.json 的 version 保持一致（没有构建步骤，只能手动同步，test/feedback.test.js 会盯着） */
-export const APP_VERSION = '3.4.2';
+export const APP_VERSION = '3.4.3';
 
 export const FEEDBACK_REPO = 'huangchenfeng0713-cyber/Fitness-and-health';
 

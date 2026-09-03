@@ -7,7 +7,7 @@ import { renderDashboard } from './views/dashboard.js';
 import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
 import { renderTraining } from './views/training.js';
-import { renderSettings } from './views/settings.js';
+import { renderSettings, resetSettingsExpand } from './views/settings.js';
 import { APP_VERSION, buildDiagnostics, formatDiagnostics } from './core/feedback.js';
 import {
   initCloud, getAccountState, subscribeAccount,
@@ -83,6 +83,7 @@ function closeSettings({ restoreHash = true } = {}) {
   settingsOverlay.setAttribute('aria-hidden', 'true');
   $('#app').inert = false;
   settingsOpen = false;
+  resetSettingsExpand();
   syncOnboarding();
   settingsCloseTimer = setTimeout(() => { settingsOverlay.hidden = true; }, 220);
   if (restoreHash && location.hash === '#settings') {

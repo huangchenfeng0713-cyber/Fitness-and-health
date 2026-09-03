@@ -526,26 +526,24 @@ html, body { height: 100%; overflow: hidden; }
  */
 .ring-track { stroke: var(--track); }
 .ring-seg, .ring-track { stroke-linecap: butt; }
-.ring-seg-solid { stroke: var(--accent); }
+.ring-seg-solid { stroke: #22c55e; }
+.ring-seg-wrap { stroke: #147a5c; }
+.ring-seg-deep { stroke: #0b4f3c; }
 .ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
 .ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
 .ring-seg-dashed {
   stroke: color-mix(in srgb, var(--accent) 30%, transparent);
   mask: repeating-linear-gradient(112deg, #000 0 3px, transparent 3px 6px);
 }
-/* 起点方块：什么都没有时靠它看出这一圈从哪儿开始、往哪边走 */
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-/*
- * 刻度线只负责切分，不表达量。长实线是当前消耗，短淡线是预计全天消耗；
- * 两条之间的距离就是「今天接下来还会再烧掉多少」。
- */
 .ring-tick { stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; opacity: .6; }
-.ring-tick.strong { stroke: var(--text); stroke-width: 2.4; opacity: .9; }
-/* 外圈那两行字。只有这两个注释，段落本身不再各挂一个标注 */
+.ring-tick.strong { stroke: #ffffff; stroke-width: 3.2; opacity: 1; }
 .ring-tick-label { fill: var(--faint); font-weight: 600; }
 .ring-tick-label.strong { fill: var(--muted); }
-/* 吃得比烧的多：多出来的那截走外圈细轨，用位置而不是颜色表达翻转 */
 .ring-overflow { stroke: var(--accent); stroke-linecap: round; }
+.ring-burn { stroke: #e8c84a; }
+.ring-burn-wrap { stroke: #c9a20c; }
+.ring-burn-track { stroke: #efe3a8; }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
