@@ -78,7 +78,7 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   }));
 
   const tickTone = {
-    intake: { stroke: '#ffffff', fill: '#ffffff', inner: false },
+    intake: { stroke: 'var(--text)', fill: 'var(--text)', inner: false },
     burn: { stroke: '#e8c84a', fill: '#e8c84a', inner: true },
   };
   const placed = (model.ticks || []).map((tick) => {
@@ -89,35 +89,7 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     return { tick, tone, deg, r0, r1 };
   });
 
-  /*
-   * 标签放在左右边沟里，不沿半径往外飞。
-   * 「当前摄入 1584」一整行约 110px，原先 pad 只有 78，字会画出 viewBox
-   * 被 SVG 裁掉，左边只剩「前摄入」。改成两行之后边沟够用。
-   */
-  const LABEL_H = 30;
-  const labels = placed.map((p) => {
-    const [, py] = point(p.deg, r + stroke * 0.65);
-    const norm = ((p.deg % 360) + 360) % 360;
-    const onLeft = norm > 90 && norm < 270;
-    return {
-      ...p,
-      onLeft,
-      lx: onLeft ? padX - 8 : vbW - padX + 8,
-      ly: Math.max(14, Math.min(vbH - 18, py)),
-    };
-  });
-  if (labels.length === 2 && labels[0].onLeft === labels[1].onLeft) {
-    const a = labels[0].ly <= labels[1].ly ? labels[0] : labels[1];
-    const b = a === labels[0] ? labels[1] : labels[0];
-    if (b.ly - a.ly < LABEL_H + 4) {
-      const mid = (a.ly + b.ly) / 2;
-      a.ly = Math.max(14, mid - LABEL_H / 2 - 4);
-      b.ly = Math.min(vbH - 18, a.ly + LABEL_H + 8);
-    }
-  }
-
-  for (const item of labels) {
-    const { tick, tone, deg, r0, r1, onLeft, lx, ly } = item;
+  for (const { tick, tone, deg, r0, r1 } of placed) {
     const [x1, y1] = point(deg, r0);
     const [x2, y2] = point(deg, r1);
     svg.append(el('line', {
@@ -133,6 +105,17 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
         stroke: tone.stroke, 'stroke-width': 1.5,
       }));
     }
+  }
+
+  /*
+   * 文字固定在环左右：摄入永远在左，消耗永远在右，垂直居中。
+   * 跟着端点跑的话，两条贴在 1 点方向就会叠成一坨，看起来乱飘。
+   */
+  const labelOf = (key, onLeft) => {
+    const tick = (model.ticks || []).find((t) => t.key === key);
+    if (!tick) return;
+    const lx = onLeft ? padX - 8 : vbW - padX + 8;
+    const ly = cy;
     const text = el('text', {
       x: lx, y: ly, class: `ring-tick-label strong ${tick.key}`,
       'text-anchor': onLeft ? 'end' : 'start',
@@ -144,7 +127,9 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     num.textContent = String(tick.kcal);
     text.append(line, num);
     svg.append(text);
-  }
+  };
+  labelOf('eaten', true);
+  labelOf('burned', false);
 
   if (model.center) {
     const main = el('text', {

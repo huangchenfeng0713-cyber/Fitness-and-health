@@ -537,7 +537,7 @@ html, body { height: 100%; overflow: hidden; }
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
 .ring-tick { stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; opacity: .6; }
 .ring-tick.strong { stroke-width: 3.2; opacity: 1; }
-.ring-tick.eaten { stroke: #ffffff; }
+.ring-tick.eaten { stroke: var(--text); }
 .ring-tick.burned { stroke: #e8c84a; }
 .ring-tick-label { fill: var(--faint); font-weight: 600; }
 .ring-tick-label.strong { fill: var(--muted); }
