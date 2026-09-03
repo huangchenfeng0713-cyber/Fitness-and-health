@@ -118,21 +118,13 @@ export function energyRing({
 
   /*
    * 摄入端点越过黄刻度：越过的那段改深绿。
-   * 套圈之后只在当前还看得见的那一圈上比。
+   * 只在同一圈上比。摄入已经套圈、消耗还没有时，第二圈从 12 点
+   * 顺时针往右盖（wrap），不要再把黄刻度到 12 点（12 点左边）涂深 ——
+   * 那看起来像第二圈往反方向盖。
    */
-  if (ate > burn + 0.5 && hasBurn) {
-    let fromPct = 0;
-    let toPct = 0;
-    if (burnLap.laps === 0 && eatLap.laps === 0) {
-      fromPct = burnLap.firstPct;
-      toPct = eatLap.firstPct;
-    } else if (burnLap.laps === 0 && eatLap.laps >= 1) {
-      fromPct = burnLap.firstPct;
-      toPct = 100;
-    } else if (burnLap.laps >= 1 && eatLap.laps >= 1 && burnLap.laps === eatLap.laps) {
-      fromPct = burnLap.wrapPct;
-      toPct = eatLap.wrapPct;
-    }
+  if (ate > burn + 0.5 && hasBurn && burnLap.laps === eatLap.laps) {
+    const fromPct = eatLap.laps >= 1 ? burnLap.wrapPct : burnLap.firstPct;
+    const toPct = eatLap.laps >= 1 ? eatLap.wrapPct : eatLap.firstPct;
     if (toPct > fromPct + 0.3) {
       segments.push({
         key: 'lead', fromPct, toPct,
