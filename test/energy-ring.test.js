@@ -108,8 +108,21 @@ test('摄入再追上后绿弧回来，越过黄刻度再变深绿', () => {
 test('没有设备消耗就不画黄刻度', () => {
   const m = energyRing({ eaten: 800, projected: 2168, scale: SCALE });
   assert.equal(m.hasBurn, false);
-  assert.equal(m.ticks.length, 0);
+  assert.equal(m.ticks.some((t) => t.key === 'burned'), false);
+  assert.equal(m.ticks.find((t) => t.key === 'eaten')?.label, '当前摄入');
   assert.equal(m.center.label, '摄入领先');
+});
+
+test('绿环白刻度写当前摄入，黄环黄刻度写当前消耗', () => {
+  const m = ring(895, 1191);
+  const eat = m.ticks.find((t) => t.key === 'eaten');
+  const burn = m.ticks.find((t) => t.key === 'burned');
+  assert.equal(eat.label, '当前摄入');
+  assert.equal(eat.kcal, 895);
+  assert.equal(eat.tone, 'intake');
+  assert.equal(burn.label, '当前消耗');
+  assert.equal(burn.kcal, 1191);
+  assert.equal(burn.tone, 'burn');
 });
 
 test('异常输入不抛，弧不画出圈', () => {

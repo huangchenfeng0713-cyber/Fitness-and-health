@@ -1096,6 +1096,16 @@ test('7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切�
   assert.match(charts, /'text-anchor': anchor/);
 });
 
+test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
+  const dash = strip(read('js/views/dashboard.js'));
+  const css = read('css/app.css');
+  assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
+  assert.match(read('js/core/energy-ring.js'), /label: '当前摄入'/, '绿环没有当前摄入刻度');
+  assert.match(css, /\.ring-tick\.eaten \{[^}]*#ffffff/, '摄入刻度不是白色');
+  assert.match(css, /\.ring-tick\.burned \{[^}]*#e8c84a/, '消耗刻度没有换成黄色');
+  assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
+});
+
 test('短标签不会被从中间断成两截', () => {
   // 实测 393px 屏：「游离糖上限」被断成「游离糖上 / 限」，「1g 蛋白」被断成「蛋 / 白」。
   // 中文默认允许在任意两个字之间断行，短标签必须显式挡住。

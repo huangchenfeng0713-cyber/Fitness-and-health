@@ -142,13 +142,22 @@ export function energyRing({
   }
 
   const ticks = [];
+  if (ate > 0.5) {
+    ticks.push({
+      key: 'eaten',
+      pct: (ate % sc) / sc * 100,
+      kcal: Math.round(ate),
+      label: '当前摄入',
+      tone: 'intake',
+    });
+  }
   if (hasBurn) {
     ticks.push({
       key: 'burned',
       pct: (burn % sc) / sc * 100,
       kcal: Math.round(burn),
       label: '当前消耗',
-      strong: true,
+      tone: 'burn',
     });
   }
 
