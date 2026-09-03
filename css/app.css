@@ -1447,16 +1447,9 @@ body.sheet-open {
 }
 .water-wave > i {
   position: absolute; border-radius: 50%;
-}
-.water-wave > i.water-ripple {
-  border: 1.5px solid color-mix(in srgb, var(--accent) 85%, transparent);
-}
-.water-wave > i.water-sheen {
   border: 0;
-  background: radial-gradient(ellipse at center,
-    color-mix(in srgb, var(--accent) 42%, #fff) 0%,
-    color-mix(in srgb, var(--accent) 16%, transparent) 46%,
-    transparent 72%);
+  background: transparent;
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
