@@ -12,12 +12,10 @@ function el(tag, attrs = {}) {
 }
 
 export function energyRingChart({ model, size = 152, stroke = 14 }) {
-  const padX = 78;
-  const padY = 28;
-  const vbW = size + padX * 2;
-  const vbH = size + padY * 2;
-  const cx = vbW / 2;
-  const cy = vbH / 2;
+  const pad = 16;
+  const vb = size + pad * 2;
+  const cx = vb / 2;
+  const cy = vb / 2;
   const r = (size - stroke) / 2;
   const burnR = r - stroke / 2 - 7;
   const span = 360 - RING_GAP_DEG;
@@ -29,7 +27,7 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   ];
 
   const svg = el('svg', {
-    viewBox: `0 0 ${vbW} ${vbH}`, class: 'ring energy-ring',
+    viewBox: `0 0 ${vb} ${vb}`, class: 'ring energy-ring',
     preserveAspectRatio: 'xMidYMid meet', overflow: 'visible',
   });
 
@@ -96,30 +94,6 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
       x1, y1, x2, y2, class: `ring-tick strong ${tick.key}`,
     }));
   }
-
-  /*
-   * 文字固定在环左右：摄入永远在左，消耗永远在右，垂直居中。
-   * 跟着端点跑的话，两条贴在 1 点方向就会叠成一坨，看起来乱飘。
-   */
-  const labelOf = (key, onLeft) => {
-    const tick = (model.ticks || []).find((t) => t.key === key);
-    if (!tick) return;
-    const lx = onLeft ? padX - 8 : vbW - padX + 8;
-    const ly = cy;
-    const text = el('text', {
-      x: lx, y: ly, class: `ring-tick-label strong ${tick.key}`,
-      'text-anchor': onLeft ? 'end' : 'start',
-      'font-size': 12,
-    });
-    const line = el('tspan', { x: lx, dy: '-0.45em' });
-    line.textContent = tick.label;
-    const num = el('tspan', { x: lx, dy: '1.25em' });
-    num.textContent = String(tick.kcal);
-    text.append(line, num);
-    svg.append(text);
-  };
-  labelOf('eaten', true);
-  labelOf('burned', false);
 
   if (model.center) {
     const main = el('text', {
