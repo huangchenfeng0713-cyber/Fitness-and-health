@@ -303,9 +303,19 @@ test('今日健康数据钉死今天，只有体重可使用最近记录', () =>
   assert.match(metrics, /latestHealthEntry\('weightKg', today\)/, '没有取截至今天最近一次体重');
   assert.match(metrics, /latestWeight,/, '最近体重没有交给健康卡状态层');
 
-  // 格子保持简洁，测量日期收在右上角信息按钮里。
-  assert.ok(!/`体重 \$\{/.test(metrics), '又把沿用的日期标回格子里了');
-  assert.match(metrics, /体重默认显示截至今天最近一次有效记录/, '说明层没有解释最近体重口径');
+  /*
+   * 格子保持简洁，测量日期收在右上角信息按钮里。
+   * 只看画格子那一段：说明面板里当然要写清「这个体重是哪天称的」，
+   * 那正是它存在的理由。
+   */
+  const grid = metrics.slice(metrics.indexOf('info.cells.map('));
+  assert.ok(!/体重 \$\{/.test(grid), '又把沿用的日期标回格子里了');
+  /*
+   * 说明层要写出这个体重是哪天称的 —— 不写的话人会以为是今天的。
+   * 断言只锁「日期得出现」，不锁具体措辞。
+   */
+  assert.match(metrics, /weightCell\.observedDate/, '说明层没有写出体重是哪天称的');
+  assert.match(metrics, /不用每天称/, '说明层没有告诉用户不必天天称重');
   assert.match(metrics, /function lastSeenLines\(/, '最近一次测量没有地方可查');
   assert.match(metrics, /infoTip\(/, '同步情况和最近一次测量要收在信息按钮里');
 
@@ -511,8 +521,13 @@ test('选择动作顶部使用与食物一致的搜索框，输入时只更新�
     '搜索时旧筛选内容仍会和结果挤在一起');
   assert.match(polish, /\.exercise-search-input\s*\{\s*width:\s*100%/,
     '动作搜索框没有铺满可用宽度');
-  assert.match(polish, /\.picker-controls\[hidden\][\s\S]*?display:\s*none\s*!important/,
-    '搜索时隐藏的筛选区可能被组件自身 display 样式重新显示');
+  /*
+   * 一条全局的 [hidden] 兜底，不再给每个组件各补一条。
+   * 补丁式的写法漏过一次：搜索框那个清除键 JS 写了 hidden，
+   * 而 `.search-clear { display: grid }` 让它一直站在那儿。
+   */
+  assert.match(polish, /^\[hidden\] \{ display: none !important; \}$/m,
+    '缺少全局 [hidden] 兜底，组件自身的 display 会把 hidden 压掉');
 });
 
 test('高频搜索框、弱标签、信息入口和列表行由统一组件提供', () => {
@@ -731,8 +746,12 @@ test('含咖啡因功能饮料按毫升记录，并动态显示整份咖啡因',
 test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致', () => {
   const trends = page('health');
   const charts = read('js/lib/charts.js');
-  // 体重门槛收进说明层，必须和 weightTrendStats 的实际口径一致
-  assert.ok(trends.includes('体重趋势至少需要 4 次称重，且第一条与最后一条相隔至少 7 天'));
+  /*
+   * 数据不够时要说清「还差什么才能给结论」—— 那是用户能动手补的事。
+   * 门槛数字必须和 weightTrendStats 的实际判断一致，否则就是在骗人。
+   */
+  assert.ok(trends.includes('至少 4 次') && trends.includes('隔开 7 天'),
+    '体重趋势的门槛没有写给用户看');
   assert.match(read('js/core/health-insights.js'),
     /points\.length >= 4 && elapsedDays >= 7/, '体重拟合门槛与解读文案不一致');
   assert.ok(trends.includes('target: proteinThreshold'));
@@ -919,8 +938,9 @@ test('「全部」档位附一张逐日明细表', () => {
   const trends = page('health');
   assert.match(trends, /range === 'all' \? fullTable\(days, dietByDate\) : null/);
   assert.match(trends, /function fullTable\(/);
-  // 缺的字段要留空，不能当成 0
-  assert.ok(trends.includes('不会当成 0'), '明细表没有说明缺失字段的处理');
+  // 缺的字段要留空，不能当成 0 —— 也得说出来，否则会被读成「那天一口没吃」
+  assert.ok(trends.includes('「—」表示那天没有这一项记录'),
+    '明细表没有说清「—」不是 0');
 });
 
 test('一次点选让同一页所有图标注同一天', () => {
@@ -1096,12 +1116,15 @@ test('添加食物标题不展示总数，README 的库规模仍有测试盯着'
     `README 写 ${claimed} 种，实际约 ${actual} 种`);
 });
 
-test('统计截止日期收在信息按钮里，不再占一整段正文', () => {
+test('「图上没有今天」收在信息按钮里，不占一整段正文', () => {
   // 那段话每次进页面都要读一遍，实际只在第一次有用。
   const health = page('health');
   assert.ok(!health.includes('今天还没过完，画进去必然是个偏低的点'), '正文里还留着那段说明');
-  // 但口径本身不能丢，得能在信息按钮里查到
-  assert.match(health, /统计到 \$\{endDay\} 为止；\$\{todayNote \|\| '所选日期当天不计入。'\}/);
+  /*
+   * 但这件事本身不能丢：不说的话，人会以为图坏了或者自己的记录没存上。
+   * 说的是「图上没有今天」这个事实和原因，不是统计窗口怎么取的。
+   */
+  assert.ok(health.includes('图上不含今天'), '信息按钮里查不到「为什么没有今天」');
 });
 
 test('区间与图表改用下拉，不再铺一屏按钮', () => {
@@ -1303,10 +1326,18 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
   assert.match(utils, /stem\.setAttribute\('d', 'M6 [\d.]+v[\d.]+'\)/,
     '信息符号的 i 竖笔没有使用 SVG 路径');
   assert.match(utils, /dot\.setAttribute\('r', '([\d.]+)'\)/, '信息符号缺少那一点');
-  assert.ok(Number(utils.match(/dot\.setAttribute\('r', '([\d.]+)'\)/)[1]) >= 0.9,
-    '那一点太小，渲染出来不到一个像素，整个记号会读成一道杂线');
-  assert.match(utils, /dot\.setAttribute\('cy', '2\.8'\)/,
-    '信息符号的圆点应位于竖笔上方');
+  /*
+   * 记号要有外圈。没有它，一个点加一道竖线在正文旁边只是一处杂线，
+   * 认不出这是个可以点的说明入口。
+   */
+  assert.match(utils, /rim\.setAttribute\('class', 'info-tip-rim'\)/, '说明记号没有外圈');
+  assert.match(utils, /mark\.append\(rim, stem, dot\)/, '外圈没有画进去');
+  const size = Number(read('css/app.css').match(/\.info-tip-mark \{[^}]*width: ([\d.]+)px/s)[1]);
+  assert.ok(size >= 13, `记号只有 ${size}px，套上外圈之后里面那个 i 就糊了`);
+  // 位置能调，「点在竖笔上方」这件事不能变，所以比大小而不是比字面量
+  const dotY = Number(utils.match(/dot\.setAttribute\('cy', '([\d.]+)'\)/)[1]);
+  const stemTop = Number(utils.match(/stem\.setAttribute\('d', 'M6 ([\d.]+)v/)[1]);
+  assert.ok(dotY < stemTop, `信息符号的圆点应位于竖笔上方（点 ${dotY}、竖笔从 ${stemTop} 起）`);
   assert.doesNotMatch(utils, /h\([^\n]*['"]i['"]\)/,
     '信息符号不能用手打字体字符');
   assert.match(utils, /document\.addEventListener\('click'/, '没有装「点外面收起来」的监听');
@@ -1749,7 +1780,8 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
     .filter((sel) => sel !== ':root');
   assert.deepEqual(raw, [], `这些规则绕过了 --safe-* 直接用 env()：${raw.join('、')}`);
 
-  const bar = css.slice(css.indexOf('\n.select-bar {') + 1, css.indexOf('.select-bar[hidden]'));
+  const barStart = css.indexOf('\n.select-bar {') + 1;
+  const bar = css.slice(barStart, css.indexOf('.select-bar-go', barStart));
   assert.ok(!/safe/.test(bar), '多选条又把底部安全区算了一遍');
   const dock = css.slice(css.indexOf('.actionbar-slot {'), css.indexOf('.tab {'));
   assert.ok(!/safe-bottom/.test(dock), '固定选择栏又把底部安全区算了一遍');

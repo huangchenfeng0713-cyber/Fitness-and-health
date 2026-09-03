@@ -1114,20 +1114,26 @@ test('刘文祥麻辣烫按实际自选配料逐项计算，而不是套固定�
   assert.ok(searchFoods('niujinmian').some((item) => item.id === 'liuwenxiang_gluten_noodle'));
 });
 
-test('每个估算菜品都有统一的依据与误差披露，精确标签项不误标', () => {
+test('每个估算菜品都有误差披露，精确标签项不误标', () => {
   const estimated = FOODS.filter(isEstimated);
   assert.ok(estimated.length > 600, `估算条目覆盖异常：${estimated.length}`);
   for (const food of estimated) {
     const disclosure = estimateDisclosure(food);
     assert.ok(disclosure, `${food.name} 缺估算披露`);
-    assert.ok(disclosure.basis.length >= 12, `${food.name} 的估算依据过短`);
-    assert.ok(disclosure.uncertainty.length >= 12, `${food.name} 的误差来源过短`);
+    assert.ok(disclosure.generic.length >= 12, `${food.name} 的误差来源过短`);
+    // note 是这一道菜特有的那句，可以没有；有就不能是空字符串
+    assert.ok(disclosure.note == null || disclosure.note.length > 0,
+      `${food.name} 的特有说明是空的`);
   }
 
+  /*
+   * 共有的误差和某一道菜特有的边界必须分开返回。
+   * 黏成一句的话，一张卡里列五道菜就把同一句抄五遍，
+   * 真正有区别的那句反而被埋掉。
+   */
   const legacy = estimateDisclosure(FOOD_BY_ID.get('gongbao'));
-  assert.match(legacy.basis, /通用成品配方|食物库/,
-    '没有逐项来源的旧菜品应透明使用通用兜底，而不是编造官方来源');
-  assert.match(legacy.uncertainty, /原料比例.*用油.*汤汁|原料比例.*用油.*酱汁/);
+  assert.match(legacy.generic, /原料比例.*用油.*汤汁|原料比例.*用油.*酱汁/);
+  assert.ok(!/此外/.test(legacy.note || ''), '特有说明里还黏着共有的那句');
   assert.equal(estimateDisclosure(FOOD_BY_ID.get('mcd_bigmac')), null,
     '已有可复核官方标签的食品不应显示估算披露');
 });

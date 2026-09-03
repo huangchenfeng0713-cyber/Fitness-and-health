@@ -1907,21 +1907,23 @@ const ESTIMATE_FALLBACK = Object.freeze({
 });
 
 /**
- * 返回估算值在界面信息面板中使用的统一披露；非估算条目返回 null。
- * source.ref 是估算依据，note 是该条目的特定边界；类型兜底补充共同误差项。
+ * 估算菜品的披露；非估算条目返回 null。
+ *
+ * 三块分开返回，**不再拼成一句**：
+ *  - note     这一道菜特有的边界（「按粥底加鱼片、花生的整碗计」）
+ *  - generic  同一类菜共有的误差来源（用油、份量、烹调失水…）
+ *  - source   真有可查的出处时才有
+ *
+ * 原先把 note 和 generic 用「；此外，」黏成一条 uncertainty，于是一张卡里
+ * 列五道菜就把同一句共有的误差抄了五遍。共有的那句由界面整卡说一次就够。
  */
 export function estimateDisclosure(food) {
   if (!isEstimated(food)) return null;
   const fallback = ESTIMATE_FALLBACK[food?.cat] || ESTIMATE_FALLBACK.other;
-  const source = String(food?.source?.ref || '').trim();
-  const note = String(food?.note || '').trim();
-  const uncertainty = note
-    ? `${note}；此外，${fallback.uncertainty}`
-    : fallback.uncertainty;
   return {
-    basis: source || fallback.basis,
-    uncertainty,
-    accessed: String(food?.source?.accessed || '').trim() || null,
+    note: String(food?.note || '').trim() || null,
+    generic: fallback.uncertainty,
+    source: String(food?.source?.ref || '').trim() || null,
   };
 }
 

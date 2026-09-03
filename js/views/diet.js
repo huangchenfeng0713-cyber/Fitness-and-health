@@ -1430,7 +1430,8 @@ function refreshAdvice() {
   mount(nodes.water, waterCard(rerender));
   // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
   if (ui.query || ui.selected) return;
-  mount(nodes.advice, recommendCard(rerender));
+  // ＋ 走和搜索结果一样的路：先开份量面板，不直接落库
+  mount(nodes.advice, recommendCard(rerender, (food) => selectFood(food)));
 }
 
 export function renderDiet(root) {

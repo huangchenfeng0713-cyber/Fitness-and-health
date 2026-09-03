@@ -2,8 +2,9 @@
 
 import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
-import { ring, macroBar, rangeBar, splitBar } from '../lib/charts.js';
+import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
+import { energyRing, ringLegend } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
@@ -93,8 +94,16 @@ function heroCard(advice, targets, derived) {
   const kcal = metrics.find((m) => m.key === 'kcal');
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
-  /* 热量环表达进度，不把“还没吃到目标”本身画成警告。 */
-  const ringColor = status.level === 'good' ? 'var(--accent)' : 'var(--warn)';
+  /*
+   * 热量环用同一个绿的三个密度分段，不靠色相区分，也就不会把
+   * 「还没吃到目标」画成警告色。段落和刻度由 core/energy-ring.js 算。
+   */
+  const ringModel = energyRing({
+    eaten: gaps.kcal.eaten,
+    target: targets.kcal,
+    burned: derived.liveEnergy?.tdee ?? null,
+    projected: targets.tdee,
+  });
 
   return h(`section.card.hero.${status.level}`, null,
     h('div.hero-head', null,
@@ -106,15 +115,19 @@ function heroCard(advice, targets, derived) {
 
     h('div.hero-body', null,
       h('div.hero-ring', null,
-        ring({
-          pct: gaps.kcal.pct,
-          size: 104,
-          stroke: 10,
-          label: num(kcal.eaten),
-          sub: `/ ${num(targets.kcal)} kcal`,
-          color: ringColor,
+        energyRingChart({
+          model: ringModel,
+          size: 116,
+          stroke: 11,
+          /*
+           * 圈里写「余量」而不是「已摄入」：已摄入这个数在图例那一行
+           * 已经写着了，而人打开这张卡最想知道的是「还能吃多少」。
+           */
+          label: num(Math.max(0, ringModel.remaining ?? 0)),
+          sub: '余量 kcal',
         })),
-      energyBalance(derived, targets)),
+      energyBalance(derived, ringModel)),
+    ringLegendRow(ringModel),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -124,22 +137,34 @@ function heroCard(advice, targets, derived) {
   );
 }
 
-function energyBalance(derived, targets) {
-  const live = derived.liveEnergy;
+/*
+ * 图例。只列这一圈真的画出来的段（ringLegend 把关）——
+ * 没有设备数据的人不该看到两条永远不出现的图例。
+ */
+function ringLegendRow(model) {
+  const items = ringLegend(model);
+  if (items.length < 2) return null;
+  return h('div.ring-legend', null, items.map((x) => h('span.ring-legend-item', null,
+    h('i', { class: `ring-swatch ring-seg-${x.tone}`, 'aria-hidden': 'true' }),
+    x.label)));
+}
+
+/*
+ * 环右边那几个数。每一行都对得上环上的一处 ——
+ * 已摄入是实心弧，当前消耗是那条长实线，缺口 / 盈余是它们之间的那一段。
+ * 对不上环的数不放这儿：读的人会以为图上漏画了什么。
+ */
+function energyBalance(derived, model) {
   const line = (k, v) => h('div.energy-line', null,
     h('span.energy-key', null, k), h('strong.energy-val', null, v));
-  const rows = [];
-
-  /* 维持目标不再显示没有信息量的“计划平衡 0 kcal”。 */
-  if (Number(targets.dailyDelta) !== 0) {
-    const planWord = targets.dailyDelta > 0 ? '计划盈余' : '计划赤字';
-    rows.push(line(planWord, `${num(Math.abs(targets.dailyDelta))} kcal`));
-  }
-  rows.push(live
-    ? line('今日实际消耗', `${num(live.tdee)} kcal`)
-    : line('预计总消耗', `${num(targets.tdee)} kcal`));
-  if (live) {
-    rows.push(line(`实际${live.surplus >= 0 ? '盈余' : '缺口'}`, `${num(Math.abs(live.surplus))} kcal`));
+  const rows = [line('已摄入', `${num(model.eaten)} kcal`)];
+  rows.push(model.hasBurn
+    ? line('当前消耗', `${num(model.burned)} kcal`)
+    : line('预计消耗', `${num(model.projected || model.target || 0)} kcal`));
+  if (model.hasBurn) {
+    rows.push(model.surplus > 0
+      ? line('已超出', `${num(model.surplus)} kcal`)
+      : line('缺口', `${num(model.gap)} kcal`));
   }
   return h('div.energy-block', null, rows);
 }
@@ -156,8 +181,7 @@ function heroInfo(derived, targets) {
           ? '活动采用近期设备记录基线估算'
           : '按今日 Apple 能量记录动态估算'],
     ['蛋白质', targets.proteinBasis],
-    ['脂肪', `计划 ${num(targets.fat)}g 用于分配三大营养素；参考上限 ${num(targets.fatUpper || targets.fat)}g 按总热量 35% 计算`],
-    ['碳水', '总热量减去蛋白与脂肪后的剩余'],
+    ['脂肪', `参考上限 ${num(targets.fatUpper || targets.fat)}g，约占总热量 35%`],
     ['膳食纤维', '中国成人参考 25–30g'],
     ['钠上限', '约等于 5g 食盐'],
     ['游离糖上限', '含糖浆、蜂蜜和果汁中的糖；低于总热量 10%'],
@@ -170,7 +194,7 @@ function heroInfo(derived, targets) {
     const age = meta.ageMinutes >= 120
       ? `，距今约 ${Math.max(2, Math.round(meta.ageMinutes / 60))} 小时`
       : meta.ageMinutes > 5 ? `，距今 ${meta.ageMinutes} 分钟` : '';
-    freshness = `Apple 能量数据截至 ${clock}${age}；没有新数据时热量目标会保持不变。`;
+    freshness = `Apple 能量数据截至 ${clock}${age}。`;
   }
   return infoTip('查看目标计算依据',
     h('p', null, h('strong', null, `${GOALS[targets.goal].label}`),
@@ -178,8 +202,8 @@ function heroInfo(derived, targets) {
         ? ' · 计划体重维持不变'
         : ` · 计划体重 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`),
     h('p', null,
-      `按 7700 kcal/kg 的脂肪当量换算，相当于每天${targets.dailyDelta >= 0 ? '多' : '少'}吃 `
-      + `${num(Math.abs(targets.dailyDelta))} kcal。这只是能量换算，程序规划的是体重变化速度，不能保证增减的是肌肉还是脂肪。`),
+      `相当于每天${targets.dailyDelta >= 0 ? '多' : '少'}吃 ${num(Math.abs(targets.dailyDelta))} kcal。`
+      + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),

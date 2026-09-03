@@ -9,7 +9,7 @@
 import { h, num, toast, runLocalAction } from '../../lib/utils.js';
 import { icon } from '../../lib/icons.js';
 import { infoTip, listRow, weakTag } from '../../lib/ui.js';
-import { state, addEntry, saveHealthDay } from '../../lib/store.js';
+import { state, saveHealthDay } from '../../lib/store.js';
 import { CATEGORIES } from '../../data/foods.js';
 import { MEAL_LABEL } from '../../core/advisor.js';
 import { estimateTag, estimateGroupInfoTip } from './food-estimate.js';
@@ -23,9 +23,16 @@ function moreToggle(key, total, shown, rerender) {
   }, expanded[key] ? '收起' : `展开其余 ${total - shown} 项`);
 }
 
-function recRow(item, meal) {
+/*
+ * 推荐行的 ＋ 和搜索结果里的 ＋ 走同一条路：**先开份量面板**。
+ *
+ * 原先它直接按推荐的克数落库。可推荐给的克数是「按剩余预算算出来的一份」，
+ * 不是这个人自己的份量 —— 而克数是乘数，差一倍热量就差一倍。
+ * 同一个加号在两处做两件不同的事，本身也说不通。
+ * 落库那一步交给份量面板，`addEntry` 在饮食页仍然只出现一次。
+ */
+function recRow(item, meal, onPick) {
   const f = item.food;
-  const unit = f.basis === '100ml' ? 'ml' : 'g';
   return listRow({ className: 'rec-row' },
     h('div.rec-info', null,
       h('div.rec-name', null, f.name,
@@ -38,18 +45,13 @@ function recRow(item, meal) {
       h('span.rec-unit', null, 'kcal'),
       h('span.rec-prot', null, `蛋白 ${item.nutrients.protein}g`)),
     h('button.add-btn', {
-      'aria-label': `记录 ${f.name}`,
-      onclick: async (ev) => {
-        const result = await runLocalAction(ev.currentTarget,
-          () => addEntry({ foodId: f.id, grams: item.grams, meal }), '记录食物');
-        if (!result.ok) return;
-        toast(`已记录 ${f.name} ${item.grams}${unit}`, 'ok');
-      },
+      'aria-label': `选择 ${f.name}`,
+      onclick: () => onPick?.(f, { meal }),
     }, icon('plus')),
   );
 }
 
-export function recommendCard(rerender) {
+export function recommendCard(rerender, onPick) {
   const advice = state.derived?.advice;
   if (!advice) return null;
   const meal = advice.budget.meal.key;
@@ -68,7 +70,7 @@ export function recommendCard(rerender) {
         : `蛋白≤${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length
       ? [
-        h('div.rec-list', null, list.map((item) => recRow(item, meal))),
+        h('div.rec-list', null, list.map((item) => recRow(item, meal, onPick))),
         moreToggle('recommend', all.length, 3, rerender),
       ]
       : h('p.empty-hint', null, '今天的热量预算已经吃满了。剩下时间以水和无糖茶为主，明天回到正常预算即可。'),
@@ -94,6 +96,18 @@ const waterTaps = () => Math.max(0, Math.round(Number(state.derived?.health?.wat
 
 let undoUntil = 0;
 let undoTimer = null;
+/*
+ * 刚点完那一下要放一次「水滴流到数字上」的动画。
+ *
+ * 用一个很短的时间窗而不是布尔量。一次点击会引发**两次**渲染 ——
+ * saveHealthDay 里的 emit 一次、await 之后的 rerender 又一次 ——
+ * 布尔量会被第一次渲染取走，而那个节点马上被第二次渲染换掉，
+ * 动画挂在一个已经离开文档的节点上，什么也看不到。
+ * 时间窗让这几百毫秒内的渲染都能接上，真正播起来之后立刻关掉，
+ * 免得撤销窗口那五秒里后台落库把它又放一遍。
+ */
+const FLOW_WINDOW_MS = 500;
+let flowUntil = 0;
 
 async function bumpWater(delta) {
   const next = Math.max(0, Math.min(MAX_WATER_TAPS, waterTaps() + delta));
@@ -143,26 +157,57 @@ export function waterCard(rerender) {
           ? h('p', null, `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。`)
           : null)),
     h('div.water-row', null,
-      h('div.water-pill', { role: 'status', 'aria-live': 'polite' },
-        dropletIcon(),
-        justLogged
-          ? [
-            h('span', null, '已记录一次饮水'),
-            h('span.water-sep', { 'aria-hidden': 'true' }, '·'),
-            h('button.water-undo', {
-              type: 'button',
-              onclick: async (ev) => {
-                const r = await runLocalAction(ev.currentTarget, () => bumpWater(-1), '撤销');
-                if (r.ok) { closeUndoWindow(); rerender(); }
-              },
-            }, '撤销'),
-          ]
-          : h('span', null, `已记录 ${taps} 次饮水`)),
+      waterPill(taps, justLogged, rerender),
       h('button.water-add', {
         type: 'button', 'aria-label': `记录一次饮水，当前 ${taps} 次`,
         onclick: async (ev) => {
+          flowUntil = Date.now() + FLOW_WINDOW_MS;
           const r = await runLocalAction(ev.currentTarget, () => bumpWater(1), '记录饮水');
-          if (r.ok) { openUndoWindow(rerender); rerender(); }
+          if (r.ok) { openUndoWindow(rerender); rerender(); } else { flowUntil = 0; }
         },
       }, icon('plus'), '饮水')));
+}
+
+/*
+ * 左边那条状态。
+ *
+ * 次数一直写在这儿（原先记完那几秒会换成「已记录一次饮水」，数字消失，
+ * 而那正是人最想看到它加一的时刻）。撤销仍然只在那几秒里挂在后面。
+ *
+ * 记完的动画是水滴往数字上流：位移距离要量出来才知道，所以挂进 DOM 之后
+ * 用一帧的时间量一次，写进 --flow-x。量不到就不放动画，不猜一个距离 ——
+ * 猜错的话水滴会停在半路上或者飞出卡片。
+ */
+function waterPill(taps, justLogged, rerender) {
+  const drop = dropletIcon();
+  const count = h('b.water-count', null, String(taps));
+  const pill = h('div.water-pill', { role: 'status', 'aria-live': 'polite' },
+    drop,
+    h('span', null, '已记录 ', count, ' 次饮水'),
+    justLogged
+      ? [
+        h('span.water-sep', { 'aria-hidden': 'true' }, '·'),
+        h('button.water-undo', {
+          type: 'button',
+          onclick: async (ev) => {
+            const r = await runLocalAction(ev.currentTarget, () => bumpWater(-1), '撤销');
+            if (r.ok) { closeUndoWindow(); rerender(); }
+          },
+        }, '撤销'),
+      ]
+      : null);
+
+  if (Date.now() < flowUntil) {
+    requestAnimationFrame(() => {
+      if (!pill.isConnected || Date.now() >= flowUntil) return;
+      const from = drop.getBoundingClientRect();
+      const to = count.getBoundingClientRect();
+      const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+      if (!(dx > 0)) return;
+      flowUntil = 0;
+      pill.style.setProperty('--flow-x', `${Math.round(dx)}px`);
+      pill.classList.add('is-flowing');
+    });
+  }
+  return pill;
 }

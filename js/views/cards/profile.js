@@ -139,7 +139,7 @@ export function profileCard(rerender) {
       h('div.card-head-actions', null,
         dirtyMark,
         infoTip('查看身体信息用途',
-          h('p', null, '身高、体重、生日和性别用于估算能量需求；同步过 Apple 健康的身体数据优先采用设备最近一次记录。'),
+          h('p', null, '身高、体重、生日和性别用来估算你的能量需求。前三项以 Apple 健康最近一次记录为准，所以在这儿改不了。'),
           h('p', null, '体脂率可选。家用体脂秤的单次数值误差较大，更适合看长期趋势。')))),
     sourceNote,
     h('div.form-grid', null,

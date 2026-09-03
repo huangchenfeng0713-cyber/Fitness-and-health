@@ -8,8 +8,10 @@
  * 必须整屏摆出来，收进二级页面等于没提示。
  */
 
-import { h, clearEl, toast, mount, num, confirmAction, field, todayKey } from '../lib/utils.js';
-import { infoTip, segmentedGroupProps, segmentedItemProps } from '../lib/ui.js';
+import {
+  h, clearEl, toast, mount, num, confirmAction, field, todayKey, runLocalAction,
+} from '../lib/utils.js';
+import { infoTip } from '../lib/ui.js';
 import { icon, iconSvg } from '../lib/icons.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard } from './cards/data-manager.js';
@@ -29,7 +31,11 @@ import {
 /*
  * 「这个钟点该吃到多少」按哪套口径算。
  *
- * 两套都不是匀速直线（见 core/eating-rhythm.js）。默认走膳食指南：
+ * 用下拉而不是分段控件：分段把两个选项一直摊在屏幕上，而这是个设完就
+ * 很少再动的偏好，摊开只是占地方。形式和饮食记录里改餐次那个下拉一致 ——
+ * 同一个应用里「从几个里挑一个」就该长一个样。
+ *
+ * 两套口径都不是匀速直线，见 core/eating-rhythm.js。默认走膳食指南：
  * 新用户没有记录，「按我平常」也无从算起。
  */
 function rhythmPicker(rerender) {
@@ -38,16 +44,26 @@ function rhythmPicker(rerender) {
   const sample = expectedShare({
     mode: current, hour: 12, entries: state.dietRhythm, asOf: todayKey(),
   });
+  const select = h('select.setting-select', {
+    'aria-label': '进食节奏参照',
+    onchange: async (ev) => {
+      const node = ev.currentTarget;
+      const before = current;
+      const result = await runLocalAction(node,
+        () => saveProfile({ rhythmMode: node.value }), '切换进食节奏参照');
+      if (!result.ok) { node.value = before; return; }
+      rerender();
+    },
+  }, RHYTHM_MODES.map((m) => h('option', { value: m.key }, m.label)));
+  // 选项要先挂进 select 再设 value：插入时浏览器会按 selectedIndex 重算
+  select.value = current;
+
   return h('div.setting-choice', null,
-    h('div.setting-choice-head', null,
-      h('strong', null, '进食节奏参照'),
-      h('p', null, '主卡上「热量完成 45%」拿来和什么比。')),
-    h('div.range-switch', segmentedGroupProps('进食节奏参照', 'radio'),
-      RHYTHM_MODES.map((m) => h('button', {
-        class: `chip-btn${current === m.key ? ' active' : ''}`,
-        ...segmentedItemProps(current === m.key, 'radio'),
-        onclick: async () => { await saveProfile({ rhythmMode: m.key }); rerender(); },
-      }, m.label))),
+    h('div.setting-choice-row', null,
+      h('div.setting-choice-head', null,
+        h('strong', null, '进食节奏参照'),
+        h('p', null, '主卡上「热量完成 45%」拿来和什么比。')),
+      select),
     h('p.setting-choice-desc', null, chosen.desc),
     // 退回这件事必须说出来：否则用户以为看的是自己的节奏，其实是指南的
     sample.fellBack
@@ -72,9 +88,8 @@ function toggleCard(rerender) {
         h('h3', null, '计算方式'),
         h('p.card-desc', null, '每日目标怎么算、进度和什么比。')),
       infoTip('查看计算方式说明',
-        h('p', null, '开启设备消耗后，有可靠记录时采用静息能量与活动能量；缺失时自动回到公式估算。'),
-        h('p', null, '进食节奏只影响主卡上那句「这个钟点大约该吃到多少」，不改动热量目标本身。'),
-        h('p', null, '这些选项只影响之后显示的目标，不会改动饮食记录。'))),
+        h('p', null, '进食节奏只影响主卡上那句「这个钟点大约该吃到多少」，不改动热量目标。'),
+        h('p', null, '这两项都只改之后显示的目标，不会动到已经记下的饮食。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
     rhythmPicker(rerender),
