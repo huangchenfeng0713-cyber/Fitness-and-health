@@ -1,0 +1,18 @@
+.manager-panel .data-actions {
+  margin: 6px 0 2px;
+  padding: 2px 10px;
+  border-radius: var(--r-md);
+  background: var(--card-2);
+}
+.manager-panel .data-action {
+  border-top-color: var(--hairline);
+  padding: 10px 0;
+}
+.manager-panel .data-action:first-child { border-top: 0; padding-top: 8px; }
+.manager-panel .data-action:last-child { padding-bottom: 8px; }
+.manager-panel .data-action-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+}
