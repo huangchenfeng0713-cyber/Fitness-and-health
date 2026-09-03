@@ -311,7 +311,7 @@ function syncFieldPanel() {
 function automaticSyncPanel(rerender) {
   const account = getAccountState();
   if (!account.user) {
-    return h('section.auto-sync-box', null,
+    return h('section.sync-section', null,
       h('div.auto-sync-title', null,
         h('div', null, h('strong', null, '快捷指令自动上传'), h('span', null, '需要登录账号')),
         h('span.status-pill', null, '自动')),
@@ -418,7 +418,7 @@ function automaticSyncPanel(rerender) {
     },
   }, healthCloudState.status === 'pulling' ? '正在读取…' : '立即读取账号最新数据');
 
-  return h('section.auto-sync-box', null,
+  return h('section.sync-section', null,
     h('div.auto-sync-title', null,
       h('div', null,
         h('strong', null, '快捷指令自动上传'),
@@ -504,8 +504,7 @@ function importPanel(rerender) {
     placeholder: 'Apple Watch\niPhone\n第三方 App',
     value: (state.profile.appleSourcePriority || []).join('\n'),
   });
-  const priorityEditor = rememberedDetails('source-priority', 'details.paste-block',
-    h('summary', null, '高级：统一数据来源优先级'),
+  const priorityEditor = subDetails('source-priority', '高级：统一数据来源优先级',
     h('p.form-hint', { style: { margin: '4px 0 8px' } },
       '每行一个 export.xml 中的 sourceName，越靠上越优先；不确定时请留空，应用会自动处理。'),
     detectedSources.length && h('p.form-hint', null,
@@ -523,14 +522,18 @@ function importPanel(rerender) {
   return h('div.import-panel', null,
     automaticSyncPanel(rerender),
     syncFieldPanel(),
-    h('div.import-fallback-title', null,
+    /*
+     * 标题和说明上下排，不左右分栏。
+     * 原先是 flex + space-between：左边标题在窄屏上折成两行、右边说明右对齐，
+     * 两块字各自往中间挤，读起来是两段互相打架的碎文本。
+     */
+    h('div.section-head', null,
       h('strong', null, '文件与剪贴板导入'),
       h('span', null, '首次导入历史数据，或自动上传不可用时使用')),
     drop,
     progressEl,
     clipboardBtn,
-    rememberedDetails('paste', 'details.paste-block',
-      h('summary', null, '手动粘贴快捷指令输出'),
+    subDetails('paste', '手动粘贴快捷指令输出',
       h('p.form-hint', { style: { margin: '4px 0 8px' } },
         '支持一条或多条 JSON / CSV。每条数据都要有 date；完整应用备份请在“备份与恢复”中选择。'),
       pasteArea,
@@ -578,11 +581,9 @@ function guidePanel() {
     h('div.method', null,
       h('div.method-head', null, h('span.method-badge.fast', null, '推荐'), h('strong', null, '快捷指令自动上传')),
       h('p', null, '上传直接进入当前账号，不需要复制粘贴，也不要求网页在后台常驻。'),
-      rememberedDetails('recipe-shortcut', 'details',
-        h('summary', null, '创建自动上传快捷指令'),
+      subDetails('recipe-shortcut', '创建自动上传快捷指令',
         h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
-      rememberedDetails('recipe-automation', 'details',
-        h('summary', null, '设置定时自动运行'),
+      subDetails('recipe-automation', '设置定时自动运行',
         h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 
     h('div.method', null,
@@ -650,6 +651,21 @@ const openSections = new Set();
 
 export function collapseManagerSections() {
   openSections.clear();
+}
+
+/*
+ * 折叠块里的次级项。
+ *
+ * 箭头和一级折叠节共用同一个 chevron（转 90° 表示展开）。
+ * 原先这几处是 CSS `content: '\u25b8'` 打出来的三角，而一级用的是描边图标 ——
+ * 同一张卡里两套折叠标记，`同步帮助` 用图标、它展开后第一行就用三角，上下挨着。
+ */
+function subDetails(key, label, ...children) {
+  return rememberedDetails(key, 'details.sub-fold',
+    h('summary', null,
+      h('span.sub-fold-caret', { 'aria-hidden': 'true' }, icon('chevron')),
+      h('span', null, label)),
+    ...children);
 }
 
 /** 记得住展开状态的 <details>。设置面板里的折叠块一律走这个 */

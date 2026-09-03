@@ -1,4 +1,9 @@
-/** 今日能量跑道：绿=摄入，黄=消耗，圈心=谁领先。只负责画，不算。 */
+/**
+ * 今日热量环：整圈 = 今天计划吃多少。只负责画，不算。
+ *
+ * 两条轨道各画各的：外圈粗的是摄入，内圈细的是消耗。
+ * 每条轨道第一圈浅色、第二圈深色盖在浅色上，一条不去动另一条。
+ */
 
 const NS = 'http://www.w3.org/2000/svg';
 const RING_GAP_DEG = 8;
@@ -33,43 +38,42 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     preserveAspectRatio: 'xMidYMid meet', overflow: 'visible',
   });
 
-  const strokeFor = (cls) => {
-    if (cls.includes('ring-seg-wrap')) return { stroke: 'var(--ring-eat-wrap)' };
-    if (cls.includes('ring-seg-deep')) return { stroke: 'var(--ring-eat-lead)' };
-    if (cls.includes('ring-burn-wrap')) return { stroke: 'var(--ring-burn-wrap)' };
-    if (cls.includes('ring-burn-track')) return {};
-    if (cls.includes('ring-burn')) return { stroke: 'var(--ring-burn)' };
-    if (cls.includes('ring-seg-solid')) return { stroke: 'var(--ring-eat)' };
-    return {};
+  /* 两条轨道的几何和配色都只写一次，段落按 track / tone 取 */
+  const TRACK = {
+    intake: { radius: r, width: stroke, light: 'var(--ring-eat)', deep: 'var(--ring-eat-wrap)' },
+    burn: { radius: burnR, width: BURN_STROKE, light: 'var(--ring-burn)', deep: 'var(--ring-burn-wrap)' },
   };
 
-  const arc = (radius, width, cls, fromPct, toPct) => {
+  const arc = (radius, width, cls, colour, fromPct, toPct) => {
     const circ = 2 * Math.PI * radius;
     const usable = (span / 360) * circ;
     const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
     const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
     if (!(len > 0.3)) return;
     svg.append(el('circle', {
-      cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width, ...strokeFor(cls),
+      cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width, stroke: colour,
       'stroke-dasharray': `0 ${from} ${len} ${circ}`,
       transform: `rotate(${start} ${cx} ${cy})`,
     }));
   };
 
-  const eat = model.drawn || {};
-  const burn = model.laps?.burned;
+  // 灰轨先铺满，两条都有 —— 没画到的地方就是还没走到的部分
+  arc(r, stroke, 'ring-track', null, 0, 100);
+  arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100);
 
-  arc(r, stroke, 'ring-track', 0, 100);
-  arc(r, stroke, 'ring-seg ring-seg-solid', 0, eat.firstPct || 0);
-  arc(r, stroke, 'ring-seg ring-seg-wrap', 0, eat.wrapPct || 0);
-  const lead = (model.segments || []).find((s) => s.key === 'lead');
-  if (lead) arc(r, stroke, 'ring-seg ring-seg-deep', lead.fromPct, lead.toPct);
-
-  arc(burnR, BURN_STROKE, 'ring-burn-track', 0, 100);
-  if (model.hasBurn && burn) {
-    const first = burn.laps >= 1 ? 100 : burn.firstPct;
-    arc(burnR, BURN_STROKE, 'ring-burn', 0, first);
-    arc(burnR, BURN_STROKE, 'ring-burn-wrap', 0, burn.wrapPct);
+  /*
+   * 先画完所有第一圈，再画所有第二圈。
+   *
+   * 同一条轨道上第二圈必须压在第一圈上面（深色盖浅色），而 model.segments
+   * 的顺序不保证这一点 —— 按 tone 分两趟画，叠放次序就跟数据顺序无关了。
+   */
+  for (const tone of ['light', 'deep']) {
+    for (const seg of model.segments || []) {
+      if (seg.tone !== tone) continue;
+      const t = TRACK[seg.track] || TRACK.intake;
+      arc(t.radius, t.width, `ring-seg ring-seg-${seg.track} ring-seg-${tone}`,
+        t[tone], seg.fromPct, seg.toPct);
+    }
   }
 
   const [sx, sy] = point(start, r);
@@ -78,53 +82,48 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   }));
 
   /*
-   * 刻度线要**完整穿过它标的那条轨道**，两端各出头一点点。
+   * 刻度线完整穿过它标的那条轨道，两端各出头一点点。
    *
-   * 原先两条都只刻了一半：摄入那条画在 66.9~75.3，而主环是 62~76 ——
-   * 内侧差 4.9px 没到、外侧差 0.7px，成了浮在环外侧的一小截；
-   * 消耗那条更奇怪，从消耗环（53.25~56.75）一路冲进主环，停在 71.1，
-   * 既没穿透主环也没有终点，看着就是一条断线。
-   *
+   * 早先两条都只刻了一半：摄入那条浮在环的外侧、消耗那条从消耗环冲进主环
+   * 停在半路 —— 穿不透的刻度读作「划痕」，不是「记号」。
    * 每条刻度只管自己那条轨道：摄入标主环，消耗标消耗环。
-   * 出头 OVERHANG 是为了让它读作「一个记号」而不是「轨道上的一道划痕」。
    */
   const OVERHANG = 2.5;
-  const bandOf = {
-    intake: { mid: r, half: stroke / 2 },
-    burn: { mid: burnR, half: BURN_STROKE / 2 },
-  };
-  const placed = (model.ticks || []).map((tick) => {
-    const band = bandOf[tick.tone] || bandOf.intake;
+  for (const tick of model.ticks || []) {
+    const t = TRACK[tick.track] || TRACK.intake;
     const deg = angleOf(tick.pct);
-    return {
-      tick,
-      deg,
-      r0: band.mid - band.half - OVERHANG,
-      r1: band.mid + band.half + OVERHANG,
-    };
-  });
-
-  for (const { tick, deg, r0, r1 } of placed) {
-    const [x1, y1] = point(deg, r0);
-    const [x2, y2] = point(deg, r1);
-    svg.append(el('line', {
-      x1, y1, x2, y2, class: `ring-tick strong ${tick.key}`,
-    }));
+    const [x1, y1] = point(deg, t.radius - t.width / 2 - OVERHANG);
+    const [x2, y2] = point(deg, t.radius + t.width / 2 + OVERHANG);
+    svg.append(el('line', { x1, y1, x2, y2, class: `ring-tick strong ${tick.key}` }));
   }
 
+  /*
+   * 圈心只有一句话。差得很少时（「接近目标」）没有数字，
+   * 那一句就自己占住中间，不留一个空的大号数字位。
+   */
   if (model.center) {
-    const main = el('text', {
-      x: cx, y: cy - 3, 'text-anchor': 'middle',
-      class: 'ring-label', 'font-size': size / 4.6, 'font-weight': 650,
-    });
-    main.textContent = String(model.center.kcal);
-    svg.append(main);
-    const sub = el('text', {
-      x: cx, y: cy + size / 5.6, 'text-anchor': 'middle',
-      class: 'ring-sub', 'font-size': size / 11.5,
-    });
-    sub.textContent = model.center.label;
-    svg.append(sub);
+    const hasNumber = model.center.kcal != null;
+    if (hasNumber) {
+      const main = el('text', {
+        x: cx, y: cy - 3, 'text-anchor': 'middle',
+        class: 'ring-label', 'font-size': size / 4.6, 'font-weight': 650,
+      });
+      main.textContent = String(model.center.kcal);
+      svg.append(main);
+      const sub = el('text', {
+        x: cx, y: cy + size / 5.6, 'text-anchor': 'middle',
+        class: 'ring-sub', 'font-size': size / 11.5,
+      });
+      sub.textContent = model.center.label;
+      svg.append(sub);
+    } else {
+      const only = el('text', {
+        x: cx, y: cy + size / 26, 'text-anchor': 'middle',
+        class: 'ring-label', 'font-size': size / 8.5, 'font-weight': 620,
+      });
+      only.textContent = model.center.label;
+      svg.append(only);
+    }
   }
   return svg;
 }

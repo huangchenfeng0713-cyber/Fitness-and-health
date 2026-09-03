@@ -14,7 +14,6 @@
   --accent-soft: #e5f4ef;
   --ring-eat: #4ca38e;
   --ring-eat-wrap: #2d7d6b;
-  --ring-eat-lead: #1b5f52;
   --ring-burn: #cbb67a;
   --ring-burn-wrap: #a89455;
   --ring-tick: #8a9397;
@@ -151,7 +150,6 @@
     --accent-soft: #102c25;
     --ring-eat: #4db89a;
     --ring-eat-wrap: #2f9a7e;
-    --ring-eat-lead: #21806a;
     --ring-burn: #d4c186;
     --ring-burn-wrap: #b8a05c;
     --ring-tick: #9aa4a8;
@@ -555,57 +553,37 @@ html, body { height: 100%; overflow: hidden; }
 .hero-detail { margin: 8px 0 0; font-size: var(--fs-body); color: var(--muted); line-height: 1.65; }
 
 .hero-body { display: flex; flex-direction: column; margin: 12px 0 4px; overflow: visible; }
+/*
+ * 环居中，图例排在它下面。
+ *
+ * 原先是三栏（左「当前摄入」、环、右「当前消耗」），两侧各留出 4.5em ——
+ * 同一屏上左、右、圈心三处数字说的是同一件事，而两侧那两栏又把环挤小了。
+ */
 .hero-ring {
-  display: grid;
-  grid-template-columns: minmax(4.5em, 1fr) auto minmax(4.5em, 1fr);
-  align-items: center;
-  column-gap: 8px;
-  overflow: visible;
-}
-.ring-side {
-  display: flex; flex-direction: column; gap: 1px; min-width: 0;
-}
-.ring-side.eaten { align-items: flex-end; text-align: right; }
-.ring-side.burned { align-items: flex-start; text-align: left; }
-.ring-side-k { font-size: var(--fs-caption); color: var(--muted); white-space: nowrap; }
-.ring-side-v {
-  font-size: var(--fs-body); font-weight: 650; font-variant-numeric: tabular-nums;
-  color: var(--text); white-space: nowrap;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 10px; overflow: visible;
 }
 .ring-label { fill: var(--text); }
 .ring-sub { fill: var(--faint); }
 
 /*
- * 热量圆环：四段，同一个绿由实到虚。
+ * 两条轨道，每条两档明度。
  *
- * 密度递减和「越实越是已经发生」对齐：实心是吃到的，半透明是欠着的缺口，
- * 最淡的是还没走到的。盈余段用纹理而不是第四级明度 ——
- * 那是计划里主动给的额度，和「欠着的」性质不同，再降一档只会和缺口打架。
+ * 深浅只说一件事：**这条已经跑过一整圈了**。第一圈浅色，越过 12 点进第二圈
+ * 换深色盖在浅色上。两条轨道互不覆盖 —— 消耗跑得再远也碰不到绿弧，
+ * 浅色永远不会被擦回灰轨。
  *
- * 三档都挂在同一个 --accent 上，暗色模式跟着底色自动走，不必写两套。
+ * 具体颜色由画的时候按 track / tone 直接给（见 energy-ring-chart.js 的 TRACK），
+ * 这里只管描边端头和灰轨。
  */
-.ring-track { stroke: var(--track); }
-.ring-seg, .ring-track { stroke-linecap: butt; }
-.ring-seg-solid { stroke: var(--ring-eat); }
-.ring-seg-wrap { stroke: var(--ring-eat-wrap); }
-.ring-seg-deep { stroke: var(--ring-eat-lead); }
-.ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
-.ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
-.ring-seg-dashed {
-  stroke: color-mix(in srgb, var(--accent) 30%, transparent);
-  mask: repeating-linear-gradient(112deg, #000 0 3px, transparent 3px 6px);
-}
+.ring-track, .ring-burn-track { stroke: var(--track); }
+.ring-seg, .ring-track, .ring-burn-track { stroke-linecap: butt; }
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
+/* 刻度只要细线，不要圈圈：摄入淡灰标主环，消耗浅金标消耗环 */
 .ring-tick { stroke: var(--ring-tick); stroke-width: 1.6; stroke-linecap: round; opacity: .7; }
 .ring-tick.strong { stroke-width: 2; opacity: 1; }
 .ring-tick.eaten { stroke: var(--ring-tick); }
 .ring-tick.burned { stroke: var(--ring-burn); }
-.ring-tick-label { fill: var(--faint); font-weight: 600; }
-.ring-tick-label.strong { fill: var(--muted); }
-.ring-overflow { stroke: var(--accent); stroke-linecap: round; }
-.ring-burn { stroke: var(--ring-burn); }
-.ring-burn-wrap { stroke: var(--ring-burn-wrap); }
-.ring-burn-track { stroke: var(--track); }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
@@ -613,29 +591,30 @@ html, body { height: 100%; overflow: hidden; }
  */
 .energy-ring { display: block; width: min(168px, 46vw); height: auto; overflow: visible; }
 
+/*
+ * 图例：一项对着环上一条弧。色块的颜色和深浅必须和环上完全一致 ——
+ * 「颜色变深」在两处说的是同一件事：这条跑过一整圈了。
+ */
 .ring-legend {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px;
-  margin: 2px 0 12px; font-size: var(--fs-caption); color: var(--muted);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px;
+  font-size: var(--fs-caption); color: var(--muted);
 }
 .ring-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ring-legend-k { color: var(--muted); }
+.ring-legend-v {
+  font-size: var(--fs-body); font-weight: 650; font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
 /*
  * 9px 见方，圆角只能是 2px：阶梯最低的 --r-xs 是 6px，扣在 9px 的方块上
  * 直接把它磨成一个圆点，图例就分不出「这是一段弧」还是「这是个点」了。
  * 这是全表唯一一处不走阶梯的矩形圆角。
  */
 .ring-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; background: currentColor; }
-.ring-swatch.ring-seg-solid { color: var(--accent); }
-.ring-swatch.ring-seg-mid { color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.ring-swatch.ring-seg-faint { color: color-mix(in srgb, var(--accent) 16%, transparent); }
-.ring-swatch.ring-seg-dashed {
-  color: color-mix(in srgb, var(--accent) 30%, transparent);
-  background: repeating-linear-gradient(112deg, currentColor 0 2px, transparent 2px 4px);
-}
-/* 溢出走外圈细轨，图例也画成一条细的，别和「已摄入」那块实心撞 */
-/* 细条一律 999px 收圆头，和 .macro-bar、.progress-track 那几条一样 */
-.ring-swatch.ring-seg-thin {
-  color: var(--accent); height: 3px; border-radius: 999px; align-self: center;
-}
+.ring-swatch-intake { color: var(--ring-eat); }
+.ring-swatch-intake.is-deep { color: var(--ring-eat-wrap); }
+.ring-swatch-burn { color: var(--ring-burn); }
+.ring-swatch-burn.is-deep { color: var(--ring-burn-wrap); }
 
 .hero-macros { flex: 1; display: grid; gap: 10px; min-width: 0; }
 
@@ -1925,7 +1904,12 @@ body.sheet-open {
 }
 .manager-icon svg { width: var(--icon-md); height: var(--icon-md); }
 .manager-summary-copy { min-width: 0; }
-.manager-summary-copy strong { display: block; font-size: var(--fs-body); color: var(--text); }
+/*
+ * 卡里的字号从上往下**只降不升**：卡标题 17 → 一级折叠节 15 → 节里的一切 14。
+ * 原先一级折叠节是 14，而它展开后里面的「推荐 快捷指令自动上传」是 15 ——
+ * 子级印得比父级还大，层级就读反了。
+ */
+.manager-summary-copy strong { display: block; font-size: var(--fs-value); color: var(--text); }
 .manager-summary-copy span {
   display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-caption);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1936,17 +1920,26 @@ body.sheet-open {
 }
 .manager-chevron svg { width: var(--icon-sm); height: var(--icon-sm); }
 .manager-section[open] .manager-chevron { transform: rotate(90deg); color: var(--accent); }
+/*
+ * 展开的内容要缩进，缩进就是这张卡里唯一表达「这些属于上面那一节」的东西。
+ * 原先窄屏把它归零（见下面的 media query），于是手机上二级内容和一级标题
+ * 左边缘完全对齐，七种块平铺在同一条线上，看不出任何嵌套。
+ */
 .manager-panel { padding: 3px 0 16px 48px; }
 .manager-panel .primary-btn { margin-top: 10px; }
 .manager-panel .dropzone { padding-top: 18px; padding-bottom: 16px; }
 
-.auto-sync-box {
-  padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  border-radius: var(--r-lg); background: color-mix(in srgb, var(--accent-soft) 32%, var(--card-2));
-}
+/*
+ * 二级分区靠标题和一条上边线分段，不靠边框和底色。
+ *
+ * 原先这块是「淡绿描边 + 淡绿底」的盒子，而同一张卡里还有虚线盒（拖放区）、
+ * 只有上边线的分区标题、什么都没有的行 —— 四套边框语言，读不出谁包着谁。
+ * 边框现在只留给真的拖放目标。
+ */
+.sync-section { padding-top: 2px; }
 .auto-sync-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .auto-sync-title > div { min-width: 0; }
-.auto-sync-title strong { display: block; font-size: var(--fs-value); color: var(--text); }
+.auto-sync-title strong { display: block; font-size: var(--fs-body); color: var(--text); }
 .auto-sync-title div > span {
   display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-caption); overflow-wrap: anywhere;
 }
@@ -1955,7 +1948,7 @@ body.sheet-open {
   color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent);
 }
 .auto-sync-title .status-pill.ok { color: var(--accent); background: var(--accent-soft); }
-.auto-sync-box > p { margin: 8px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
+.sync-section > p { margin: 8px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
 .auto-sync-form {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end;
   gap: 8px; margin-top: 12px;
@@ -2020,14 +2013,26 @@ body.sheet-open {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 10px;
   margin-top: 10px; color: var(--faint); font-size: var(--fs-caption); line-height: 1.45;
 }
-.auto-sync-box > .secondary-btn.full { margin-top: 9px; background: var(--card); }
-.import-fallback-title {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+/*
+ * 底色跟着 .secondary-btn 走，别再自己写一遍。
+ * 它原先写 var(--card)（白）是为了在淡绿盒子上衬出来；盒子去掉之后
+ * 白底压在白卡上，这个按钮就成了一行居中的绿字，看不出能按。
+ */
+.sync-section > .secondary-btn.full { margin-top: 9px; }
+/*
+ * 二级分区标题：标题一行、说明一行，上面一条边线把它和上一节分开。
+ * 原先标题和说明左右分栏，窄屏上标题折成两行、说明右对齐，两块字对着中间挤。
+ */
+.section-head {
   margin-top: 16px; padding: 14px 0 9px; border-top: 1px solid var(--border);
 }
-.import-fallback-title strong { font-size: var(--fs-footnote); }
-.import-fallback-title span { color: var(--faint); font-size: var(--fs-caption); text-align: right; line-height: 1.4; }
+.section-head strong { display: block; font-size: var(--fs-body); color: var(--text); }
+.section-head span {
+  display: block; margin-top: 2px;
+  color: var(--faint); font-size: var(--fs-caption); line-height: 1.45;
+}
 
+/* 虚线只留给真的拖放目标 —— 别的分区靠标题和边线分段，不靠边框 */
 .dropzone {
   border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: var(--r-lg);
   padding: 23px 16px 19px; text-align: center; cursor: pointer;
@@ -2042,7 +2047,7 @@ body.sheet-open {
   border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
 }
 .dropzone-icon svg { width: var(--icon-lg); height: var(--icon-lg); }
-.dropzone strong { font-size: var(--fs-value); }
+.dropzone strong { font-size: var(--fs-body); }
 .dropzone > span { font-size: var(--fs-caption); color: var(--muted); }
 .file-types { display: flex; gap: 5px; margin-top: 8px; }
 .file-types span {
@@ -2056,14 +2061,22 @@ body.sheet-open {
 .progress-fill { height: 100%; width: 2%; background: var(--accent); border-radius: 999px; transition: width .3s; }
 .progress-text { font-size: var(--fs-caption); color: var(--muted); margin-top: 5px; text-align: center; }
 
-.paste-block { margin-top: 12px; }
-.paste-block summary {
-  font-size: var(--fs-footnote); color: var(--accent); cursor: pointer; padding: 6px 0;
+/*
+ * 次级折叠：箭头和一级折叠节共用同一个 chevron，转 90° 表示展开。
+ * 原先是 CSS content 打出来的 ▸ / ▾ —— 排版字符在三个平台上是三种字形，
+ * 而它就挨在一级那个描边图标下面。
+ */
+.sub-fold { margin-top: 12px; }
+.sub-fold > summary {
+  display: flex; align-items: center; gap: 5px;
+  min-height: var(--control-sm);
+  font-size: var(--fs-body); color: var(--accent); cursor: pointer;
   list-style: none; font-weight: 550;
 }
-.paste-block summary::-webkit-details-marker { display: none; }
-.paste-block summary::before { content: '▸ '; }
-.paste-block[open] summary::before { content: '▾ '; }
+.sub-fold > summary::-webkit-details-marker { display: none; }
+.sub-fold-caret { display: grid; place-items: center; transition: transform .16s ease; }
+.sub-fold-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
+.sub-fold[open] > summary .sub-fold-caret { transform: rotate(90deg); }
 /*
  * 撑满一行的次按钮和撑满一行的主按钮**摞在一起**，所以要一样高。
  *
@@ -2110,17 +2123,27 @@ body.sheet-open {
 .sync-details ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.65; }
 .sync-details p { margin: 7px 0 0; color: var(--faint); font-size: var(--fs-caption); line-height: 1.55; overflow-wrap: anywhere; }
 
+/*
+ * 备份那三行和「同步帮助」那三段是同一级，左边缘必须一样。
+ *
+ * 这几条原先长在 css/settings-nest.css 里 —— 那是第二张样式表，用「缩进 +
+ * 浅底虚线盒」表达下一级，而同一张卡里另外三种块各用各的办法（实线盒、
+ * 只有上边线、什么都没有）。同一张卡四套边框语言，读不出谁包着谁；
+ * 它还让备份那三行比同级的段落深了 25px。
+ * 现在层级只由缩进和字号表达，虚线只留给真的拖放目标。
+ */
 .data-actions { display: flex; flex-direction: column; }
 .data-action {
-  display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center;
   padding: 11px 0; border-top: 1px solid var(--border);
 }
 .data-action:first-child { border-top: 0; padding-top: 1px; }
+/* 三级的图标比一级那个 36px 的小一圈 —— 大小也参与说「这是下一层」 */
 .data-action-icon {
-  width: 34px; height: 34px; border-radius: var(--r-sm); display: grid; place-items: center;
+  width: 28px; height: 28px; border-radius: var(--r-xs); display: grid; place-items: center;
   color: var(--accent); background: var(--accent-soft);
 }
-.data-action-icon svg { width: var(--icon-md); height: var(--icon-md); }
+.data-action-icon svg { width: var(--icon-sm); height: var(--icon-sm); }
 .data-action.danger .data-action-icon {
   color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
@@ -2143,7 +2166,7 @@ body.sheet-open {
 .method { padding: 12px 0; border-top: 1px solid var(--border); }
 .method:first-of-type { border-top: 0; padding-top: 0; }
 .method-head { display: flex; align-items: center; gap: 8px; }
-.method-head strong { font-size: var(--fs-value); }
+.method-head strong { font-size: var(--fs-body); }
 .method-badge {
   font-size: var(--fs-caption); font-weight: 600; padding: 2px 8px; border-radius: 999px;
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); white-space: nowrap;
@@ -2151,10 +2174,7 @@ body.sheet-open {
 .method-badge.fast { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .method p { margin: 5px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.65; }
 .method details { margin-top: 8px; }
-.method summary { font-size: var(--fs-footnote); color: var(--accent); cursor: pointer; font-weight: 550; list-style: none; }
-.method summary::-webkit-details-marker { display: none; }
-.method summary::before { content: '▸ '; }
-.method details[open] summary::before { content: '▾ '; }
+
 
 .guide-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 11px; }
 .guide-list strong { font-size: var(--fs-body); }
@@ -2390,7 +2410,8 @@ body.sheet-open {
 }
 
 @media (max-width: 480px) {
-  .manager-panel { padding-left: 0; }
+  /* 窄屏收窄但不归零：14px 已经够读出「这是上面那一节的内容」 */
+  .manager-panel { padding-left: 14px; }
   .auto-sync-form { grid-template-columns: 1fr; }
   .auto-sync-form .primary-btn { width: 100%; }
 }

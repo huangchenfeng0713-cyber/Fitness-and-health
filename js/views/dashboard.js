@@ -95,20 +95,18 @@ function heroCard(advice, targets, derived) {
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
   /*
-   * 热量环是环形跑道，不是目标进度条。
-   * 绿是摄入，黄是消耗，尺子按预计日消耗取整到百，当天内不许改。
-   */
-  /*
+   * 整圈 = 今天计划吃多少（摄入目标取整到百），12 点就是吃满计划。
+   * 尺子当天锁死，只有计划本身变了才从那一天起换。
+   *
    * 「当前消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
    * 不用 liveEnergy.tdee —— 后者是按已过时长外推出来的全天值，
    * 早上八点就报出一千七，环上那条弧看着像「今天已经烧掉八成」。
-   * 外推那个数是「预计全天消耗」，走 targets.tdee。
    */
-  const ringScale = lockTrackScale(state.day, targets.tdee);
+  const ringScale = lockTrackScale(state.day, targets.kcal);
   const ringModel = energyRing({
     eaten: gaps.kcal.eaten,
     burned: derived.liveEnergy?.burnedNow ?? null,
-    projected: targets.tdee,
+    target: targets.kcal,
     scale: ringScale,
   });
 
@@ -121,14 +119,16 @@ function heroCard(advice, targets, derived) {
     h('p.hero-detail', null, status.detail),
 
     /*
-     * 环在中间，摄入 / 消耗贴在左右。字走 HTML，不写进 SVG ——
-     * SVG 里的字会跟着环缩放，和卡片上其他 12px 对不齐。
+     * 环居中，下面一行图例。原先摄入 / 消耗是贴在环左右的两列文字，
+     * 一屏上就有三处数字（左、右、圈心）在说同一件事，而环两边的空当
+     * 又把整只环挤小了。图例只有色块 + 名字 + 值，和环上的两条弧一一对应。
+     *
+     * 字走 HTML 不写进 SVG —— SVG 里的字会跟着环缩放，和卡片上别处的 12px 对不齐。
      */
     h('div.hero-body', null,
       h('div.hero-ring', null,
-        ringSide(ringModel, 'eaten'),
         energyRingChart({ model: ringModel }),
-        ringSide(ringModel, 'burned'))),
+        ringLegend(ringModel))),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -138,12 +138,20 @@ function heroCard(advice, targets, derived) {
   );
 }
 
-function ringSide(model, key) {
-  const tick = (model.ticks || []).find((t) => t.key === key);
-  if (!tick) return h('div.ring-side');
-  return h(`div.ring-side.${key}`, null,
-    h('span.ring-side-k', null, tick.label),
-    h('span.ring-side-v', null, String(tick.kcal)));
+/*
+ * 图例：色块 + 名字 + 值，一项对着环上一条弧。
+ * 色块的深浅跟着那条轨道当前画到第几圈走 —— 环上颜色变深和图例上变深
+ * 说的是同一件事：这条已经跑过一整圈了。
+ */
+function ringLegend(model) {
+  const items = model.legend || [];
+  if (!items.length) return null;
+  return h('div.ring-legend', null, items.map((item) => h('span.ring-legend-item', null,
+    h(`span.ring-swatch.ring-swatch-${item.track}${item.deep ? '.is-deep' : ''}`, {
+      'aria-hidden': 'true',
+    }),
+    h('span.ring-legend-k', null, item.label),
+    h('span.ring-legend-v', null, String(item.kcal)))));
 }
 
 function heroInfo(derived, targets) {
