@@ -96,13 +96,20 @@ test('消耗套圈后扫过的绿弧回到灰轨', () => {
   assert.equal(m.center.label, '消耗领先');
 });
 
-test('摄入再追上后绿弧回来，越过黄刻度再变深绿', () => {
+test('摄入再追上后第一圈保持浅绿，第二圈从 12 点往右盖', () => {
   const m = ring(2500, 2300);
-  assert.equal(m.drawn.firstPct, 0, '消耗已套圈，第一圈仍是灰');
+  assert.equal(m.drawn.firstPct, 100, '摄入已经跑完第一圈，不应变灰');
   assert.ok(m.drawn.wrapPct > 0, '第二圈摄入应画出来');
   const lead = seg(m, 'lead');
   assert.ok(lead, '第二圈越过消耗的那段应是领先');
   assert.ok(lead.fromPct < lead.toPct);
+});
+
+test('两边都套圈时第一圈仍是浅绿，不是灰轨', () => {
+  const m = energyRing({ eaten: 2130, burned: 1975, scale: 1900 });
+  assert.equal(m.drawn.firstPct, 100, '灰色位置应是浅绿');
+  assert.ok(m.drawn.wrapPct > 0);
+  assert.equal(m.center.label, '摄入领先');
 });
 
 test('没有设备消耗就不画黄刻度', () => {
@@ -113,7 +120,7 @@ test('没有设备消耗就不画黄刻度', () => {
   assert.equal(m.center.label, '摄入领先');
 });
 
-test('绿环白刻度写当前摄入，黄环黄刻度写当前消耗', () => {
+test('绿环黑刻度写当前摄入，黄环黄刻度写当前消耗', () => {
   const m = ring(895, 1191);
   const eat = m.ticks.find((t) => t.key === 'eaten');
   const burn = m.ticks.find((t) => t.key === 'burned');

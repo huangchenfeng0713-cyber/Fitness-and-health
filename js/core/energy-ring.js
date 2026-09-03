@@ -95,12 +95,13 @@ export function energyRing({
   const burnLap = lap(burn, sc);
 
   /*
-   * 消耗套圈：黄刻度扫过的绿弧变回灰轨。
-   * 第一圈被扫掉当 burn.laps >= 1；第二圈被扫掉当 burn.laps >= 2。
+   * 消耗套圈：黄刻度扫过、摄入还没追上的绿弧变回灰轨。
+   * 摄入已经跑完的那一圈保持浅绿 —— 否则刚套圈时整圈变灰，
+   * 看起来像没吃，其实已经吃满一圈。
    * 再多的数值只写在圈心，最多画满两圈。
    */
-  const firstGreen = burnLap.laps >= 1 ? 0 : eatLap.firstPct;
-  const wrapGreen = burnLap.laps >= 2 ? 0 : eatLap.wrapPct;
+  const firstGreen = burnLap.laps >= 1 && eatLap.laps === 0 ? 0 : eatLap.firstPct;
+  const wrapGreen = burnLap.laps >= 2 && eatLap.laps < 2 ? 0 : eatLap.wrapPct;
 
   const segments = [];
   if (firstGreen > 0.3) {

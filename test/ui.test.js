@@ -1101,7 +1101,7 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
   assert.match(read('js/core/energy-ring.js'), /label: '当前摄入'/, '绿环没有当前摄入刻度');
-  assert.match(css, /\.ring-tick\.eaten \{[^}]*#ffffff/, '摄入刻度不是白色');
+  assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--text\)/, '摄入刻度应是黑色');
   assert.match(css, /\.ring-tick\.burned \{[^}]*#e8c84a/, '消耗刻度没有换成黄色');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   const chart = read('js/lib/energy-ring-chart.js');
