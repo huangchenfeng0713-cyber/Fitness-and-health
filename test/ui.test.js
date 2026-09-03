@@ -1119,7 +1119,7 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
    * 在说同一件事，两侧留白还把环挤小了。现在环居中，下面一行图例。
    */
   assert.doesNotMatch(dash, /ring-side/, '环两侧的两列文字应已删掉');
-  assert.match(dash, /dailyDelta: targets.dailyDelta/, '圈心「还应吃」没拿到计划差额');
+  assert.match(dash, /function ringLegend/, '环下没有图例');
   assert.match(css, /\.ring-swatch-intake\.is-deep/, '图例色块没有跟着轨道跑第二圈加深');
   assert.doesNotMatch(chart, /tspan/, '标签不该再画进 SVG');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
