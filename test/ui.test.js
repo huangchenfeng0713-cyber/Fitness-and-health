@@ -1550,6 +1550,22 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
  * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
  * 而且它跟着字号走，粗细没法和别的图标统一。
  */
+/*
+ * 从今日提示跳进来的那一列食物必须有看得见的出口。
+ *
+ * 原先唯一的退出方式是往搜索框里打字 —— 打字会顺手清掉 focus。
+ * 可谁也猜不到这一点，于是人就困在一列鳕鱼牛筋里出不去了。
+ */
+test('「补蛋白」这类跳转进来的列表给得出退出', () => {
+  const diet = strip(read('js/views/diet.js'));
+  assert.match(diet, /h\('button\.focus-chip'/, '筛选标签不是可点的，没有出口');
+  assert.match(diet, /onclick: \(\) => pickFocus\(null\)/, '点了标签没有清掉 focus');
+  assert.match(diet, /icon\('close', 'focus-chip-x'\)/,
+    '出口没有画成叉 —— 光是一个标签看不出能关');
+  const css = read('css/app.css');
+  assert.match(css, /\.focus-chip \{[^}]*cursor: pointer/s, '筛选标签看不出能点');
+});
+
 test('图标是画出来的，不是打出来的，而且只有一套', () => {
   const app = strip(read('js/app.js'));
   const icons = read('js/lib/icons.js');

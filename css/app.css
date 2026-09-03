@@ -1237,7 +1237,25 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .ui-list-row:last-child { border-bottom-color: transparent; }
 
-.result-caption { margin: 11px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: 600; }
+.result-caption {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  margin: 11px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: 600;
+}
+/*
+ * 可关闭的筛选胶囊：这一屏是从今日提示跳进来的，得有个看得见的出口。
+ * 做成「标签 + ×」而不是句尾摆一个孤零零的叉 —— 叉长在标签上才读得出
+ * 「关掉的是这个筛选」，和别处那些可移除的胶囊是同一套约定。
+ */
+.focus-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: var(--control-sm); padding: 0 4px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 999px; background: var(--accent-soft);
+  color: var(--accent); font: inherit; font-size: var(--fs-footnote); cursor: pointer;
+}
+.focus-chip:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.focus-chip .focus-chip-x { display: inline-flex; opacity: .75; }
+.focus-chip .focus-chip-x svg { width: var(--icon-xs); height: var(--icon-xs); }
 
 /*
  * 底部弹层（lib/sheet.js）。
