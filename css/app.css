@@ -2406,7 +2406,19 @@ body.sheet-open {
 
 /* ============ 健身建议 ============ */
 .ex-row.chosen { background: var(--accent-soft); border-radius: var(--r-md); }
-.ex-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--fs-value); }
+/*
+ * 行高必须落在整像素上，否则分隔线会一条深一条浅。
+ *
+ * 正文继承的 line-height 是 1.55，15px 的动作名算出来是 23.25px，一行连
+ * 内边距和边框是 65.25px。屏幕是 2 倍图时，各行的下边缘落在 130.5 / 261 /
+ * 391.5 / 522…… 半像素那几条边框被摊到两个物理像素上，颜色淡掉一半 ——
+ * 而 --hairline 本来就很淡，淡一半就等于没有。八行动作看下来就是隔一条少一条。
+ * 1.6 在 15px 上正好是 24px，整行变成 66px，每条边框都压在整像素上。
+ */
+.ex-name {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-value); line-height: 1.6;
+}
 .ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ex-muscle-old { font-size: var(--fs-footnote); color: var(--faint); margin-top: 3px; }
 /*
