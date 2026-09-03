@@ -4,7 +4,7 @@ import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
-import { energyRing } from '../core/energy-ring.js';
+import { energyRing, ringLegend } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
@@ -98,10 +98,16 @@ function heroCard(advice, targets, derived) {
    * 热量环用同一个绿的三个密度分段，不靠色相区分，也就不会把
    * 「还没吃到目标」画成警告色。段落和刻度由 core/energy-ring.js 算。
    */
+  /*
+   * 「当前消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
+   * 不用 liveEnergy.tdee —— 后者是按已过时长外推出来的全天值，
+   * 早上八点就报出一千七，环上那条弧看着像「今天已经烧掉八成」。
+   * 外推那个数是「预计全天消耗」，走 targets.tdee。
+   */
   const ringModel = energyRing({
     eaten: gaps.kcal.eaten,
     target: targets.kcal,
-    burned: derived.liveEnergy?.tdee ?? null,
+    burned: derived.liveEnergy?.burnedNow ?? null,
     projected: targets.tdee,
   });
 
@@ -113,19 +119,15 @@ function heroCard(advice, targets, derived) {
       heroInfo(derived, targets)),
     h('p.hero-detail', null, status.detail),
 
+    /*
+     * 环占满一行，数字排在下面。
+     *
+     * 两条刻度各带一个外圈文字，环左右两边都要留出地方 ——
+     * 再把三个数挤在右边，环就只剩不到一半宽度，字会互相压。
+     */
     h('div.hero-body', null,
-      h('div.hero-ring', null,
-        energyRingChart({
-          model: ringModel,
-          size: 132,
-          stroke: 12,
-          /*
-           * 圈里写「余量」而不是「已摄入」：已摄入这个数在图例那一行
-           * 已经写着了，而人打开这张卡最想知道的是「还能吃多少」。
-           */
-          label: num(Math.max(0, ringModel.remaining ?? 0)),
-          sub: '余量 kcal',
-        })),
+      h('div.hero-ring', null, energyRingChart({ model: ringModel })),
+      ringLegendRow(ringModel),
       energyBalance(derived, ringModel)),
 
     h('div.metric-list', null,
@@ -137,20 +139,30 @@ function heroCard(advice, targets, derived) {
 }
 
 /*
+ * 图例：只列这一圈真的画出来的段。
+ * 没有设备数据的人不该看到两条永远不出现的图例。
+ */
+function ringLegendRow(model) {
+  const items = ringLegend(model);
+  if (items.length < 2) return null;
+  return h('div.ring-legend', null, items.map((x) => h('span.ring-legend-item', null,
+    h('i', { class: `ring-swatch ring-seg-${x.tone}`, 'aria-hidden': 'true' }),
+    x.label)));
+}
+
+/*
  * 环右边那几个数。
  *
- * 每一行前面挂一小块色标，和环上那条弧同色 —— 图例就长在数字上，
- * 不再单独占一行。分开放的时候，人得先看图例、再回到环、再回到数字，
- * 而这三样说的是同一件事。
+ * 三个数排成一行摆在环下面，每一行都对得上环上的一处。
  */
 function energyBalance(derived, model) {
   const line = (k, v, swatch) => h('div.energy-line', null,
     swatch ? h('i', { class: `energy-swatch ${swatch}`, 'aria-hidden': 'true' }) : null,
     h('span.energy-key', null, k),
     h('strong.energy-val', null, v));
-  const rows = [line('已摄入', `${num(model.eaten)} kcal`, 'ring-intake-swatch')];
+  const rows = [line('已摄入', `${num(model.eaten)} kcal`)];
   rows.push(model.hasBurn
-    ? line('当前消耗', `${num(model.burned)} kcal`, 'ring-burn-swatch')
+    ? line('当前消耗', `${num(model.burned)} kcal`)
     : line('预计消耗', `${num(model.projected || model.target || 0)} kcal`));
   if (model.hasBurn) {
     rows.push(model.surplus > 0

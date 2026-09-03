@@ -154,7 +154,7 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
    */
   const card = read('js/views/cards/meal-advice.js');
   assert.match(card, /const waterTaps = \(\) =>/, '没有按次数计的饮水');
-  assert.match(card, /waterCount: next/, '次数没有落到 waterCount 字段上');
+  assert.match(card, /waterCount: target/, '次数没有落到 waterCount 字段上');
   assert.ok(!/MAX_ONE_TIME_ML|waterMl: Math\.max/.test(card), '还留着按毫升记录的老路');
   // 误触之后总得有办法改回来
   /*
@@ -553,8 +553,15 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
   assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
     '饮食推荐列表没有接入统一列表行');
-  assert.match(css, /\.ui-weak-tag\s*\{[^}]*min-height:\s*21px/s,
-    '弱标签没有统一高度与内边距');
+  /*
+   * 弱标签要比它旁边的正文轻：不撑最小高度、内边距贴着字。
+   * 原先 min-height 21px + padding 1px 6px + 一圈实描边，整块比食物名
+   * 还占地方，注释反倒比主文字显眼。
+   */
+  assert.match(css, /\.ui-weak-tag\s*\{[^}]*padding:\s*0 5px/s,
+    '弱标签的内边距又撑开了');
+  assert.doesNotMatch(css.slice(css.indexOf('.ui-weak-tag {')).split('}')[0], /min-height/,
+    '弱标签不该撑最小高度，那会让它比正文还高');
   assert.match(css, /\.ui-list-row\s*\{[^}]*border-bottom-color:\s*var\(--hairline\)/s,
     '列表行没有统一分隔线口径');
 });
@@ -1556,6 +1563,31 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
  * 原先唯一的退出方式是往搜索框里打字 —— 打字会顺手清掉 focus。
  * 可谁也猜不到这一点，于是人就困在一列鳕鱼牛筋里出不去了。
  */
+/*
+ * 喝水的动画和撤销都栽过跟头，各留一条。
+ *
+ * 动画：整段跑在 body 上。挂在卡里的话，一次点击引发两次渲染，
+ * 动画挂在第一个节点上而它马上被第二个换掉 —— 表现就是「只有第一次能看到」。
+ * 撤销：快速点两下要能整串退回去，不是只减一下。
+ */
+test('喝水的动画不挂在会被重绘换掉的节点上，撤销退整串', () => {
+  const card = read('js/views/cards/meal-advice.js');
+  assert.match(card, /document\.body\.append\(fly\)/,
+    '飞行的水滴还挂在卡片里，重绘一次就没了');
+  assert.match(card, /flyDrop\(document\.querySelector\('\.water-row \.water-pill'\)\)/,
+    '重绘之后没有重新查节点，ev.currentTarget 那时已经离开文档了');
+  assert.match(card, /typeof drop\.animate !== 'function'/, '没有给不支持 WAAPI 的环境兜底');
+  // 位移用 JS 算成像素传进去，不往关键帧里塞 calc(var(...))
+  assert.doesNotMatch(read('css/app.css'), /@keyframes water-flow/,
+    '又把位移写回 CSS 关键帧了');
+
+  assert.match(card, /const BURST_GAP_MS/, '没有「一串连点」的判断');
+  assert.match(card, /now - lastTapAt > BURST_GAP_MS/,
+    '同一串按间隔算，不能按撤销窗口算 —— 慢慢点十下会被当成一串');
+  assert.match(card, /back == null \? bumpWater\(-1\) : setWater\(back\)/,
+    '撤销只退了一下，没有回到这串连点之前');
+});
+
 test('「补蛋白」这类跳转进来的列表给得出退出', () => {
   const diet = strip(read('js/views/diet.js'));
   assert.match(diet, /h\('button\.focus-chip'/, '筛选标签不是可点的，没有出口');

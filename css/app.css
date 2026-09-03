@@ -450,7 +450,9 @@ html, body { height: 100%; overflow: hidden; }
    * 淡就淡成了「有根杂线」。11px 仍然远轻于原先那个带描边的圆。
    */
   width: 15px; height: 15px; overflow: visible;
-  fill: currentColor; stroke: currentColor; stroke-width: 1.15;
+  fill: currentColor; stroke: currentColor;
+  /* 外圈要细。1.15 在 15px 的框上压得太重，整个记号比旁边的正文还显眼 */
+  stroke-width: .85;
   stroke-linecap: round; vector-effect: non-scaling-stroke;
 }
 .info-tip > summary::-webkit-details-marker { display: none; }
@@ -505,39 +507,67 @@ html, body { height: 100%; overflow: hidden; }
 .hero.bad .status-pill { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 .hero-detail { margin: 8px 0 0; font-size: var(--fs-body); color: var(--muted); line-height: 1.65; }
 
-.hero-body { display: flex; align-items: center; gap: 18px; margin: 16px 0 4px; }
+.hero-body { display: flex; flex-direction: column; margin: 12px 0 4px; }
 /* 收到圆环本身的宽度，否则下面那行说明会飘到卡片最左边 */
-.hero-ring { flex: none; display: flex; flex-direction: column; align-items: center; }
+.hero-ring { display: flex; justify-content: center; }
 .ring-label { fill: var(--text); }
 .ring-sub { fill: var(--faint); }
 
 /*
- * 热量圆环：两条同心弧，外环摄入、内环消耗。
+ * 热量圆环：四段，同一个绿由实到虚。
  *
- * 区分靠的是**位置**（两条弧谁长谁短）而不是色相，也不是三档明度 ——
- * 上一版把一圈切成四段、用同一个绿的三个密度区分，摄入为 0 时那条锚定
- * 视线的实心弧根本不存在，整圈只剩三层几乎一样的淡绿。
- * 而摄入为 0 恰恰是每天早上打开时的样子。
+ * 密度递减和「越实越是已经发生」对齐：实心是吃到的，半透明是欠着的缺口，
+ * 最淡的是还没走到的。盈余段用纹理而不是第四级明度 ——
+ * 那是计划里主动给的额度，和「欠着的」性质不同，再降一档只会和缺口打架。
+ *
+ * 三档都挂在同一个 --accent 上，暗色模式跟着底色自动走，不必写两套。
  */
 .ring-track { stroke: var(--track); }
-.ring-seg, .ring-track, .ring-intake, .ring-burn, .ring-ahead { stroke-linecap: butt; }
-.ring-intake { stroke: var(--accent); }
-/* 内环比外环淡一档：外环是「我做的事」，内环是「身体在烧」 */
-.ring-burn { stroke: color-mix(in srgb, var(--accent) 62%, transparent); }
-/* 消耗还会往前走的那一段，最淡 */
-.ring-ahead { stroke: color-mix(in srgb, var(--accent) 24%, transparent); }
-/* 起点圆点：两条弧都为 0 时靠它看出这一圈从哪儿开始 */
-.ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-/* 目标刻度横跨外环，用中性色 —— 它是参照，不是又一段进度 */
-.ring-goal-tick { stroke: var(--text); stroke-width: 2; stroke-linecap: round; opacity: .8; }
-
-/* 图例长在数字上，不单独占一行 */
-.energy-swatch {
-  width: 8px; height: 8px; border-radius: 2px; flex: none;
-  background: currentColor; margin-right: 6px;
+.ring-seg, .ring-track { stroke-linecap: butt; }
+.ring-seg-solid { stroke: var(--accent); }
+.ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
+.ring-seg-dashed {
+  stroke: color-mix(in srgb, var(--accent) 30%, transparent);
+  mask: repeating-linear-gradient(112deg, #000 0 3px, transparent 3px 6px);
 }
-.energy-swatch.ring-intake-swatch { color: var(--accent); }
-.energy-swatch.ring-burn-swatch { color: color-mix(in srgb, var(--accent) 62%, transparent); }
+/* 起点方块：什么都没有时靠它看出这一圈从哪儿开始、往哪边走 */
+.ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
+/*
+ * 刻度线只负责切分，不表达量。长实线是当前消耗，短淡线是预计全天消耗；
+ * 两条之间的距离就是「今天接下来还会再烧掉多少」。
+ */
+.ring-tick { stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; opacity: .6; }
+.ring-tick.strong { stroke: var(--text); stroke-width: 2.4; opacity: .9; }
+/* 外圈那两行字。只有这两个注释，段落本身不再各挂一个标注 */
+.ring-tick-label { fill: var(--faint); font-weight: 600; }
+.ring-tick-label.strong { fill: var(--muted); }
+/* 吃得比烧的多：多出来的那截走外圈细轨，用位置而不是颜色表达翻转 */
+.ring-overflow { stroke: var(--accent); stroke-linecap: round; }
+
+/*
+ * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
+ * 它只是主卡的一部分，下面还有蛋白、碳水脂肪和四个方框要看。
+ */
+.energy-ring { display: block; width: 100%; max-width: 268px; height: auto; }
+
+.ring-legend {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px;
+  margin: 2px 0 12px; font-size: var(--fs-caption); color: var(--muted);
+}
+.ring-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ring-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; background: currentColor; }
+.ring-swatch.ring-seg-solid { color: var(--accent); }
+.ring-swatch.ring-seg-mid { color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ring-swatch.ring-seg-faint { color: color-mix(in srgb, var(--accent) 16%, transparent); }
+.ring-swatch.ring-seg-dashed {
+  color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: repeating-linear-gradient(112deg, currentColor 0 2px, transparent 2px 4px);
+}
+/* 溢出走外圈细轨，图例也画成一条细的，别和「已摄入」那块实心撞 */
+.ring-swatch.ring-seg-thin {
+  color: var(--accent); height: 3px; border-radius: 2px; align-self: center;
+}
 
 .hero-macros { flex: 1; display: grid; gap: 10px; min-width: 0; }
 
@@ -594,9 +624,9 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 /* 能量收支：和圆环并排，一行一个键值对 */
-.energy-block { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.energy-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.energy-line .energy-key { flex: 1; }
+/* 三个数排成一行摆在环下面，每一行都对得上环上的一处 */
+.energy-block { display: flex; justify-content: space-around; gap: 10px; width: 100%; }
+.energy-line { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
 .energy-key { font-size: var(--fs-footnote); color: var(--muted); white-space: nowrap; }
 .energy-val {
   font-size: var(--fs-body); font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -776,20 +806,31 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ============ 避免 ============ */
 
+/*
+ * 弱标签要比它旁边的正文轻。
+ *
+ * 原先 min-height 21px、padding 1px 6px，配上一圈实描边，整块比食物名
+ * 还占地方 —— 注释反倒比主文字显眼。现在贴着字走：不设最小高度，
+ * 左右各留 5px，描边压到半透明。
+ */
 .ui-weak-tag {
-  min-height: 21px; padding: 1px 6px; border-radius: var(--r-xs); white-space: nowrap;
+  padding: 0 5px; border-radius: var(--r-xs); white-space: nowrap;
   display: inline-flex; align-items: center;
-  font-size: var(--fs-caption); line-height: 1.45; font-weight: 450;
+  /* 行高压到和正文一样高：1.6 会让这块比它注解的食物名还高一截 */
+  font-size: var(--fs-caption); line-height: 1.35; font-weight: 450;
   background: var(--card-2); color: var(--faint); border: 1px solid transparent;
 }
 .ui-weak-tag-soft { background: var(--card-2); color: var(--faint-readable); }
-.ui-weak-tag-outline { background: transparent; color: var(--faint); border-color: var(--border); }
+.ui-weak-tag-outline {
+  background: transparent; color: var(--faint);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
 .ui-weak-tag-accent { background: var(--accent-soft); color: var(--accent); }
 .chip-est {
   /* 只披露“这不是精确标签值”，不把估算本身画成警告。 */
   background: transparent;
   color: var(--faint);
-  border-color: color-mix(in srgb, var(--faint) 34%, transparent);
+  border-color: color-mix(in srgb, var(--faint) 26%, transparent);
   font-size: var(--fs-caption);
   font-weight: 450;
 }
@@ -1380,63 +1421,22 @@ body.sheet-open {
 .water-drop { width: 17px; height: 17px; flex: none; fill: currentColor; stroke: none; }
 .water-sep { opacity: .5; }
 .water-count {
-  display: inline-block; position: relative;
-  font-variant-numeric: tabular-nums; color: var(--text);
+  display: inline-block; font-variant-numeric: tabular-nums; color: var(--text);
 }
 /*
- * 记完一次：一滴水甩到数字上，被数字接住。
- *
- * 让它像水而不是像一个滑过去的图标，靠的是**形变**：
- * 起手先沉一下蓄势，飞行段沿运动方向拉长（真实的水滴就是这样），
- * 落点摊开压扁，同时数字被撑开一下再回弹，外面荡一圈涟漪。
- * 匀速平移加淡出只会像个图标在滑轨上走。
- *
- * 途中几个横坐标由 JS 算成具体像素写进 --flow-x-a/b/c ——
- * 关键帧里不做 calc(var(...) * n)，Safari 对那个支持不稳，
- * 整条关键帧一失效就只剩第一帧。
+ * 飞行中的那滴水和落点的涟漪都挂在 body 上，不挂在卡片里 ——
+ * 这张卡每次落库都会重建，挂在卡里的动画会连节点一起被换掉，
+ * 于是「只有第一次能看到」。位移和关键帧由 JS 用 Web Animations 给，
+ * 这里只管样式。
  */
-.water-pill { position: relative; }
-.water-pill.is-flowing .water-drop {
-  animation: water-flow .62s cubic-bezier(.55, .02, .3, 1) both;
-  transform-origin: 50% 50%;
-  /* 从「已记录」几个字上面飞过去，不从字中间穿过 */
-  position: relative; z-index: 2;
+.water-fly {
+  position: fixed; z-index: 60; pointer-events: none;
+  color: var(--muted); fill: currentColor; stroke: none;
 }
-.water-pill.is-flowing .water-count {
-  animation: water-catch .46s cubic-bezier(.3, 1.4, .5, 1) .34s both;
-}
-.water-pill.is-flowing .water-count::after {
-  content: ''; position: absolute; inset: -4px -6px;
-  border-radius: 50%; border: 1.5px solid var(--accent);
-  animation: water-ripple .5s ease-out .36s both;
-  pointer-events: none;
-}
-@keyframes water-flow {
-  /* 蓄势：先往回缩一点、微微下沉 */
-  0% { transform: translate(0, 0) scale(1, 1); opacity: 1; }
-  14% { transform: translate(var(--flow-x-a, 0px), 3px) scale(.82, 1.18); opacity: 1; }
-  /* 飞行：沿运动方向拉长，略微抛起 */
-  52% { transform: translate(var(--flow-x-b, 0px), -11px) scale(1.55, .66); opacity: .95; }
-  /* 落点：摊开压扁 */
-  84% { transform: translate(var(--flow-x-c, 0px), -2px) scale(1.15, .8); opacity: .75; }
-  100% { transform: translate(var(--flow-x, 0px), 0) scale(.4, .34); opacity: 0; }
-}
-@keyframes water-catch {
-  0% { transform: scale(1); color: var(--text); }
-  38% { transform: scale(1.3); color: var(--accent); }
-  70% { transform: scale(.95); color: var(--accent); }
-  100% { transform: scale(1); color: var(--text); }
-}
-@keyframes water-ripple {
-  0% { transform: scale(.45); opacity: .55; }
-  100% { transform: scale(2.1); opacity: 0; }
-}
-/* 动画只是锦上添花：关掉动效的人照样看得到数字加一 */
-@media (prefers-reduced-motion: reduce) {
-  .water-pill.is-flowing .water-drop,
-  .water-pill.is-flowing .water-count,
-  .water-pill.is-flowing .water-count::after { animation: none; }
-  .water-pill.is-flowing .water-count::after { content: none; }
+.water-ripple {
+  position: fixed; z-index: 59; pointer-events: none;
+  width: 26px; height: 26px; margin: 0; border-radius: 50%;
+  border: 1.5px solid var(--accent);
 }
 
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */

@@ -80,90 +80,110 @@ function el(tag, attrs = {}) {
  * 饮水环同理，多喝一点也不是错误。
  */
 /*
- * 热量圆环：两条同心弧。
+ * 热量圆环。段落、刻度、外圈文字由 core/energy-ring.js 算好，这里只管画。
  *
- * 外环（粗）是摄入，内环（细）是消耗，同一个起点、同一把尺子。
- * **两条弧的长度差就是缺口** —— 谁长谁短是位置关系，不需要图例来解释。
+ * viewBox 比环本身宽出一圈：两条刻度线各带一个外圈文字（消耗 / 全天），
+ * 得留出地方，否则左右两边的字会被裁掉。
  *
- * 上一版是把一个环切成四段、靠三个明度加一层纹理区分。那在「已经吃了八成」
- * 时好看，可摄入为 0 时实心弧根本不存在，整圈只剩三层几乎一样的淡绿，
- * 没有任何参照物。而摄入为 0 恰恰是每天早上打开时的样子。
- *
- * 十二点开一道小豁口 + 起点圆点：闭合的环在两条弧都为 0 时看不出从哪儿开始、
- * 往哪边走。目标是外环上的一个刻度，不是第四段。
+ * 十二点开一道小豁口 + 起点方块：闭合的环在什么都没有时看不出从哪儿开始、
+ * 往哪边走 —— 而「一口没吃」是每天早上打开时的样子。
  */
-const RING_GAP_DEG = 14;
+const RING_GAP_DEG = 8;
 
-export function energyRingChart({
-  model, size = 132, stroke = 12, label = '', sub = '',
-}) {
-  const inner = Math.max(4, Math.round(stroke * 0.42));  // 内环细一圈
-  const ringGap = 4;                                     // 两环之间留缝
-  const rOuter = (size - stroke) / 2;
-  const rInner = rOuter - stroke / 2 - ringGap - inner / 2;
-  const cx = size / 2;
-  const cy = size / 2;
+export function energyRingChart({ model, size = 152, stroke = 14 }) {
+  const padX = 78;                      // 给外圈那两行字让出的横向空间
+  const padY = 22;
+  const vbW = size + padX * 2;
+  const vbH = size + padY * 2;
+  const cx = vbW / 2;
+  const cy = vbH / 2;
+  const r = (size - stroke) / 2;
   const span = 360 - RING_GAP_DEG;
   const start = -90 + RING_GAP_DEG / 2;
+  const c = 2 * Math.PI * r;
+  const angleOf = (p) => start + (Math.max(0, Math.min(100, p)) / 100) * span;
   const point = (deg, radius) => [
     cx + radius * Math.cos((deg * Math.PI) / 180),
     cy + radius * Math.sin((deg * Math.PI) / 180),
   ];
-  const angleOf = (p) => start + (Math.max(0, Math.min(100, p)) / 100) * span;
 
   const svg = el('svg', {
-    viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring energy-ring',
+    viewBox: `0 0 ${vbW} ${vbH}`, class: 'ring energy-ring',
+    preserveAspectRatio: 'xMidYMid meet',
   });
 
   /** 一段弧：从 fromPct 走到 toPct */
   const arc = (radius, width, cls, fromPct, toPct) => {
-    const c = 2 * Math.PI * radius;
-    const usable = (span / 360) * c;
+    const circ = 2 * Math.PI * radius;
+    const usable = (span / 360) * circ;
     const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
     const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
     if (!(len > 0.3)) return;
     svg.append(el('circle', {
       cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width,
       // 先空一段跳到起点再画本段：比给每段单独算路径省事，也不会有接缝
-      'stroke-dasharray': `0 ${from} ${len} ${c}`,
+      'stroke-dasharray': `0 ${from} ${len} ${circ}`,
       transform: `rotate(${start} ${cx} ${cy})`,
     }));
   };
 
   // 底槽只铺到可用角度，否则豁口那儿会露出一截灰
-  arc(rOuter, stroke, 'ring-track', 0, 100);
-  if (model.hasBurn) arc(rInner, inner, 'ring-track', 0, 100);
-
-  arc(rOuter, stroke, 'ring-intake', 0, model.intake.pct);
-  if (model.burn) arc(rInner, inner, 'ring-burn', 0, model.burn.pct);
-  // 消耗还会往前走的那一段，最淡
-  if (model.ahead) arc(rInner, inner, 'ring-ahead', model.ahead.fromPct, model.ahead.pct);
-
-  /* 起点圆点：两条弧都为 0 时，靠它看出这一圈从哪儿开始 */
-  const [sx, sy] = point(start, rOuter);
-  svg.append(el('circle', { cx: sx, cy: sy, r: stroke / 5, class: 'ring-origin' }));
-
-  /* 目标刻度：横跨外环，比弧本身稍长一点才看得见 */
-  if (model.targetTick) {
-    const deg = angleOf(model.targetTick.pct);
-    const [x1, y1] = point(deg, rOuter - stroke * 0.62);
-    const [x2, y2] = point(deg, rOuter + stroke * 0.62);
-    svg.append(el('line', { x1, y1, x2, y2, class: 'ring-goal-tick' }));
+  arc(r, stroke, 'ring-track', 0, 100);
+  for (const s of model.segments) {
+    arc(r, stroke, `ring-seg ring-seg-${s.tone}`, s.fromPct, s.toPct);
   }
 
-  const main = el('text', {
-    x: cx, y: cy - (sub ? 3 : -5), 'text-anchor': 'middle',
-    class: 'ring-label', 'font-size': size / 5.2, 'font-weight': 650,
-  });
-  main.textContent = label;
-  svg.append(main);
-  if (sub) {
-    const s = el('text', {
-      x: cx, y: cy + size / 6.4, 'text-anchor': 'middle',
-      class: 'ring-sub', 'font-size': size / 11,
+  /* 吃得比烧的多：从消耗那条线到已摄入这一段，走主环外面的细轨 */
+  if (model.overflow) {
+    const outerR = r + stroke / 2 + 4;
+    arc(outerR, 4, 'ring-overflow', model.overflow.fromPct, model.overflow.toPct);
+  }
+
+  /* 起点方块：什么都没有时靠它看出这一圈从哪儿开始 */
+  const [sx, sy] = point(start, r);
+  svg.append(el('rect', {
+    x: sx - 2.4, y: sy - 2.4, width: 4.8, height: 4.8, rx: 1, class: 'ring-origin',
+  }));
+
+  for (const tick of model.ticks) {
+    const deg = angleOf(tick.pct);
+    const half = tick.strong ? stroke * 0.72 : stroke * 0.5;
+    const [x1, y1] = point(deg, r - half);
+    const [x2, y2] = point(deg, r + half);
+    svg.append(el('line', {
+      x1, y1, x2, y2, class: `ring-tick${tick.strong ? ' strong' : ''}`,
+    }));
+
+    /*
+     * 外圈那行字。锚点按左右半边翻转，否则右半边的字会往回压在环上。
+     * 只有这两个注释（消耗 / 全天）—— 段落本身不再各挂一个标注。
+     */
+    const norm = ((deg % 360) + 360) % 360;
+    const onLeft = norm > 90 && norm < 270;
+    const [tx, ty] = point(deg, r + stroke * 0.72 + 8);
+    const text = el('text', {
+      x: tx, y: ty, class: `ring-tick-label${tick.strong ? ' strong' : ''}`,
+      'text-anchor': onLeft ? 'end' : 'start',
+      'dominant-baseline': 'middle',
+      'font-size': 13,
     });
-    s.textContent = sub;
-    svg.append(s);
+    text.textContent = `${tick.label} ${tick.kcal}`;
+    svg.append(text);
+  }
+
+  if (model.center) {
+    const main = el('text', {
+      x: cx, y: cy - 3, 'text-anchor': 'middle',
+      class: 'ring-label', 'font-size': size / 4.6, 'font-weight': 650,
+    });
+    main.textContent = String(model.center.kcal);
+    svg.append(main);
+    const sub = el('text', {
+      x: cx, y: cy + size / 5.6, 'text-anchor': 'middle',
+      class: 'ring-sub', 'font-size': size / 11.5,
+    });
+    sub.textContent = model.center.label;
+    svg.append(sub);
   }
   return svg;
 }
