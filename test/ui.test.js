@@ -1101,10 +1101,12 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
   assert.match(read('js/core/energy-ring.js'), /label: '当前摄入'/, '绿环没有当前摄入刻度');
-  assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--text\)/, '摄入刻度应是黑色');
-  assert.match(css, /\.ring-tick\.burned \{[^}]*#e8c84a/, '消耗刻度没有换成黄色');
-  assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
+  assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--ring-tick\)/, '摄入刻度应是淡灰线');
+  assert.match(css, /\.ring-tick\.burned \{[^}]*var\(--ring-burn\)/, '消耗刻度应跟着黄环');
+  assert.match(css, /--ring-eat:/, '圆环没有收进同一套配色');
   const chart = read('js/lib/energy-ring-chart.js');
+  assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
+  assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   assert.match(chart, /tspan/, '刻度文字还是单行，窄屏会裁掉「当」');
   assert.match(chart, /padX - 8/, '标签没有放进左右边沟，会画出 viewBox');
 });
