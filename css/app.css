@@ -1423,6 +1423,9 @@ body.sheet-open {
 .water-count {
   display: inline-block; font-variant-numeric: tabular-nums; color: var(--text);
 }
+.water-label {
+  display: inline-block; transform-origin: 28% 60%;
+}
 /*
  * 飞行中的那滴水和落点的涟漪都挂在 body 上，不挂在卡片里 ——
  * 这张卡每次落库都会重建，挂在卡里的动画会连节点一起被换掉，
@@ -1443,7 +1446,16 @@ body.sheet-open {
 }
 .water-wave > i {
   position: absolute; border-radius: 50%;
+}
+.water-wave > i.water-ripple {
   border: 1.5px solid color-mix(in srgb, var(--accent) 85%, transparent);
+}
+.water-wave > i.water-sheen {
+  border: 0;
+  background: radial-gradient(ellipse at center,
+    color-mix(in srgb, var(--accent) 42%, #fff) 0%,
+    color-mix(in srgb, var(--accent) 16%, transparent) 46%,
+    transparent 72%);
 }
 
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
