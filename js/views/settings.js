@@ -14,7 +14,7 @@ import {
 import { infoTip } from '../lib/ui.js';
 import { icon, iconSvg } from '../lib/icons.js';
 import { profileCard } from './cards/profile.js';
-import { dataManagerCard } from './cards/data-manager.js';
+import { dataManagerCard, collapseManagerSections } from './cards/data-manager.js';
 import { state, saveProfile } from '../lib/store.js';
 import { takeIntent } from '../lib/nav.js';
 import { GOALS } from '../core/nutrition.js';
@@ -541,6 +541,11 @@ function feedbackCard({ about = null } = {}) {
  * 这正是分组列表比一堆折叠面板好用的地方。
  */
 let openSection = null;
+
+export function resetSettingsExpand() {
+  openSection = null;
+  collapseManagerSections();
+}
 
 
 /** 每行右边那句「现在设成什么了」。不用点进去就知道 */

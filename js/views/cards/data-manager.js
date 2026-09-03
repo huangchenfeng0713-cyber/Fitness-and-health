@@ -1,5 +1,5 @@
 /**
- * 数据管理卡片：Apple 健康同步、自动同步、手动补录、本应用备份与恢复、同步帮助。
+ * 数据管理卡片：Apple 健康同步、自动同步、手动补录、备份与恢复、同步帮助。
  *
  * 单独成模块是为了让「这张卡片放在哪一页」变成一行 import 的事。
  * 它以前长在数据页里，现在挂在设置页——都是维护性操作，和日常看数据不是一类。
@@ -532,7 +532,7 @@ function importPanel(rerender) {
     rememberedDetails('paste', 'details.paste-block',
       h('summary', null, '手动粘贴快捷指令输出'),
       h('p.form-hint', { style: { margin: '4px 0 8px' } },
-        '支持一条或多条 JSON / CSV。每条数据都要有 date；完整应用备份请在“本应用备份与恢复”中选择。'),
+        '支持一条或多条 JSON / CSV。每条数据都要有 date；完整应用备份请在“备份与恢复”中选择。'),
       pasteArea,
       h('button.secondary-btn.full', {
         onclick: () => {
@@ -648,6 +648,10 @@ function manualPanel(rerender) {
  */
 const openSections = new Set();
 
+export function collapseManagerSections() {
+  openSections.clear();
+}
+
 /** 记得住展开状态的 <details>。设置面板里的折叠块一律走这个 */
 function rememberedDetails(key, spec, ...children) {
   return h(spec, {
@@ -696,7 +700,7 @@ export function dataManagerCard(rerender) {
     h('div.manager-list', null,
       managerSection('import', 'upload', '同步 Apple 健康', lastHint, importPanel(rerender)),
       managerSection('manual', 'plus', `手动补录 · ${state.day}`, '补充当天缺少的健康字段', manualPanel(rerender)),
-      managerSection('backup', 'restore', '本应用备份与恢复', connected
+      managerSection('backup', 'restore', '备份与恢复', connected
         ? '导出、恢复或清空当前账号数据'
         : '导出、换设备、恢复或清空本机数据', backupPanel(rerender)),
       managerSection('guide', 'help', '同步帮助', '首次完整导出与日常快捷指令步骤', guidePanel())),

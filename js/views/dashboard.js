@@ -4,7 +4,7 @@ import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
-import { energyRing, ringLegend } from '../core/energy-ring.js';
+import { energyRing, lockTrackScale } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
@@ -95,8 +95,8 @@ function heroCard(advice, targets, derived) {
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
   /*
-   * 热量环用同一个绿的三个密度分段，不靠色相区分，也就不会把
-   * 「还没吃到目标」画成警告色。段落和刻度由 core/energy-ring.js 算。
+   * 热量环是环形跑道，不是目标进度条。
+   * 绿是摄入，黄是消耗，尺子按预计日消耗取整到百，当天内不许改。
    */
   /*
    * 「当前消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
@@ -104,11 +104,12 @@ function heroCard(advice, targets, derived) {
    * 早上八点就报出一千七，环上那条弧看着像「今天已经烧掉八成」。
    * 外推那个数是「预计全天消耗」，走 targets.tdee。
    */
+  const ringScale = lockTrackScale(state.day, targets.tdee);
   const ringModel = energyRing({
     eaten: gaps.kcal.eaten,
-    target: targets.kcal,
     burned: derived.liveEnergy?.burnedNow ?? null,
     projected: targets.tdee,
+    scale: ringScale,
   });
 
   return h(`section.card.hero.${status.level}`, null,
@@ -127,8 +128,7 @@ function heroCard(advice, targets, derived) {
      */
     h('div.hero-body', null,
       h('div.hero-ring', null, energyRingChart({ model: ringModel })),
-      ringLegendRow(ringModel),
-      energyBalance(derived, ringModel)),
+      h('p.hero-ring-note', null, ringModel.scaleCaption)),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -136,40 +136,6 @@ function heroCard(advice, targets, derived) {
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
-}
-
-/*
- * 图例：只列这一圈真的画出来的段。
- * 没有设备数据的人不该看到两条永远不出现的图例。
- */
-function ringLegendRow(model) {
-  const items = ringLegend(model);
-  if (items.length < 2) return null;
-  return h('div.ring-legend', null, items.map((x) => h('span.ring-legend-item', null,
-    h('i', { class: `ring-swatch ring-seg-${x.tone}`, 'aria-hidden': 'true' }),
-    x.label)));
-}
-
-/*
- * 环右边那几个数。
- *
- * 三个数排成一行摆在环下面，每一行都对得上环上的一处。
- */
-function energyBalance(derived, model) {
-  const line = (k, v, swatch) => h('div.energy-line', null,
-    swatch ? h('i', { class: `energy-swatch ${swatch}`, 'aria-hidden': 'true' }) : null,
-    h('span.energy-key', null, k),
-    h('strong.energy-val', null, v));
-  const rows = [line('已摄入', `${num(model.eaten)} kcal`)];
-  rows.push(model.hasBurn
-    ? line('当前消耗', `${num(model.burned)} kcal`)
-    : line('预计消耗', `${num(model.projected || model.target || 0)} kcal`));
-  if (model.hasBurn) {
-    rows.push(model.surplus > 0
-      ? line('已超出', `${num(model.surplus)} kcal`)
-      : line('缺口', `${num(model.gap)} kcal`));
-  }
-  return h('div.energy-block', null, rows);
 }
 
 function heroInfo(derived, targets) {
@@ -211,6 +177,7 @@ function heroInfo(derived, targets) {
           + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'
         : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
+    h('p', null, '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
     targets.clampedByFloor && h('p', null,

@@ -1052,10 +1052,10 @@ export function feedXmlChunk(chunk, aggregator) {
  *   3. 单独一条记录 {date, steps, ...} —— 快捷指令最容易产出这种
  */
 export function parseHealthJson(json) {
-  // “数据 → 本应用备份与恢复”导出的完整应用备份也是 JSON，但不能在这里按 Apple 健康文件解析。
+  // “设置 → 导入与备份 → 备份与恢复”导出的完整应用备份也是 JSON，但不能在这里按 Apple 健康文件解析。
   // 若继续走扁平记录分支，只会因为根对象没有 date 而给出误导性的“缺少 date”提示。
   if (json?.app === 'health-diet-tracker' && Array.isArray(json.health)) {
-    throw new Error('这是完整应用备份，不是 Apple 健康导出文件。请到「数据 → 本应用备份与恢复」恢复');
+    throw new Error('这是完整应用备份，不是 Apple 健康导出文件。请到「设置 → 导入与备份 → 备份与恢复」恢复');
   }
 
   const days = new Map();
