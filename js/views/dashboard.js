@@ -108,6 +108,7 @@ function heroCard(advice, targets, derived) {
     burned: derived.liveEnergy?.burnedNow ?? null,
     target: targets.kcal,
     scale: ringScale,
+    dailyDelta: targets.dailyDelta,
   });
 
   return h(`section.card.hero.${status.level}`, null,
