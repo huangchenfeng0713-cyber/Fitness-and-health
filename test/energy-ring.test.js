@@ -132,6 +132,11 @@ test('摄入套圈后刻度带着圈数，位置落在第二圈', () => {
   assert.equal(eat.laps, 1);
   assert.ok(eat.pct < 50, '第二圈应从 12 点重新起，不该还停在第一圈末尾');
   assert.equal(eat.kcal, 2758);
+  const wrap = seg(m, 'wrap');
+  assert.ok(wrap, '第二圈没画');
+  assert.equal(wrap.fromPct, 0, '第二圈应从 12 点起');
+  assert.ok(wrap.toPct < 50, '第二圈应往右盖，不该绕到 12 点左边');
+  assert.equal(seg(m, 'lead'), undefined, '12 点左边（黄刻度到 12）不要涂成第二圈');
 });
 
 test('异常输入不抛，弧不画出圈', () => {
