@@ -27,16 +27,23 @@ test('五种状态的圈内数字和缺口 / 溢出都对得上', () => {
   }
 });
 
-test('主环实心弧走满已摄入，超过消耗的那截另外画在外圈', () => {
+/*
+ * 主环那条实心弧**不越过消耗那条刻度线**。
+ * 环里那一圈始终是「已经被今天的消耗兜住的那部分」，
+ * 越出去的整段画在主环外面 —— 位置本身就在说「你超了」。
+ */
+test('实心弧只画到消耗，越出去的整段走外圈', () => {
   const m = ring(1485, 950);
-  assert.equal(seg(m, 'eaten').kcal, 1485, '实心弧要走满已摄入，不是只到消耗');
+  assert.equal(seg(m, 'eaten').kcal, 950, '实心弧不该越过刻度线');
   assert.equal(seg(m, 'gap'), undefined, '吃得比烧的多就没有缺口');
   assert.ok(m.overflow, '超出的部分没有去处');
   assert.equal(m.overflow.kcal, 535);
-  // 外圈那条弧的起点必须落在消耗那条刻度线上
+  // 外圈那条弧接着刻度线起，一直到已摄入 —— 两段合起来才是吃了多少
   const tick = m.ticks.find((t) => t.key === 'burned');
   assert.ok(Math.abs(m.overflow.fromPct - tick.pct) < 0.01, '外圈的弧没有从刻度线起');
-  assert.ok(Math.abs(m.overflow.toPct - seg(m, 'eaten').toPct) < 0.01, '外圈的弧没有到已摄入');
+  assert.ok(Math.abs(m.overflow.fromPct - seg(m, 'eaten').toPct) < 0.01,
+    '实心弧的末端和外圈的起点没有接上');
+  assert.equal(seg(m, 'eaten').kcal + m.overflow.kcal, m.eaten, '两段加起来要等于已摄入');
 });
 
 test('吃得比烧的少时中间那段是缺口', () => {
@@ -57,22 +64,22 @@ test('四段的密度由实到虚，盈余段用纹理', () => {
   assert.equal(seg(m, 'plan').kcal, 330, '盈余段 = 目标 − 预计全天');
 });
 
-test('两条刻度分别是当前消耗和预计全天，各带一个外圈文字', () => {
+/*
+ * 环上只有一条刻度：当前消耗。
+ *
+ * 「预计全天消耗」不再单独画线 —— 它标的位置正好是虚线盈余段的起点
+ * （目标 = 预计全天消耗 + 计划盈余），纹理已经在说这件事了，
+ * 再压一条带数字的刻度上去是同一件事说两遍。
+ */
+test('环上只有「当前消耗」一条刻度', () => {
   const m = ring(900, 1400);
-  assert.deepEqual(m.ticks.map((t) => t.key), ['burned', 'projected']);
-  assert.equal(m.ticks[0].strong, true, '当前消耗是长实线');
+  assert.deepEqual(m.ticks.map((t) => t.key), ['burned']);
+  assert.equal(m.ticks[0].strong, true);
   assert.equal(m.ticks[0].label, '消耗');
-  assert.equal(m.ticks[1].strong, false, '预计全天是短淡线');
-  assert.equal(m.ticks[1].label, '全天');
-  // 只有这两个文字注释，不该冒出第三个
-  assert.equal(m.ticks.length, 2);
-});
-
-test('两条刻度贴太近时只留长的那条', () => {
-  // 图2：消耗 1855 和预计全天 1856 在 2186 的圆周上差不到 0.05%
-  const m = ring(1970, 1855);
-  assert.deepEqual(m.ticks.map((t) => t.key), ['burned'],
-    '并排两根线读不出是两个数');
+  // 数值本身没丢，只是不占环上的位置
+  assert.equal(m.projected, 1856);
+  // 虚线段的起点就是「预计全天」，那条边界还在
+  assert.ok(Math.abs(seg(m, 'plan').fromPct - (1856 / 2186) * 100) < 0.01);
 });
 
 test('当前消耗是 0 和没有设备数据是两回事', () => {

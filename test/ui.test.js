@@ -1343,6 +1343,13 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
    */
   assert.match(utils, /rim\.setAttribute\('class', 'info-tip-rim'\)/, '说明记号没有外圈');
   assert.match(utils, /mark\.append\(rim, stem, dot\)/, '外圈没有画进去');
+  /*
+   * 那一点只填不描。整个记号在 .info-tip-mark 上统一给了 stroke，
+   * 圆点跟着被描一圈，实际半径是 r + 描边的一半 —— 比下面那一竖粗出一圈。
+   */
+  assert.match(utils, /dot\.setAttribute\('class', 'info-tip-dot'\)/, '那一点没有单独的类');
+  assert.match(read('css/app.css'), /\.info-tip-dot \{[^}]*stroke: none/s,
+    '那一点还跟着统一描边走，会比竖笔粗一圈');
   const size = Number(read('css/app.css').match(/\.info-tip-mark \{[^}]*width: ([\d.]+)px/s)[1]);
   assert.ok(size >= 13, `记号只有 ${size}px，套上外圈之后里面那个 i 就糊了`);
   // 位置能调，「点在竖笔上方」这件事不能变，所以比大小而不是比字面量

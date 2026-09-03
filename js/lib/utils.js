@@ -219,10 +219,14 @@ export function infoTip(label, ...children) {
   dot.setAttribute('cx', '6');
   dot.setAttribute('cy', '3.4');
   /*
-   * 点要比笔画粗一圈才认得出是「i」。
-   * 早先 r=.7 配 8px 的框，渲染出来只有半个像素，整个记号看着像一道杂线。
+   * 这一点只填不描。
+   *
+   * 整个记号在 .info-tip-mark 上统一给了 stroke，圆点跟着一起被描了一圈，
+   * 半径实际是 r + 描边的一半 —— 看着比下面那一竖粗出一圈，像个小球。
+   * 单独关掉它的描边，一个点就是一个点。
    */
-  dot.setAttribute('r', '.85');
+  dot.setAttribute('class', 'info-tip-dot');
+  dot.setAttribute('r', '.95');
   mark.append(rim, stem, dot);
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, mark),

@@ -16,17 +16,19 @@
  * 密度递减和「越实越是已经发生」对齐。盈余段用纹理而不是第四级明度：
  * 那是计划里主动给的额度，和「欠着的」性质不同，再降一档只会和缺口打架。
  *
- * ## 两条刻度线，各带一个外圈文字
+ * ## 一条刻度线：当前消耗
  *
- * 长实线是**当前消耗**（设备到此刻的静息 + 活动，直接相加，不外推），
- * 短淡线是**预计全天消耗**。两条之间的距离就是「今天接下来还会再烧掉多少」。
- * 贴太近时只留长的那条 —— 并排两根线读不出是两个数。
+ * 设备到此刻的静息 + 活动，直接相加，不外推。它到「未到达」那一段的尽头，
+ * 就是「今天接下来还会再烧掉多少」。
+ *
+ * **预计全天消耗不单独画线**：它的位置正好是虚线盈余段的起点
+ * （目标 = 预计全天消耗 + 计划盈余），纹理已经在说这件事了。
  *
  * ## 吃得比烧的多时，多出来的溢到外圈细轨
  *
  * 单色没有第二个色相来表达「缺口翻成了盈余」，改用位置：
- * 从当前消耗那条刻度线到已摄入这一段，在主环外面再画一条细弧。
- * 主环那一圈仍然只讲「今天走到哪儿了」。
+ * **主环那条实心弧不越过消耗那条刻度线**，越出去的整段画在主环外面。
+ * 环里那一圈始终是「已经被今天的消耗兜住的那部分」。
  *
  * 这个模块只算长度和位置，不碰 DOM；画在 lib/charts.js 里。
  */
@@ -39,9 +41,6 @@ export const SEGMENT_META = Object.freeze({
   plan: { label: '盈余段', tone: 'dashed' },
   deficit: { label: '赤字段', tone: 'dashed' },
 });
-
-/* 两条刻度靠得比这还近就只留长的那条（占圆周的百分比） */
-const TICK_MERGE_PCT = 3;
 
 /*
  * `Number(null)` 是 0，而 `Number.isFinite(0)` 是 true —— 光用 isFinite 过滤，
@@ -94,9 +93,16 @@ export function energyRing({
     });
   };
 
-  push('eaten', 0, ate);
+  /*
+   * **主环那条实心弧不越过「当前消耗」那条刻度线。**
+   *
+   * 吃得比烧的多时，主环只画到消耗，多出来的整段走外圈细轨 ——
+   * 环里那一圈始终是「已经被今天的消耗兜住的那部分」，
+   * 越出去的部分在物理上就画到外面。
+   */
+  push('eaten', 0, burn != null ? Math.min(ate, burn) : ate);
   if (burn != null) push('gap', ate, burn);
-  const reached = Math.max(ate, burn ?? 0);
+  const reached = burn != null ? burn : ate;
   if (plan != null) push('ahead', reached, plan);
   else if (goal != null) push('ahead', reached, goal);
 
@@ -122,13 +128,16 @@ export function energyRing({
       label: '消耗', strong: true,
     });
   }
-  if (plan != null && !atEnd(plan)
-    && (burn == null || Math.abs(pct(plan) - pct(burn)) >= TICK_MERGE_PCT)) {
-    ticks.push({
-      key: 'projected', pct: pct(plan), kcal: Math.round(plan),
-      label: '全天', strong: false,
-    });
-  }
+  /*
+   * **「预计全天消耗」不单独画一条刻度。**
+   *
+   * 它标的位置正好是虚线盈余段的起点 —— `目标 = 预计全天消耗 + 计划盈余`，
+   * 那条线和虚线段的边界本来就是同一条，纹理已经在说「从这儿往后是计划
+   * 多给的额度」，再压一条带数字的刻度上去是同一件事说两遍。
+   * 维持计划下目标就等于全天，圆周本身就是它，更没有第二条线可画。
+   *
+   * 数值本身没丢（model.projected），只是不占环上的位置。
+   */
 
   /* 吃得比烧的多：从消耗那条线到已摄入这一段，画在主环外面 */
   const over = burn != null && ate > burn ? Math.round(ate - burn) : 0;

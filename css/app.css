@@ -444,6 +444,8 @@ html, body { height: 100%; overflow: hidden; }
 .info-tip > summary:active { opacity: 1; }
 /* 外圈只描不填，i 那两笔跟着 currentColor —— 整个记号仍然是淡的 */
 .info-tip-rim { fill: none; }
+/* 那一点只填不描：跟着统一描边走的话，它会比下面那一竖粗出一圈 */
+.info-tip-dot { stroke: none; }
 .info-tip-mark {
   /*
    * 记号本身要淡，但得认得出是个 i：8px 的框里那个点不到一个像素，
