@@ -354,9 +354,9 @@ function refreshResults() {
         h('div.search-item-main', null,
           h('strong', null, f.name),
           h('span.search-item-meta', null, `${p.kcal} kcal · 蛋白 ${p.protein}g / ${basis}`)),
-        h('div.search-item-tags', null,
-          estimateTag(f),
-          weakTag(CATEGORIES[f.cat] || '自定义'))),
+        // 分类（肉禽 / 菜肴外卖…）不写：挑食物时它不参与判断，
+        // 一列结果每行挂一个灰块，比食物名还抢眼
+        h('div.search-item-tags', null, estimateTag(f))),
       chosen ? h('button.search-item-remove', {
         type: 'button',
         'aria-label': `把 ${f.name} 移出本餐清单`,
@@ -560,8 +560,7 @@ function refreshMixedPortion(food) {
       h('div.portion-head-main', null,
         h('div.portion-title-line', null,
           h('strong', null, food.name),
-          estimateTag(food),
-          weakTag(CATEGORIES[food.cat])),
+          estimateTag(food)),
         h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
       h('div.portion-head-actions', null,
         foodInfoTip(food, { label: '查看估算依据与误差' }),
@@ -799,8 +798,7 @@ function refreshPortion() {
       h('div.portion-head-main', null,
         h('div.portion-title-line', null,
           h('strong', null, food.name),
-          estimateTag(food),
-          weakTag(CATEGORIES[food.cat] || '自定义')),
+          estimateTag(food)),
         h('div.portion-per100', null,
           `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
       h('div.portion-head-actions', null,

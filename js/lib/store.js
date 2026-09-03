@@ -327,8 +327,22 @@ export function recompute(now = new Date()) {
    * 不是「今天该吃多少」。
    */
   const liveTdee = dynamic ? Math.round(dynamic.tdee) : null;
+  /*
+   * 「当前消耗」= 设备到此刻的静息 + 活动，直接相加。
+   *
+   * 不能拿 dynamic.tdee 当这个数：那份是**按已过时长外推出来的全天值**
+   * （静息 basalNow / f，再夹在近 14 天基线的 0.8~1.4 倍之间）。
+   * 早上八点它就已经报出一千七，主卡上那条弧看着像「今天已经烧掉八成」，
+   * 而实际累计只有几百。外推那个数有它的用处 —— 它是「预计全天消耗」，
+   * 归 targets.tdee；这里要的是「到现在为止真的烧了多少」。
+   */
+  const burnedParts = [health.restingEnergy, health.activeEnergy]
+    .map((v) => Number(v))
+    .filter((v) => Number.isFinite(v) && v >= 0);
+  const burnedNow = burnedParts.length ? Math.round(burnedParts.reduce((a, b) => a + b, 0)) : null;
   const liveEnergy = liveTdee != null ? {
     tdee: liveTdee,
+    burnedNow,
     surplus: Math.round((Number(intake.kcal) || 0) - liveTdee),
     plannedSurplus: targets.dailyDelta,
     // 目标算的是近期节奏，实时这份是今天：差多少就是「今天比平时多动/少动了多少」
