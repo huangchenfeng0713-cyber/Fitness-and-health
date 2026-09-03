@@ -30,7 +30,7 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
 
   const svg = el('svg', {
     viewBox: `0 0 ${vbW} ${vbH}`, class: 'ring energy-ring',
-    preserveAspectRatio: 'xMidYMid meet',
+    preserveAspectRatio: 'xMidYMid meet', overflow: 'visible',
   });
 
   const strokeFor = (cls) => {
@@ -88,8 +88,36 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     const r1 = tone.inner ? r + stroke * 0.2 : r + stroke * 0.55;
     return { tick, tone, deg, r0, r1 };
   });
-  for (let i = 0; i < placed.length; i++) {
-    const { tick, tone, deg, r0, r1 } = placed[i];
+
+  /*
+   * 标签放在左右边沟里，不沿半径往外飞。
+   * 「当前摄入 1584」一整行约 110px，原先 pad 只有 78，字会画出 viewBox
+   * 被 SVG 裁掉，左边只剩「前摄入」。改成两行之后边沟够用。
+   */
+  const LABEL_H = 30;
+  const labels = placed.map((p) => {
+    const [, py] = point(p.deg, r + stroke * 0.65);
+    const norm = ((p.deg % 360) + 360) % 360;
+    const onLeft = norm > 90 && norm < 270;
+    return {
+      ...p,
+      onLeft,
+      lx: onLeft ? padX - 8 : vbW - padX + 8,
+      ly: Math.max(14, Math.min(vbH - 18, py)),
+    };
+  });
+  if (labels.length === 2 && labels[0].onLeft === labels[1].onLeft) {
+    const a = labels[0].ly <= labels[1].ly ? labels[0] : labels[1];
+    const b = a === labels[0] ? labels[1] : labels[0];
+    if (b.ly - a.ly < LABEL_H + 4) {
+      const mid = (a.ly + b.ly) / 2;
+      a.ly = Math.max(14, mid - LABEL_H / 2 - 4);
+      b.ly = Math.min(vbH - 18, a.ly + LABEL_H + 8);
+    }
+  }
+
+  for (const item of labels) {
+    const { tick, tone, deg, r0, r1, onLeft, lx, ly } = item;
     const [x1, y1] = point(deg, r0);
     const [x2, y2] = point(deg, r1);
     svg.append(el('line', {
@@ -99,22 +127,22 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     svg.append(el('circle', {
       cx: x1, cy: y1, r: 2.7, fill: tone.fill, stroke: 'var(--text)', 'stroke-width': 1.2,
     }));
-    let labelR = r + stroke * 0.72 + 8;
-    const other = placed.find((_, j) => j !== i);
-    if (other) {
-      const d = Math.abs(tick.pct - other.tick.pct);
-      if (Math.min(d, 100 - d) < 12) labelR += i * 16;
+    if ((tick.laps || 0) >= 1) {
+      svg.append(el('circle', {
+        cx: x1, cy: y1, r: 5.4, fill: 'none',
+        stroke: tone.stroke, 'stroke-width': 1.5,
+      }));
     }
-    const [tx, ty] = point(deg, labelR);
-    const norm = ((deg % 360) + 360) % 360;
-    const onLeft = norm > 90 && norm < 270;
     const text = el('text', {
-      x: tx, y: ty, class: `ring-tick-label strong ${tick.key}`,
+      x: lx, y: ly, class: `ring-tick-label strong ${tick.key}`,
       'text-anchor': onLeft ? 'end' : 'start',
-      'dominant-baseline': 'middle',
-      'font-size': 13,
+      'font-size': 12,
     });
-    text.textContent = `${tick.label} ${tick.kcal}`;
+    const line = el('tspan', { x: lx, dy: '-0.45em' });
+    line.textContent = tick.label;
+    const num = el('tspan', { x: lx, dy: '1.25em' });
+    num.textContent = String(tick.kcal);
+    text.append(line, num);
     svg.append(text);
   }
 

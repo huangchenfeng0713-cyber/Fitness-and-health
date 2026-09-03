@@ -1104,6 +1104,9 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   assert.match(css, /\.ring-tick\.eaten \{[^}]*#ffffff/, '摄入刻度不是白色');
   assert.match(css, /\.ring-tick\.burned \{[^}]*#e8c84a/, '消耗刻度没有换成黄色');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
+  const chart = read('js/lib/energy-ring-chart.js');
+  assert.match(chart, /tspan/, '刻度文字还是单行，窄屏会裁掉「当」');
+  assert.match(chart, /padX - 8/, '标签没有放进左右边沟，会画出 viewBox');
 });
 
 test('短标签不会被从中间断成两截', () => {

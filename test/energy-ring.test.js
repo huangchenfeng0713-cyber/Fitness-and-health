@@ -120,9 +120,18 @@ test('绿环白刻度写当前摄入，黄环黄刻度写当前消耗', () => {
   assert.equal(eat.label, '当前摄入');
   assert.equal(eat.kcal, 895);
   assert.equal(eat.tone, 'intake');
+  assert.equal(eat.laps, 0);
   assert.equal(burn.label, '当前消耗');
   assert.equal(burn.kcal, 1191);
   assert.equal(burn.tone, 'burn');
+});
+
+test('摄入套圈后刻度带着圈数，位置落在第二圈', () => {
+  const m = ring(2758, 1781);
+  const eat = m.ticks.find((t) => t.key === 'eaten');
+  assert.equal(eat.laps, 1);
+  assert.ok(eat.pct < 50, '第二圈应从 12 点重新起，不该还停在第一圈末尾');
+  assert.equal(eat.kcal, 2758);
 });
 
 test('异常输入不抛，弧不画出圈', () => {
