@@ -1431,6 +1431,8 @@ test('卡片级说明层在无关重绘后保持用户选择的展开态', () =>
   assert.match(utils, /details\.open = persistentInfoTipOpen\.has\(stableKey\)/);
   assert.match(utils, /details\.addEventListener\('toggle'/,
     '再次点击、点外面或按 Escape 后没有把关闭状态写回');
+  assert.match(utils, /export function infoTip\(label, \.\.\.children\) \{\s*return persistentInfoTip\(`info:\$\{label\}`/,
+    '普通说明层重绘时仍会自己收起');
   assert.match(training,
     /persistentInfoTip\('training-recommendation-method', '这几个是怎么挑的'/,
     '选择动作卡右上角说明仍会随整页重绘自动收起');
@@ -1556,7 +1558,8 @@ test('设置主页只列五组，点进去才是表单', () => {
   assert.match(settings, /function sectionStatus\(/, '分组行没有当前状态');
   assert.match(settings, /`v\$\{APP_VERSION\}`/, '关于那一组没显示版本号');
   assert.match(settings, /function backBar\(/, '二级页面没有返回入口');
-  assert.match(read('css/app.css'), /\.set-row \{/, '分组列表没有样式');
+  assert.match(settings, /button\.settings-row/, '分组行还在用训练组数的 class');
+  assert.match(read('js/views/training.js'), /div\.set-row/, '训练组数行被改名了');
 
   /*
    * 账号冲突、待确认归属、锁定这几种必须整屏摆出来。

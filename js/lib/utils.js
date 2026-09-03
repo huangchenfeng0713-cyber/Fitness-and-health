@@ -197,7 +197,7 @@ function bindInfoTipDismiss() {
   window.visualViewport?.addEventListener('scroll', () => queueInfoTipPositions());
 }
 
-export function infoTip(label, ...children) {
+function createInfoTip(label, ...children) {
   bindInfoTipDismiss();
   const mark = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   mark.setAttribute('class', 'info-tip-mark');
@@ -240,18 +240,15 @@ export function infoTip(label, ...children) {
 }
 
 /*
- * 某些卡片会被账号状态、数据同步或时钟刷新整块重建。普通 infoTip 跟着 DOM
- * 一起销毁是合理的；但卡片级的主要说明刚点开就被一次无关重绘收起，看起来像
- * 信息按钮失灵。给这类入口一个稳定 key，把用户主动选择的展开态留在模块内存里。
- *
- * 点外面、再次点 summary 或按 Escape 仍会改变 details.open；toggle 事件会把
- * 新状态写回集合，因此这里只抵抗“节点被重建”，不会把用户已经关闭的层又打开。
+ * 卡片会被同步、时钟、记账整块重建。说明层开着的时候节点一换，看起来像
+ * 自己收起来了。用稳定 key 把用户点开的状态留在模块内存里：点外面、再点
+ * 记号或按 Escape 仍会关，只抵抗「没点却消失」。
  */
 const persistentInfoTipOpen = new Set();
 
 export function persistentInfoTip(key, label, ...children) {
   const stableKey = String(key);
-  const details = infoTip(label, ...children);
+  const details = createInfoTip(label, ...children);
   details.open = persistentInfoTipOpen.has(stableKey);
   if (details.open) queueInfoTipPositions(details);
   details.addEventListener('toggle', () => {
@@ -259,6 +256,10 @@ export function persistentInfoTip(key, label, ...children) {
     else persistentInfoTipOpen.delete(stableKey);
   });
   return details;
+}
+
+export function infoTip(label, ...children) {
+  return persistentInfoTip(`info:${label}`, label, ...children);
 }
 
 /**

@@ -579,7 +579,7 @@ function sectionStatus(key, account) {
 }
 
 function sectionRow(section, account, rerender) {
-  return h('button.set-row', {
+  return h('button.settings-row', {
     type: 'button',
     onclick: () => { openSection = section.key; rerender(); },
   },
