@@ -149,6 +149,7 @@ export function energyRing({
       kcal: Math.round(ate),
       label: '当前摄入',
       tone: 'intake',
+      laps: eatLap.laps,
     });
   }
   if (hasBurn) {
@@ -158,6 +159,7 @@ export function energyRing({
       kcal: Math.round(burn),
       label: '当前消耗',
       tone: 'burn',
+      laps: burnLap.laps,
     });
   }
 

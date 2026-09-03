@@ -509,9 +509,8 @@ html, body { height: 100%; overflow: hidden; }
 .hero.bad .status-pill { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 .hero-detail { margin: 8px 0 0; font-size: var(--fs-body); color: var(--muted); line-height: 1.65; }
 
-.hero-body { display: flex; flex-direction: column; margin: 12px 0 4px; }
-/* 收到圆环本身的宽度，否则下面那行说明会飘到卡片最左边 */
-.hero-ring { display: flex; justify-content: center; }
+.hero-body { display: flex; flex-direction: column; margin: 12px 0 4px; overflow: visible; }
+.hero-ring { display: flex; justify-content: center; overflow: visible; }
 .ring-label { fill: var(--text); }
 .ring-sub { fill: var(--faint); }
 
@@ -551,7 +550,7 @@ html, body { height: 100%; overflow: hidden; }
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
  * 它只是主卡的一部分，下面还有蛋白、碳水脂肪和四个方框要看。
  */
-.energy-ring { display: block; width: 100%; max-width: 268px; height: auto; }
+.energy-ring { display: block; width: 100%; max-width: 268px; height: auto; overflow: visible; }
 
 .ring-legend {
   display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px;
