@@ -153,6 +153,10 @@ function closeUndoWindow() {
  * 直接以数值传进去，不必往关键帧里塞 calc(var(--x) * n)
  * （Safari 对那个支持不稳，整条关键帧一失效就只剩第一帧）。
  */
+/* 水滴飞行的时长，以及它落进数字的那一刻 —— 涟漪和数字都对着这个时刻起 */
+const FLY_MS = 620;
+const LAND_MS = 380;
+
 function flyDrop(pill) {
   if (!pill?.isConnected) return;
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
@@ -175,6 +179,15 @@ function flyDrop(pill) {
   });
   document.body.append(fly);
   /*
+   * 原地那滴让开：飞的是它自己，不是凭空多出来一个副本。
+   * 落定之后再淡回来 —— 横幅上不能空着一格。
+   * fill 用默认的 none，动画一结束样式自动还原，不会在节点上留残值。
+   */
+  drop.animate([
+    { opacity: 1 }, { opacity: 0, offset: 0.06 },
+    { opacity: 0, offset: 0.62 }, { opacity: 1 },
+  ], { duration: FLY_MS + 460, easing: 'ease-out' });
+  /*
    * 像水而不是像图标在滑轨上走，靠的是形变：起手下沉蓄势，
    * 飞行段沿运动方向拉长，从文字上方划过，落点摊开压扁。
    */
@@ -183,32 +196,69 @@ function flyDrop(pill) {
     transform: `translate(${Math.round(dx * ax)}px, ${Math.round(dy * ay)}px) scale(${sx}, ${sy})`,
     opacity: o,
   });
+  /*
+   * 起飞那一下由灰转绿：这滴水是「我按下去的那一下」，
+   * 染色让它和右边那个绿色按钮对上，落进数字里也就有了来处。
+   */
   const anim = fly.animate([
-    at(0, 0, 0, 1, 1, 1),
-    { ...at(0.14, 0.08, 0.14, 0.8, 1.22, 1), transform: `translate(${Math.round(dx * 0.08)}px, ${Math.round(dy * 0.14 + 4)}px) scale(.8, 1.22)` },
+    { ...at(0, 0, 0, 1, 1, 1), color: 'var(--muted)' },
+    { ...at(0.14, 0.08, 0.14, 0.8, 1.22, 1), color: 'var(--accent)', transform: `translate(${Math.round(dx * 0.08)}px, ${Math.round(dy * 0.14 + 4)}px) scale(.8, 1.22)` },
     { ...at(0.52, 0.52, 0.52, 1.55, 0.66, 0.95), transform: `translate(${Math.round(dx * 0.52)}px, ${Math.round(dy * 0.52 - 10)}px) scale(1.55, .66)` },
     { ...at(0.84, 0.93, 0.84, 1.15, 0.8, 0.75), transform: `translate(${Math.round(dx * 0.93)}px, ${Math.round(dy * 0.84 - 2)}px) scale(1.15, .8)` },
-    at(1, 1, 1, 0.4, 0.34, 0),
-  ], { duration: 620, easing: 'cubic-bezier(.55, .02, .3, 1)', fill: 'both' });
+    { ...at(1, 1, 1, 0.4, 0.34, 0), color: 'var(--accent)' },
+  ], { duration: FLY_MS, easing: 'cubic-bezier(.55, .02, .3, 1)', fill: 'both' });
   anim.finished.then(() => fly.remove(), () => fly.remove());
 
-  /* 落点荡一圈涟漪，再让数字被撑开一下 —— 数字是接住它的那个 */
-  const ripple = document.createElement('span');
-  ripple.className = 'water-ripple';
-  Object.assign(ripple.style, {
-    left: `${b.left + b.width / 2}px`, top: `${b.top + b.height / 2}px`,
+  /*
+   * 落点在整条横幅里荡开一圈。
+   *
+   * 涟漪要被框裁住才像「水在这个容器里回荡」—— 所以铺一层和横幅同样大小、
+   * 同样圆角的裁剪层，两圈波从数字那儿扩出去，撞到边就没了。
+   * 这一层也挂在 body 上：横幅本身随时会被重绘换掉。
+   */
+  const wave = document.createElement('span');
+  wave.className = 'water-wave';
+  const pillBox = pill.getBoundingClientRect();
+  Object.assign(wave.style, {
+    left: `${pillBox.left}px`, top: `${pillBox.top}px`,
+    width: `${pillBox.width}px`, height: `${pillBox.height}px`,
+    borderRadius: getComputedStyle(pill).borderRadius,
   });
-  document.body.append(ripple);
-  const rip = ripple.animate(
-    [{ transform: 'translate(-50%, -50%) scale(.4)', opacity: .5 },
-      { transform: 'translate(-50%, -50%) scale(2.2)', opacity: 0 }],
-    { duration: 500, delay: 360, easing: 'ease-out', fill: 'both' },
+  // 波心落在数字上，半径取到最远那个角，才铺得满整条
+  const originX = b.left + b.width / 2 - pillBox.left;
+  const originY = b.top + b.height / 2 - pillBox.top;
+  const reach = Math.ceil(Math.hypot(
+    Math.max(originX, pillBox.width - originX),
+    Math.max(originY, pillBox.height - originY),
+  ));
+  const rings = [0, 170].map((delay) => {
+    const ring = document.createElement('i');
+    Object.assign(ring.style, {
+      left: `${originX}px`, top: `${originY}px`,
+      width: `${reach * 2}px`, height: `${reach * 2}px`,
+    });
+    wave.append(ring);
+    return ring.animate(
+      [{ transform: 'translate(-50%, -50%) scale(.04)', opacity: .55 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
+      { duration: 720, delay: LAND_MS + delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' },
+    );
+  });
+  // 整条横幅还跟着泛一下淡绿，像水漫过去
+  const wash = wave.animate(
+    [{ backgroundColor: 'transparent' },
+      { backgroundColor: 'var(--accent-soft)', offset: .3 },
+      { backgroundColor: 'transparent' }],
+    { duration: 820, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
   );
-  rip.finished.then(() => ripple.remove(), () => ripple.remove());
+  document.body.append(wave);
+  Promise.allSettled([...rings, wash].map((x) => x.finished)).then(() => wave.remove());
+
+  /* 数字被撑开一下再回弹 —— 它是接住这滴水的那个 */
   count.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.3)', offset: .38 },
-      { transform: 'scale(.95)', offset: .7 }, { transform: 'scale(1)' }],
-    { duration: 460, delay: 340, easing: 'ease-out' },
+    [{ transform: 'scale(1)' }, { transform: 'scale(1.32)', offset: .36 },
+      { transform: 'scale(.95)', offset: .68 }, { transform: 'scale(1)' }],
+    { duration: 470, delay: LAND_MS - 40, easing: 'ease-out' },
   );
 }
 
