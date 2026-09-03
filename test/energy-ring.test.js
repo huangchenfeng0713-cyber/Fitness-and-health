@@ -70,22 +70,34 @@ test('v1 存的圆周不认：那时候存的是按预计消耗算的，含义�
   assert.equal(lockTrackScale('2026-09-03', 2168, old), 2200);
 });
 
-test('圈心只说还能吃 / 热量盈余 / 接近目标', () => {
+test('圈心只说还能吃 / 还应吃 / 超出目标 / 接近目标', () => {
   const left = ring(1500, 1200);
   assert.equal(left.center.label, '还能吃');
   assert.equal(left.center.kcal, TARGET - 1500);
 
+  const need = ring(1500, 1200, { dailyDelta: 300 });
+  assert.equal(need.center.label, '还应吃', '计划要吃到消耗之上时是义务不是配额');
+
+  const maintain = ring(1500, 1200, { dailyDelta: 0 });
+  assert.equal(maintain.center.label, '还能吃', '增肌档速率为 0 时没有要补的量');
+
+  const cut = ring(1500, 1200, { dailyDelta: -500 });
+  assert.equal(cut.center.label, '还能吃');
+
   const over = ring(2400, 1200);
-  assert.equal(over.center.label, '热量盈余');
+  assert.equal(over.center.label, '超出目标');
   assert.equal(over.center.kcal, 2400 - TARGET);
+
+  const overWhileCutting = ring(2400, 1200, { dailyDelta: -500 });
+  assert.equal(overWhileCutting.center.label, '超出目标', '吃超目标不是热量盈余');
 
   const near = ring(TARGET - 20, 1200);
   assert.equal(near.center.label, '接近目标');
   assert.equal(near.center.kcal, null, '差得很少时不报数');
 
-  for (const m of [left, over, near]) {
-    assert.doesNotMatch(m.center.label, /领先|平衡|缺口/,
-      '不写「摄入领先 / 消耗领先」，也不把还能吃的额度叫成缺口');
+  for (const m of [left, need, over, near]) {
+    assert.doesNotMatch(m.center.label, /领先|平衡|缺口|盈余/,
+      '不写「摄入领先 / 热量盈余」，也不把还能吃的额度叫成缺口');
   }
 });
 
