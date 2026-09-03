@@ -117,6 +117,11 @@
   --r-md: 14px;
   --r-lg: 18px;
   /*
+   * 卡头那一行的高度 = 标题的行盒（--fs-headline × 1.35）。
+   * 右边挂什么都不许改这个数，否则 ⓘ 的中心就不在标题的中心上了。
+   */
+  --card-head-line: calc(var(--fs-headline) * 1.35);
+  /*
    * iOS 的分组列表是「灰底 + 纯色卡」，没有阴影也没有描边 ——
    * 层次全靠底色对比。之前那层投影会让每张卡都像浮起来的小窗口，
    * 一页四五张就显得吵。去掉之后边缘干净，页面安静下来。
@@ -429,7 +434,21 @@ html, body { height: 100%; overflow: hidden; }
 }
 .card-head > div { min-width: 0; }
 .card-head h3 { margin: 0; font-size: var(--fs-headline); line-height: 1.35; font-weight: 680; letter-spacing: 0; }
-.card-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; min-width: 0; }
+/*
+ * 卡头右边那一格钉死在一个标题行高上。
+ *
+ * 原先它跟着内容长：ⓘ 是 14px、状态标签 18.2px、「编辑」按钮 36px，
+ * 而 .card-head 又是顶对齐 —— 于是同一枚 ⓘ 的中心相对标题中心落在
+ * −4.5（喝水 / 今日提示 / 趋势）、−2.4（今日健康数据）、+6.5（饮食记录）
+ * 好几个位置上。横向都贴着右边缘，竖向却各站各的。
+ *
+ * 高度固定之后，比一行高的按钮上下对称溢出（它没有底色，只有文字，
+ * 文字仍然落在标题的中线上），热区不变，而卡头的高度不再被它撑开。
+ */
+.card-head-actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+  min-width: 0; height: var(--card-head-line);
+}
 .card-head-actions .card-tag { max-width: 180px; }
 .card-desc { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-footnote); line-height: 1.55; font-weight: 400; }
 .card-tag {
@@ -444,6 +463,15 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 .info-tip { position: relative; flex: none; }
+/*
+ * 直接挂在卡头上的 ⓘ（今日提示、喝水）也要占一个标题行高。
+ *
+ * 它们没有 .card-head-actions 包着，于是被 .card-head 的 flex-start 顶到最上面：
+ * 记号只有 14px、标题的行盒是 23px，中心差 4.5px —— 横向明明贴着右边缘，
+ * 竖向却比标题高出小半行。高度加在外层 details 上，不加在 summary 上：
+ * summary 打开时有一块圆形底色，拉高它会变成椭圆。
+ */
+.card-head > .info-tip { height: var(--card-head-line); display: flex; align-items: center; }
 /*
  * 说明入口要淡。
  *
