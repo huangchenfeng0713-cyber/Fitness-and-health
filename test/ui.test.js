@@ -1002,6 +1002,15 @@ test('每个 js 模块都在 Service Worker 的离线清单里', () => {
   assert.deepEqual(missing, [], `这些模块没进 sw.js 的 SHELL：${missing.join('、')}`);
 });
 
+test('index.html 引用的样式都在离线清单里', () => {
+  const sw = read('sw.js');
+  const hrefs = [...read('index.html').matchAll(/href="(css\/[^"]+\.css)"/g)].map((m) => m[1]);
+  assert.ok(hrefs.length, 'index.html 没有引用任何 css');
+  for (const href of hrefs) {
+    assert.ok(sw.includes(`'./${href}'`), `${href} 没进 sw.js 的 SHELL，离线时设置分层样式会丢`);
+  }
+});
+
 test('Service Worker 缓存名跟着版本号走', () => {
   // 缓存名不变的话，老用户可能一直吃着旧壳
   const pkg = JSON.parse(read('package.json'));

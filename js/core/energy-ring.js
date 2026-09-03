@@ -24,17 +24,28 @@ function memoryStore() {
   return localStorage;
 }
 
+function toScaleMap(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  if (raw.date && Number.isFinite(raw.scale) && raw.scale >= 100) {
+    return { [raw.date]: raw.scale };
+  }
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (Number.isFinite(v) && v >= 100) out[k] = v;
+  }
+  return out;
+}
+
 /** 当天尺子锁住。换日再重算。storage 可注入，方便单测。 */
 export function lockTrackScale(date, projected, storage = memoryStore()) {
   const computed = trackScale(projected);
   const key = String(date || '');
   if (!key || !storage) return computed;
   try {
-    const prev = JSON.parse(storage.getItem(SCALE_KEY) || 'null');
-    if (prev && prev.date === key && Number.isFinite(prev.scale) && prev.scale >= 100) {
-      return prev.scale;
-    }
-    storage.setItem(SCALE_KEY, JSON.stringify({ date: key, scale: computed }));
+    const map = toScaleMap(JSON.parse(storage.getItem(SCALE_KEY) || 'null'));
+    if (Number.isFinite(map[key]) && map[key] >= 100) return map[key];
+    map[key] = computed;
+    storage.setItem(SCALE_KEY, JSON.stringify(map));
   } catch {
     return computed;
   }

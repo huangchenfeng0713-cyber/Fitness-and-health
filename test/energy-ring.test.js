@@ -49,8 +49,19 @@ test('当天尺子锁定后不随预计消耗改圆周', () => {
   assert.equal(first, 2200);
   const again = lockTrackScale('2026-09-03', 1800, mem);
   assert.equal(again, 2200, '同一天不许改尺子');
+  const other = lockTrackScale('2026-09-02', 1800, mem);
+  assert.equal(other, 1800);
+  const todayStill = lockTrackScale('2026-09-03', 1600, mem);
+  assert.equal(todayStill, 2200, '翻到昨天不能改掉今天的尺子');
   const next = lockTrackScale('2026-09-04', 1800, mem);
   assert.equal(next, 1800);
+
+  const old = {
+    data: JSON.stringify({ date: '2026-09-03', scale: 2100 }),
+    getItem() { return this.data; },
+    setItem(_, v) { this.data = v; },
+  };
+  assert.equal(lockTrackScale('2026-09-03', 1800, old), 2100, '旧的单日锁要认得出');
 });
 
 test('圈心只说谁领先，不写目标', () => {
