@@ -18,6 +18,8 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   const cy = vb / 2;
   const r = (size - stroke) / 2;
   const burnR = r - stroke / 2 - 7;
+  // 消耗环的粗细：画弧和画刻度共用一个数，否则刻度出头的长度会跟着漂
+  const BURN_STROKE = 3.5;
   const span = 360 - RING_GAP_DEG;
   const start = -90 + RING_GAP_DEG / 2;
   const angleOf = (p) => start + (Math.max(0, Math.min(100, p)) / 100) * span;
@@ -63,11 +65,11 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   const lead = (model.segments || []).find((s) => s.key === 'lead');
   if (lead) arc(r, stroke, 'ring-seg ring-seg-deep', lead.fromPct, lead.toPct);
 
-  arc(burnR, 3.5, 'ring-burn-track', 0, 100);
+  arc(burnR, BURN_STROKE, 'ring-burn-track', 0, 100);
   if (model.hasBurn && burn) {
     const first = burn.laps >= 1 ? 100 : burn.firstPct;
-    arc(burnR, 3.5, 'ring-burn', 0, first);
-    arc(burnR, 3.5, 'ring-burn-wrap', 0, burn.wrapPct);
+    arc(burnR, BURN_STROKE, 'ring-burn', 0, first);
+    arc(burnR, BURN_STROKE, 'ring-burn-wrap', 0, burn.wrapPct);
   }
 
   const [sx, sy] = point(start, r);
@@ -75,16 +77,31 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     x: sx - 2.4, y: sy - 2.4, width: 4.8, height: 4.8, rx: 1, class: 'ring-origin',
   }));
 
-  const tickTone = {
-    intake: { inner: false },
-    burn: { inner: true },
+  /*
+   * 刻度线要**完整穿过它标的那条轨道**，两端各出头一点点。
+   *
+   * 原先两条都只刻了一半：摄入那条画在 66.9~75.3，而主环是 62~76 ——
+   * 内侧差 4.9px 没到、外侧差 0.7px，成了浮在环外侧的一小截；
+   * 消耗那条更奇怪，从消耗环（53.25~56.75）一路冲进主环，停在 71.1，
+   * 既没穿透主环也没有终点，看着就是一条断线。
+   *
+   * 每条刻度只管自己那条轨道：摄入标主环，消耗标消耗环。
+   * 出头 OVERHANG 是为了让它读作「一个记号」而不是「轨道上的一道划痕」。
+   */
+  const OVERHANG = 2.5;
+  const bandOf = {
+    intake: { mid: r, half: stroke / 2 },
+    burn: { mid: burnR, half: BURN_STROKE / 2 },
   };
   const placed = (model.ticks || []).map((tick) => {
-    const tone = tickTone[tick.tone] || tickTone.intake;
+    const band = bandOf[tick.tone] || bandOf.intake;
     const deg = angleOf(tick.pct);
-    const r0 = tone.inner ? burnR - 1 : r - stroke * 0.15;
-    const r1 = tone.inner ? r + stroke * 0.15 : r + stroke * 0.45;
-    return { tick, tone, deg, r0, r1 };
+    return {
+      tick,
+      deg,
+      r0: band.mid - band.half - OVERHANG,
+      r1: band.mid + band.half + OVERHANG,
+    };
   });
 
   for (const { tick, deg, r0, r1 } of placed) {
