@@ -80,101 +80,87 @@ function el(tag, attrs = {}) {
  * 饮水环同理，多喝一点也不是错误。
  */
 /*
- * 热量圆环。段落和刻度由 core/energy-ring.js 算好，这里只管画。
+ * 热量圆环：两条同心弧。
  *
- * 三件事值得先说清楚：
+ * 外环（粗）是摄入，内环（细）是消耗，同一个起点、同一把尺子。
+ * **两条弧的长度差就是缺口** —— 谁长谁短是位置关系，不需要图例来解释。
  *
- * **十二点方向开一道小豁口，起点留一个圆点。** 闭合的环在摄入为 0 时
- * 看不出起点在哪，也就读不出往哪个方向走；开缝之后方向感就回来了。
+ * 上一版是把一个环切成四段、靠三个明度加一层纹理区分。那在「已经吃了八成」
+ * 时好看，可摄入为 0 时实心弧根本不存在，整圈只剩三层几乎一样的淡绿，
+ * 没有任何参照物。而摄入为 0 恰恰是每天早上打开时的样子。
  *
- * **刻度线只负责切分。** 它压在环上，不带自己的长度语义 ——
- * 长实线是当前消耗，短淡线是预计全天消耗，两条之间的距离就是
- * 「今天接下来还会再烧掉多少」。
- *
- * **超出的部分画在外圈细轨上。** 单色版没有第二个色相来表达
- * 「缺口翻成了盈余」，改用位置：吃得比烧的多，多出来的那截跑到主环外面。
+ * 十二点开一道小豁口 + 起点圆点：闭合的环在两条弧都为 0 时看不出从哪儿开始、
+ * 往哪边走。目标是外环上的一个刻度，不是第四段。
  */
-const RING_GAP_DEG = 12;
+const RING_GAP_DEG = 14;
 
 export function energyRingChart({
-  model, size = 116, stroke = 11, label = '', sub = '',
+  model, size = 132, stroke = 12, label = '', sub = '',
 }) {
-  const outerPad = 5;               // 外圈细轨占掉的地方
-  const r = (size - stroke) / 2 - outerPad;
+  const inner = Math.max(4, Math.round(stroke * 0.42));  // 内环细一圈
+  const ringGap = 4;                                     // 两环之间留缝
+  const rOuter = (size - stroke) / 2;
+  const rInner = rOuter - stroke / 2 - ringGap - inner / 2;
   const cx = size / 2;
   const cy = size / 2;
-  const span = 360 - RING_GAP_DEG;  // 实际可用的角度
+  const span = 360 - RING_GAP_DEG;
   const start = -90 + RING_GAP_DEG / 2;
-  const c = 2 * Math.PI * r;
-  const arcLen = (pctVal) => (Math.max(0, Math.min(100, pctVal)) / 100) * (span / 360) * c;
-  const angleOf = (pctVal) => start + (Math.max(0, Math.min(100, pctVal)) / 100) * span;
   const point = (deg, radius) => [
     cx + radius * Math.cos((deg * Math.PI) / 180),
     cy + radius * Math.sin((deg * Math.PI) / 180),
   ];
+  const angleOf = (p) => start + (Math.max(0, Math.min(100, p)) / 100) * span;
 
   const svg = el('svg', {
     viewBox: `0 0 ${size} ${size}`, width: size, height: size, class: 'ring energy-ring',
   });
 
-  /* 底槽只铺到可用角度，不然豁口那儿会露出一截灰 */
-  svg.append(el('circle', {
-    cx, cy, r, fill: 'none', stroke: 'var(--track)', 'stroke-width': stroke,
-    'stroke-dasharray': `${arcLen(100)} ${c}`,
-    transform: `rotate(${start} ${cx} ${cy})`,
-  }));
-
-  for (const segment of model.segments) {
-    const from = arcLen(segment.fromPct);
-    const len = Math.max(0, arcLen(segment.toPct) - from);
-    if (len <= 0) continue;
+  /** 一段弧：从 fromPct 走到 toPct */
+  const arc = (radius, width, cls, fromPct, toPct) => {
+    const c = 2 * Math.PI * radius;
+    const usable = (span / 360) * c;
+    const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
+    const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
+    if (!(len > 0.3)) return;
     svg.append(el('circle', {
-      cx, cy, r, fill: 'none',
-      class: `ring-seg ring-seg-${segment.tone}`,
-      'stroke-width': stroke,
-      // 先空一段跳到起点，再画本段。比给每段单独算路径省事，也不会有接缝
+      cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width,
+      // 先空一段跳到起点再画本段：比给每段单独算路径省事，也不会有接缝
       'stroke-dasharray': `0 ${from} ${len} ${c}`,
       transform: `rotate(${start} ${cx} ${cy})`,
     }));
-  }
+  };
 
-  /* 起点圆点：告诉人这一圈从哪儿开始、往哪边走 */
-  const [sx, sy] = point(start, r);
+  // 底槽只铺到可用角度，否则豁口那儿会露出一截灰
+  arc(rOuter, stroke, 'ring-track', 0, 100);
+  if (model.hasBurn) arc(rInner, inner, 'ring-track', 0, 100);
+
+  arc(rOuter, stroke, 'ring-intake', 0, model.intake.pct);
+  if (model.burn) arc(rInner, inner, 'ring-burn', 0, model.burn.pct);
+  // 消耗还会往前走的那一段，最淡
+  if (model.ahead) arc(rInner, inner, 'ring-ahead', model.ahead.fromPct, model.ahead.pct);
+
+  /* 起点圆点：两条弧都为 0 时，靠它看出这一圈从哪儿开始 */
+  const [sx, sy] = point(start, rOuter);
   svg.append(el('circle', { cx: sx, cy: sy, r: stroke / 5, class: 'ring-origin' }));
 
-  for (const tick of model.ticks) {
-    const deg = angleOf(tick.pct);
-    const half = tick.strong ? stroke * 0.78 : stroke * 0.46;
-    const [x1, y1] = point(deg, r - half);
-    const [x2, y2] = point(deg, r + half);
-    svg.append(el('line', {
-      x1, y1, x2, y2,
-      class: `ring-tick${tick.strong ? ' strong' : ''}`,
-    }));
-  }
-
-  /* 吃得比烧的多：多出来的那截走外圈细轨 */
-  if (model.overflow) {
-    const outerR = r + stroke / 2 + 3;
-    const outerC = 2 * Math.PI * outerR;
-    const outerLen = (Math.min(100, model.overflow.pct) / 100) * (span / 360) * outerC;
-    svg.append(el('circle', {
-      cx, cy, r: outerR, fill: 'none', class: 'ring-overflow',
-      'stroke-dasharray': `${outerLen} ${outerC}`,
-      transform: `rotate(${start} ${cx} ${cy})`,
-    }));
+  /* 目标刻度：横跨外环，比弧本身稍长一点才看得见 */
+  if (model.targetTick) {
+    const deg = angleOf(model.targetTick.pct);
+    const [x1, y1] = point(deg, rOuter - stroke * 0.62);
+    const [x2, y2] = point(deg, rOuter + stroke * 0.62);
+    svg.append(el('line', { x1, y1, x2, y2, class: 'ring-goal-tick' }));
   }
 
   const main = el('text', {
-    x: cx, y: cy - (sub ? 2 : -5), 'text-anchor': 'middle',
-    class: 'ring-label', 'font-size': size / 4.4, 'font-weight': 650,
+    x: cx, y: cy - (sub ? 3 : -5), 'text-anchor': 'middle',
+    class: 'ring-label', 'font-size': size / 5.2, 'font-weight': 650,
   });
   main.textContent = label;
   svg.append(main);
   if (sub) {
     const s = el('text', {
-      x: cx, y: cy + size / 6, 'text-anchor': 'middle',
-      class: 'ring-sub', 'font-size': size / 8.6,
+      x: cx, y: cy + size / 6.4, 'text-anchor': 'middle',
+      class: 'ring-sub', 'font-size': size / 11,
     });
     s.textContent = sub;
     svg.append(s);

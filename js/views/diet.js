@@ -322,9 +322,20 @@ function refreshResults() {
     return;
   }
   mount(nodes.results,
-    // 说清这张表是按什么排的，否则「为什么鳕鱼排在鸡胸肉前面」没人猜得到
+    /*
+     * 说清这张表是按什么排的，否则「为什么鳕鱼排在鸡胸肉前面」没人猜得到。
+     *
+     * 前面那个可关闭的胶囊是**出口**。这一屏是从今日提示的「补蛋白」跳进来的，
+     * 原先唯一的退出方式是往搜索框里打字（打字会顺手清掉 focus）——
+     * 可谁也猜不到这一点，于是人就困在一列鳕鱼牛筋里出不去了。
+     */
     ui.focus ? h('div.result-caption', null,
-      `${FOCUS_LABEL[ui.focus]} · ${all.length} 项，按每 100 kcal 含量从高到低`) : null,
+      h('button.focus-chip', {
+        type: 'button',
+        'aria-label': `退出「${FOCUS_LABEL[ui.focus]}」，回到推荐`,
+        onclick: () => pickFocus(null),
+      }, FOCUS_LABEL[ui.focus], icon('close', 'focus-chip-x')),
+      h('span', null, `${all.length} 项，按每 100 kcal 含量从高到低`)) : null,
     h('div.search-results', null, results.map((f) => {
     const p = per100(f);
     const basis = f.basis === '100ml' ? '100ml' : '100g';

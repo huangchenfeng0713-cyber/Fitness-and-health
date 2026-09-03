@@ -171,8 +171,12 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
   // Apple 健康同步来的毫升不能丢：那是设备数据，仍留在数据页
   assert.match(read('js/core/health-card.js'), /key: 'waterMl'/, '数据页不该丢掉设备记录的饮水');
 
-  // 说明里必须讲清楚这个数不代表全天水分
-  assert.match(card, /饮料、汤、粥、水果和饭菜里的水分同样被人体吸收/, '没有说清这个数的口径');
+  /*
+   * 说明里必须讲清楚这个数不代表全天水分 —— 否则「今天只喝了 3 次」
+   * 会被读成缺水，而那个人可能刚喝完两碗汤。措辞可以改，这件事不能丢。
+   */
+  assert.ok(/汤、粥、水果和饭菜里的/.test(card) && /水分同样算数/.test(card),
+    '没有说清这个数不代表全天水分');
 });
 
 test('搜索先出十条，换词或提示筛选时收回展开；没找到时给反馈入口', () => {
@@ -1546,6 +1550,22 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
  * 打出来的 ↩ 在三个平台上是三种字形、三种基线，和旁边的中文对不齐，
  * 而且它跟着字号走，粗细没法和别的图标统一。
  */
+/*
+ * 从今日提示跳进来的那一列食物必须有看得见的出口。
+ *
+ * 原先唯一的退出方式是往搜索框里打字 —— 打字会顺手清掉 focus。
+ * 可谁也猜不到这一点，于是人就困在一列鳕鱼牛筋里出不去了。
+ */
+test('「补蛋白」这类跳转进来的列表给得出退出', () => {
+  const diet = strip(read('js/views/diet.js'));
+  assert.match(diet, /h\('button\.focus-chip'/, '筛选标签不是可点的，没有出口');
+  assert.match(diet, /onclick: \(\) => pickFocus\(null\)/, '点了标签没有清掉 focus');
+  assert.match(diet, /icon\('close', 'focus-chip-x'\)/,
+    '出口没有画成叉 —— 光是一个标签看不出能关');
+  const css = read('css/app.css');
+  assert.match(css, /\.focus-chip \{[^}]*cursor: pointer/s, '筛选标签看不出能点');
+});
+
 test('图标是画出来的，不是打出来的，而且只有一套', () => {
   const app = strip(read('js/app.js'));
   const icons = read('js/lib/icons.js');
