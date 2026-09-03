@@ -7,10 +7,6 @@
 <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
 <meta name="description" content="同步 Apple 健康数据、记录每日饮食，实时判断热量与蛋白摄入并给出该吃什么、该避开什么的建议。">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<!-- 用 default 而不是 black-translucent：后者会让网页整块伸到状态栏底下，
-     一旦 env(safe-area-inset-top) 没及时算出来（iOS 首帧的老毛病），标题就被
-     状态栏的半透明层压住，看着像蒙了层毛玻璃。default 由系统把网页顶下来，
-     状态栏那条用 theme-color 上色，和 --bg 同一个值，接缝看不出来。 -->
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="健康饮食">
 <title>健康饮食助手</title>
@@ -18,6 +14,7 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/icon-180.png">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/settings-nest.css">
 </head>
 <body>
   <div id="app">
@@ -42,14 +39,10 @@
   </div>
   <noscript><p style="padding:2rem;text-align:center">这个应用需要 JavaScript 才能运行。</p></noscript>
   <script>
-    // Supabase 的 Project URL 与 Publishable key 是浏览器公开配置；数据隔离由 RLS 保证。
     window.__HEALTH_DIET_CLOUD_CONFIG__ = {
       supabaseUrl: 'https://kdkykrshqiamwecohxgw.supabase.co',
       supabasePublishableKey: 'sb_publishable_af7poqn7uHi8-NOFQMllTg_NKCecDuY',
     };
-
-    // 模块没能完整加载时也要留一条自救通道。这里只清 Service Worker 与 Cache Storage，
-    // 用户记录所在的 IndexedDB 不会被碰到。
     (() => {
       let finished = false;
       const screen = document.getElementById('boot-screen');
@@ -57,25 +50,19 @@
       const repair = document.getElementById('boot-repair');
       const note = document.getElementById('boot-note');
       let timer = null;
-
       const showRecovery = (reason = '') => {
         if (finished || !screen?.isConnected) return;
         message.textContent = reason || '启动时间过长。可能是旧版缓存不完整，或还有另一个旧页面占用本地数据库。';
         repair.hidden = false;
         note.hidden = false;
       };
-
       window.__HEALTH_DIET_BOOT__ = {
-        ready() {
-          finished = true;
-          clearTimeout(timer);
-        },
+        ready() { finished = true; clearTimeout(timer); },
         fail(error) {
           const detail = String(error?.message || error || '').slice(0, 180);
           showRecovery(detail ? `启动失败：${detail}` : '启动失败，请修复缓存后重试。');
         },
       };
-
       repair.addEventListener('click', async () => {
         repair.disabled = true;
         repair.textContent = '正在修复…';
@@ -98,7 +85,6 @@
           location.reload();
         }
       });
-
       window.addEventListener('error', (event) => {
         const target = event.target;
         if (target?.tagName === 'SCRIPT' || /module|import|script/i.test(event.message || '')) {
