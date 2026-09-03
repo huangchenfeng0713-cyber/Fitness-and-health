@@ -591,8 +591,14 @@ test('动作列表默认只出前几个，但已选的绝不会被藏起来', ()
   // 收起时把它藏掉，等于选了就撤不掉。
   const training = read('js/views/training.js');
   assert.match(training, /const LIST_PREVIEW = \d+/);
-  assert.match(training, /list\.slice\(LIST_PREVIEW\)\.filter\(\(e\) => chosen\.has\(e\.id\)\)/,
+  assert.match(training, /list\.slice\(LIST_PREVIEW\)\.filter\(\(e\) => kept\.has\(e\.id\)\)/,
     '排在预览之后的已选动作要接到末尾');
+  assert.match(training, /new Set\(\[\.\.\.picked\(\), \.\.\.pending\]\)/,
+    '搜索里勾上的动作清掉搜索词后也要留在列表里');
+  assert.match(training, /leavingSearch && !searchContent\.hidden|const leavingSearch = !searching && !searchContent\.hidden/,
+    '离开搜索时没有把勾选态画回列表');
+  assert.match(training, /if \(leavingSearch\) rerender\(\)/,
+    '离开搜索应当重绘以恢复 ✓，输入过程中不许重绘');
   // 换部位、换器械档位都要收回去，否则换一档还是满屏
   const resets = training.match(/showAllExercises = false/g) || [];
   assert.ok(resets.length >= 2, `切部位和切器械档位都要收回预览：只找到 ${resets.length} 处`);

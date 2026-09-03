@@ -392,11 +392,12 @@ function pickerCard(rerender) {
    * 收起时也不能把已选的动作藏掉：这一行的 ✓ 就是取消选择的入口，
    * 藏起来等于选了就撤不掉。排在第 8 个之后的已选项直接接到末尾，
    * 不打乱原顺序（同部位是按主次排的）。
+   * pending 也算已选：搜到勾上、清掉搜索词回到列表，✓ 必须还在。
    */
-  const chosen = new Set(picked());
+  const kept = new Set([...picked(), ...pending]);
   const visible = showAllExercises
     ? list
-    : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => chosen.has(e.id))];
+    : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => kept.has(e.id))];
 
   /* 全部动作与推荐组合是两种并列视图，文字直接说出当前选择，避免只写“推荐”。 */
   const rec = showRecommend ? recommendFor({
@@ -480,6 +481,12 @@ function pickerCard(rerender) {
   const updateSearch = () => {
     const query = exerciseQuery.trim();
     const searching = Boolean(query);
+    /*
+     * 搜索结果是另建的一批行。勾选改的是那批 DOM 上的 ✓，底下那条栏读 pending。
+     * 清掉搜索词时若不重绘，原先那列还是进搜索前的样子 —— 栏上写着已选，
+     * 列表里仍是 ＋。只在「正在搜 → 不搜了」时整页重绘：输入过程中重绘会丢键盘。
+     */
+    const leavingSearch = !searching && !searchContent.hidden;
     controls.hidden = searching;
     compactSummary.hidden = searching || showRecommend;
     normalContent.hidden = searching;
@@ -490,6 +497,7 @@ function pickerCard(rerender) {
     searchCount.hidden = !searching;
     if (!searching) {
       scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
+      if (leavingSearch) rerender();
       return;
     }
     // 搜索是全库搜的，器械档位这时候不参与筛选，所以列表头整块让位
