@@ -1107,8 +1107,13 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const chart = read('js/lib/energy-ring-chart.js');
   assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
-  assert.match(chart, /tspan/, '刻度文字还是单行，窄屏会裁掉「当」');
-  assert.match(chart, /padX - 8/, '标签没有放进左右边沟，会画出 viewBox');
+  assert.match(dash, /ring-side/, '摄入 / 消耗文字应在环左右，不写进 SVG');
+  assert.doesNotMatch(chart, /tspan/, '标签不该再画进 SVG');
+  assert.match(css, /grid-template-columns: minmax\(4\.5em, 1fr\) auto minmax\(4\.5em, 1fr\)/,
+    '环和左右文字没有排成三列');
+  assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
+  assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,
+    '碳水 / 脂肪克数没有左右对齐、说明居中');
 });
 
 test('短标签不会被从中间断成两截', () => {

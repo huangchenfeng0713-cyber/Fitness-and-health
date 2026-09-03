@@ -121,10 +121,14 @@ function heroCard(advice, targets, derived) {
     h('p.hero-detail', null, status.detail),
 
     /*
-     * 环占满一行。两条刻度各带一个外圈文字，环左右两边都要留出地方。
+     * 环在中间，摄入 / 消耗贴在左右。字走 HTML，不写进 SVG ——
+     * SVG 里的字会跟着环缩放，和卡片上其他 12px 对不齐。
      */
     h('div.hero-body', null,
-      h('div.hero-ring', null, energyRingChart({ model: ringModel }))),
+      h('div.hero-ring', null,
+        ringSide(ringModel, 'eaten'),
+        energyRingChart({ model: ringModel }),
+        ringSide(ringModel, 'burned'))),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -132,6 +136,14 @@ function heroCard(advice, targets, derived) {
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
+}
+
+function ringSide(model, key) {
+  const tick = (model.ticks || []).find((t) => t.key === key);
+  if (!tick) return h('div.ring-side');
+  return h(`div.ring-side.${key}`, null,
+    h('span.ring-side-k', null, tick.label),
+    h('span.ring-side-v', null, String(tick.kcal)));
 }
 
 function heroInfo(derived, targets) {
