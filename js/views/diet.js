@@ -1172,7 +1172,18 @@ function refreshEntries() {
   mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
       h('h3', null, '饮食记录'),
+      /*
+       * ⓘ 排在最后。全应用其余五张卡的说明入口都贴着卡头右边缘，
+       * 只有这一张夹在摘要和「编辑」中间 —— 同一个记号在同一屏上有两个落点，
+       * 眼睛就得每张卡重新找一遍。
+       */
       h('div.card-head-actions', null,
+        h('span.card-tag', null,
+          `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
+        h('button.text-btn', {
+          type: 'button', 'aria-pressed': String(editing),
+          onclick: () => { ui.editEntries = !ui.editEntries; refreshEntries(); },
+        }, editing ? '完成' : '编辑'),
         /*
          * 这张卡只留这一个说明入口。
          *
@@ -1193,13 +1204,7 @@ function refreshEntries() {
                 : null,
             ],
           },
-        ),
-        h('span.card-tag', null,
-          `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
-        h('button.text-btn', {
-          type: 'button', 'aria-pressed': String(editing),
-          onclick: () => { ui.editEntries = !ui.editEntries; refreshEntries(); },
-        }, editing ? '完成' : '编辑'))),
+        ))),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
         mealIcon(meal),

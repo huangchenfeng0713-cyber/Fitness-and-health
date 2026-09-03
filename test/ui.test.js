@@ -393,8 +393,16 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
     '身体部位没有把实际列数交给样式');
   assert.match(training, /style: \{ '--picker-cols': String\(SPLITS\.length\) \}/,
     '动作模式没有把实际列数交给样式');
-  assert.match(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(100% - 24px\)[^}]*margin-inline:\s*auto/s,
-    '红圈内两排控件没有缩窄并居中');
+  /*
+   * 三排分段控件一样宽。
+   *
+   * 这两排曾经写着 `width: calc(100% - 24px); margin-inline: auto`，左右各缩
+   * 12px，而下面「全部 / 推荐」那排齐着卡片内容边 —— 三个做同一件事的开关
+   * 摆出两种宽度，读起来是「谁没对齐」，不是「谁是谁的下一级」。
+   * 「2 + 1」的层级由位置表达（这两排贴在一起、那一排跟着列表头走），不靠缩进。
+   */
+  assert.doesNotMatch(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(/s,
+    '选择动作里的分段控件又缩窄了，三排必须一样宽');
   assert.match(polish, /\.picker-mode-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
     '顶部模式控件仍然过厚');
   assert.match(polish, /\.picker-scope-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,

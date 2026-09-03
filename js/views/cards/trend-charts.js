@@ -8,6 +8,7 @@
 
 import { h, num, shiftDay, formatDuration, todayKey } from '../../lib/utils.js';
 import { infoTip } from '../../lib/ui.js';
+import { icon } from '../../lib/icons.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
@@ -103,8 +104,16 @@ function picker({ label, value, options, onPick }) {
    * 「看什么」「时间段」这两行字不写在界面上：下拉里第一项就写着「热量摄入」
    * 和「7 天」，标签只是把同一件事再说一遍。aria-label 保留，读屏仍念得出来。
    */
+  /*
+   * 箭头是画出来的，不是打出来的。
+   *
+   * 原先这儿是一个 `⌄` 字符 —— 排版字符在三个平台上是三种字形、三种基线，
+   * 粗细跟着字重走，和这一屏其余描边图标（列表行的 ›、返回键）凑不到一块儿。
+   * 用同一个 chevron 转 90°，形只有一份。
+   */
   return h('div.trend-picker-field', null,
-    h('div.trend-select-wrap', null, select, h('span.trend-select-caret', { 'aria-hidden': 'true' }, '⌄')));
+    h('div.trend-select-wrap', null, select,
+      h('span.trend-select-caret', { 'aria-hidden': 'true' }, icon('chevron'))));
 }
 
 /*
