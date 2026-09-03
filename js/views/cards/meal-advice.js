@@ -210,11 +210,9 @@ function flyDrop(pill) {
   anim.finished.then(() => fly.remove(), () => fly.remove());
 
   /*
-   * 落点在整条横幅里荡开。
-   *
-   * 涟漪要被框裁住才像「水在这个容器里回荡」—— 所以铺一层和横幅同样大小、
-   * 同样圆角的裁剪层。波是扁椭圆，沿槽面铺开，不是正圆往外冒。
-   * 这一层也挂在 body 上：横幅本身随时会被重绘换掉。
+   * 落点从数字那儿荡开几圈圆波，被横幅圆角裁住。
+   * 不要扁椭圆、不要描边圈 —— 那会在数字上套一个黑框。
+   * 这一层挂在 body 上：横幅本身随时会被重绘换掉。
    */
   const wave = document.createElement('span');
   wave.className = 'water-wave';
@@ -224,14 +222,13 @@ function flyDrop(pill) {
     width: `${pillBox.width}px`, height: `${pillBox.height}px`,
     borderRadius: getComputedStyle(pill).borderRadius,
   });
-  // 波心落在数字上，半径取到最远那个角，才铺得满整条
   const originX = b.left + b.width / 2 - pillBox.left;
   const originY = b.top + b.height / 2 - pillBox.top;
   const reach = Math.ceil(Math.hypot(
     Math.max(originX, pillBox.width - originX),
     Math.max(originY, pillBox.height - originY),
   ));
-  const rings = [0, 120, 240].map((delay, i) => {
+  const rings = [0, 80, 160, 240].map((delay, i) => {
     const ring = document.createElement('i');
     ring.className = 'water-ripple';
     Object.assign(ring.style, {
@@ -240,33 +237,19 @@ function flyDrop(pill) {
     });
     wave.append(ring);
     return ring.animate(
-      [{ transform: 'translate(-50%, -50%) scale(.05, .12)', opacity: 0.58 - i * 0.1 },
-        { transform: `translate(-50%, -50%) scale(${1.08 + i * 0.08}, ${0.46 + i * 0.1})`, opacity: 0 }],
-      { duration: 760 + i * 70, delay: LAND_MS + delay, easing: 'cubic-bezier(.16,.72,.22,1)', fill: 'both' },
+      [{ transform: 'translate(-50%, -50%) scale(0)', opacity: 0.5 - i * 0.08 },
+        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
+      { duration: 680 + i * 60, delay: LAND_MS + delay, easing: 'cubic-bezier(.12,.72,.22,1)', fill: 'both' },
     );
   });
-  const sheen = document.createElement('i');
-  sheen.className = 'water-sheen';
-  Object.assign(sheen.style, {
-    left: `${originX}px`, top: `${originY}px`,
-    width: `${Math.max(pillBox.width * 1.4, 80)}px`,
-    height: `${pillBox.height * 1.8}px`,
-  });
-  wave.append(sheen);
-  const gleam = sheen.animate(
-    [{ transform: 'translate(-50%, -50%) scale(.2, .55)', opacity: 0 },
-      { transform: 'translate(-18%, -50%) scale(.75, .9)', opacity: 0.42, offset: 0.3 },
-      { transform: 'translate(18%, -50%) scale(1.2, .7)', opacity: 0 }],
-    { duration: 920, delay: LAND_MS - 30, easing: 'ease-out', fill: 'both' },
-  );
   const wash = wave.animate(
     [{ backgroundColor: 'transparent' },
-      { backgroundColor: 'var(--accent-soft)', offset: 0.28 },
+      { backgroundColor: 'var(--accent-soft)', offset: 0.22 },
       { backgroundColor: 'transparent' }],
-    { duration: 900, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
+    { duration: 720, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
   );
   document.body.append(wave);
-  Promise.allSettled([...rings, gleam, wash].map((x) => x.finished)).then(() => wave.remove());
+  Promise.allSettled([...rings, wash].map((x) => x.finished)).then(() => wave.remove());
 
   /*
    * 文字跟着水面走：整句先抬再沉，数字稍晚一拍，像波从数字那儿穿过字面。

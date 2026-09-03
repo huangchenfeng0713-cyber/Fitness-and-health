@@ -1621,6 +1621,9 @@ test('喝水的动画不挂在会被重绘换掉的节点上，撤销退整串',
     '又把位移写回 CSS 关键帧了');
   assert.match(card, /querySelector\('\.water-label'\)/, '点饮水后文字没有跟着水波荡');
   assert.match(card, /skewX/, '文字没有水波那种左右荡');
+  assert.doesNotMatch(card, /water-sheen|scale\(\.05, \.12\)/,
+    '数字周围不要再套扁椭圆');
+  assert.doesNotMatch(read('css/app.css'), /\.water-ripple[^}]*border:/, '涟漪不要描边圈');
 
   assert.match(card, /const BURST_GAP_MS/, '没有「一串连点」的判断');
   assert.match(card, /now - lastTapAt > BURST_GAP_MS/,
