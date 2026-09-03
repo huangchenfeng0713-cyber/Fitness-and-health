@@ -1343,6 +1343,13 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
    */
   assert.match(utils, /rim\.setAttribute\('class', 'info-tip-rim'\)/, '说明记号没有外圈');
   assert.match(utils, /mark\.append\(rim, stem, dot\)/, '外圈没有画进去');
+  /*
+   * 那一点只填不描。整个记号在 .info-tip-mark 上统一给了 stroke，
+   * 圆点跟着被描一圈，实际半径是 r + 描边的一半 —— 比下面那一竖粗出一圈。
+   */
+  assert.match(utils, /dot\.setAttribute\('class', 'info-tip-dot'\)/, '那一点没有单独的类');
+  assert.match(read('css/app.css'), /\.info-tip-dot \{[^}]*stroke: none/s,
+    '那一点还跟着统一描边走，会比竖笔粗一圈');
   const size = Number(read('css/app.css').match(/\.info-tip-mark \{[^}]*width: ([\d.]+)px/s)[1]);
   assert.ok(size >= 13, `记号只有 ${size}px，套上外圈之后里面那个 i 就糊了`);
   // 位置能调，「点在竖笔上方」这件事不能变，所以比大小而不是比字面量
@@ -1577,6 +1584,16 @@ test('喝水的动画不挂在会被重绘换掉的节点上，撤销退整串',
   assert.match(card, /flyDrop\(document\.querySelector\('\.water-row \.water-pill'\)\)/,
     '重绘之后没有重新查节点，ev.currentTarget 那时已经离开文档了');
   assert.match(card, /typeof drop\.animate !== 'function'/, '没有给不支持 WAAPI 的环境兜底');
+  /*
+   * 涟漪要被横幅裁住才像「水在这个容器里回荡」，所以裁剪层要拿到
+   * 横幅的实际尺寸和圆角；波心落在数字上，半径取到最远那个角。
+   */
+  assert.match(card, /borderRadius: getComputedStyle\(pill\)\.borderRadius/,
+    '涟漪没有跟着横幅的圆角裁，会露出方角');
+  assert.match(card, /Math\.hypot\(/, '涟漪半径没有取到最远的角，铺不满整条');
+  // 飞的是那滴水本身，不是凭空多出来一个副本
+  assert.match(card, /drop\.animate\(\[\s*\{ opacity: 1 \}/,
+    '原地那滴没有让开，看着像复制了一个');
   // 位移用 JS 算成像素传进去，不往关键帧里塞 calc(var(...))
   assert.doesNotMatch(read('css/app.css'), /@keyframes water-flow/,
     '又把位移写回 CSS 关键帧了');

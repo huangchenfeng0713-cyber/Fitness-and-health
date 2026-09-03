@@ -444,6 +444,8 @@ html, body { height: 100%; overflow: hidden; }
 .info-tip > summary:active { opacity: 1; }
 /* 外圈只描不填，i 那两笔跟着 currentColor —— 整个记号仍然是淡的 */
 .info-tip-rim { fill: none; }
+/* 那一点只填不描：跟着统一描边走的话，它会比下面那一竖粗出一圈 */
+.info-tip-dot { stroke: none; }
 .info-tip-mark {
   /*
    * 记号本身要淡，但得认得出是个 i：8px 的框里那个点不到一个像素，
@@ -1433,10 +1435,17 @@ body.sheet-open {
   position: fixed; z-index: 60; pointer-events: none;
   color: var(--muted); fill: currentColor; stroke: none;
 }
-.water-ripple {
-  position: fixed; z-index: 59; pointer-events: none;
-  width: 26px; height: 26px; margin: 0; border-radius: 50%;
-  border: 1.5px solid var(--accent);
+/*
+ * 涟漪在整条横幅里回荡：一层和横幅同样大小、同样圆角的裁剪层，
+ * 两圈波从数字那儿扩出去，撞到边就没了 —— 这样才像水在这个容器里荡，
+ * 而不是凭空冒出来一个圆。
+ */
+.water-wave {
+  position: fixed; z-index: 59; pointer-events: none; overflow: hidden;
+}
+.water-wave > i {
+  position: absolute; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 85%, transparent);
 }
 
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
