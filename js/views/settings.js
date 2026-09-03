@@ -58,11 +58,17 @@ function rhythmPicker(rerender) {
   // 选项要先挂进 select 再设 value：插入时浏览器会按 selectedIndex 重算
   select.value = current;
 
+  /*
+   * 标题下面只留一句。
+   *
+   * 原先是两段：「主卡上『热量完成 45%』拿来和什么比」加上当前口径的说明，
+   * 前一句在讲这个开关是干嘛的、后一句在讲选中的那档是怎么回事 ——
+   * 读的人得把两句拼起来才知道现在到底按什么算。合成一句就完了。
+   */
   return h('div.setting-choice', null,
     h('div.setting-choice-row', null,
       h('div.setting-choice-head', null,
-        h('strong', null, '进食节奏参照'),
-        h('p', null, '主卡上「热量完成 45%」拿来和什么比。')),
+        h('strong', null, '进食节奏参照')),
       select),
     h('p.setting-choice-desc', null, chosen.desc),
     // 退回这件事必须说出来：否则用户以为看的是自己的节奏，其实是指南的
@@ -88,8 +94,7 @@ function toggleCard(rerender) {
         h('h3', null, '计算方式'),
         h('p.card-desc', null, '每日目标怎么算、进度和什么比。')),
       infoTip('查看计算方式说明',
-        h('p', null, '进食节奏只影响主卡上那句「这个钟点大约该吃到多少」，不改动热量目标。'),
-        h('p', null, '这两项都只改之后显示的目标，不会动到已经记下的饮食。'))),
+        h('p', null, '这两项只改之后显示的目标和参照，不会动到已经记下的饮食。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
     rhythmPicker(rerender),

@@ -99,15 +99,16 @@ let undoTimer = null;
 /*
  * 刚点完那一下要放一次「水滴流到数字上」的动画。
  *
- * 用一个很短的时间窗而不是布尔量。一次点击会引发**两次**渲染 ——
- * saveHealthDay 里的 emit 一次、await 之后的 rerender 又一次 ——
- * 布尔量会被第一次渲染取走，而那个节点马上被第二次渲染换掉，
- * 动画挂在一个已经离开文档的节点上，什么也看不到。
- * 时间窗让这几百毫秒内的渲染都能接上，真正播起来之后立刻关掉，
- * 免得撤销窗口那五秒里后台落库把它又放一遍。
+ * 这个标记**只在动画真的跑起来那一刻才清掉**，不设时限。
+ *
+ * 一次点击会引发两次渲染（saveHealthDay 里的 emit 一次、await 之后的
+ * rerender 又一次），第一个节点马上被第二个换掉，所以不能在渲染时就把
+ * 标记取走 —— 得等 rAF 里确认节点还在文档上、动画确实挂上去了再清。
+ *
+ * 也不能用时间窗：写库慢一点（真机上 IndexedDB 比无头浏览器慢得多），
+ * 渲染就落在窗口外面，动画从第二次起再也不出现 —— 实机上就是这么表现的。
  */
-const FLOW_WINDOW_MS = 500;
-let flowUntil = 0;
+let pendingFlow = false;
 
 async function bumpWater(delta) {
   const next = Math.max(0, Math.min(MAX_WATER_TAPS, waterTaps() + delta));
@@ -145,14 +146,10 @@ export function waterCard(rerender) {
       h('h3', null, '喝水'),
       // 次数已经写在下面那条里了，标题右边再挂一个「已记录 5 次」是同一个数写两遍
       infoTip('查看饮水说明',
-        h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— '
-          + '饮料、汤、粥、水果和饭菜里的水分同样被人体吸收，'
-          + '单算白水没法代表全天水分够不够。'),
-        h('p', null, '一般成人每天', h('strong', null, '直接饮水'),
-          `参考约 ${goal || 1700} ml（女性约 1500 ml），`
-          + '把食物和汤水算进去，全天总水分约 2700–3000 ml。运动、高温和出汗会明显改变需要量。'),
-        h('p', null, '次数只代表主动饮水这个行为，不代表精确的总水分摄入。'
-          + '真正好用的判断是口渴感、尿色和一天下来的整体状态，不是有没有恰好喝满某个数字。'),
+        h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— 汤、粥、水果和饭菜里的'
+          + '水分同样算数，光算白水说明不了全天够不够。'),
+        h('p', null, `一般成人每天直接饮水约 ${goal || 1700} ml，`
+          + '但更好用的判断是口渴感和尿色，不是有没有恰好喝满某个数字。'),
         deviceMl > 0
           ? h('p', null, `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。`)
           : null)),
@@ -161,9 +158,9 @@ export function waterCard(rerender) {
       h('button.water-add', {
         type: 'button', 'aria-label': `记录一次饮水，当前 ${taps} 次`,
         onclick: async (ev) => {
-          flowUntil = Date.now() + FLOW_WINDOW_MS;
+          pendingFlow = true;
           const r = await runLocalAction(ev.currentTarget, () => bumpWater(1), '记录饮水');
-          if (r.ok) { openUndoWindow(rerender); rerender(); } else { flowUntil = 0; }
+          if (r.ok) { openUndoWindow(rerender); rerender(); } else { pendingFlow = false; }
         },
       }, icon('plus'), '饮水')));
 }
@@ -197,15 +194,23 @@ function waterPill(taps, justLogged, rerender) {
       ]
       : null);
 
-  if (Date.now() < flowUntil) {
+  if (pendingFlow) {
     requestAnimationFrame(() => {
-      if (!pill.isConnected || Date.now() >= flowUntil) return;
+      // 这一版渲染已经被下一版换掉了，等下一版自己来挂
+      if (!pill.isConnected || !pendingFlow) return;
       const from = drop.getBoundingClientRect();
       const to = count.getBoundingClientRect();
       const dx = to.left + to.width / 2 - (from.left + from.width / 2);
       if (!(dx > 0)) return;
-      flowUntil = 0;
-      pill.style.setProperty('--flow-x', `${Math.round(dx)}px`);
+      pendingFlow = false;
+      /*
+       * 关键帧里不写 calc(var(--flow-x) * .55)：Safari 对关键帧里嵌
+       * 自定义属性的 calc 支持不稳，整条关键帧失效就只剩第一帧。
+       * 几个途中位置在这儿算成具体像素，关键帧里只 var() 不运算。
+       */
+      for (const [name, ratio] of [['', 1], ['-a', 0.08], ['-b', 0.52], ['-c', 0.93]]) {
+        pill.style.setProperty(`--flow-x${name}`, `${Math.round(dx * ratio)}px`);
+      }
       pill.classList.add('is-flowing');
     });
   }

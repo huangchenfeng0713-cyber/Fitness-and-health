@@ -512,63 +512,33 @@ html, body { height: 100%; overflow: hidden; }
 .ring-sub { fill: var(--faint); }
 
 /*
- * 热量圆环：一个绿色，三个密度。
+ * 热量圆环：两条同心弧，外环摄入、内环消耗。
  *
- * 区分的担子在**密度**和**位置**上，不在色相上 —— 实心是已经吃到的，
- * 半透明是欠着的缺口，最淡的是还没走到的。密度递减的顺序和「已经发生」
- * 对齐，人眼不用查图例也知道哪段更实。
- *
- * 三档都挂在同一个 --accent 上，暗色模式跟着底色自动走，不必写两套。
- * 缺口那档取 0.45 而不是更低：它和「未到达」只隔一级透明度，
- * 小尺寸或低亮度屏上容易压得太近，再配一条内侧细描边把它顶出来。
+ * 区分靠的是**位置**（两条弧谁长谁短）而不是色相，也不是三档明度 ——
+ * 上一版把一圈切成四段、用同一个绿的三个密度区分，摄入为 0 时那条锚定
+ * 视线的实心弧根本不存在，整圈只剩三层几乎一样的淡绿。
+ * 而摄入为 0 恰恰是每天早上打开时的样子。
  */
-.ring-seg { stroke-linecap: butt; }
-.ring-seg-solid { stroke: var(--accent); }
-.ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
-.ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
-/*
- * 盈余 / 赤字段用纹理，不是第四级明度：那是计划里主动给的额度，
- * 和「欠着的」性质不同。再降一档透明度只会和缺口打架。
- */
-.ring-seg-dashed {
-  stroke: color-mix(in srgb, var(--accent) 34%, transparent);
-  stroke-dashoffset: 0;
-  mask: repeating-linear-gradient(115deg,
-    #000 0 3px, transparent 3px 6px);
-}
-/* 起点圆点：闭合的环在摄入为 0 时看不出从哪儿开始、往哪边走 */
+.ring-track { stroke: var(--track); }
+.ring-seg, .ring-track, .ring-intake, .ring-burn, .ring-ahead { stroke-linecap: butt; }
+.ring-intake { stroke: var(--accent); }
+/* 内环比外环淡一档：外环是「我做的事」，内环是「身体在烧」 */
+.ring-burn { stroke: color-mix(in srgb, var(--accent) 62%, transparent); }
+/* 消耗还会往前走的那一段，最淡 */
+.ring-ahead { stroke: color-mix(in srgb, var(--accent) 24%, transparent); }
+/* 起点圆点：两条弧都为 0 时靠它看出这一圈从哪儿开始 */
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-/*
- * 刻度线只负责切分，不表达量。长实线是当前消耗，短淡线是预计全天消耗；
- * 两条之间的距离就是「今天接下来还会再烧掉多少」。
- */
-.ring-tick { stroke: var(--faint); stroke-width: 1.4; stroke-linecap: round; opacity: .55; }
-.ring-tick.strong { stroke: var(--text); stroke-width: 2; opacity: .85; }
-/* 吃得比烧的多：多出来的那截走外圈细轨，用位置而不是颜色表达翻转 */
-.ring-overflow {
-  stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
-  opacity: .85;
-}
+/* 目标刻度横跨外环，用中性色 —— 它是参照，不是又一段进度 */
+.ring-goal-tick { stroke: var(--text); stroke-width: 2; stroke-linecap: round; opacity: .8; }
 
-/* 占满一行。挤在 116px 的环底下会折成四行，把下面的营养条整个顶下去 */
-.ring-legend {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px;
-  margin: 2px 0 10px; font-size: var(--fs-caption); color: var(--muted);
+/* 图例长在数字上，不单独占一行 */
+.energy-swatch {
+  width: 8px; height: 8px; border-radius: 2px; flex: none;
+  background: currentColor; margin-right: 6px;
 }
-.ring-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
-.ring-swatch {
-  width: 9px; height: 9px; border-radius: 2px; flex: none;
-  /* 图例块用 background 上色，环上用 stroke —— 同一档密度两处写法 */
-  background: currentColor;
-}
-.ring-swatch.ring-seg-solid { color: var(--accent); }
-.ring-swatch.ring-seg-mid { color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.ring-swatch.ring-seg-faint { color: color-mix(in srgb, var(--accent) 16%, transparent); }
-.ring-swatch.ring-seg-dashed {
-  color: color-mix(in srgb, var(--accent) 34%, transparent);
-  background: repeating-linear-gradient(115deg,
-    currentColor 0 2px, transparent 2px 4px);
-}
+.energy-swatch.ring-intake-swatch { color: var(--accent); }
+.energy-swatch.ring-burn-swatch { color: color-mix(in srgb, var(--accent) 62%, transparent); }
+
 .hero-macros { flex: 1; display: grid; gap: 10px; min-width: 0; }
 
 .mini-macro-top { display: flex; align-items: baseline; gap: 4px; font-size: var(--fs-footnote); margin-bottom: 4px; }
@@ -625,7 +595,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* 能量收支：和圆环并排，一行一个键值对 */
 .energy-block { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.energy-line { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.energy-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.energy-line .energy-key { flex: 1; }
 .energy-key { font-size: var(--fs-footnote); color: var(--muted); white-space: nowrap; }
 .energy-val {
   font-size: var(--fs-body); font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -1390,36 +1361,66 @@ body.sheet-open {
 .water-add { color: var(--accent); }
 .water-drop { width: 17px; height: 17px; flex: none; fill: currentColor; stroke: none; }
 .water-sep { opacity: .5; }
-.water-count { font-variant-numeric: tabular-nums; color: var(--text); }
+.water-count {
+  display: inline-block; position: relative;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
 /*
- * 记完一次：水滴往数字上流，数字接住之后弹一下。
+ * 记完一次：一滴水甩到数字上，被数字接住。
  *
- * 位移距离由 JS 量出来写进 --flow-x —— 文案长度会变（撤销挂上去那几秒
- * 整条会变宽），写死一个像素值必然有一次是错的。
- * 数字那一下延后到水滴快到的时候，两个动作才连得上。
+ * 让它像水而不是像一个滑过去的图标，靠的是**形变**：
+ * 起手先沉一下蓄势，飞行段沿运动方向拉长（真实的水滴就是这样），
+ * 落点摊开压扁，同时数字被撑开一下再回弹，外面荡一圈涟漪。
+ * 匀速平移加淡出只会像个图标在滑轨上走。
+ *
+ * 途中几个横坐标由 JS 算成具体像素写进 --flow-x-a/b/c ——
+ * 关键帧里不做 calc(var(...) * n)，Safari 对那个支持不稳，
+ * 整条关键帧一失效就只剩第一帧。
  */
 .water-pill { position: relative; }
 .water-pill.is-flowing .water-drop {
-  animation: water-flow .52s cubic-bezier(.4, 0, .3, 1) both;
+  animation: water-flow .62s cubic-bezier(.55, .02, .3, 1) both;
+  transform-origin: 50% 50%;
+  /* 从「已记录」几个字上面飞过去，不从字中间穿过 */
+  position: relative; z-index: 2;
 }
 .water-pill.is-flowing .water-count {
-  animation: water-catch .34s ease-out .3s both;
+  animation: water-catch .46s cubic-bezier(.3, 1.4, .5, 1) .34s both;
+}
+.water-pill.is-flowing .water-count::after {
+  content: ''; position: absolute; inset: -4px -6px;
+  border-radius: 50%; border: 1.5px solid var(--accent);
+  animation: water-ripple .5s ease-out .36s both;
+  pointer-events: none;
 }
 @keyframes water-flow {
-  0% { transform: translateX(0) scale(1); opacity: 1; }
-  62% { transform: translateX(calc(var(--flow-x, 0px) * .82)) scale(.72); opacity: .85; }
-  100% { transform: translateX(var(--flow-x, 0px)) scale(.3); opacity: 0; }
+  /* 蓄势：先往回缩一点、微微下沉 */
+  0% { transform: translate(0, 0) scale(1, 1); opacity: 1; }
+  14% { transform: translate(var(--flow-x-a, 0px), 3px) scale(.82, 1.18); opacity: 1; }
+  /* 飞行：沿运动方向拉长，略微抛起 */
+  52% { transform: translate(var(--flow-x-b, 0px), -11px) scale(1.55, .66); opacity: .95; }
+  /* 落点：摊开压扁 */
+  84% { transform: translate(var(--flow-x-c, 0px), -2px) scale(1.15, .8); opacity: .75; }
+  100% { transform: translate(var(--flow-x, 0px), 0) scale(.4, .34); opacity: 0; }
 }
 @keyframes water-catch {
   0% { transform: scale(1); color: var(--text); }
-  45% { transform: scale(1.34); color: var(--accent); }
+  38% { transform: scale(1.3); color: var(--accent); }
+  70% { transform: scale(.95); color: var(--accent); }
   100% { transform: scale(1); color: var(--text); }
+}
+@keyframes water-ripple {
+  0% { transform: scale(.45); opacity: .55; }
+  100% { transform: scale(2.1); opacity: 0; }
 }
 /* 动画只是锦上添花：关掉动效的人照样看得到数字加一 */
 @media (prefers-reduced-motion: reduce) {
   .water-pill.is-flowing .water-drop,
-  .water-pill.is-flowing .water-count { animation: none; }
+  .water-pill.is-flowing .water-count,
+  .water-pill.is-flowing .water-count::after { animation: none; }
+  .water-pill.is-flowing .water-count::after { content: none; }
 }
+
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
 .water-undo {
   border: 0; background: none; padding: 0; cursor: pointer;

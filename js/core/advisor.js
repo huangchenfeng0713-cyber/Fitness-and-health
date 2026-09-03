@@ -649,7 +649,7 @@ export function buildInsights({
   } else if (proteinShort > 10) {
     const eq = proteinEquivalent(proteinShort);
     add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,
-      `目标依据：${targets.proteinBasis}。`,
+      `${targets.proteinBasis}。`,
       `蛋白量约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋；这只是蛋白换算，实际选择还要计入总热量、脂肪和个人饮食偏好，可分到后续餐次完成。`);
   } else if (gaps.protein.pct >= 100) {
     add('good', INSIGHT_PRIORITY.energy, '蛋白已达标',

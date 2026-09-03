@@ -4,7 +4,7 @@ import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
-import { energyRing, ringLegend } from '../core/energy-ring.js';
+import { energyRing } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
@@ -117,8 +117,8 @@ function heroCard(advice, targets, derived) {
       h('div.hero-ring', null,
         energyRingChart({
           model: ringModel,
-          size: 116,
-          stroke: 11,
+          size: 132,
+          stroke: 12,
           /*
            * 圈里写「余量」而不是「已摄入」：已摄入这个数在图例那一行
            * 已经写着了，而人打开这张卡最想知道的是「还能吃多少」。
@@ -127,7 +127,6 @@ function heroCard(advice, targets, derived) {
           sub: '余量 kcal',
         })),
       energyBalance(derived, ringModel)),
-    ringLegendRow(ringModel),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -138,28 +137,20 @@ function heroCard(advice, targets, derived) {
 }
 
 /*
- * 图例。只列这一圈真的画出来的段（ringLegend 把关）——
- * 没有设备数据的人不该看到两条永远不出现的图例。
- */
-function ringLegendRow(model) {
-  const items = ringLegend(model);
-  if (items.length < 2) return null;
-  return h('div.ring-legend', null, items.map((x) => h('span.ring-legend-item', null,
-    h('i', { class: `ring-swatch ring-seg-${x.tone}`, 'aria-hidden': 'true' }),
-    x.label)));
-}
-
-/*
- * 环右边那几个数。每一行都对得上环上的一处 ——
- * 已摄入是实心弧，当前消耗是那条长实线，缺口 / 盈余是它们之间的那一段。
- * 对不上环的数不放这儿：读的人会以为图上漏画了什么。
+ * 环右边那几个数。
+ *
+ * 每一行前面挂一小块色标，和环上那条弧同色 —— 图例就长在数字上，
+ * 不再单独占一行。分开放的时候，人得先看图例、再回到环、再回到数字，
+ * 而这三样说的是同一件事。
  */
 function energyBalance(derived, model) {
-  const line = (k, v) => h('div.energy-line', null,
-    h('span.energy-key', null, k), h('strong.energy-val', null, v));
-  const rows = [line('已摄入', `${num(model.eaten)} kcal`)];
+  const line = (k, v, swatch) => h('div.energy-line', null,
+    swatch ? h('i', { class: `energy-swatch ${swatch}`, 'aria-hidden': 'true' }) : null,
+    h('span.energy-key', null, k),
+    h('strong.energy-val', null, v));
+  const rows = [line('已摄入', `${num(model.eaten)} kcal`, 'ring-intake-swatch')];
   rows.push(model.hasBurn
-    ? line('当前消耗', `${num(model.burned)} kcal`)
+    ? line('当前消耗', `${num(model.burned)} kcal`, 'ring-burn-swatch')
     : line('预计消耗', `${num(model.projected || model.target || 0)} kcal`));
   if (model.hasBurn) {
     rows.push(model.surplus > 0
@@ -201,9 +192,12 @@ function heroInfo(derived, targets) {
       targets.rateKgPerWeek === 0
         ? ' · 计划体重维持不变'
         : ` · 计划体重 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`),
+    // 维持目标时「相当于每天多吃 0 kcal」是句废话，只留后半句
     h('p', null,
-      `相当于每天${targets.dailyDelta >= 0 ? '多' : '少'}吃 ${num(Math.abs(targets.dailyDelta))} kcal。`
-      + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
+      Number(targets.dailyDelta) !== 0
+        ? `相当于每天${targets.dailyDelta > 0 ? '多' : '少'}吃 ${num(Math.abs(targets.dailyDelta))} kcal。`
+          + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'
+        : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
