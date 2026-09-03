@@ -210,10 +210,10 @@ function flyDrop(pill) {
   anim.finished.then(() => fly.remove(), () => fly.remove());
 
   /*
-   * 落点在整条横幅里荡开一圈。
+   * 落点在整条横幅里荡开。
    *
    * 涟漪要被框裁住才像「水在这个容器里回荡」—— 所以铺一层和横幅同样大小、
-   * 同样圆角的裁剪层，两圈波从数字那儿扩出去，撞到边就没了。
+   * 同样圆角的裁剪层。波是扁椭圆，沿槽面铺开，不是正圆往外冒。
    * 这一层也挂在 body 上：横幅本身随时会被重绘换掉。
    */
   const wave = document.createElement('span');
@@ -231,34 +231,66 @@ function flyDrop(pill) {
     Math.max(originX, pillBox.width - originX),
     Math.max(originY, pillBox.height - originY),
   ));
-  const rings = [0, 170].map((delay) => {
+  const rings = [0, 120, 240].map((delay, i) => {
     const ring = document.createElement('i');
+    ring.className = 'water-ripple';
     Object.assign(ring.style, {
       left: `${originX}px`, top: `${originY}px`,
       width: `${reach * 2}px`, height: `${reach * 2}px`,
     });
     wave.append(ring);
     return ring.animate(
-      [{ transform: 'translate(-50%, -50%) scale(.04)', opacity: .55 },
-        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
-      { duration: 720, delay: LAND_MS + delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' },
+      [{ transform: 'translate(-50%, -50%) scale(.05, .12)', opacity: 0.58 - i * 0.1 },
+        { transform: `translate(-50%, -50%) scale(${1.08 + i * 0.08}, ${0.46 + i * 0.1})`, opacity: 0 }],
+      { duration: 760 + i * 70, delay: LAND_MS + delay, easing: 'cubic-bezier(.16,.72,.22,1)', fill: 'both' },
     );
   });
-  // 整条横幅还跟着泛一下淡绿，像水漫过去
+  const sheen = document.createElement('i');
+  sheen.className = 'water-sheen';
+  Object.assign(sheen.style, {
+    left: `${originX}px`, top: `${originY}px`,
+    width: `${Math.max(pillBox.width * 1.4, 80)}px`,
+    height: `${pillBox.height * 1.8}px`,
+  });
+  wave.append(sheen);
+  const gleam = sheen.animate(
+    [{ transform: 'translate(-50%, -50%) scale(.2, .55)', opacity: 0 },
+      { transform: 'translate(-18%, -50%) scale(.75, .9)', opacity: 0.42, offset: 0.3 },
+      { transform: 'translate(18%, -50%) scale(1.2, .7)', opacity: 0 }],
+    { duration: 920, delay: LAND_MS - 30, easing: 'ease-out', fill: 'both' },
+  );
   const wash = wave.animate(
     [{ backgroundColor: 'transparent' },
-      { backgroundColor: 'var(--accent-soft)', offset: .3 },
+      { backgroundColor: 'var(--accent-soft)', offset: 0.28 },
       { backgroundColor: 'transparent' }],
-    { duration: 820, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
+    { duration: 900, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
   );
   document.body.append(wave);
-  Promise.allSettled([...rings, wash].map((x) => x.finished)).then(() => wave.remove());
+  Promise.allSettled([...rings, gleam, wash].map((x) => x.finished)).then(() => wave.remove());
 
-  /* 数字被撑开一下再回弹 —— 它是接住这滴水的那个 */
+  /*
+   * 文字跟着水面走：整句先抬再沉，数字稍晚一拍，像波从数字那儿穿过字面。
+   * 节点是重绘之后新查到的，这段动画能跑完；下一次点才会再换节点。
+   */
+  const label = pill.querySelector('.water-label');
+  if (label && typeof label.animate === 'function') {
+    label.animate(
+      [{ transform: 'translateY(0) skewX(0deg)' },
+        { transform: 'translateY(-3.5px) skewX(-8deg)', offset: 0.18 },
+        { transform: 'translateY(2.6px) skewX(6deg)', offset: 0.38 },
+        { transform: 'translateY(-1.6px) skewX(-3.5deg)', offset: 0.58 },
+        { transform: 'translateY(1px) skewX(2deg)', offset: 0.78 },
+        { transform: 'translateY(0) skewX(0deg)' }],
+      { duration: 760, delay: LAND_MS - 40, easing: 'ease-out' },
+    );
+  }
   count.animate(
-    [{ transform: 'scale(1)' }, { transform: 'scale(1.32)', offset: .36 },
-      { transform: 'scale(.95)', offset: .68 }, { transform: 'scale(1)' }],
-    { duration: 470, delay: LAND_MS - 40, easing: 'ease-out' },
+    [{ transform: 'scale(1) translateY(0)' },
+      { transform: 'scale(1.3) translateY(-4px)', offset: 0.3 },
+      { transform: 'scale(.94) translateY(2px)', offset: 0.55 },
+      { transform: 'scale(1.08) translateY(-1px)', offset: 0.76 },
+      { transform: 'scale(1) translateY(0)' }],
+    { duration: 640, delay: LAND_MS - 20, easing: 'ease-out' },
   );
 }
 
@@ -318,7 +350,7 @@ function waterPill(taps, justLogged, rerender) {
   const count = h('b.water-count', null, String(taps));
   return h('div.water-pill', { role: 'status', 'aria-live': 'polite' },
     dropletIcon(),
-    h('span', null, '已记录 ', count, ' 次饮水'),
+    h('span.water-label', null, '已记录 ', count, ' 次饮水'),
     justLogged
       ? [
         h('span.water-sep', { 'aria-hidden': 'true' }, '·'),

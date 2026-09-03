@@ -1606,6 +1606,8 @@ test('喝水的动画不挂在会被重绘换掉的节点上，撤销退整串',
   // 位移用 JS 算成像素传进去，不往关键帧里塞 calc(var(...))
   assert.doesNotMatch(read('css/app.css'), /@keyframes water-flow/,
     '又把位移写回 CSS 关键帧了');
+  assert.match(card, /querySelector\('\.water-label'\)/, '点饮水后文字没有跟着水波荡');
+  assert.match(card, /skewX/, '文字没有水波那种左右荡');
 
   assert.match(card, /const BURST_GAP_MS/, '没有「一串连点」的判断');
   assert.match(card, /now - lastTapAt > BURST_GAP_MS/,
