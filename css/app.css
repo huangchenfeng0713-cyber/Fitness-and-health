@@ -196,6 +196,16 @@ button, .tab, summary, [role="button"] {
 }
 
 html { -webkit-text-size-adjust: 100%; }
+/*
+ * hidden 属性要真的管用。
+ *
+ * 只要元素自己写了 display（flex / grid / block），hidden 就被压掉了 ——
+ * 搜索框那个清除键就是这么变成常显的：JS 明明写了 `hidden: !value`，
+ * 而 `.search-clear { display: grid }` 让它一直站在那儿。
+ * 之前是每碰到一个就在旁边补一条 `.xxx[hidden] { display: none }`，
+ * 补到第十一处仍然会漏下一个。一条全局的就够了。
+ */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -313,7 +323,6 @@ html, body { height: 100%; overflow: hidden; }
   -webkit-backdrop-filter: saturate(145%) blur(18px);
   backdrop-filter: saturate(145%) blur(18px);
 }
-.actionbar-slot[hidden] { display: none; }
 .actionbar-slot .select-bar {
   position: static;
   margin: 0;
@@ -363,7 +372,6 @@ html, body { height: 100%; overflow: hidden; }
   background: rgba(7, 16, 14, .32); opacity: 0; pointer-events: none;
   transition: opacity .2s ease;
 }
-.settings-overlay[hidden] { display: none; }
 .settings-overlay.open { opacity: 1; pointer-events: auto; }
 .settings-drawer {
   width: min(430px, 94vw); height: 100%; min-width: 0; display: flex; flex-direction: column;
@@ -434,13 +442,15 @@ html, body { height: 100%; overflow: hidden; }
   transition: opacity .12s ease, color .12s ease;
 }
 .info-tip > summary:active { opacity: 1; }
+/* 外圈只描不填，i 那两笔跟着 currentColor —— 整个记号仍然是淡的 */
+.info-tip-rim { fill: none; }
 .info-tip-mark {
   /*
    * 记号本身要淡，但得认得出是个 i：8px 的框里那个点不到一个像素，
    * 淡就淡成了「有根杂线」。11px 仍然远轻于原先那个带描边的圆。
    */
-  width: 11px; height: 11px; overflow: visible;
-  fill: currentColor; stroke: currentColor; stroke-width: 1.3;
+  width: 15px; height: 15px; overflow: visible;
+  fill: currentColor; stroke: currentColor; stroke-width: 1.15;
   stroke-linecap: round; vector-effect: non-scaling-stroke;
 }
 .info-tip > summary::-webkit-details-marker { display: none; }
@@ -500,6 +510,65 @@ html, body { height: 100%; overflow: hidden; }
 .hero-ring { flex: none; display: flex; flex-direction: column; align-items: center; }
 .ring-label { fill: var(--text); }
 .ring-sub { fill: var(--faint); }
+
+/*
+ * 热量圆环：一个绿色，三个密度。
+ *
+ * 区分的担子在**密度**和**位置**上，不在色相上 —— 实心是已经吃到的，
+ * 半透明是欠着的缺口，最淡的是还没走到的。密度递减的顺序和「已经发生」
+ * 对齐，人眼不用查图例也知道哪段更实。
+ *
+ * 三档都挂在同一个 --accent 上，暗色模式跟着底色自动走，不必写两套。
+ * 缺口那档取 0.45 而不是更低：它和「未到达」只隔一级透明度，
+ * 小尺寸或低亮度屏上容易压得太近，再配一条内侧细描边把它顶出来。
+ */
+.ring-seg { stroke-linecap: butt; }
+.ring-seg-solid { stroke: var(--accent); }
+.ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
+/*
+ * 盈余 / 赤字段用纹理，不是第四级明度：那是计划里主动给的额度，
+ * 和「欠着的」性质不同。再降一档透明度只会和缺口打架。
+ */
+.ring-seg-dashed {
+  stroke: color-mix(in srgb, var(--accent) 34%, transparent);
+  stroke-dashoffset: 0;
+  mask: repeating-linear-gradient(115deg,
+    #000 0 3px, transparent 3px 6px);
+}
+/* 起点圆点：闭合的环在摄入为 0 时看不出从哪儿开始、往哪边走 */
+.ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
+/*
+ * 刻度线只负责切分，不表达量。长实线是当前消耗，短淡线是预计全天消耗；
+ * 两条之间的距离就是「今天接下来还会再烧掉多少」。
+ */
+.ring-tick { stroke: var(--faint); stroke-width: 1.4; stroke-linecap: round; opacity: .55; }
+.ring-tick.strong { stroke: var(--text); stroke-width: 2; opacity: .85; }
+/* 吃得比烧的多：多出来的那截走外圈细轨，用位置而不是颜色表达翻转 */
+.ring-overflow {
+  stroke: var(--accent); stroke-width: 3; stroke-linecap: round;
+  opacity: .85;
+}
+
+/* 占满一行。挤在 116px 的环底下会折成四行，把下面的营养条整个顶下去 */
+.ring-legend {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px;
+  margin: 2px 0 10px; font-size: var(--fs-caption); color: var(--muted);
+}
+.ring-legend-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ring-swatch {
+  width: 9px; height: 9px; border-radius: 2px; flex: none;
+  /* 图例块用 background 上色，环上用 stroke —— 同一档密度两处写法 */
+  background: currentColor;
+}
+.ring-swatch.ring-seg-solid { color: var(--accent); }
+.ring-swatch.ring-seg-mid { color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.ring-swatch.ring-seg-faint { color: color-mix(in srgb, var(--accent) 16%, transparent); }
+.ring-swatch.ring-seg-dashed {
+  color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: repeating-linear-gradient(115deg,
+    currentColor 0 2px, transparent 2px 4px);
+}
 .hero-macros { flex: 1; display: grid; gap: 10px; min-width: 0; }
 
 .mini-macro-top { display: flex; align-items: baseline; gap: 4px; font-size: var(--fs-footnote); margin-bottom: 4px; }
@@ -1011,6 +1080,15 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  */
 .setting-choice { padding: 11px 0; border-top: 1px solid var(--border); }
 .setting-choice:first-of-type { border-top: 0; }
+/* 标题在左、下拉在右，和「从几个里挑一个」的其他地方一个样 */
+.setting-choice-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.setting-choice-row .setting-choice-head { flex: 1; min-width: 0; }
+.setting-choice-row .setting-choice-head p { margin-bottom: 0; }
+.setting-select {
+  flex: none; max-width: 44%; min-height: var(--control-sm); padding: 6px 8px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--card-2); color: var(--text); font-size: var(--fs-footnote);
+}
 .setting-choice-head strong { font-size: var(--fs-body); }
 .setting-choice-head p {
   margin: 3px 0 10px; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55;
@@ -1198,7 +1276,6 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  *  - body 钉成 fixed —— iOS 上只给 overflow:hidden 拦不住手指拖动。
  */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; }
-.sheet-wrap[hidden] { display: none; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
   animation: sheet-fade .18s ease;
@@ -1228,7 +1305,6 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   padding: 10px 16px calc(10px + var(--safe-bottom));
   background: var(--card); border-top: 1px solid var(--hairline);
 }
-.sheet-footer[hidden] { display: none; }
 /* 顶上那道小横杠：告诉人这层是能关掉的 */
 .sheet::before {
   content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
@@ -1314,6 +1390,36 @@ body.sheet-open {
 .water-add { color: var(--accent); }
 .water-drop { width: 17px; height: 17px; flex: none; fill: currentColor; stroke: none; }
 .water-sep { opacity: .5; }
+.water-count { font-variant-numeric: tabular-nums; color: var(--text); }
+/*
+ * 记完一次：水滴往数字上流，数字接住之后弹一下。
+ *
+ * 位移距离由 JS 量出来写进 --flow-x —— 文案长度会变（撤销挂上去那几秒
+ * 整条会变宽），写死一个像素值必然有一次是错的。
+ * 数字那一下延后到水滴快到的时候，两个动作才连得上。
+ */
+.water-pill { position: relative; }
+.water-pill.is-flowing .water-drop {
+  animation: water-flow .52s cubic-bezier(.4, 0, .3, 1) both;
+}
+.water-pill.is-flowing .water-count {
+  animation: water-catch .34s ease-out .3s both;
+}
+@keyframes water-flow {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  62% { transform: translateX(calc(var(--flow-x, 0px) * .82)) scale(.72); opacity: .85; }
+  100% { transform: translateX(var(--flow-x, 0px)) scale(.3); opacity: 0; }
+}
+@keyframes water-catch {
+  0% { transform: scale(1); color: var(--text); }
+  45% { transform: scale(1.34); color: var(--accent); }
+  100% { transform: scale(1); color: var(--text); }
+}
+/* 动画只是锦上添花：关掉动效的人照样看得到数字加一 */
+@media (prefers-reduced-motion: reduce) {
+  .water-pill.is-flowing .water-drop,
+  .water-pill.is-flowing .water-count { animation: none; }
+}
 /* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
 .water-undo {
   border: 0; background: none; padding: 0; cursor: pointer;
@@ -1371,7 +1477,6 @@ body.sheet-open {
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
-.select-bar[hidden] { display: none; }
 .select-bar-main { display: flex; align-items: center; gap: 8px; }
 .select-bar-summary {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px;
@@ -1442,7 +1547,6 @@ body.sheet-open {
 .portion-head-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .portion-per100 { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; }
 .portion-meal, .unit-row, .qty-quick, .sugar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.qty-quick[hidden] { display: none; }
 
 .field-label {
   font-size: var(--fs-footnote); color: var(--faint); margin-top: 14px; font-weight: 600;
@@ -1475,7 +1579,6 @@ body.sheet-open {
   display: flex; align-items: center; gap: 8px; margin-top: 10px;
   font-size: var(--fs-footnote); color: var(--muted);
 }
-.gram-input-wrap[hidden] { display: none; }
 
 .grams-input {
   flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--border);
@@ -2162,7 +2265,6 @@ body.sheet-open {
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   padding: 2px 8px; border-radius: 999px;
 }
-.dirty-mark[hidden] { display: none; }
 
 .primary-btn:disabled { opacity: .4; cursor: default; }
 
@@ -2416,10 +2518,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .exercise-search-input { width: 100%; }
 .exercise-search-results .ex-list { margin-top: 0; }
 .exercise-search-empty { margin: 14px 2px 4px; }
-.exercise-search-results[hidden],
-.picker-normal-results[hidden],
-.picker-controls[hidden],
-.picker-compact-summary[hidden] { display: none !important; }
 .picker-controls .range-switch {
   width: calc(100% - 24px);
   margin-inline: auto;
@@ -2486,7 +2584,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
   margin-top: var(--space-4);
 }
-.picker-list-head[hidden] { display: none; }
 .picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .picker-scope-name {
   font-size: var(--fs-value); font-weight: 650; color: var(--text);
@@ -2498,7 +2595,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 /* 视图切换跟着列表头走，不再是筛选区的第三排 */
 .picker-view-switch { margin-top: var(--space-2); }
-.picker-view-switch[hidden] { display: none; }
 .picker-view-switch .chip-btn { min-height: var(--control-sm); }
 
 .equip-filter-wrap {

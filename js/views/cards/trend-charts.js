@@ -153,9 +153,9 @@ function fullTable(days, dietByDate) {
     h('div.table-wrap.table-scroll', null, h('table.data-table', null,
       h('thead', null, h('tr', null, cols.map(([label]) => h('th', null, label)))),
       h('tbody', null, rows.map((r) => h('tr', null, cols.map(([, fmt]) => h('td', null, fmt(r)))))))),
+    // 「—」表示那天没有这一项，不是 0 —— 不说的话会被读成「那天一口没吃」
     h('p.form-hint', null,
-      '摄入与蛋白来自饮食记录，其余来自 Apple 健康；某天没有的字段显示「—」，不会当成 0。'
-      + '单位：摄入 kcal、蛋白 g、活动/静息 kcal、体重 kg。'));
+      '「—」表示那天没有这一项记录。单位：摄入 kcal、蛋白 g、活动/静息 kcal、体重 kg。'));
 }
 
 /* ------------------------------------------------- 图表清单 ------------- */
@@ -276,7 +276,7 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('kcal', kcalSeries, { target: targets.kcal }),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
-      tip: `参考线使用${targetContext}，不代表区间内各历史日期当时的目标。单日高于参考线不等于做错，需结合多日体重与收支趋势判断。`,
+      tip: '单日高于参考线不等于做错。判断要看多日的体重和收支趋势，一天的高低说明不了什么。',
     }),
     protein: () => ({
       title: '每日蛋白摄入',
@@ -289,7 +289,7 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
       readout: readoutRow(valueAt((v) => `${num(v)} g`)((dd) => dietByDate.get(dd)?.protein ?? null)),
-      tip: `达标线使用${targetContext}的 90%（${Math.round(proteinThreshold)}g）；超过这条线不会被标红。`,
+      tip: `虚线是达标参考 ${Math.round(proteinThreshold)}g。蛋白吃超一点没有坏处，不必刻意压在线下。`,
     }),
     weight: () => ({
       title: '体重',
@@ -303,7 +303,7 @@ export function trendCharts(rerender) {
         records: weightStats.records, spanDays: weightStats.spanDays,
       }),
       readout: readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))),
-      tip: '拟合趋势按所选区间内的全部称重估算；单日波动主要是水分与排空差异。',
+      tip: '看那条趋势线，别看单日的上下：一天里的起伏主要是水分和排空，不是体脂变了。',
     }),
     steps: () => ({
       title: '步数',
@@ -315,7 +315,7 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('steps', stepsSeries, {}),
       readout: readoutRow(valueAt((v) => `${num(v)} 步`)((dd) => health.get(dd)?.steps ?? null)),
-      tip: '步数来自手机或手表的计步器。多设备同时佩戴时按来源取较大值，不做累加。',
+      tip: '步数由设备的计步器估算，不同设备和佩戴位置会有出入，适合看自己的前后变化。',
     }),
     exercise: () => ({
       title: '锻炼时间',
@@ -377,7 +377,7 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('balance', balanceSeries, {}),
       readout: readoutRow(kcalAt((dd) => balanceSeries.find((pt) => pt.x === dd)?.y ?? null)),
-      tip: '只绘制同日饮食、静息能量和活动能量都齐全的数据；低于 0 表示摄入低于设备估算消耗。',
+      tip: '低于 0 表示这天吃的比设备估算的消耗少。看的是一段时间的累计，不是某一天的高低。',
     }),
   };
 
@@ -394,11 +394,14 @@ export function trendCharts(rerender) {
    */
   if (typeof SPEC[activeChart] !== 'function') activeChart = CHARTS[0].key;
   const spec = SPEC[activeChart]();
+  /*
+   * 数据不够时要说清「还差什么才能给结论」—— 这是用户能动手补的事，
+   * 不是实现细节。其余那几句（分母怎么取、没记录的日子怎么处理）已经删掉。
+   */
   const insufficient = spec.note === INSUFFICIENT_DATA_TEXT;
   const insufficientHelp = activeChart === 'weight'
-    ? '体重趋势至少需要 4 次称重，且第一条与最后一条相隔至少 7 天。'
-    : '趋势解读至少需要 3 个有效记录日；没有记录的日期不会按 0 计算。';
-  const todayNote = '统计到昨天为止：当天数据要等这一天过完才会出现。';
+    ? '还差几次称重才能看出趋势：至少 4 次，而且第一次和最后一次要隔开 7 天以上。'
+    : '记录还太少，看不出趋势。再记几天就会有结论。';
 
   return [
     // 选择器和图合成一张卡：它们本来就是一件事，分成两块只是多一道分隔线
@@ -411,10 +414,10 @@ export function trendCharts(rerender) {
          */
         h('h3', null, '趋势'),
         h('div.card-head-actions', null,
-          infoTip('查看这张图的统计口径',
+          infoTip('怎么看这张图',
             h('p', null, spec.tip),
             insufficient ? h('p', null, insufficientHelp) : null,
-            h('p', null, `统计到 ${endDay} 为止；${todayNote || '所选日期当天不计入。'}`)))),
+            h('p', null, '图上不含今天：一天没过完，画出来必然偏低。')))),
 
       h('div.trend-pickers', null,
         picker({

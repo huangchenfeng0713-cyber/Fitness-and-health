@@ -1,8 +1,8 @@
 /**
  * 估算菜品的统一呈现。
  *
- * 列表只放一枚低强调的“估算”标签；来源、误差和核对日期全部收进信息面板。
- * 这样不会给每一行再塞一个 i，也不会让同一份说明散落在标题、脚注和 tooltip。
+ * 列表只放一枚低强调的“估算”标签，说明收进一个信息面板 ——
+ * 不给每一行再塞一个 i，也不让同一份说明散落在标题、脚注和 tooltip 里。
  */
 
 import { h } from '../../lib/utils.js';
@@ -19,20 +19,19 @@ export function estimateTag(food) {
   });
 }
 
-function disclosureRows(disclosure) {
-  return [
-    h('p.estimate-disclosure-row', null,
-      h('strong', null, '估算依据：'), disclosure.basis),
-    h('p.estimate-disclosure-row', null,
-      h('strong', null, '主要误差：'), disclosure.uncertainty),
-    disclosure.accessed
-      ? h('p.estimate-disclosure-date', null, `资料核对日期：${disclosure.accessed}`)
-      : null,
-  ];
-}
+/*
+ * 「估算」是什么意思，一句话说清。
+ *
+ * 原先是三段：估算依据（「通用中式配方估算（原料成分与成品重量折算）」）、
+ * 主要误差、资料核对日期。第一段和第三段说的是这份数据怎么来的、什么时候
+ * 核过 —— 那是维护这个库的人要的，不是照着吃饭的人要的。
+ * 用户要判断的只有一件事：这个数不精确，哪些因素会让它差。
+ */
+const ESTIMATE_INTRO = '标着「估算」的菜没有官方营养标签，数值按常见做法折算，'
+  + '记个大概可以，别当精确值用。';
 
 /**
- * 单个食物的说明入口。估算项统一展示依据与误差；非估算项仍可展示原有 note。
+ * 单个食物的说明入口。
  * extra 用于把复合食物的实际配料快照并入同一个面板，避免一行出现两个信息按钮。
  */
 export function foodInfoTip(food, {
@@ -44,14 +43,16 @@ export function foodInfoTip(food, {
   const disclosure = estimateDisclosure(food);
   const note = String(food?.note || '').trim();
   const extras = Array.isArray(extra) ? extra.filter(Boolean) : (extra ? [extra] : []);
-  if (!disclosure && !note && !extras.length) return null;
+  if (!disclosure && !note && !extras.length && !fallback) return null;
 
   return infoTip(label,
+    disclosure ? h('p.estimate-disclosure-intro', null, ESTIMATE_INTRO) : null,
     disclosure
-      ? h('p.estimate-disclosure-intro', null,
-        '“估算”表示这不是当前官方营养标签或实验室实测值，适合做日常记录参考。')
-      : null,
-    disclosure ? disclosureRows(disclosure) : (note ? h('p', null, note) : null),
+      ? [
+        disclosure.note ? h('p.estimate-disclosure-row', null, disclosure.note) : null,
+        h('p.estimate-disclosure-row', null, disclosure.generic),
+      ]
+      : (note ? h('p', null, note) : null),
     extras);
 }
 
@@ -72,16 +73,24 @@ export function estimateGroupInfoTip(foods, label = '查看估算说明', { extr
   const extras = Array.isArray(extra) ? extra.filter(Boolean) : (extra ? [extra] : []);
   if (!unique.length && !extras.length) return null;
 
+  /*
+   * 同一类菜共有的那句误差，整张卡只说一次。
+   *
+   * 原先每道菜后面都跟一遍「原料比例、实际份量、用油、酱汁或汤汁摄入量，
+   * 以及烹调失水都会造成误差」，列五道菜就抄五遍 ——
+   * 真正有区别的那句（「按粥底加鱼片、花生的整碗计」）反而被埋掉了。
+   */
+  const generics = [...new Set(unique.map(({ disclosure }) => disclosure.generic))];
+  const named = unique.filter(({ disclosure }) => disclosure.note);
+
   return infoTip(label,
-    unique.length
-      ? h('p.estimate-disclosure-intro', null,
-        '列表中标有“估算”的菜品不是当前官方营养标签或实验室实测值；误差来源集中列在这里。')
-      : null,
-    unique.length
-      ? h('div.estimate-disclosure-list', null, unique.map(({ food, disclosure }) =>
+    unique.length ? h('p.estimate-disclosure-intro', null, ESTIMATE_INTRO) : null,
+    named.length
+      ? h('div.estimate-disclosure-list', null, named.map(({ food, disclosure }) =>
         h('section.estimate-disclosure-item', null,
           h('strong.estimate-disclosure-name', null, food.name),
-          disclosureRows(disclosure))))
+          h('p.estimate-disclosure-row', null, disclosure.note))))
       : null,
+    generics.map((g) => h('p.estimate-disclosure-row', null, g)),
     extras);
 }

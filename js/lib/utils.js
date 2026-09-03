@@ -203,18 +203,27 @@ export function infoTip(label, ...children) {
   mark.setAttribute('class', 'info-tip-mark');
   mark.setAttribute('viewBox', '0 0 12 12');
   mark.setAttribute('aria-hidden', 'true');
+  /*
+   * 外圈 + 小写 i。都画成路径，不依赖字体，也就不会在不同系统上变成不同字形。
+   * 外圈是必须的：没有它，一个点加一道竖线在正文旁边只是一处杂线，
+   * 认不出这是个可以点的说明入口。
+   */
+  const rim = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  rim.setAttribute('cx', '6');
+  rim.setAttribute('cy', '6');
+  rim.setAttribute('r', '5.1');
+  rim.setAttribute('class', 'info-tip-rim');
   const stem = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  // 小写 i 用路径和圆点绘制，不依赖字体，也不会在不同系统上变成不同字形。
-  stem.setAttribute('d', 'M6 5.3v4.4');
+  stem.setAttribute('d', 'M6 5.6v3.1');
   const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   dot.setAttribute('cx', '6');
-  dot.setAttribute('cy', '2.8');
+  dot.setAttribute('cy', '3.4');
   /*
    * 点要比笔画粗一圈才认得出是「i」。
    * 早先 r=.7 配 8px 的框，渲染出来只有半个像素，整个记号看着像一道杂线。
    */
-  dot.setAttribute('r', '1');
-  mark.append(stem, dot);
+  dot.setAttribute('r', '.85');
+  mark.append(rim, stem, dot);
   const details = h('details.info-tip', null,
     h('summary', { 'aria-label': label, title: label }, mark),
     h('div.info-tip-panel', { role: 'note' }, children));

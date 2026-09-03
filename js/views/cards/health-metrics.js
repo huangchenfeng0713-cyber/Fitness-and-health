@@ -116,14 +116,16 @@ export function healthMetricsCard() {
               h('ul', null, MISSING_REASONS.map((r) => h('li', null, r))),
             ]
             : null,
-          h('p', null, '体重默认显示截至今天最近一次有效记录，不要求必须当天称重。',
-            weightCell?.value != null
-              ? ` 当前显示 ${num(weightCell.value, 1)} kg，测量日期 ${weightCell.observedDate || '未知'}。`
-              : ' 当前还没有体重记录。'),
-          h('p', null, '体脂与静息心率仍只显示当天值；最近一次记录如下：'),
-          h('ul', null, optionalLastSeen.length
-            ? optionalLastSeen
-            : h('li', null, '体脂与静息心率都还没有记录。')),
+          /*
+           * 体重那句留着，因为它回答的是「我今天没称，这个数怎么还在」——
+           * 不说的话人会以为是今天的。哪一天称的必须写出来。
+           * 「体脂与静息心率仍只显示当天值」那句删了：那是程序内部的取值规则。
+           */
+          h('p', null, weightCell?.value != null
+            ? `体重 ${num(weightCell.value, 1)} kg 是 ${weightCell.observedDate || '较早'} 称的，`
+              + '不用每天称，看的是一段时间的走势。'
+            : '还没有体重记录。'),
+          optionalLastSeen.length ? h('ul', null, optionalLastSeen) : null,
           info.sourceNote ? h('p', null, info.sourceNote) : null))),
     info.hasAny
       /*

@@ -128,8 +128,19 @@ test('估算菜品统一使用弱标签，误差来源集中到信息面板', ()
     '多条菜品没有使用卡片级集中说明');
   assert.match(foods, /export function estimateDisclosure\(food\)/,
     '估算依据与误差没有数据层统一口径');
-  assert.match(disclosure, /'估算依据：'/);
-  assert.match(disclosure, /'主要误差：'/);
+  /*
+   * 说明层只写用户拿来判断的话。
+   * 「估算依据：通用中式配方折算」和「资料核对日期」讲的是这份数据怎么来的、
+   * 什么时候核过 —— 维护这个库的人要，照着吃饭的人不要。
+   */
+  // 只看真的会渲染出去的字符串，注释里记着为什么删的那段不算
+  const strings = (disclosure.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')
+    .match(/'[^'\n]*'|`[^`]*`/g) || []).join(' ');
+  assert.doesNotMatch(strings, /估算依据|资料核对日期/,
+    '说明面板里又出现了讲数据怎么来的文字');
+  assert.match(disclosure, /disclosure\.generic/, '共有的误差来源没有展示');
+  assert.match(disclosure, /const generics = \[\.\.\.new Set\(/,
+    '共有的那句误差没有去重，列五道菜会抄五遍');
 
   assert.ok((diet.match(/estimateTag\(/g) || []).length >= 5,
     '搜索、备选清单、份量、复合食物或饮食记录中仍有估算标签缺口');
