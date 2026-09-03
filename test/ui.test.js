@@ -1108,17 +1108,21 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const dash = strip(read('js/views/dashboard.js'));
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
-  assert.match(read('js/core/energy-ring.js'), /label: '当前摄入'/, '绿环没有当前摄入刻度');
   assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--ring-tick\)/, '摄入刻度应是淡灰线');
   assert.match(css, /\.ring-tick\.burned \{[^}]*var\(--ring-burn\)/, '消耗刻度应跟着黄环');
   assert.match(css, /--ring-eat:/, '圆环没有收进同一套配色');
   const chart = read('js/lib/energy-ring-chart.js');
   assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
-  assert.match(dash, /ring-side/, '摄入 / 消耗文字应在环左右，不写进 SVG');
+  /*
+   * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处
+   * 在说同一件事，两侧留白还把环挤小了。现在环居中，下面一行图例。
+   */
+  assert.doesNotMatch(dash, /ring-side/, '环两侧的两列文字应已删掉');
+  assert.match(dash, /function ringLegend/, '环下没有图例');
+  assert.match(css, /\.ring-swatch-intake\.is-deep/, '图例色块没有跟着轨道跑第二圈加深');
   assert.doesNotMatch(chart, /tspan/, '标签不该再画进 SVG');
-  assert.match(css, /grid-template-columns: minmax\(4\.5em, 1fr\) auto minmax\(4\.5em, 1fr\)/,
-    '环和左右文字没有排成三列');
+  assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
   assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,
     '碳水 / 脂肪克数没有左右对齐、说明居中');
@@ -2033,6 +2037,20 @@ test('记录一笔食物只弹一次提示，撤销由 recordOne 自己给', () 
   const html = read('index.html');
   assert.ok(!/ux-polish/.test(html), 'index.html 又挂上了精修层');
   assert.ok(!/ux-polish/.test(read('sw.js')), 'sw.js 的 SHELL 里还留着精修层');
+
+  /*
+   * 「只有一张样式表」要按数量卡，不能只点名 ux-polish。
+   *
+   * 上一条只拦了那一个文件名，于是后来又长出一张 css/settings-nest.css ——
+   * 它靠加载顺序压住 app.css 里 .data-actions 的排版，把备份那三行套进一个
+   * 浅底虚线盒，比同级的段落深了 25px，而 app.css 里根本查不到这个缩进。
+   * 「改样式前先看 app.css 顶部的 token」这句话，多一张表就不成立。
+   */
+  const sheets = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]*>/g)].map((m) => m[0]);
+  assert.equal(sheets.length, 1, `index.html 挂了 ${sheets.length} 张样式表：${sheets.join(' ')}`);
+  assert.match(sheets[0], /css\/app\.css/, '唯一那张样式表应该是 css/app.css');
+  assert.deepEqual(readdirSync(new URL('../css', import.meta.url)).sort(), ['app.css'],
+    'css/ 下只许有 app.css');
 });
 
 test('份量弹层的碳水脂肪刻度直接算，不从渲染结果里读回数字', () => {
