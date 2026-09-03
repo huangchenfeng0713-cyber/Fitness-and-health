@@ -34,12 +34,12 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   });
 
   const strokeFor = (cls) => {
-    if (cls.includes('ring-seg-wrap')) return { stroke: '#147a5c' };
-    if (cls.includes('ring-seg-deep')) return { stroke: '#0b4f3c' };
-    if (cls.includes('ring-burn-wrap')) return { stroke: '#c9a20c' };
+    if (cls.includes('ring-seg-wrap')) return { stroke: 'var(--ring-eat-wrap)' };
+    if (cls.includes('ring-seg-deep')) return { stroke: 'var(--ring-eat-lead)' };
+    if (cls.includes('ring-burn-wrap')) return { stroke: 'var(--ring-burn-wrap)' };
     if (cls.includes('ring-burn-track')) return {};
-    if (cls.includes('ring-burn')) return { stroke: '#e8c84a' };
-    if (cls.includes('ring-seg-solid')) return { stroke: '#22c55e' };
+    if (cls.includes('ring-burn')) return { stroke: 'var(--ring-burn)' };
+    if (cls.includes('ring-seg-solid')) return { stroke: 'var(--ring-eat)' };
     return {};
   };
 
@@ -78,33 +78,23 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
   }));
 
   const tickTone = {
-    intake: { stroke: 'var(--text)', fill: 'var(--text)', inner: false },
-    burn: { stroke: '#e8c84a', fill: '#e8c84a', inner: true },
+    intake: { inner: false },
+    burn: { inner: true },
   };
   const placed = (model.ticks || []).map((tick) => {
     const tone = tickTone[tick.tone] || tickTone.intake;
     const deg = angleOf(tick.pct);
-    const r0 = tone.inner ? burnR : r;
-    const r1 = tone.inner ? r + stroke * 0.2 : r + stroke * 0.55;
+    const r0 = tone.inner ? burnR - 1 : r - stroke * 0.15;
+    const r1 = tone.inner ? r + stroke * 0.15 : r + stroke * 0.45;
     return { tick, tone, deg, r0, r1 };
   });
 
-  for (const { tick, tone, deg, r0, r1 } of placed) {
+  for (const { tick, deg, r0, r1 } of placed) {
     const [x1, y1] = point(deg, r0);
     const [x2, y2] = point(deg, r1);
     svg.append(el('line', {
       x1, y1, x2, y2, class: `ring-tick strong ${tick.key}`,
-      stroke: tone.stroke, 'stroke-width': 3.2,
     }));
-    svg.append(el('circle', {
-      cx: x1, cy: y1, r: 2.7, fill: tone.fill, stroke: 'var(--text)', 'stroke-width': 1.2,
-    }));
-    if ((tick.laps || 0) >= 1) {
-      svg.append(el('circle', {
-        cx: x1, cy: y1, r: 5.4, fill: 'none',
-        stroke: tone.stroke, 'stroke-width': 1.5,
-      }));
-    }
   }
 
   /*

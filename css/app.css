@@ -12,6 +12,12 @@
 
   --accent: #0d8f70;
   --accent-soft: #e5f4ef;
+  --ring-eat: #4ca38e;
+  --ring-eat-wrap: #2d7d6b;
+  --ring-eat-lead: #1b5f52;
+  --ring-burn: #cbb67a;
+  --ring-burn-wrap: #a89455;
+  --ring-tick: #8a9397;
   /*
    * 数据色只留四个。
    * 之前有六个：脂肪那个橘红和 --warn 几乎一样、纤维那个绿和 --accent 几乎一样，
@@ -138,6 +144,12 @@
 
     --accent: #2dc39a;
     --accent-soft: #102c25;
+    --ring-eat: #4db89a;
+    --ring-eat-wrap: #2f9a7e;
+    --ring-eat-lead: #21806a;
+    --ring-burn: #d4c186;
+    --ring-burn-wrap: #b8a05c;
+    --ring-tick: #9aa4a8;
     --protein: #9787f0;
     --carb: #eeae55;
     --water: #6aa9e0;
@@ -525,9 +537,9 @@ html, body { height: 100%; overflow: hidden; }
  */
 .ring-track { stroke: var(--track); }
 .ring-seg, .ring-track { stroke-linecap: butt; }
-.ring-seg-solid { stroke: #22c55e; }
-.ring-seg-wrap { stroke: #147a5c; }
-.ring-seg-deep { stroke: #0b4f3c; }
+.ring-seg-solid { stroke: var(--ring-eat); }
+.ring-seg-wrap { stroke: var(--ring-eat-wrap); }
+.ring-seg-deep { stroke: var(--ring-eat-lead); }
 .ring-seg-mid { stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
 .ring-seg-faint { stroke: color-mix(in srgb, var(--accent) 16%, transparent); }
 .ring-seg-dashed {
@@ -535,15 +547,15 @@ html, body { height: 100%; overflow: hidden; }
   mask: repeating-linear-gradient(112deg, #000 0 3px, transparent 3px 6px);
 }
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-.ring-tick { stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; opacity: .6; }
-.ring-tick.strong { stroke-width: 3.2; opacity: 1; }
-.ring-tick.eaten { stroke: var(--text); }
-.ring-tick.burned { stroke: #e8c84a; }
+.ring-tick { stroke: var(--ring-tick); stroke-width: 1.6; stroke-linecap: round; opacity: .7; }
+.ring-tick.strong { stroke-width: 2; opacity: 1; }
+.ring-tick.eaten { stroke: var(--ring-tick); }
+.ring-tick.burned { stroke: var(--ring-burn); }
 .ring-tick-label { fill: var(--faint); font-weight: 600; }
 .ring-tick-label.strong { fill: var(--muted); }
 .ring-overflow { stroke: var(--accent); stroke-linecap: round; }
-.ring-burn { stroke: #e8c84a; }
-.ring-burn-wrap { stroke: #c9a20c; }
+.ring-burn { stroke: var(--ring-burn); }
+.ring-burn-wrap { stroke: var(--ring-burn-wrap); }
 .ring-burn-track { stroke: var(--track); }
 
 /*
