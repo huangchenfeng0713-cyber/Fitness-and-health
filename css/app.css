@@ -412,7 +412,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 .settings-drawer-content {
   flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain;
-  padding: 13px; display: flex; flex-direction: column; gap: 13px;
+  padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);
   -webkit-overflow-scrolling: touch;
 }
 .settings-drawer-content > * { flex: 0 0 auto; }
@@ -469,7 +469,8 @@ html, body { height: 100%; overflow: hidden; }
  * 竖向却比标题高出小半行。高度加在外层 details 上，不加在 summary 上：
  * summary 打开时有一块圆形底色，拉高它会变成椭圆。
  */
-.card-head > .info-tip { height: var(--card-head-line); display: flex; align-items: center; }
+.card-head > .info-tip,
+.hero-head > .info-tip { height: var(--card-head-line); display: flex; align-items: center; }
 /*
  * 说明入口要淡。
  *
@@ -1266,13 +1267,13 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .set-list {
   background: var(--card); border-radius: var(--r-lg); overflow: hidden;
 }
-.set-row {
+.settings-row {
   width: 100%; display: flex; align-items: center; gap: 10px;
   padding: 14px 14px; border: 0; background: none; cursor: pointer;
   border-bottom: 1px solid var(--border); text-align: left;
 }
-.set-row:last-child { border-bottom-color: transparent; }
-.set-row:active { background: var(--card-2); }
+.settings-row:last-child { border-bottom-color: transparent; }
+.settings-row:active { background: var(--card-2); }
 .set-icon { width: 19px; height: 19px; flex: none; color: var(--muted); }
 .set-title { flex: none; font-size: var(--fs-body); color: var(--text); }
 .set-status {
