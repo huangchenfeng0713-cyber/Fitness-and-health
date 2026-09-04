@@ -16,7 +16,6 @@
   --ring-eat-wrap: #2d7d6b;
   --ring-burn: #cbb67a;
   --ring-burn-wrap: #a89455;
-  --ring-tick: #8a9397;
   /*
    * 数据色只留四个。
    * 之前有六个：脂肪那个橘红和 --warn 几乎一样、纤维那个绿和 --accent 几乎一样，
@@ -152,7 +151,6 @@
     --ring-eat-wrap: #2f9a7e;
     --ring-burn: #d4c186;
     --ring-burn-wrap: #b8a05c;
-    --ring-tick: #9aa4a8;
     --protein: #9787f0;
     --carb: #eeae55;
     --water: #6aa9e0;
@@ -580,11 +578,12 @@ html, body { height: 100%; overflow: hidden; }
 .ring-track, .ring-burn-track { stroke: var(--track); }
 .ring-seg, .ring-track, .ring-burn-track { stroke-linecap: butt; }
 .ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
-/* 刻度只要细线，不要圈圈：摄入淡灰标主环，消耗浅金标消耗环 */
-.ring-tick { stroke: var(--ring-tick); stroke-width: 1.6; stroke-linecap: round; opacity: .7; }
-.ring-tick.strong { stroke-width: 2; opacity: 1; }
-.ring-tick.eaten { stroke: var(--ring-tick); }
-.ring-tick.burned { stroke: var(--ring-burn); }
+/*
+ * 刻度只要细线，不要圈圈。
+ * 颜色由画的时候按轨道和圈数直接给（见 energy-ring-chart.js 的 TRACK）——
+ * 刻度跟着它标的那条弧走色，跑过一整圈一起换深色，这里只管粗细和端头。
+ */
+.ring-tick { stroke-width: 2; stroke-linecap: round; }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——

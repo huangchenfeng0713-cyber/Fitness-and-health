@@ -1114,11 +1114,17 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const dash = strip(read('js/views/dashboard.js'));
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
-  assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--ring-tick\)/, '摄入刻度应是淡灰线');
-  assert.match(css, /\.ring-tick\.burned \{[^}]*var\(--ring-burn\)/, '消耗刻度应跟着黄环');
   assert.match(css, /--ring-eat:/, '圆环没有收进同一套配色');
   const chart = read('js/lib/energy-ring-chart.js');
   assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
+  /*
+   * 刻度的颜色跟着它标的那条轨道走，跑过一圈一起换深色 —— 和弧段取自同一张
+   * TRACK 表，CSS 里不许再单独给刻度定颜色，否则刻度和弧会走散。
+   */
+  assert.match(chart, /const tone = tick\.laps >= 1 \? 'deep' : 'light'/, '刻度没有跟着圈数换深浅');
+  assert.match(chart, /stroke: t\[tone\]/, '刻度没有取自轨道自己的颜色');
+  assert.doesNotMatch(css, /\.ring-tick\.(?:eaten|burned)[^{]*\{[^}]*stroke:/,
+    'CSS 又给刻度单独定了颜色，会和 TRACK 表走散');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   /*
    * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处

@@ -94,7 +94,15 @@ export function energyRingChart({ model, size = 152, stroke = 14 }) {
     const deg = angleOf(tick.pct);
     const [x1, y1] = point(deg, t.radius - t.width / 2 - OVERHANG);
     const [x2, y2] = point(deg, t.radius + t.width / 2 + OVERHANG);
-    svg.append(el('line', { x1, y1, x2, y2, class: `ring-tick strong ${tick.key}` }));
+    /*
+     * 刻度跟着它标的那条轨道走色：摄入用绿、消耗用金，跑过一整圈换成对应的深色。
+     * 颜色和弧段取自同一张 TRACK 表 —— 刻度和它标的那条弧永远不会走散。
+     */
+    const tone = tick.laps >= 1 ? 'deep' : 'light';
+    svg.append(el('line', {
+      x1, y1, x2, y2, stroke: t[tone],
+      class: `ring-tick ring-tick-${tick.key} ring-tick-${tone}`,
+    }));
   }
 
   /*
