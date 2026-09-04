@@ -431,7 +431,24 @@ function showUpdateNotice() {
     h('div', null,
       h('strong', null, '发现新版本'),
       h('span', null, `当前页面仍是 v${APP_VERSION}，刷新后切换到最新代码。`)),
-    h('button', { onclick: () => location.reload() }, '立即更新')));
+    h('button', { onclick: applyPendingUpdate }, '立即更新')));
+}
+
+/*
+ * iOS 加到主屏幕之后，location.reload() 经常继续用内存里的旧页，
+ * 看起来像点了更新却没换版本。清掉本应用外壳缓存再换一个地址，
+ * 这次导航才会真正走新 Service Worker。
+ */
+async function applyPendingUpdate() {
+  try {
+    const keys = await caches.keys();
+    await Promise.all(keys
+      .filter((k) => k.startsWith('health-diet-') && !k.includes('supabase'))
+      .map((k) => caches.delete(k)));
+  } catch { /* 清不掉也要跳，让新 SW 自己再拉一份 */ }
+  const url = new URL(location.href);
+  url.searchParams.set('_up', Date.now().toString(36));
+  location.replace(url.href);
 }
 
 async function registerServiceWorker({ waitForControl = false } = {}) {
