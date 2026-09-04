@@ -349,13 +349,18 @@ html, body { height: 100%; overflow: hidden; }
   padding-bottom: var(--safe-bottom);
 }
 
-/* 健身页的批量选择栏是应用壳的一层，始终位于内容区与底部导航之间。 */
+/*
+ * 健身页的批量选择栏是应用壳的一层，始终位于内容区与底部导航之间。
+ *
+ * **不加毛玻璃。** 它和顶栏、底栏一样是 flex 纵列里的一格，内容被 .view 自己的
+ * 盒子裁掉，从来不从它下面穿过 —— 实测它背后压着的只有 body，没有内容。
+ * blur 糊的是一块纯色，等于白花 GPU；原先那层 saturate 做的事一个颜色值就够。
+ * 毛玻璃只给真正叠在内容上面的东西（弹层、设置抽屉、toast）。
+ */
 .actionbar-slot {
   flex: none;
-  background: color-mix(in srgb, var(--card) 90%, transparent);
+  background: color-mix(in srgb, var(--card) 96%, var(--bg));
   border-top: 1px solid var(--hairline);
-  -webkit-backdrop-filter: saturate(145%) blur(18px);
-  backdrop-filter: saturate(145%) blur(18px);
 }
 .actionbar-slot .select-bar {
   position: static;
@@ -410,7 +415,17 @@ html, body { height: 100%; overflow: hidden; }
 .settings-drawer {
   width: min(430px, 94vw); height: 100%; min-width: 0; display: flex; flex-direction: column;
   padding-top: var(--safe-top); padding-right: var(--safe-right); padding-bottom: var(--safe-bottom);
-  background: var(--bg); box-shadow: -18px 0 50px rgba(8, 24, 19, .2);
+  /*
+   * 抽屉是实色，不上毛玻璃。
+   *
+   * 它宽 94%、高 100%，背后只是你刚才那一页的随机一截 —— 那不是「深度」，是噪音：
+   * 实测透出来的是搜索结果那一列（米饭 / 糙米 / 黑米…），24px 模糊之后字形还认得出，
+   * 同一片区域的截图比实色版本多出 19 倍的细节，而那些细节一个也不该在这儿看。
+   * iOS 自己也是这么分的：整屏推出来的设置是实色，弹层和横条才是材质。
+   * 玻璃只值得给「上面还留着内容」的叠层 —— 这个应用里就是 .sheet 和 .toast。
+   */
+  background: var(--bg);
+  box-shadow: -18px 0 50px rgba(8, 24, 19, .2);
   transform: translateX(102%); transition: transform .22s ease; overflow: hidden;
 }
 .settings-overlay.open .settings-drawer { transform: translateX(0); }
@@ -1426,13 +1441,24 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   /* 背景上不该能拖动页面 */
   touch-action: none;
 }
+/*
+ * 弹层、设置抽屉、toast 是这个应用里仅有的三处**真的叠在内容上面**的东西，
+ * 所以只有它们值得毛玻璃 —— 底下确实有内容可以透出来。
+ * 横条那几格是 flex 纵列的兄弟，内容不从它们下面走，糊的是纯色，见 .actionbar-slot。
+ *
+ * 不支持 backdrop-filter 的浏览器落回实色（下面的 @supports）：
+ * 半透明底 + 不模糊 = 字压在花花绿绿的内容上，那比没有玻璃糟得多。
+ */
 .sheet {
   position: absolute; left: 0; right: 0; bottom: 0;
   max-height: min(80vh, 660px);
   display: flex; flex-direction: column; overflow: hidden;
   overscroll-behavior: contain;
   padding: 8px 0 0;
-  background: var(--card); border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: color-mix(in srgb, var(--card) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
 }
@@ -2420,7 +2446,10 @@ body.sheet-open {
 .toast {
   position: fixed; left: 50%; bottom: calc(78px + var(--safe-bottom));
   transform: translate(-50%, 12px); z-index: 90;
-  background: #252b30; color: #fff; padding: 10px 14px; border-radius: var(--r-md);
+  background: color-mix(in srgb, #252b30 86%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  color: #fff; padding: 10px 14px; border-radius: var(--r-md);
   font-size: var(--fs-footnote); line-height: 1.48; opacity: 0; pointer-events: none;
   transition: opacity .2s, transform .2s;
   width: max-content; max-width: min(calc(100vw - 32px), 440px);
@@ -3178,3 +3207,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .select-bar-caret { display: grid; place-items: center; color: var(--faint); flex: none; }
 .select-bar-caret svg { width: var(--icon-xs); height: var(--icon-xs); transform: rotate(-90deg); }
 .select-bar-caret.open svg { transform: rotate(90deg); }
+
+/*
+ * 没有 backdrop-filter 时落回实色。
+ *
+ * 半透明底 + 不模糊 = 弹层里的字直接压在背后花花绿绿的内容上，
+ * 那比根本没有玻璃糟得多 —— 玻璃是「模糊 + 半透明」一起才成立的。
+ */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sheet { background: var(--card); }
+  .toast { background: #252b30; }
+}

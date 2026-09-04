@@ -1,6 +1,7 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
 import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText } from './lib/utils.js';
+import { isGesturing, dragGesture } from './lib/gesture.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -192,6 +193,25 @@ function renderTopbar() {
     }, h('span', { html: iconSvg('chevron') })),
   );
   bar.append(context, settingsButton);
+
+  /*
+   * 顶栏左右滑翻日期。
+   *
+   * 手势只是那两个箭头的补充，不是唯一入口 —— 箭头照旧在，读屏和键盘走它。
+   * 挂在顶栏而不是整个内容区：内容区是竖着滚的，在那儿认横向滑动，
+   * 一次斜着的甩动就会把日期翻走，而用户只是想滚列表。
+   *
+   * 往左滑是「往后翻一天」，和箭头的方向一致；已经在今天了就不再往后。
+   */
+  dragGesture(context, {
+    axis: 'x',
+    threshold: 28,
+    onEnd: ({ dx }) => {
+      const step = dx < 0 ? 1 : -1;
+      if (step > 0 && dayHeading(state.day, todayKey()).isToday) return;
+      setDay(shiftDay(state.day, step));
+    },
+  });
 }
 
 function renderTabs() {
@@ -232,6 +252,12 @@ function isEditing() {
 }
 
 /*
+ * 手指正压在某个手势上时同样不能重绘 —— 和输入框是同一件事，
+ * 只是把焦点换成了手指：重绘会把正在拖的那个节点连根换掉，手势当场断在半路。
+ */
+const busy = () => isEditing() || isGesturing();
+
+/*
  * 定时器、可见性、账号轮询这几条路都记得躲开输入框，唯独 store 订阅这条没有 ——
  * 于是在饮食记录里改克数时，后台任何一次落库（五分钟一次的账号健康轮询、
  * 云端同步拉到新数据）都会把整页重绘一遍，正在编辑的那个 input 被连根换掉：
@@ -242,7 +268,7 @@ function isEditing() {
 let renderPending = false;
 
 function renderCurrentSafely({ force = false } = {}) {
-  if (!force && isEditing()) { renderPending = true; return; }
+  if (!force && busy()) { renderPending = true; return; }
   renderPending = false;
   renderCurrent();
 }
@@ -254,9 +280,19 @@ document.addEventListener('focusout', () => {
    * 这一刻 activeElement 还是 body，直接重绘等于把用户从第二个框里踢出去。
    */
   setTimeout(() => {
-    if (renderPending && !isEditing()) renderCurrentSafely();
+    if (renderPending && !busy()) renderCurrentSafely();
   }, 0);
 });
+
+/* 手势跳过的那次重绘，手指抬起来补上。元素自己的 pointerup 先跑，这时已经不忙了 */
+for (const type of ['pointerup', 'pointercancel']) {
+  document.addEventListener(type, () => {
+    if (!renderPending) return;
+    setTimeout(() => {
+      if (renderPending && !busy()) renderCurrentSafely();
+    }, 0);
+  });
+}
 
 /* 判断本身在 lib/account.js，设置页用的是同一个 —— 别在这儿另写一份。 */
 function accountDataLocked(account = getAccountState()) {
@@ -590,7 +626,7 @@ async function boot() {
   runUrlImport();
 
   const refreshAccountHealth = async ({ minIntervalMs = 0 } = {}) => {
-    if (isEditing()) return { skipped: true };
+    if (busy()) return { skipped: true };
     try {
       const outcome = await pullAccountHealth({ minIntervalMs });
       // 有新健康行时 mergeHealthDays 会自己触发 store 重绘；没有新行时补一次，
@@ -608,7 +644,7 @@ async function boot() {
     renderTopbar();
     syncOnboarding();
     renderCurrentSafely();
-    if (settingsOpen && !isEditing()) renderSettings(settingsRoot);
+    if (settingsOpen && !busy()) renderSettings(settingsRoot);
   });
 
   let healthAccountUserId = null;
@@ -618,7 +654,7 @@ async function boot() {
     // 只有普通状态刷新才为了保留键盘和草稿而跳过重绘。
     const locked = accountDataLocked(account);
     renderCurrentSafely({ force: locked });
-    if (settingsOpen && (locked || !isEditing())) renderSettings(settingsRoot);
+    if (settingsOpen && (locked || !busy())) renderSettings(settingsRoot);
     const nextUserId = account.user?.id || null;
     if (!nextUserId) {
       healthAccountUserId = null;
@@ -639,7 +675,7 @@ async function boot() {
   // 只在用户原本跟随“今天”时自动跨日，避免把正在查看历史日期的人强行拉走。
   let clockDay = todayKey();
   const refreshClock = async () => {
-    if (isEditing()) return;
+    if (busy()) return;
     const nextDay = todayKey();
     const wasFollowingToday = state.day === clockDay;
     if (nextDay !== clockDay) {
@@ -659,7 +695,7 @@ async function boot() {
 
   // 从后台切回来时刷新一次
   document.addEventListener('visibilitychange', async () => {
-    if (document.hidden || isEditing()) return;
+    if (document.hidden || busy()) return;
     await refreshClock();
     await refreshAccountHealth({ minIntervalMs: 60_000 });
     if (current !== 'today' && current !== 'diet') renderCurrent();
