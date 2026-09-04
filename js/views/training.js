@@ -8,7 +8,7 @@
  * render* 会被定时器反复重跑，存在 DOM 里会被抹掉。
  */
 
-import { h, clearEl, mount, num, todayKey, toast } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, daySeed, toast } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
 import {
   listRow, persistentInfoTip, searchField, weakTag,
@@ -422,6 +422,15 @@ function pickerCard(rerender) {
   const rec = showRecommend ? recommendFor({
     mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
     selection: picked(), equip: equipFilter,
+    /*
+     * 推荐要有变化，但**不能在你看着它的时候变**。
+     *
+     * 挑选规则一条没松（每个动作模式一个槽、复合优先、不和已选的高度重合），
+     * 变的只是同样够格的那几个里今天挑哪一个。种子取当天的日期：
+     * 同一天里翻来翻去、切范围、每次重绘都是同一套，隔天才换 ——
+     * 拿 Math.random() 的话，每 60 秒的定时重绘都会让这一列动作自己跳一次。
+     */
+    seed: daySeed(todayKey()),
   }) : null;
   /*
    * 「全部 / 推荐」仍是互斥选择，所以还是分段控件 —— 但收窄一档，跟着列表头走。

@@ -297,7 +297,7 @@ export async function copyText(text) {
  * 得能写测试。这里原样再导出一遍，免得几十处 import 全要改。
  */
 export {
-  todayKey, shiftDay, dayFraction, dayOffset, dayHeading,
+  todayKey, shiftDay, dayFraction, dayOffset, dayHeading, daySeed,
 } from '../core/day.js';
 
 export const num = (v, d = 0) => {

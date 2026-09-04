@@ -125,7 +125,11 @@ function attachHits({ svg, pad, width, height, items, onPick }) {
       }
       return best ? best.date : null;
     };
-    const release = holdGesture();
+    /*
+     * 占用要挂在这根手指上：pointerup 收不到时（重绘换掉节点、页面切走）
+     * gesture.js 那边还能按 pointerId 把它作废。裸占用漏一次就永久卡住重绘。
+     */
+    const release = holdGesture(ev.pointerId);
     let lastDate = null;
     const move = (e) => {
       if (e.cancelable) e.preventDefault();

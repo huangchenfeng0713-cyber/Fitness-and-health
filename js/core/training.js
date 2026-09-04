@@ -228,20 +228,48 @@ const SPLIT_STARTER_PATTERNS = Object.freeze({
   core: ['anti_extension', 'trunk_flexion', 'anti_lateral', 'anti_rotation'],
 });
 
-function comboForPatterns(list, patterns, requestedSize) {
+/*
+ * 每个模式的槽位里，允许轮换的候选个数。
+ *
+ * 库里同一个模式下的动作是按「主流程度」录进去的（杠铃卧推排在窄距卧推前面），
+ * 所以轮换只在前几名里转 —— 转到第 12 个的话，推荐的就不再是这个模式的
+ * 代表动作，而是它的边角变式了。3 个足够让人看出「今天和昨天不一样」，
+ * 又不至于把方案质量摊薄。
+ */
+const ROTATE_POOL = 3;
+
+/** 从合格候选里按 seed 挑一个：还是那几个够格的，只是换着来 */
+function rotate(options, seed) {
+  if (!options.length) return null;
+  const n = Math.min(options.length, ROTATE_POOL);
+  return options[((((Number(seed) || 0) % n) + n) % n)];
+}
+
+function comboForPatterns(list, patterns, requestedSize, seed = 0) {
   const size = Math.max(1, Math.min(Number(requestedSize) || patterns.length, list.length));
   const combo = [];
   for (const pattern of patterns) {
     if (combo.length >= size) break;
-    const candidate = list
+    /*
+     * 先按老规矩把这个模式下够格的都筛出来（复合优先、和已选的不高度重合），
+     * 再在**前几名里**按 seed 转一个。挑选规则一条没松：换的只是同样够格的
+     * 那几个里挑哪一个，不是「随便来一个」。
+     */
+    const options = list
       .filter((e) => e.pattern === pattern && !combo.some((picked) => picked.id === e.id))
       .sort((a, b) => Number(b.compound) - Number(a.compound))
-      .find((e) => combo.every((picked) => overlapLevel(overlapScore(e, picked)) !== 'high'));
+      .filter((e) => combo.every((picked) => overlapLevel(overlapScore(e, picked)) !== 'high'));
+    // 只在同一档里转：复合的槽位不能因为轮换变成孤立动作
+    const top = options.filter((e) => Boolean(e.compound) === Boolean(options[0]?.compound));
+    const candidate = rotate(top, seed);
     if (candidate) combo.push(candidate);
   }
   // 动作库较小或某个模式缺失时仍尽量凑齐，但不塞进高度重复的替代品。
-  for (const exercise of list) {
+  const rest = list.filter((e) => !combo.some((picked) => picked.id === e.id));
+  const offset = rest.length ? (((Number(seed) || 0) % rest.length) + rest.length) % rest.length : 0;
+  for (let i = 0; i < rest.length; i += 1) {
     if (combo.length >= size) break;
+    const exercise = rest[(i + offset) % rest.length];
     if (combo.some((picked) => picked.id === exercise.id)) continue;
     if (combo.some((picked) => overlapLevel(overlapScore(exercise, picked)) === 'high')) continue;
     combo.push(exercise);
@@ -318,7 +346,7 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  *  - replacements 已选里有高度重合的一对时，给出「换掉哪个、换成什么」
  */
 export function recommendFor({
-  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all',
+  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0,
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
@@ -339,7 +367,7 @@ export function recommendFor({
   // 已选的、以及和已选高度重合的，都不再推荐
   const candidates = pool.filter((e) => !chosenIds.has(e.id)
     && !chosen.some((c) => overlapLevel(overlapScore(e, c)) === 'high'));
-  const combo = comboForPatterns(candidates, patterns, Math.min(size, candidates.length));
+  const combo = comboForPatterns(candidates, patterns, Math.min(size, candidates.length), seed);
 
   /*
    * 已经选了高度重合的一对时，直接把「换掉哪个」摆出来。
