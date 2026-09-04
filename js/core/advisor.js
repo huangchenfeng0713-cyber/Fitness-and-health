@@ -11,6 +11,7 @@ import { macroSplit } from './metrics.js';
 import { formatDuration } from './duration.js';
 import { MEALS, paceNote, DEFAULT_RHYTHM_MODE } from './eating-rhythm.js';
 import { todayKey } from './day.js';
+import { BALANCE_WITHIN } from './energy-ring.js';
 
 /*
  * 餐次定义搬去了 core/eating-rhythm.js —— 时间窗和供能比就是「进食节奏」本身，
@@ -521,19 +522,34 @@ export function judgeStatus({
   const dayProgress = pace.share;
   const expected = pace.should;
 
+  /*
+   * 标题只说判断，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，
+   * 标题再写一遍余量就叠了。差 40 kcal 以内和圈心同一把尺，说到位即可。
+   */
+  if (Math.abs(kcalLeft) <= BALANCE_WITHIN) {
+    return {
+      level: 'good',
+      headline: '今日热量到位',
+      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`
+        + (kcalLeft < 0
+          ? '这个幅度对计划几乎没有影响，今天无需补偿性少吃。'
+          : ''),
+    };
+  }
+
   if (kcalLeft < -targets.kcal * 0.12) {
     return {
       // 热量目标是计划区间，不是安全上限。单日偏高用橙色提醒即可；
       // 红色只留给钠、游离糖等真正的上限，避免诱导跳餐或补偿性节食。
       level: 'warn',
-      headline: `今日比计划多 ${Math.abs(kcalLeft)} kcal`,
+      headline: '今日热量偏高',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划为 ${gaps.kcal.target} kcal。单日偏差不能说明增减脂结果，不必跳过下一餐或明天补偿性少吃；如果一周内反复偏高，再结合 7 天体重趋势调整份量。`,
     };
   }
   if (kcalLeft < 0) {
     return {
       level: 'warn',
-      headline: `热量刚好吃满并略超 ${Math.abs(kcalLeft)} kcal`,
+      headline: '略超计划',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。这个幅度对计划几乎没有影响，今天无需补偿性少吃，下一餐回到正常预算即可。`,
     };
   }
@@ -554,7 +570,7 @@ export function judgeStatus({
      */
     return {
       level: late ? 'warn' : 'good',
-      headline: `还有 ${kcalLeft} kcal 热量余量`,
+      headline: '按计划吃',
       detail: late
         ? `按计划今天要吃到 ${gaps.kcal.target} kcal。夜里不建议一次补完全天缺口，明天回到正常节奏即可。`
         : `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
@@ -563,14 +579,14 @@ export function judgeStatus({
   if (kcalPct < expected - 30 && dayProgress > 0.5) {
     return {
       level: 'warn',
-      headline: `还有 ${kcalLeft} kcal 没吃，偏少了`,
+      headline: '今天吃得偏少',
       detail: `若记录完整且长期大幅低于目标，可能增加恢复不足和瘦体重流失风险。接下来 ${budget.meal.label} 可先安排约 ${budget.kcal} kcal。`
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
   return {
     level: 'good',
-    headline: `还有 ${kcalLeft} kcal 热量余量`,
+    headline: '按计划吃',
     detail: `热量完成 ${kcalPct}%，${pace.text}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
   };
 }
