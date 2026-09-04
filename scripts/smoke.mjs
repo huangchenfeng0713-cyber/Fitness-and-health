@@ -117,10 +117,15 @@ try {
       symbol: action?.textContent || '',
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
       controlRows: controlRows.map(rect),
-      viewSwitch: rect(document.querySelector('.picker-view-switch')),
+      viewSwitch: rect(document.querySelector('.picker-list-head .picker-view-switch')),
+      scopeRow: rect(document.querySelector('.picker-scope-row')),
+      equipInRow: rect(document.querySelector('.picker-scope-row .equip-filter-btn')),
+      modeField: rect(document.querySelector('.picker-mode-field')),
+      modeIsSelect: document.querySelector('.picker-mode-select')?.tagName === 'SELECT',
+      searchRow: rect(document.querySelector('.exercise-picker-card .exercise-search-row')),
       listHead: rect(document.querySelector('.picker-list-head')),
       equipBordered: (() => {
-        const btn = document.querySelector('.picker-list-head .equip-filter-btn');
+        const btn = document.querySelector('.picker-scope-row .equip-filter-btn');
         return btn ? getComputedStyle(btn).borderTopWidth !== '0px' : false;
       })(),
     };
@@ -209,16 +214,12 @@ try {
         ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
         : null
     )),
-    allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
     /*
-     * 「2 + 1」：上面两排是筛，宽度必须一致；「全部动作 / 推荐组合」跟着列表头走，
-     * 不进 picker-controls —— 它换的是呈现方式，不是把范围再切细。
+     * 筛选区里只剩一排分段控件（范围）；挑法是它上面那个下拉。
+     * 三样东西三种形态，不再是三排一样的灰槽比谁在上面。
      */
-    (() => {
-      const widths = allState.controlRows.map((row) => row.width);
-      const spread = Math.max(...widths) - Math.min(...widths);
-      return spread > 1 && `两排筛选控件宽度不一致：${widths.map((w) => w.toFixed(1)).join('/')}`;
-    })(),
+    allState.controlRows.length !== 1 && `筛选区里的分段控件不是一排：${allState.controlRows.length}`,
+    !allState.modeIsSelect && '挑法不是下拉',
     !allState.listHead && '缺少「这张列表是什么」那一行',
     allState.listHead && allState.controls
       && allState.listHead.top < allState.controls.top + allState.controls.height
@@ -228,21 +229,56 @@ try {
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
     /*
-     * 三排分段控件一样宽、一样起点。
+     * 层级靠形态 + 疏密，不靠缩进。
      *
-     * 上面两排曾经左右各缩 12px，而「全部 / 推荐」那排齐着卡片内容边 ——
-     * 三个做同一件事的开关摆出两种宽度，看着是「谁没对齐」，
-     * 而不是「谁是谁的下一级」。层级由位置表达，不靠缩进。
+     * 1. 范围那排要和搜索框、列表头一样宽、一样起点 —— 缩一道 12px 的话
+     *    读出来是「谁没对齐」，不是「谁是谁的下一级」（踩过一次）。
+     * 2. 挑法下拉到范围之间要比范围到列表头之间**更紧**，父子关系才读得出来。
+     * 3. 挑法下拉靠左站，不铺满一整行 —— 铺满就又变回一排灰槽了。
      */
     (() => {
-      const rows = [...allState.controlRows, allState.viewSwitch].filter(Boolean);
-      if (rows.length !== 3) return `选择动作里的分段控件不是三排：${rows.length}`;
-      const spread = Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width));
-      const offset = Math.max(...rows.map((r) => r.left)) - Math.min(...rows.map((r) => r.left));
+      const scope = allState.controlRows[0];
+      const { searchRow, listHead } = allState;
+      if (!scope || !searchRow || !listHead) return '量不到筛选区的几个块';
+      const spread = Math.max(scope.width, searchRow.width, listHead.width)
+        - Math.min(scope.width, searchRow.width, listHead.width);
+      const offset = Math.max(scope.left, searchRow.left, listHead.left)
+        - Math.min(scope.left, searchRow.left, listHead.left);
       return (spread > 1 || offset > 1)
-        && `三排分段控件没对齐：宽 ${rows.map((r) => r.width.toFixed(1)).join('/')}，`
-          + `左 ${rows.map((r) => r.left.toFixed(1)).join('/')}`;
+        && `范围那排和搜索框、列表头没对齐：宽 ${[scope, searchRow, listHead].map((r) => r.width.toFixed(1)).join('/')}，`
+          + `左 ${[scope, searchRow, listHead].map((r) => r.left.toFixed(1)).join('/')}`;
     })(),
+    (() => {
+      const row = allState.scopeRow;
+      const scope = allState.controlRows[0];
+      const { listHead } = allState;
+      if (!row || !scope || !listHead) return null;
+      const inner = scope.top - (row.top + row.height);
+      const outer = listHead.top - (scope.top + scope.height);
+      return inner >= outer
+        && `口径行和范围之间（${inner.toFixed(1)}px）不比范围到列表头（${outer.toFixed(1)}px）更紧，看不出是父子`;
+    })(),
+    allState.modeField && allState.controlRows[0]
+      && allState.modeField.width > allState.controlRows[0].width - 40
+      && `挑法下拉几乎铺满一整行（${allState.modeField.width.toFixed(1)}），又变回一排灰槽了`,
+    /*
+     * 每一行要么满宽，要么两端都有东西。
+     * 只有一侧有控件、另一侧空着一大片，夹在两个满宽的块中间就是一道豁口。
+     */
+    (() => {
+      const row = allState.scopeRow;
+      const mode = allState.modeField;
+      const equip = allState.equipInRow;
+      if (!row || !mode || !equip) return '口径行里少了挑法或器械档位';
+      const leftGap = mode.left - row.left;
+      const rightGap = (row.left + row.width) - (equip.left + equip.width);
+      return (leftGap > 1 || rightGap > 1)
+        && `口径行没有把两端撑住：左 ${leftGap.toFixed(1)}px、右 ${rightGap.toFixed(1)}px`;
+    })(),
+    allState.viewSwitch && allState.listHead
+      && (allState.viewSwitch.top < allState.listHead.top - 1
+        || allState.viewSwitch.top > allState.listHead.top + allState.listHead.height + 1)
+      && '视图切换没有挂在列表头那一行上',
     !recommendState.hasTip && '推荐说明入口缺失',
     recommendState.tip && (Math.abs(recommendState.tip.width - 14) > 1
       || Math.abs(recommendState.tip.height - 14) > 1)
@@ -251,9 +287,9 @@ try {
     !openAfterRender && '推荐说明被一次无关重绘自动收起',
   ].filter(Boolean);
   check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
-  // 后续用例会在「全部动作」中选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
+  // 后续用例会在动作列表里选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.trim() === '全部')?.click());
+    .find((x) => x.textContent.trim() === '列表')?.click());
   await page.waitForTimeout(200);
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
@@ -270,7 +306,53 @@ try {
       && exerciseSearch.resultText.includes('硬拉')
       && exerciseSearch.controlsHidden,
     JSON.stringify(exerciseSearch));
-  await page.fill('.exercise-search-input', '');
+
+  /*
+   * 搜索框本身必须一路活着。
+   *
+   * 这里量的是节点身份，不是文字：搜索词存在模块变量里，整卡重绘之后
+   * 文字照样会被填回来，看起来没事 —— 可输入框已经是另一个节点，
+   * 焦点掉回 body，iOS 上就是键盘当场收起、拼音没了。
+   *
+   * 两种「变空」都要过：用户自己退格清空，以及中文键盘上拼音没上屏就失焦时
+   * iOS 补来的那个空值 input 事件（后者不是清空，搜索词和结果都该留着）。
+   */
+  const searchAlive = await page.evaluate(() => {
+    const el = document.querySelector('.exercise-search-input');
+    el.focus();
+    const first = el;
+    const fire = (v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+    fire('h');
+    const rowsWhileSearching = document.querySelectorAll('.exercise-search-results .ex-row').length;
+    // iOS 丢拼音：先失焦，再补一个空值事件
+    el.blur();
+    fire('');
+    const kept = {
+      value: document.querySelector('.exercise-search-input')?.value,
+      rows: document.querySelectorAll('.exercise-search-results .ex-row').length,
+    };
+    // 用户自己退格清空：焦点在框里，这一下才算数
+    el.focus();
+    fire('');
+    const after = document.querySelector('.exercise-search-input');
+    return {
+      rowsWhileSearching,
+      keptQuery: kept.value === 'h' && kept.rows === rowsWhileSearching,
+      sameNode: first === after,
+      stillFocused: document.activeElement === after,
+      backToList: document.querySelector('.exercise-search-results')?.hidden === true
+        && document.querySelectorAll('.picker-normal-results .ex-row').length > 0,
+    };
+  });
+  const searchProblems = [
+    !searchAlive.rowsWhileSearching && '搜索没有出结果，后面几条量不准',
+    !searchAlive.keptQuery && '拼音被 iOS 丢掉时搜索词和结果跟着没了',
+    !searchAlive.sameNode && '清空搜索词把整张卡重绘了，输入框已是另一个节点',
+    !searchAlive.stillFocused && '清空搜索词后焦点掉出输入框，iOS 上键盘会收起',
+    !searchAlive.backToList && '清空后没回到普通列表',
+  ].filter(Boolean);
+  check('搜索框在清空和失焦时都不被重建', searchProblems.length === 0,
+    searchProblems.join('；') || JSON.stringify(searchAlive));
   await page.waitForTimeout(100);
 
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
@@ -744,10 +826,16 @@ try {
    * 设置主页是一张分组列表：每组一行，点进去才是那张表单。
    * 光看得见五行不算数——真正会坏的是「点进去里面是空的」，所以逐个点开看。
    */
-  const drawer = await page.$$eval('.settings-drawer .set-row .set-title', (h) => h.map((x) => x.textContent.trim()));
+  /*
+   * 行的类名是 .settings-row，不是 .set-row —— 后者是训练页记组数那一行。
+   * 这条守卫曾经查着 .set-row，两边同名的时候看着是对的；设置行改名之后
+   * 它就一直匹配到 0 个元素、报「一行都没有」，而设置页本身好好的。
+   * 查不到元素时报「一行都没有」和真的坏掉长得一模一样，所以下面额外断言行数是 5。
+   */
+  const drawer = await page.$$eval('.settings-drawer .settings-row .set-title', (h) => h.map((x) => x.textContent.trim()));
   const opened = [];
   for (let i = 0; i < drawer.length; i += 1) {
-    await page.evaluate((n) => document.querySelectorAll('.settings-drawer .set-row')[n]?.click(), i);
+    await page.evaluate((n) => document.querySelectorAll('.settings-drawer .settings-row')[n]?.click(), i);
     await page.waitForTimeout(250);
     const inner = await page.evaluate(() => ({
       back: !!document.querySelector('.settings-drawer .set-back-btn'),

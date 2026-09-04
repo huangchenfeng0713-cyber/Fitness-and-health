@@ -74,10 +74,28 @@ export function aliasInitials(alias) {
  *
  * 只认前缀，不认子串：`nf` 应当找到「牛奶粉」，但不该在「西红柿炒蛋」
  * 的首字母 `xhscd` 中间碰巧命中就算数 —— 那样两个字母能匹配上半个库。
- * 也要求至少两个字母，单个字母同样会匹配得到处都是。
+ *
+ * 前缀语义下单个字母是安全的（`h` 只命中首字母以 h 起头的那些），
+ * 真正会匹配得到处都是的是**拿一个字母去别名里做子串**，那条由
+ * `aliasSubstringMatch` 挡着。
  */
 export function matchesInitials(query, alias) {
   const q = String(query || '').toLowerCase().trim();
-  if (q.length < 2 || !/^[a-z]+$/.test(q)) return false;
+  if (!q || !/^[a-z]+$/.test(q)) return false;
   return aliasInitials(alias).some((initials) => initials.startsWith(q));
+}
+
+/**
+ * 查询串在这段文字（名称或别名）里做子串匹配。
+ *
+ * **单个拉丁字母不走这条路。** 别名里存的是全拼，`a`、`i`、`h` 这种字母
+ * 几乎每条全拼里都有：实测搜 `h` 命中 128 个动作里的 100 个、`a` 命中 122 个，
+ * 等于没筛 —— 而人打第一个拼音字母时看到的正是这一屏。名称里的英文品牌名同理。
+ * 一个字母只当首字母的开头用（走 `matchesInitials`），或者按前缀匹配。
+ */
+export function substringMatch(query, text) {
+  const q = String(query || '').toLowerCase().trim();
+  if (!q) return false;
+  if (/^[a-z]$/.test(q)) return false;
+  return String(text || '').toLowerCase().includes(q);
 }

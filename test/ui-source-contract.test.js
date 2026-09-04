@@ -10,20 +10,24 @@ test('健身器械筛选由 training view 自己管理状态', () => {
   assert.match(training, /equip-filter-menu/);
 });
 
-test('选择动作是「2 + 1」，不是三级下钻', () => {
+test('选择动作是三种形态，不是三排一样的灰槽', () => {
   const training = text('js/views/training.js');
-  assert.match(training, /picker-mode-switch/);
-  assert.match(training, /picker-scope-switch/);
   /*
-   * 上面两排是筛（挑法 → 范围），picker-controls 里只有这两排。
-   * 「全部动作 / 推荐组合」换的是同一批动作的呈现方式，不是把范围再切细 ——
-   * 塞进同一组控件等于宣称三者是一条下钻链。
+   * 挑法（用哪套分类法）、范围（练哪儿）、视图（怎么呈现）是三件不同的事，
+   * 却曾经是三排一模一样的灰槽白格叠在一起 —— 读出来是三个并列的兄弟。
+   * 现在：挑法是下拉、范围是唯一那排分段控件、视图收窄一档挂在列表头右边。
+   * 层级由形态 + 疏密表达，不靠三块一样的灰槽比谁在上面。
    */
+  assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
+  assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
+  assert.match(training, /picker-scope-switch/);
   assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\)\);/,
-    'picker-controls 里不该有第三排');
+    'picker-controls 里只该有挑法和范围');
   assert.match(training, /const listHead = h\('div\.picker-list-head'/,
     '缺少「这张列表是什么」那一行');
-  assert.match(training, /listHead,\s*\n\s*viewTabs,/,
+  assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
+    '口径那一行没有把两端撑住（左挑法、右器械档位）');
+  assert.match(training, /h\('div\.picker-scope', null, scopeName, scopeCount\),\s*\n\s*viewTabs\)/,
     '视图切换没有跟着列表头走');
   assert.ok(!/picker-list-toolbar/.test(training), '列表工具条应当已经取消');
   assert.doesNotMatch(training, /equipTabs\(rerender, all\)/);

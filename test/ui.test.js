@@ -351,8 +351,8 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
   assert.match(training, /`\$\{g\.label\}（今天已练到）`/, '标记没有给读屏软件的说法');
   assert.match(css, /\.tab-dot\s*\{/, '.tab-dot 没有样式');
 
-  assert.match(training, /\['group', '身体部位'\].*\['split', '动作模式'\]/s,
-    '两种选择入口应使用“身体部位 / 动作模式”');
+  assert.match(training, /\['group', '按身体部位'\].*\['split', '按动作模式'\]/s,
+    '两种选择入口应使用“按身体部位 / 按动作模式”');
   /*
    * 顶栏副标题不许写「数据截至 X」：健身页不跟今日 / 饮食页的日期走，
    * 那句话会让人以为翻回昨天，动作记录也跟着翻。
@@ -403,8 +403,32 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
    */
   assert.doesNotMatch(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(/s,
     '选择动作里的分段控件又缩窄了，三排必须一样宽');
-  assert.match(polish, /\.picker-mode-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
-    '顶部模式控件仍然过厚');
+  /*
+   * 挑法是个下拉，不是第三排灰槽 —— 三样东西三种形态，
+   * 层级靠形态 + 疏密表达，不靠三块一样的灰槽比谁在上面。
+   */
+  assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
+  assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
+  assert.match(training, /select\.value = pickMode;/,
+    '选中项要在节点建好之后再设，否则会被按 selectedIndex 打回第一项');
+  assert.match(polish, /\.picker-mode-select\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
+    '挑法下拉仍然过厚');
+  /*
+   * 「口径」那一行左右各站一个下拉形态的控件：挑法在左、器械档位在右。
+   * 只放左边那个的话，右边空着一大片，夹在满宽的搜索框和满宽的范围之间，
+   * 边缘读出来是豁的 —— 那不是层级，是没排完。
+   */
+  assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
+    '口径那一行没有把两端撑住');
+  // 视图切换挂在列表头右边，和左边的「这张列表是什么」各占一端
+  assert.match(training, /h\('div\.picker-scope', null, scopeName, scopeCount\),\s*\n\s*viewTabs\)/,
+    '视图切换没有跟着列表头走');
+  /*
+   * 视图切换和器械筛选现在并排站，两个都叫「全部」的话光看字分不出
+   * 按下去会怎样 —— 这个坑在它们上下相邻的时候就踩过一次。
+   */
+  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
+    '视图切换又叫回「全部」了，会和旁边的「全部器械」撞');
   assert.match(polish, /\.picker-scope-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
     '动作范围控件仍然过厚');
   assert.match(training, /function setupPickerCompact\(root\)/,
@@ -447,7 +471,9 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
 
   assert.ok(!/function scopeCard\(/.test(training), '范围选择又被拆成了独立卡片');
   assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
-  assert.match(training, /\['all', '全部'\], \['recommend', '推荐'\]/,
+  // 两个并列的具名选项，不是一个语义含糊的单开关。
+  // 叫「列表」不叫「全部」：它和「全部器械」并排站，两个「全部」分不出按下去会怎样。
+  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
     '列表 / 推荐仍是语义含糊的单个开关');
   /*
    * 互斥选择的读屏语义要说清「这是一组、现在选中的是哪个」。
@@ -597,8 +623,17 @@ test('动作列表默认只出前几个，但已选的绝不会被藏起来', ()
     '搜索里勾上的动作清掉搜索词后也要留在列表里');
   assert.match(training, /leavingSearch && !searchContent\.hidden|const leavingSearch = !searching && !searchContent\.hidden/,
     '离开搜索时没有把勾选态画回列表');
-  assert.match(training, /if \(leavingSearch\) rerender\(\)/,
-    '离开搜索应当重绘以恢复 ✓，输入过程中不许重绘');
+  /*
+   * 离开搜索时只能重建下面那列，不能走 rerender()：rerender() 会把搜索框
+   * 一起换掉（焦点掉回 body，iOS 当场收键盘），而「离开搜索」在中文键盘上
+   * 不止是用户按退格 —— 拼音没上屏就失焦时 iOS 也会补一个空值的 input 事件。
+   */
+  assert.match(training, /if \(leavingSearch\) mount\(clearEl\(normalContent\), normalBody\(\)\)/,
+    '离开搜索应当只重建普通列表，把 ✓ 画回去');
+  assert.doesNotMatch(training, /if \(leavingSearch\) rerender\(\)/,
+    '离开搜索不许整卡重绘，那会连搜索框和键盘一起换掉');
+  assert.match(training, /document\.activeElement !== searchInput/,
+    '空值只有在输入框自己拿着焦点时才算清空，否则是 iOS 丢掉了没上屏的拼音');
   // 换部位、换器械档位都要收回去，否则换一档还是满屏
   const resets = training.match(/showAllExercises = false/g) || [];
   assert.ok(resets.length >= 2, `切部位和切器械档位都要收回预览：只找到 ${resets.length} 处`);
@@ -1114,11 +1149,17 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   const dash = strip(read('js/views/dashboard.js'));
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
-  assert.match(css, /\.ring-tick\.eaten \{[^}]*var\(--ring-tick\)/, '摄入刻度应是淡灰线');
-  assert.match(css, /\.ring-tick\.burned \{[^}]*var\(--ring-burn\)/, '消耗刻度应跟着黄环');
   assert.match(css, /--ring-eat:/, '圆环没有收进同一套配色');
   const chart = read('js/lib/energy-ring-chart.js');
   assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
+  /*
+   * 刻度的颜色跟着它标的那条轨道走，跑过一圈一起换深色 —— 和弧段取自同一张
+   * TRACK 表，CSS 里不许再单独给刻度定颜色，否则刻度和弧会走散。
+   */
+  assert.match(chart, /const tone = tick\.laps >= 1 \? 'deep' : 'light'/, '刻度没有跟着圈数换深浅');
+  assert.match(chart, /stroke: t\[tone\]/, '刻度没有取自轨道自己的颜色');
+  assert.doesNotMatch(css, /\.ring-tick\.(?:eaten|burned)[^{]*\{[^}]*stroke:/,
+    'CSS 又给刻度单独定了颜色，会和 TRACK 表走散');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   /*
    * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处
@@ -2127,4 +2168,117 @@ test('搜索框有清除键，两页共用一个组件', () => {
   const css = read('css/app.css');
   assert.match(css, /\.search-input::-webkit-search-cancel-button/,
     '没有藏掉原生小叉，桌面上会出现两个');
+});
+
+test('动画只在真的变了的时候跑，且都躲开「减少动态效果」', () => {
+  /*
+   * 两处动画（热量环的弧长、删记录时那一行收拢）都不是装饰：
+   * 前者说的是「刚才这口饭走了这么远」，后者说的是「删掉的是这一行」。
+   * 但两处都必须能安静地不跑：值没变时不跑、系统开了减少动态效果时不跑。
+   */
+  const ring = read('js/lib/energy-ring-chart.js');
+  assert.match(ring, /prefers-reduced-motion: reduce/, '弧长动画没有躲开减少动态效果');
+  assert.match(ring, /Math\.abs\(prev - len\) < 0\.5/, '值没变也要动一下的话，每 60 秒的定时重绘都会闪');
+  assert.match(ring, /`\$\{animateKey\}\|\$\{model\.scale\}\|\$\{memoKey\}`/,
+    '换了日期或换了尺子还接着动画，等于把两份数据说成「长了一截」');
+  const dash = read('js/views/dashboard.js');
+  assert.match(dash, /animateKey: state\.day/, '主卡没有把日期交给环，环会跨日期动画');
+
+  const ui = read('js/lib/ui.js');
+  assert.match(ui, /export async function collapseRow/, '收拢动画应当和别的 UI 组件放在一起，别再开一层');
+  assert.match(ui, /prefers-reduced-motion: reduce/, '收拢动画没有躲开减少动态效果');
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /const btn = ev\.currentTarget;/,
+    'currentTarget 过了 await 就是 null，要先抓在手里');
+  assert.match(diet, /await collapseRow\(btn\.closest\('\.entry-row'\)\)/,
+    '删记录时那一行应当先收拢再落库');
+});
+
+test('同一个选择器不许把同一个属性写两遍', () => {
+  /*
+   * 这条规矩 CLAUDE.md 里立过，但一直没人执行 —— 实测全文件有 45 处。
+   * 其中一半不是无害的重复，是**写在组件旁边的值根本不作数**：
+   * `.card-head h3` 写着 letter-spacing: 0，文件后面又改成 -.015em；
+   * `.card-tag` 写着 caption/faint，后面被统一成 footnote/muted；
+   * `.chart-note` 的 padding 写了 9px 11px，后面又写 11px 13px。
+   * 看代码的人得先算层叠顺序才知道真值，改样式时改到的那一份往往是死代码。
+   *
+   * @media 里的覆写不算，那是正当的第二次声明。
+   */
+  const css = read('css/app.css');
+  const noComment = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 把 @media / @supports 整段跳过
+  let rest = '';
+  for (let i = 0; i < noComment.length;) {
+    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i)) {
+      let depth = 0;
+      let j = i;
+      for (; j < noComment.length; j += 1) {
+        if (noComment[j] === '{') depth += 1;
+        else if (noComment[j] === '}') { depth -= 1; if (depth === 0) { j += 1; break; } }
+      }
+      i = j;
+    } else { rest += noComment[i]; i += 1; }
+  }
+  const bySelector = new Map();
+  for (const match of rest.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = match[1].trim().replace(/\s+/g, ' ');
+    if (selector.startsWith('@') || selector.startsWith(':root')) continue;
+    for (const one of selector.split(',').map((x) => x.trim()).filter(Boolean)) {
+      if (!bySelector.has(one)) bySelector.set(one, []);
+      for (const decl of match[2].split(';')) {
+        const prop = decl.split(':')[0].trim();
+        if (prop) bySelector.get(one).push(prop);
+      }
+    }
+  }
+  const dupes = [];
+  for (const [selector, props] of bySelector) {
+    const seen = new Set();
+    for (const prop of props) {
+      if (seen.has(prop)) dupes.push(`${selector} → ${prop}`);
+      seen.add(prop);
+    }
+  }
+  assert.equal(dupes.length, 0, `同一属性写了两遍：${dupes.slice(0, 8).join('；')}`);
+});
+
+test('字重只有四档，和字号一样是个阶梯', () => {
+  /*
+   * 分不出粗细的层级不是层级 —— 和字号那七档是同一条道理。
+   * 重构前散着 400 / 450 / 500 / 550 / 560 / 600 / 620 / 650 / 680 / 700 十个值，
+   * 而 550 和 560、650 和 680 在 SF 上肉眼分不出；更糟的是同一件事拿了不同的值：
+   * 数值有 600 也有 650，食物名在推荐卡里 600、在饮食记录里 550，
+   * `.chip-btn` 是 650 而选中之后降到 600 —— 按下去字反而变细。
+   */
+  const css = read('css/app.css');
+  const raw = [...css.matchAll(/font-weight:\s*(\d+)/g)].map((m) => m[1]);
+  assert.deepEqual(raw, [], `字重要写 var(--w-*)，别写裸数字：还有 ${raw.length} 处`);
+  for (const name of ['--w-regular: 400', '--w-medium: 500', '--w-semibold: 600', '--w-bold: 700']) {
+    assert.ok(css.includes(name), `字重阶梯少了 ${name}`);
+  }
+  const used = new Set([...css.matchAll(/font-weight:\s*var\((--w-[a-z]+)\)/g)].map((m) => m[1]));
+  for (const token of used) {
+    assert.ok(['--w-regular', '--w-medium', '--w-semibold', '--w-bold'].includes(token),
+      `${token} 不在四档里`);
+  }
+});
+
+test('两个页面上的「把这一行加进来」长得一样大', () => {
+  // 圆的直径已经共用 --control-inline，里面那个加号也得共用一个尺寸：
+  // 实测饮食页 20px、健身页 21.25px（那边没写死，1.25em 跟着 17px 的行盒走）。
+  const css = read('css/app.css');
+  assert.match(css, /\.add-btn \.icon-slot svg,\s*\n\.exercise-choice-action \.icon-slot svg \{[^}]*var\(--icon-md\)/,
+    '饮食页和健身页的加号没有共用同一条尺寸规则');
+});
+
+test('图上的字不小于全应用的可读下限', () => {
+  // --fs-caption 12px 是写死的下限，而趋势图的日期和刻度曾经是 9.5 / 10px，
+  // 是全屏最小的字。提上来之后左边留白要跟着算，否则五位数会被切掉第一位。
+  const charts = read('js/lib/charts.js');
+  assert.match(charts, /const AXIS_FONT = 11;/, '轴字号没有收进一个常量');
+  assert.doesNotMatch(charts, /'font-size': (9\.5|10)\b/, '图上还有小于 11px 的字');
+  assert.match(charts, /function axisPad\(/, '纵轴留白没有按最长刻度算');
+  const uses = (charts.match(/pad\.l = axisPad\(/g) || []).length;
+  assert.equal(uses, 2, `折线图和柱状图都要算留白，实际 ${uses} 处`);
 });

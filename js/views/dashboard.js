@@ -127,7 +127,8 @@ function heroCard(advice, targets, derived) {
      */
     h('div.hero-body', null,
       h('div.hero-ring', null,
-        energyRingChart({ model: ringModel }),
+        // 只在同一天里让弧长过去；翻日期是换了一份数据，不是「长了一截」
+        energyRingChart({ model: ringModel, animateKey: state.day }),
         ringLegend(ringModel))),
 
     h('div.metric-list', null,

@@ -153,9 +153,17 @@ function closeUndoWindow() {
  * 直接以数值传进去，不必往关键帧里塞 calc(var(--x) * n)
  * （Safari 对那个支持不稳，整条关键帧一失效就只剩第一帧）。
  */
-/* 水滴飞行的时长，以及它落进数字的那一刻 —— 涟漪和数字都对着这个时刻起 */
-const FLY_MS = 620;
-const LAND_MS = 380;
+/*
+ * 水滴飞行的时长，以及它落进数字的那一刻 —— 涟漪和数字都对着这个时刻起。
+ *
+ * LAND_MS 必须落在飞行的**尾段**：原先是 620 里的 380（61%），那时水滴才走了
+ * 一半路程，水花比水滴先炸开，两个动作叠在一起，整体就成了「闪一下」。
+ * 现在按 0.86 取，水滴摊平进数字的同一拍再起波。
+ *
+ * 速度也整体放慢：水比界面元素重，620ms 走完全程读起来像图标在滑轨上弹了一下。
+ */
+const FLY_MS = 880;
+const LAND_MS = Math.round(FLY_MS * 0.86);
 
 function flyDrop(pill) {
   if (!pill?.isConnected) return;
@@ -186,7 +194,7 @@ function flyDrop(pill) {
   drop.animate([
     { opacity: 1 }, { opacity: 0, offset: 0.06 },
     { opacity: 0, offset: 0.62 }, { opacity: 1 },
-  ], { duration: FLY_MS + 460, easing: 'ease-out' });
+  ], { duration: FLY_MS + 620, easing: 'ease-out' });
   /*
    * 像水而不是像图标在滑轨上走，靠的是形变：起手下沉蓄势，
    * 飞行段沿运动方向拉长，从文字上方划过，落点摊开压扁。
@@ -228,7 +236,11 @@ function flyDrop(pill) {
     Math.max(originX, pillBox.width - originX),
     Math.max(originY, pillBox.height - originY),
   ));
-  const rings = [0, 80, 160, 240].map((delay, i) => {
+  /*
+   * 四圈波，间隔拉到 170ms：原先 80ms 四圈几乎同时到边，糊成一次闪光。
+   * 拉开之后才看得出「一圈推着一圈往外走」。
+   */
+  const rings = [0, 170, 340, 510].map((delay, i) => {
     const ring = document.createElement('i');
     ring.className = 'water-ripple';
     Object.assign(ring.style, {
@@ -236,17 +248,27 @@ function flyDrop(pill) {
       width: `${reach * 2}px`, height: `${reach * 2}px`,
     });
     wave.append(ring);
+    /*
+     * 波前要「先冲出去、再慢慢摊平」：中间那一帧把亮度留住，
+     * 让人看见它走到一半时还在，而不是一出生就淡掉。
+     */
+    const peak = 0.46 - i * 0.07;
     return ring.animate(
-      [{ transform: 'translate(-50%, -50%) scale(0)', opacity: 0.5 - i * 0.08 },
+      [{ transform: 'translate(-50%, -50%) scale(0)', opacity: peak },
+        { transform: 'translate(-50%, -50%) scale(.55)', opacity: peak * 0.92, offset: 0.34 },
         { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
-      { duration: 680 + i * 60, delay: LAND_MS + delay, easing: 'cubic-bezier(.12,.72,.22,1)', fill: 'both' },
+      {
+        duration: 1150 + i * 110, delay: LAND_MS + delay,
+        easing: 'cubic-bezier(.16,.84,.3,1)', fill: 'both',
+      },
     );
   });
   const wash = wave.animate(
     [{ backgroundColor: 'transparent' },
-      { backgroundColor: 'var(--accent-soft)', offset: 0.22 },
+      { backgroundColor: 'var(--accent-soft)', offset: 0.18 },
+      { backgroundColor: 'var(--accent-soft)', offset: 0.34 },
       { backgroundColor: 'transparent' }],
-    { duration: 720, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
+    { duration: 1400, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
   );
   document.body.append(wave);
   Promise.allSettled([...rings, wash].map((x) => x.finished)).then(() => wave.remove());
@@ -264,7 +286,7 @@ function flyDrop(pill) {
         { transform: 'translateY(-1.6px) skewX(-3.5deg)', offset: 0.58 },
         { transform: 'translateY(1px) skewX(2deg)', offset: 0.78 },
         { transform: 'translateY(0) skewX(0deg)' }],
-      { duration: 760, delay: LAND_MS - 40, easing: 'ease-out' },
+      { duration: 1020, delay: LAND_MS - 40, easing: 'ease-out' },
     );
   }
   count.animate(
@@ -273,7 +295,7 @@ function flyDrop(pill) {
       { transform: 'scale(.94) translateY(2px)', offset: 0.55 },
       { transform: 'scale(1.08) translateY(-1px)', offset: 0.76 },
       { transform: 'scale(1) translateY(0)' }],
-    { duration: 640, delay: LAND_MS - 20, easing: 'ease-out' },
+    { duration: 860, delay: LAND_MS - 20, easing: 'ease-out' },
   );
 }
 

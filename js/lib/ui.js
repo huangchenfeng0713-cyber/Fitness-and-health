@@ -51,9 +51,16 @@ export function searchField({
     onclick: () => {
       input.value = '';
       syncClear();
+      /*
+       * 先把焦点还给输入框，再派事件。
+       *
+       * 调用方要靠「派事件时输入框是不是焦点」分辨这一下是不是用户真的在清空 ——
+       * 中文键盘上拼音没上屏就失焦时，iOS 也会补一个空值的 input 事件，
+       * 那一下不该当成清空。顺序反过来的话，这个叉自己就落到了错的一边。
+       */
+      input.focus();
       // 派发 input 事件，让调用方的搜索逻辑照常跑一遍，不用各自再记一份清空逻辑
       input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.focus();
     },
   }, icon('close'));
   function syncClear() {
@@ -64,6 +71,8 @@ export function searchField({
   return {
     input,
     clear,
+    // 调用方改了 input.value 之后要能把叉的显隐补上（它只跟着 input 事件走）
+    sync: syncClear,
     el: h('div.search-row.search-row-full.ui-search-field', { class: className }, input, clear),
   };
 }
@@ -116,4 +125,33 @@ export function segmentedGroupProps(label, kind = 'tab') {
 export function segmentedItemProps(active, kind = 'tab') {
   const role = groupRole(kind);
   return { type: 'button', role: role.item, [role.selected]: String(Boolean(active)) };
+}
+
+/**
+ * 让一行先收起来再消失。
+ *
+ * 删掉一条记录时下面整段会瞬间往上跳，跳完人已经分不清刚才删的是哪一条 ——
+ * 同一样东西记了两笔时尤其明显。收拢的那一下把「删的是这一行」说清楚，
+ * 也让紧接着的位移有个来处。
+ *
+ * 收完才落库：动画跑一半被重绘换掉的话，屏幕上会剩一段半高的空档。
+ * 关掉动画偏好时直接返回，删除照常。
+ */
+export async function collapseRow(el, ms = 200) {
+  if (!el?.isConnected) return;
+  if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (typeof el.animate !== 'function') return;
+  const { height } = el.getBoundingClientRect();
+  if (!(height > 0)) return;
+  const style = getComputedStyle(el);
+  el.style.overflow = 'hidden';
+  const anim = el.animate([
+    { height: `${height}px`, opacity: 1, paddingTop: style.paddingTop, paddingBottom: style.paddingBottom },
+    { height: '0px', opacity: 0, paddingTop: '0px', paddingBottom: '0px' },
+  ], { duration: ms, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+  try {
+    await anim.finished;
+  } catch {
+    /* 被打断（重绘换掉了这个节点）就算了，反正它马上就不在了 */
+  }
 }

@@ -4,6 +4,26 @@ const NS = 'http://www.w3.org/2000/svg';
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+/*
+ * 轴上的字。
+ *
+ * 原先是 9.5 和 10 两个值散在十来处 —— 而 --fs-caption 12px 是全应用写死的
+ * 可读下限，图上的日期和刻度不该是全屏最小的那几行字。
+ *
+ * 提上来之后左边留白必须跟着算（axisPad）：38px 装不下 11px 的五位数，
+ * 「13048」会被切成「l3048」。
+ */
+const AXIS_FONT = 11;
+
+/**
+ * 纵轴刻度要留多宽。
+ * 0.62em 是等宽数字的保守宽度（SF 的 tabular 数字约 0.6em），再留 10 给间隙。
+ */
+function axisPad(labels, base = 38) {
+  const longest = Math.max(0, ...labels.map((t) => String(t).length));
+  return Math.max(base, Math.round(longest * AXIS_FONT * 0.62) + 10);
+}
+
 /**
  * 给图表加「点一下看某一天数值」的能力。
  *
@@ -246,6 +266,8 @@ export function lineChart({
     return t === `-${(0).toFixed(dec)}` ? (0).toFixed(dec) : t;   // 别显示 "-0"
   };
 
+  pad.l = axisPad([0, 1, 2, 3].map((i) => fmt(min + ((max - min) * i) / 3)));
+
   // 日期有缺口时必须按真实日历距离布点；否则 8 月 1 日、2 日、30 日会被
   // 画成等间距，视觉上把最后 28 天的空档压成一天。
   const dayXs = points.map((p) => Date.parse(`${String(p.x).slice(0, 10)}T00:00:00Z`));
@@ -277,7 +299,7 @@ export function lineChart({
     const v = min + ((max - min) * i) / 3;
     const y = py(v);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'grid' }));
-    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': AXIS_FONT });
     t.textContent = fmt(v);
     svg.append(t);
   }
@@ -286,7 +308,7 @@ export function lineChart({
     const y = py(target);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'target-line' }));
     if (targetLabel) {
-      const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': 10 });
+      const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': AXIS_FONT });
       t.textContent = targetLabel;
       svg.append(t);
     }
@@ -351,16 +373,16 @@ export function lineChart({
        */
       const anchor = i === 0 ? 'start' : i === labelDays.length - 1 ? 'end' : 'middle';
       const t = el('text', {
-        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': 9.5,
+        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': AXIS_FONT,
       });
       t.textContent = new Date(day.ms).toISOString().slice(5, 10);
       svg.append(t);
     });
   } else {
     // 给了 domain 就标区间两端，标数据两端会和相邻卡片对不上
-    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': AXIS_FONT });
     first.textContent = String(useDomain ? domain[0] : points[0].x).slice(5);
-    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': AXIS_FONT });
     lastT.textContent = String(useDomain ? domain[1] : last.x).slice(5);
     svg.append(first, lastT);
   }
@@ -393,7 +415,7 @@ export function lineChart({
   }
 
   if (unit) {
-    const u = el('text', { x: pad.l, y: 10, class: 'axis', 'font-size': 10 });
+    const u = el('text', { x: pad.l, y: 10, class: 'axis', 'font-size': AXIS_FONT });
     u.textContent = unit;
     svg.append(u);
   }
@@ -416,6 +438,7 @@ export function barChart({
     return svg;
   }
   const max = Math.max(...measured.map((d) => Number(d.y)), target || 0) * 1.15 || 1;
+  pad.l = axisPad([0, 1, 2, 3].map((i) => Math.round((max * i) / 3)));
   const innerW = width - pad.l - pad.r;
   const bw = Math.max(3, (innerW / data.length) * 0.62);
   const py = (v) => pad.t + (1 - v / max) * (height - pad.t - pad.b);
@@ -424,7 +447,7 @@ export function barChart({
     const v = (max * i) / 3;
     const y = py(v);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'grid' }));
-    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const t = el('text', { x: pad.l - 6, y: y + 3.5, 'text-anchor': 'end', class: 'axis', 'font-size': AXIS_FONT });
     t.textContent = Math.round(v);
     svg.append(t);
   }
@@ -445,7 +468,7 @@ export function barChart({
   if (target != null) {
     const y = py(target);
     svg.append(el('line', { x1: pad.l, x2: width - pad.r, y1: y, y2: y, class: 'target-line' }));
-    const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': 10 });
+    const t = el('text', { x: width - pad.r, y: y - 4, 'text-anchor': 'end', class: 'target-label', 'font-size': AXIS_FONT });
     t.textContent = `${targetLabel} ${Math.round(target)}${unit}`;
     svg.append(t);
   }
@@ -455,15 +478,15 @@ export function barChart({
   if (showAllDates) {
     data.forEach((d, i) => {
       const t = el('text', {
-        x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': 9.5,
+        x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': AXIS_FONT,
       });
       t.textContent = String(d.x).slice(5);
       svg.append(t);
     });
   } else {
-    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': 10 });
+    const first = el('text', { x: pad.l, y: height - 6, class: 'axis', 'font-size': AXIS_FONT });
     first.textContent = String(data[0].x).slice(5);
-    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': 10 });
+    const lastT = el('text', { x: width - pad.r, y: height - 6, 'text-anchor': 'end', class: 'axis', 'font-size': AXIS_FONT });
     lastT.textContent = String(data[data.length - 1].x).slice(5);
     svg.append(first, lastT);
   }

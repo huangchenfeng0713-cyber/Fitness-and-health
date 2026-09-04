@@ -84,7 +84,10 @@ async function removeExerciseWithUndo(exercise) {
   const index = current.findIndex((item) => item.id === exercise.id);
   if (index < 0) return;
   const removed = cloneTrainingItem(current[index]);
+  // 撤掉最后一个动作时「今日动作」那张卡会消失，挑选卡往上跳，同样要补
+  const restore = keepPickerInPlace();
   await updateSession((items) => items.filter((item) => item.id !== exercise.id));
+  restore();
   toast(`已移除「${exercise.name}」`, 'info', {
     label: '撤销',
     onClick: () => updateSession((items) => {
@@ -134,14 +137,28 @@ function groupTabs(rerender) {
     }));
 }
 
-/** 身体部位 / 动作模式 —— 两种挑法之间切换 */
-function modeTabs(rerender) {
-  return h('div.range-switch.picker-mode-switch', segmentedGroupProps('挑动作的方式'),
-    [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
-      class: `chip-btn${pickMode === key ? ' active' : ''}`,
-      ...segmentedItemProps(pickMode === key),
-      onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
-    }, label)));
+/**
+ * 挑法：身体部位 / 动作模式。
+ *
+ * **用下拉，不用分段控件。** 它说的是「用哪套分类法」，一个人设一次就很少再动 ——
+ * 和设置里那些偏好是一个性质，而 CLAUDE.md 自己写着这种要用下拉。
+ * 做成和下面那排范围一样的灰槽白格，屏幕上就是两排一模一样的开关叠着，
+ * 读出来是「两个并列的选择」，可它们实际是父子。
+ *
+ * 层级现在由**形态**表达：上面一个下拉，下面一排分段控件紧挨着它；
+ * 再往下隔开一段才是列表头。三样东西三种形态，不靠三块一样的灰槽比谁在上面。
+ */
+function modeSelect(rerender) {
+  const select = h('select.picker-mode-select', {
+    'aria-label': '按什么挑动作',
+    onchange: (ev) => { pickMode = ev.currentTarget.value; showAllExercises = false; rerender(); },
+  }, [['group', '按身体部位'], ['split', '按动作模式']].map(([key, label]) => h('option', { value: key }, label)));
+  // 选中项要在节点建好之后再设：给还没挂上的 option 设 selected 会被按 selectedIndex 打回第一项
+  select.value = pickMode;
+  return h('div.picker-mode-field', null,
+    select,
+    // 展开箭头是画出来的 chevron 转 90°，和趋势卡、设置页用的是同一个形
+    h('span.picker-mode-caret', { 'aria-hidden': 'true' }, icon('chevron')));
 }
 
 function splitTabs(rerender) {
@@ -394,10 +411,12 @@ function pickerCard(rerender) {
    * 不打乱原顺序（同部位是按主次排的）。
    * pending 也算已选：搜到勾上、清掉搜索词回到列表，✓ 必须还在。
    */
-  const kept = new Set([...picked(), ...pending]);
-  const visible = showAllExercises
-    ? list
-    : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => kept.has(e.id))];
+  const visibleRows = () => {
+    const kept = new Set([...picked(), ...pending]);
+    return showAllExercises
+      ? list
+      : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => kept.has(e.id))];
+  };
 
   /* 全部动作与推荐组合是两种并列视图，文字直接说出当前选择，避免只写“推荐”。 */
   const rec = showRecommend ? recommendFor({
@@ -405,14 +424,20 @@ function pickerCard(rerender) {
     selection: picked(), equip: equipFilter,
   }) : null;
   /*
-   * 「全部动作 / 推荐组合」和上面两排一样是互斥选择，所以也用分段控件。
-   * 原先它是下划线 tab，而同一屏上「身体部位 / 动作模式」「胸肩臂背腿腹」
-   * 是灰槽白格 —— 三组做同一件事的开关摆出两套视觉语言，
-   * 而 CLAUDE.md 自己写着「互斥的选择一律用分段控件」。
+   * 「全部 / 推荐」仍是互斥选择，所以还是分段控件 —— 但收窄一档，跟着列表头走。
+   *
+   * 它换的是同一批动作的**呈现方式**，作用对象是下面那张列表，
+   * 不是把范围再切细。上一版把它做成和「范围」等宽的第三排，
+   * 于是三排一模一样的灰槽叠在一起，看着像三个并列的兄弟。
    */
-  const viewTabs = h('div.range-switch.picker-view-switch.picker-list-tabs',
+  const viewTabs = h('div.range-switch.picker-view-switch',
     segmentedGroupProps('看全部动作还是推荐组合'),
-    [['all', '全部'], ['recommend', '推荐']].map(([key, label]) => {
+    /*
+     * 叫「列表」不叫「全部」：它现在和「全部器械」并排站，两个「全部」挨在一起，
+     * 一个说不限器械、一个说不限动作，光看字分不出按下去会怎样。
+     * 这个坑在它们上下相邻的时候就踩过一次了，并排只会更糟。
+     */
+    [['all', '列表'], ['recommend', '推荐']].map(([key, label]) => {
       const active = (key === 'recommend') === showRecommend;
       return h('button', {
         class: `chip-btn${active ? ' active' : ''}`,
@@ -422,17 +447,21 @@ function pickerCard(rerender) {
     }));
 
   /*
-   * 「2 + 1」，不是三级。
+   * 筛选区：一行「口径」+ 一排「范围」。
    *
-   * 上面两排是**筛**：挑法（身体部位 / 动作模式）和范围（胸 肩臂 背 腿 腹），
-   * 后者是前者的下一级，紧挨着放。
+   * 第一行左右各站一个下拉形态的控件 —— 左边挑法（用哪套分类法）、
+   * 右边器械档位（哪些动作算数）。两个都是「这批动作怎么圈出来的」，
+   * 形态也一样，配成一行正好把两端撑住。
    *
-   * 「全部动作 / 推荐组合」不属于这条下钻链 —— 它换的是同一批动作的**呈现方式**，
-   * 不是把范围再切细。上一版把三排做成同宽同层，等于宣称三者是一条链；
-   * 现在它跟着列表头走，和「这张列表是什么」摆在一起。
+   * **不能只放左边那个下拉。** 一行只有一侧有控件、右边空着一大片，
+   * 夹在满宽的搜索框和满宽的范围之间，边缘就是豁的 —— 那不是层级，是没排完。
+   *
+   * 范围是挑法的下一级，父子关系由**形态不同 + 贴得近**表达：
+   * 两者之间只留一档间距，而它们到列表头之间隔了四档。
+   * 不用缩进，缩进会让这一排比搜索框和列表窄一截，读出来是「谁没对齐」。
    */
   const controls = h('div.picker-controls', null,
-    modeTabs(rerender),
+    h('div.picker-scope-row', null, modeSelect(rerender), equipMenu(rerender, all)),
     byGroup ? groupTabs(rerender) : splitTabs(rerender));
   const compactScope = byGroup ? group.label : split.label;
   let card = null;
@@ -446,15 +475,16 @@ function pickerCard(rerender) {
   h('span.picker-compact-action', null, '回到顶部'));
 
   /*
-   * 列表头：这张列表是什么（范围名 + 个数），右边是还能怎么筛（器械）。
-   * 计数放在这儿而不是卡头 —— 它说的是下面这一列，不是整张卡。
+   * 列表头：左边说「这张列表是什么」（范围名 + 个数），右边是这批动作用哪种
+   * 呈现方式（列表 / 推荐）。两端各有东西，中间那段空白才读得出是留白。
+   * 计数放在这儿而不是卡头：它说的是下面这一列，不是整张卡。
    */
   const scopeName = h('strong.picker-scope-name', null, byGroup ? `${group.label}部动作` : `${split.label}的动作`);
   const scopeCount = h('span.picker-scope-count', null,
     showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`);
   const listHead = h('div.picker-list-head', null,
     h('div.picker-scope', null, scopeName, scopeCount),
-    equipMenu(rerender, all));
+    viewTabs);
   const search = searchField({
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',
@@ -464,18 +494,18 @@ function pickerCard(rerender) {
   const searchInput = search.input;
   /* 搜索时列表头整块让位，结果数临时挂到卡头 —— 那时范围和器械都不参与筛选 */
   const searchCount = h('span.card-tag', { hidden: true });
-  const normalContent = h('div.picker-normal-results', null,
-    showRecommend
-      ? recommendBody(rec)
-      : [
-        list.length
-          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, scopeMuscles)))
-          /* 别把档位名嵌进句子：「胸里没有全部器械动作」念不通 */
-          : h('p.empty-hint', null, `${scopeLabel}里没有符合当前器械档位的动作，换一档看看。`),
-        list.length > LIST_PREVIEW ? h('button.more-btn', {
-          onclick: () => { showAllExercises = !showAllExercises; rerender(); },
-        }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
-      ]);
+  const normalBody = () => (showRecommend
+    ? recommendBody(rec)
+    : [
+      list.length
+        ? h('div.ex-list', null, visibleRows().map((e) => exerciseRow(e, rerender, scopeMuscles)))
+        /* 别把档位名嵌进句子：「胸里没有全部器械动作」念不通 */
+        : h('p.empty-hint', null, `${scopeLabel}里没有符合当前器械档位的动作，换一档看看。`),
+      list.length > LIST_PREVIEW ? h('button.more-btn', {
+        onclick: () => { showAllExercises = !showAllExercises; rerender(); },
+      }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
+    ]);
+  const normalContent = h('div.picker-normal-results', null, normalBody());
   const searchContent = h('div.exercise-search-results', { hidden: true });
 
   const updateSearch = () => {
@@ -483,8 +513,13 @@ function pickerCard(rerender) {
     const searching = Boolean(query);
     /*
      * 搜索结果是另建的一批行。勾选改的是那批 DOM 上的 ✓，底下那条栏读 pending。
-     * 清掉搜索词时若不重绘，原先那列还是进搜索前的样子 —— 栏上写着已选，
-     * 列表里仍是 ＋。只在「正在搜 → 不搜了」时整页重绘：输入过程中重绘会丢键盘。
+     * 清掉搜索词时不刷新的话，原先那列还是进搜索前的样子 —— 栏上写着已选，
+     * 列表里仍是 ＋。
+     *
+     * **这一下只能重建下面那列，不能走 rerender()。** rerender() 会连搜索框一起
+     * 换掉：实测清空搜索词后输入框已经是另一个节点、焦点掉回 body，iOS 上表现为
+     * 键盘当场收起、刚打的字没了。而「清空」在中文键盘上不只是用户按退格 ——
+     * 拼音没上屏就失焦时，iOS 会丢掉那段拼音并补一个空值的 input 事件。
      */
     const leavingSearch = !searching && !searchContent.hidden;
     controls.hidden = searching;
@@ -493,11 +528,10 @@ function pickerCard(rerender) {
     searchContent.hidden = !searching;
     clearEl(searchContent);
     listHead.hidden = searching;
-    viewTabs.hidden = searching;
     searchCount.hidden = !searching;
     if (!searching) {
       scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
-      if (leavingSearch) rerender();
+      if (leavingSearch) mount(clearEl(normalContent), normalBody());
       return;
     }
     // 搜索是全库搜的，器械档位这时候不参与筛选，所以列表头整块让位
@@ -509,8 +543,25 @@ function pickerCard(rerender) {
           matches.map((e) => exerciseRow(e, rerender)))
         : h('p.empty-hint.exercise-search-empty', null, '没有找到动作，试试动作名、拼音或英文。'));
   };
+  /*
+   * 中文键盘上还没上屏的拼音是 composition 文本，不是输入框真正的值。
+   * 点结果里任何一行都会让输入框失焦，iOS 当场把这段拼音丢掉，并补一个
+   * value 为空的 input 事件 —— 于是刚打的字和整列结果一起没了，
+   * 而用户只是想把这个动作加进来。
+   *
+   * 所以「空值」只在输入框自己还拿着焦点时才算用户在清空；失焦带来的那一下
+   * 把字放回去，结果照旧。清除键（searchField 里那个 ×）会先 focus 再派事件，
+   * 落在这个判断的另一边。
+   */
   searchInput.addEventListener('input', (event) => {
-    exerciseQuery = event.target.value;
+    const next = event.target.value;
+    if (!next && exerciseQuery && document.activeElement !== searchInput) {
+      searchInput.value = exerciseQuery;
+      search.sync();
+      return;
+    }
+    if (next === exerciseQuery) return;
+    exerciseQuery = next;
     updateSearch();
   });
 
@@ -524,7 +575,6 @@ function pickerCard(rerender) {
     compactSummary,
     controls,
     listHead,
-    viewTabs,
     normalContent,
     searchContent);
   updateSearch();
@@ -532,11 +582,36 @@ function pickerCard(rerender) {
 }
 
 /** 勾中的这一批一次加进计划：一次落库、一次重绘 */
+/*
+ * 记住挑选卡在视口里的位置，重绘之后把滚动补回来。
+ *
+ * 加进第一个动作时，页面顶部会**从无到有**多出一张「今日动作」卡，
+ * 把挑选卡整个往下推 —— 实测 173px。滚动位置本身没变，可你刚才盯着的
+ * 那一行已经跑到屏幕下半截，看起来就像页面自己跳了回去、搜索结果也没了
+ * （其实搜索词一直在）。撤掉最后一个动作时那张卡消失，是反方向的同一件事。
+ *
+ * 锚点用挑选卡而不是某一行：搜索态和列表态下它都在，行却可能被换掉。
+ */
+function keepPickerInPlace() {
+  const view = document.querySelector('main.view');
+  const before = document.querySelector('.exercise-picker-card')?.getBoundingClientRect().top;
+  if (!view || before == null) return () => {};
+  return () => {
+    const after = document.querySelector('.exercise-picker-card')?.getBoundingClientRect().top;
+    if (after == null) return;
+    const shift = after - before;
+    if (Math.abs(shift) < 1) return;
+    view.scrollTop += shift;
+  };
+}
+
 async function commitPending() {
   const ids = [...pending].filter((id) => !picked().includes(id));
   if (!ids.length) { pending = new Set(); return; }
+  const restore = keepPickerInPlace();
   pending = new Set();
   await updateSession((items) => [...items, ...ids.map((id) => ({ id, sets: [], done: false }))]);
+  restore();
   toast(`已加入 ${ids.length} 个动作`, 'ok');
 }
 
