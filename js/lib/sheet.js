@@ -31,13 +31,15 @@ let lockedScrollY = 0;
 let closing = false;
 let exitAnim = null;
 let openGuardTimer = null;
-const OPEN_GUARD_MS = 450;
+const OPEN_GUARD_MS = 500;
 let openedAt = 0;
+let downOnSheet = false;
 const now = () => (typeof performance === 'object' ? performance.now() : Date.now());
 const stillOpening = () => now() - openedAt < OPEN_GUARD_MS;
 
 function armOpenGuard() {
   openedAt = now();
+  downOnSheet = false;
   wrap.classList.add('is-opening');
   clearTimeout(openGuardTimer);
   openGuardTimer = setTimeout(() => {
@@ -56,26 +58,43 @@ function build() {
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
   wrap = h('div.sheet-wrap', { hidden: true },
-    h('div.sheet-backdrop', { onclick: () => { if (!stillOpening()) closeSheet(); } }),
+    h('div.sheet-backdrop', { onclick: dismissFromBackdrop }),
     panel);
   document.body.append(wrap);
   attachDragToClose();
   /*
-   * 打开弹层的那一次点击，iOS 还会再派一次兼容鼠标事件到「现在手指底下的东西」。
-   * 份量面板刚升上来，底下往往是遮罩、取消键或记录按钮 —— 不吞掉的话弹层会闪一下就关。
+   * 点食物打开弹层时，Safari 会把同一次触摸再派成一次点击，落到刚露出来
+   * 的遮罩或取消键上。上一版用时间窗吞掉「打开后 450ms 内的所有事件」，
+   * 挡不住「显示已有节点时同步补派的那一次 click」——那一次没有对应的
+   * pointerdown 落在弹层上。所以改成：
+   * 弹层上的 click 如果前面没有 pointerdown，直接丢掉。
    */
-  const swallow = (ev) => {
-    if (!stillOpening() || wrap.hidden) return;
+  wrap.addEventListener('pointerdown', (ev) => {
+    if (stillOpening()) {
+      ev.stopPropagation();
+      if (ev.cancelable) ev.preventDefault();
+      downOnSheet = false;
+      return;
+    }
+    downOnSheet = true;
+  }, true);
+  wrap.addEventListener('click', (ev) => {
+    if (downOnSheet && !stillOpening()) return;
     ev.stopPropagation();
     if (ev.cancelable) ev.preventDefault();
-  };
-  wrap.addEventListener('click', swallow, true);
-  wrap.addEventListener('pointerdown', swallow, true);
-  wrap.addEventListener('pointerup', swallow, true);
+  }, true);
+  wrap.addEventListener('pointerup', () => {
+    setTimeout(() => { downOnSheet = false; }, 0);
+  }, true);
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && !wrap.hidden && !stillOpening()) closeSheet();
   });
+}
+
+function dismissFromBackdrop() {
+  if (stillOpening() || !downOnSheet) return;
+  closeSheet();
 }
 
 /*
@@ -179,6 +198,7 @@ export function closeSheet({ fromY = 0 } = {}) {
   wrap.classList.remove('is-opening');
   clearTimeout(openGuardTimer);
   openGuardTimer = null;
+  downOnSheet = false;
   // 状态同步做完：调用方依赖 onClose 就在这一刻跑（「确认」按钮先 resolve 再关）
   unlockBody();
   const fn = onClose;
