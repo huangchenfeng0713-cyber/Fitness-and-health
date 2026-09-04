@@ -229,7 +229,7 @@ test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
 test('热量明显高于计划只做橙色提醒，不把计划误说成危险上限', () => {
   const a = advise({ kcal: targets.kcal + 400, protein: 140, fat: 70, carb: 200 });
   assert.equal(a.status.level, 'warn');
-  assert.match(a.status.headline, /比计划多/);
+  assert.match(a.status.headline, /热量偏高/);
   assert.match(a.status.detail, /单日偏差不能说明/);
   assert.match(a.status.detail, /7 天体重趋势/);
   assert.match(a.status.detail, /不必跳过下一餐/);
@@ -239,10 +239,27 @@ test('热量明显高于计划只做橙色提醒，不把计划误说成危险�
   }
 });
 
+test('主卡标题只说判断，不重复圈心里的热量数字', () => {
+  assert.equal(advise().status.headline, '按计划吃');
+  assert.equal(advise({ kcal: targets.kcal + 400 }).status.headline, '今日热量偏高');
+  assert.equal(advise({ kcal: targets.kcal + 80 }).status.headline, '略超计划');
+  assert.equal(advise({ kcal: targets.kcal - 10 }).status.headline, '今日热量到位');
+  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '今天吃得偏少');
+  for (const a of [
+    advise(),
+    advise({ kcal: targets.kcal + 400 }),
+    advise({ kcal: targets.kcal + 80 }),
+    advise({ kcal: targets.kcal - 10 }),
+    advise({ kcal: 300 }, { now: at('15:30') }),
+  ]) {
+    assert.doesNotMatch(a.status.headline, /\d/, `标题还在报数：${a.status.headline}`);
+  }
+});
+
 test('有饮食记录时也不再用“吃得快慢”描述记账进度', () => {
   const a = advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') });
   const copy = `${a.status.headline} ${a.status.detail}`;
-  assert.match(copy, /记录量低于当前时间参考|缺口偏大|偏少了/);
+  assert.match(copy, /记录量低于当前时间参考|缺口偏大|偏少/);
   assert.doesNotMatch(copy, /吃得快|吃得慢/);
 });
 

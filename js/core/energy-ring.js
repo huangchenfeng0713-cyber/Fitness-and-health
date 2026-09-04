@@ -23,7 +23,7 @@
  */
 const SCALE_KEY = 'health-diet-ring-scale-v2';
 /** 差这么点以内就说「接近目标」，不报数 —— 几十千卡的估算误差不值得算成缺口 */
-const BALANCE_WITHIN = 40;
+export const BALANCE_WITHIN = 40;
 
 const n = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
