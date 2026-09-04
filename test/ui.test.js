@@ -1185,10 +1185,11 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   assert.match(dash, /function ringLegend/, '环下没有图例');
   assert.match(css, /\.ring-swatch-intake\.is-deep/, '图例色块没有跟着轨道跑第二圈加深');
   assert.doesNotMatch(chart, /当前摄入|当前消耗/, '环上不要再写当前摄入 / 当前消耗');
-  assert.match(chart, /class: 'ring-caption'/, '圈心没有状态那一行');
-  assert.match(chart, /class: 'ring-unit'/, '数字和单位没有做成一组');
-  assert.match(chart, /captionY = cy - block \/ 2 \+ cap \/ 2/, '两行没有作为整体居中');
-  assert.doesNotMatch(chart, /cy - 3/, '数字又贴回圆心独自占上半圆了');
+  assert.match(chart, /'ring-caption'/, '圈心没有状态那一行');
+  assert.match(chart, /'ring-unit'/, '圈心没有单独的 kcal 一行');
+  assert.match(chart, /gapBot = size \/ 48/, 'kcal 没有比标题更贴数字');
+  assert.match(chart, /captionY = cy - block \/ 2 \+ cap \/ 2/, '三行没有作为整体居中');
+  assert.doesNotMatch(chart, /tspan/, 'kcal 应独立成行，不要和数字挤在同一行');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
   assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,

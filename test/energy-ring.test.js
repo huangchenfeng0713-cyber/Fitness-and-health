@@ -70,13 +70,13 @@ test('v1 存的圆周不认：那时候存的是按预计消耗算的，含义�
   assert.equal(lockTrackScale('2026-09-03', 2168, old), 2200);
 });
 
-test('圈心只说剩余 / 超出目标 / 接近目标', () => {
+test('圈心只说还可摄入 / 超出目标 / 接近目标', () => {
   const left = ring(1500, 1200);
-  assert.equal(left.center.label, '剩余');
+  assert.equal(left.center.label, '还可摄入');
   assert.equal(left.center.kcal, TARGET - 1500);
 
   const bulkLeft = ring(1500, 800, { dailyDelta: 300 });
-  assert.equal(bulkLeft.center.label, '剩余',
+  assert.equal(bulkLeft.center.label, '还可摄入',
     '增肌没吃满计划也不写还应吃：吃已经多于烧时体重趋势已经是增');
 
   const over = ring(2400, 1200);
@@ -91,7 +91,7 @@ test('圈心只说剩余 / 超出目标 / 接近目标', () => {
   assert.equal(near.center.kcal, null, '差得很少时不报数');
 
   for (const m of [left, bulkLeft, over, near]) {
-    assert.doesNotMatch(m.center.label, /领先|平衡|缺口|盈余|还应|还能吃/,
+    assert.doesNotMatch(m.center.label, /领先|平衡|缺口|盈余|还应吃|还能吃/,
       '不写「摄入领先 / 热量盈余 / 还应吃 / 还能吃」');
   }
 });
@@ -133,7 +133,7 @@ test('消耗跑得再远也碰不到绿弧', () => {
   const eaten = seg(m, 'eaten');
   assert.ok(eaten, '绿弧被擦掉了');
   assert.ok(Math.abs(eaten.toPct - (800 / SCALE) * 100) < 0.01, '绿弧只表示吃了多少');
-  assert.equal(m.center.label, '剩余', '消耗套了两圈也不改圈心那句话');
+  assert.equal(m.center.label, '还可摄入', '消耗套了两圈也不改圈心那句话');
 });
 
 test('摄入越过 12 点是和目标比，不是和消耗比', () => {

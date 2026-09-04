@@ -94,16 +94,16 @@ export function lap(x, scale) {
  * 「盈余」在本应用里已经是 摄入 − 消耗（近 7 日累计收支、体重解读）。
  * 圈心比的是摄入和今日目标，不能再用这个词 —— 减脂时吃超目标仍可能是赤字。
  *
- * 没吃满写「剩余」。不要写成「还应吃」：计划要增肌、但今天已经吃得比烧掉的多，
+ * 没吃满写「还可摄入」。不要写成「还应吃」：计划要增肌、但今天已经吃得比烧掉的多，
  * 体重趋势已经是增，再说明义务会把「没吃满计划」说成「身体还缺」。
  * 吃超了写「超出目标」。差得很少写「接近目标」。
  * 不写「摄入领先 / 消耗领先」，也不写「缺口」。
  */
 function centerOf(ate, goal) {
-  if (goal == null || goal <= 0) return { key: 'none', label: '剩余', kcal: null };
+  if (goal == null || goal <= 0) return { key: 'none', label: '还可摄入', kcal: null };
   const diff = Math.round(goal - ate);
   if (Math.abs(diff) <= BALANCE_WITHIN) return { key: 'onTarget', label: '接近目标', kcal: null };
-  if (diff > 0) return { key: 'left', label: '剩余', kcal: diff };
+  if (diff > 0) return { key: 'left', label: '还可摄入', kcal: diff };
   return { key: 'over', label: '超出目标', kcal: -diff };
 }
 
