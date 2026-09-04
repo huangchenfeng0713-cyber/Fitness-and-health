@@ -117,7 +117,10 @@ try {
       symbol: action?.textContent || '',
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
       controlRows: controlRows.map(rect),
-      viewSwitch: rect(document.querySelector('.picker-view-switch')),
+      viewSwitch: rect(document.querySelector('.picker-list-head .picker-view-switch')),
+      modeField: rect(document.querySelector('.picker-mode-field')),
+      modeIsSelect: document.querySelector('.picker-mode-select')?.tagName === 'SELECT',
+      searchRow: rect(document.querySelector('.exercise-picker-card .exercise-search-row')),
       listHead: rect(document.querySelector('.picker-list-head')),
       equipBordered: (() => {
         const btn = document.querySelector('.picker-list-head .equip-filter-btn');
@@ -209,16 +212,12 @@ try {
         ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
         : null
     )),
-    allState.controlRows.length !== 2 && `筛选控件不是两排：${allState.controlRows.length}`,
     /*
-     * 「2 + 1」：上面两排是筛，宽度必须一致；「全部动作 / 推荐组合」跟着列表头走，
-     * 不进 picker-controls —— 它换的是呈现方式，不是把范围再切细。
+     * 筛选区里只剩一排分段控件（范围）；挑法是它上面那个下拉。
+     * 三样东西三种形态，不再是三排一样的灰槽比谁在上面。
      */
-    (() => {
-      const widths = allState.controlRows.map((row) => row.width);
-      const spread = Math.max(...widths) - Math.min(...widths);
-      return spread > 1 && `两排筛选控件宽度不一致：${widths.map((w) => w.toFixed(1)).join('/')}`;
-    })(),
+    allState.controlRows.length !== 1 && `筛选区里的分段控件不是一排：${allState.controlRows.length}`,
+    !allState.modeIsSelect && '挑法不是下拉',
     !allState.listHead && '缺少「这张列表是什么」那一行',
     allState.listHead && allState.controls
       && allState.listHead.top < allState.controls.top + allState.controls.height
@@ -228,21 +227,42 @@ try {
     allState.controlRows.some((row) => row.height > 41)
       && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
     /*
-     * 三排分段控件一样宽、一样起点。
+     * 层级靠形态 + 疏密，不靠缩进。
      *
-     * 上面两排曾经左右各缩 12px，而「全部 / 推荐」那排齐着卡片内容边 ——
-     * 三个做同一件事的开关摆出两种宽度，看着是「谁没对齐」，
-     * 而不是「谁是谁的下一级」。层级由位置表达，不靠缩进。
+     * 1. 范围那排要和搜索框、列表头一样宽、一样起点 —— 缩一道 12px 的话
+     *    读出来是「谁没对齐」，不是「谁是谁的下一级」（踩过一次）。
+     * 2. 挑法下拉到范围之间要比范围到列表头之间**更紧**，父子关系才读得出来。
+     * 3. 挑法下拉靠左站，不铺满一整行 —— 铺满就又变回一排灰槽了。
      */
     (() => {
-      const rows = [...allState.controlRows, allState.viewSwitch].filter(Boolean);
-      if (rows.length !== 3) return `选择动作里的分段控件不是三排：${rows.length}`;
-      const spread = Math.max(...rows.map((r) => r.width)) - Math.min(...rows.map((r) => r.width));
-      const offset = Math.max(...rows.map((r) => r.left)) - Math.min(...rows.map((r) => r.left));
+      const scope = allState.controlRows[0];
+      const { searchRow, listHead } = allState;
+      if (!scope || !searchRow || !listHead) return '量不到筛选区的几个块';
+      const spread = Math.max(scope.width, searchRow.width, listHead.width)
+        - Math.min(scope.width, searchRow.width, listHead.width);
+      const offset = Math.max(scope.left, searchRow.left, listHead.left)
+        - Math.min(scope.left, searchRow.left, listHead.left);
       return (spread > 1 || offset > 1)
-        && `三排分段控件没对齐：宽 ${rows.map((r) => r.width.toFixed(1)).join('/')}，`
-          + `左 ${rows.map((r) => r.left.toFixed(1)).join('/')}`;
+        && `范围那排和搜索框、列表头没对齐：宽 ${[scope, searchRow, listHead].map((r) => r.width.toFixed(1)).join('/')}，`
+          + `左 ${[scope, searchRow, listHead].map((r) => r.left.toFixed(1)).join('/')}`;
     })(),
+    (() => {
+      const mode = allState.modeField;
+      const scope = allState.controlRows[0];
+      const { listHead } = allState;
+      if (!mode || !scope || !listHead) return null;
+      const inner = scope.top - (mode.top + mode.height);
+      const outer = listHead.top - (scope.top + scope.height);
+      return inner >= outer
+        && `挑法和范围之间（${inner.toFixed(1)}px）不比范围到列表头（${outer.toFixed(1)}px）更紧，看不出是父子`;
+    })(),
+    allState.modeField && allState.controlRows[0]
+      && allState.modeField.width > allState.controlRows[0].width - 40
+      && `挑法下拉几乎铺满一整行（${allState.modeField.width.toFixed(1)}），又变回一排灰槽了`,
+    allState.viewSwitch && allState.listHead
+      && (allState.viewSwitch.top < allState.listHead.top - 1
+        || allState.viewSwitch.top > allState.listHead.top + allState.listHead.height + 1)
+      && '视图切换没有挂在列表头那一行上',
     !recommendState.hasTip && '推荐说明入口缺失',
     recommendState.tip && (Math.abs(recommendState.tip.width - 14) > 1
       || Math.abs(recommendState.tip.height - 14) > 1)
@@ -251,9 +271,9 @@ try {
     !openAfterRender && '推荐说明被一次无关重绘自动收起',
   ].filter(Boolean);
   check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
-  // 后续用例会在「全部动作」中选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
+  // 后续用例会在动作列表里选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
   await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.trim() === '全部')?.click());
+    .find((x) => x.textContent.trim() === '列表')?.click());
   await page.waitForTimeout(200);
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。

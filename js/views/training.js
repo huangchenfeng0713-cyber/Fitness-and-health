@@ -137,14 +137,28 @@ function groupTabs(rerender) {
     }));
 }
 
-/** 身体部位 / 动作模式 —— 两种挑法之间切换 */
-function modeTabs(rerender) {
-  return h('div.range-switch.picker-mode-switch', segmentedGroupProps('挑动作的方式'),
-    [['group', '身体部位'], ['split', '动作模式']].map(([key, label]) => h('button', {
-      class: `chip-btn${pickMode === key ? ' active' : ''}`,
-      ...segmentedItemProps(pickMode === key),
-      onclick: () => { pickMode = key; showAllExercises = false; rerender(); },
-    }, label)));
+/**
+ * 挑法：身体部位 / 动作模式。
+ *
+ * **用下拉，不用分段控件。** 它说的是「用哪套分类法」，一个人设一次就很少再动 ——
+ * 和设置里那些偏好是一个性质，而 CLAUDE.md 自己写着这种要用下拉。
+ * 做成和下面那排范围一样的灰槽白格，屏幕上就是两排一模一样的开关叠着，
+ * 读出来是「两个并列的选择」，可它们实际是父子。
+ *
+ * 层级现在由**形态**表达：上面一个下拉，下面一排分段控件紧挨着它；
+ * 再往下隔开一段才是列表头。三样东西三种形态，不靠三块一样的灰槽比谁在上面。
+ */
+function modeSelect(rerender) {
+  const select = h('select.picker-mode-select', {
+    'aria-label': '按什么挑动作',
+    onchange: (ev) => { pickMode = ev.currentTarget.value; showAllExercises = false; rerender(); },
+  }, [['group', '按身体部位'], ['split', '按动作模式']].map(([key, label]) => h('option', { value: key }, label)));
+  // 选中项要在节点建好之后再设：给还没挂上的 option 设 selected 会被按 selectedIndex 打回第一项
+  select.value = pickMode;
+  return h('div.picker-mode-field', null,
+    select,
+    // 展开箭头是画出来的 chevron 转 90°，和趋势卡、设置页用的是同一个形
+    h('span.picker-mode-caret', { 'aria-hidden': 'true' }, icon('chevron')));
 }
 
 function splitTabs(rerender) {
@@ -410,14 +424,20 @@ function pickerCard(rerender) {
     selection: picked(), equip: equipFilter,
   }) : null;
   /*
-   * 「全部动作 / 推荐组合」和上面两排一样是互斥选择，所以也用分段控件。
-   * 原先它是下划线 tab，而同一屏上「身体部位 / 动作模式」「胸肩臂背腿腹」
-   * 是灰槽白格 —— 三组做同一件事的开关摆出两套视觉语言，
-   * 而 CLAUDE.md 自己写着「互斥的选择一律用分段控件」。
+   * 「全部 / 推荐」仍是互斥选择，所以还是分段控件 —— 但收窄一档，跟着列表头走。
+   *
+   * 它换的是同一批动作的**呈现方式**，作用对象是下面那张列表，
+   * 不是把范围再切细。上一版把它做成和「范围」等宽的第三排，
+   * 于是三排一模一样的灰槽叠在一起，看着像三个并列的兄弟。
    */
-  const viewTabs = h('div.range-switch.picker-view-switch.picker-list-tabs',
+  const viewTabs = h('div.range-switch.picker-view-switch',
     segmentedGroupProps('看全部动作还是推荐组合'),
-    [['all', '全部'], ['recommend', '推荐']].map(([key, label]) => {
+    /*
+     * 叫「列表」不叫「全部」：它现在和「全部器械」并排站，两个「全部」挨在一起，
+     * 一个说不限器械、一个说不限动作，光看字分不出按下去会怎样。
+     * 这个坑在它们上下相邻的时候就踩过一次了，并排只会更糟。
+     */
+    [['all', '列表'], ['recommend', '推荐']].map(([key, label]) => {
       const active = (key === 'recommend') === showRecommend;
       return h('button', {
         class: `chip-btn${active ? ' active' : ''}`,
@@ -427,17 +447,15 @@ function pickerCard(rerender) {
     }));
 
   /*
-   * 「2 + 1」，不是三级。
+   * 筛选区：一个下拉 + 一排分段控件。
    *
-   * 上面两排是**筛**：挑法（身体部位 / 动作模式）和范围（胸 肩臂 背 腿 腹），
-   * 后者是前者的下一级，紧挨着放。
-   *
-   * 「全部动作 / 推荐组合」不属于这条下钻链 —— 它换的是同一批动作的**呈现方式**，
-   * 不是把范围再切细。上一版把三排做成同宽同层，等于宣称三者是一条链；
-   * 现在它跟着列表头走，和「这张列表是什么」摆在一起。
+   * 挑法（按身体部位 / 按动作模式）是「用哪套分类法」，范围（胸 肩臂 背 腿 腹）
+   * 是它的下一级 —— 父子关系由**形态不同 + 贴得近**表达：
+   * 两者之间只留一档间距，而它们到列表头之间隔了两档。
+   * 不用缩进，缩进会让这一排比搜索框和列表窄一截，读出来是「谁没对齐」。
    */
   const controls = h('div.picker-controls', null,
-    modeTabs(rerender),
+    modeSelect(rerender),
     byGroup ? groupTabs(rerender) : splitTabs(rerender));
   const compactScope = byGroup ? group.label : split.label;
   let card = null;
@@ -451,15 +469,16 @@ function pickerCard(rerender) {
   h('span.picker-compact-action', null, '回到顶部'));
 
   /*
-   * 列表头：这张列表是什么（范围名 + 个数），右边是还能怎么筛（器械）。
-   * 计数放在这儿而不是卡头 —— 它说的是下面这一列，不是整张卡。
+   * 列表头：左边说「这张列表是什么」（范围名 + 个数），右边挂着两个只作用于这张
+   * 列表的开关 —— 器械筛选（列出哪些）和全部 / 推荐（怎么呈现）。
+   * 计数放在这儿而不是卡头：它说的是下面这一列，不是整张卡。
    */
   const scopeName = h('strong.picker-scope-name', null, byGroup ? `${group.label}部动作` : `${split.label}的动作`);
   const scopeCount = h('span.picker-scope-count', null,
     showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`);
   const listHead = h('div.picker-list-head', null,
     h('div.picker-scope', null, scopeName, scopeCount),
-    equipMenu(rerender, all));
+    h('div.picker-list-tools', null, equipMenu(rerender, all), viewTabs));
   const search = searchField({
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',
@@ -503,7 +522,6 @@ function pickerCard(rerender) {
     searchContent.hidden = !searching;
     clearEl(searchContent);
     listHead.hidden = searching;
-    viewTabs.hidden = searching;
     searchCount.hidden = !searching;
     if (!searching) {
       scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
@@ -551,7 +569,6 @@ function pickerCard(rerender) {
     compactSummary,
     controls,
     listHead,
-    viewTabs,
     normalContent,
     searchContent);
   updateSearch();

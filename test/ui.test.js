@@ -351,8 +351,8 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
   assert.match(training, /`\$\{g\.label\}（今天已练到）`/, '标记没有给读屏软件的说法');
   assert.match(css, /\.tab-dot\s*\{/, '.tab-dot 没有样式');
 
-  assert.match(training, /\['group', '身体部位'\].*\['split', '动作模式'\]/s,
-    '两种选择入口应使用“身体部位 / 动作模式”');
+  assert.match(training, /\['group', '按身体部位'\].*\['split', '按动作模式'\]/s,
+    '两种选择入口应使用“按身体部位 / 按动作模式”');
   /*
    * 顶栏副标题不许写「数据截至 X」：健身页不跟今日 / 饮食页的日期走，
    * 那句话会让人以为翻回昨天，动作记录也跟着翻。
@@ -403,8 +403,25 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
    */
   assert.doesNotMatch(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(/s,
     '选择动作里的分段控件又缩窄了，三排必须一样宽');
-  assert.match(polish, /\.picker-mode-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
-    '顶部模式控件仍然过厚');
+  /*
+   * 挑法是个下拉，不是第三排灰槽 —— 三样东西三种形态，
+   * 层级靠形态 + 疏密表达，不靠三块一样的灰槽比谁在上面。
+   */
+  assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
+  assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
+  assert.match(training, /select\.value = pickMode;/,
+    '选中项要在节点建好之后再设，否则会被按 selectedIndex 打回第一项');
+  assert.match(polish, /\.picker-mode-select\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
+    '挑法下拉仍然过厚');
+  // 视图切换挂在列表头右边，和器械筛选一起 —— 它们都只作用于下面那张列表
+  assert.match(training, /h\('div\.picker-list-tools', null, equipMenu\(rerender, all\), viewTabs\)/,
+    '视图切换没有跟着列表头走');
+  /*
+   * 视图切换和器械筛选现在并排站，两个都叫「全部」的话光看字分不出
+   * 按下去会怎样 —— 这个坑在它们上下相邻的时候就踩过一次。
+   */
+  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
+    '视图切换又叫回「全部」了，会和旁边的「全部器械」撞');
   assert.match(polish, /\.picker-scope-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
     '动作范围控件仍然过厚');
   assert.match(training, /function setupPickerCompact\(root\)/,
@@ -447,7 +464,9 @@ test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () =>
 
   assert.ok(!/function scopeCard\(/.test(training), '范围选择又被拆成了独立卡片');
   assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
-  assert.match(training, /\['all', '全部'\], \['recommend', '推荐'\]/,
+  // 两个并列的具名选项，不是一个语义含糊的单开关。
+  // 叫「列表」不叫「全部」：它和「全部器械」并排站，两个「全部」分不出按下去会怎样。
+  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
     '列表 / 推荐仍是语义含糊的单个开关');
   /*
    * 互斥选择的读屏语义要说清「这是一组、现在选中的是哪个」。

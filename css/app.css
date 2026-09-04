@@ -2728,13 +2728,37 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .chart-wrap:has(.chart-empty) .chart-empty { transform: translateY(28px); }
 
 
-.picker-mode-switch .chip-btn {
-  flex: 1 1 0;
-  min-height: var(--control-sm);
+/*
+ * 挑法是个下拉，不是第三排灰槽。
+ *
+ * 原生箭头各浏览器长得都不一样，所以 appearance: none 之后自己画一个 ——
+ * 和趋势卡那两个下拉用的是同一个形（chevron 转 90°）。
+ * 宽度跟着文字走、靠左站：它是「用哪套分类法」，不该像范围那样铺满一整行。
+ */
+.picker-mode-field { position: relative; display: inline-flex; justify-self: start; }
+.picker-mode-select {
+  appearance: none; -webkit-appearance: none;
+  min-height: var(--control-sm); padding: 0 30px 0 12px;
+  border: 0; border-radius: var(--r-sm);
+  background: var(--card-2); color: var(--text);
+  font: inherit; font-size: var(--fs-body); font-weight: var(--w-semibold);
+  cursor: pointer;
 }
+.picker-mode-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.picker-mode-caret {
+  position: absolute; right: 10px; top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+  pointer-events: none; color: var(--faint); display: grid; place-items: center;
+}
+.picker-mode-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
+/*
+ * 挑法和范围是父子，贴紧一档；再往下到列表头隔了两档（.picker-list-head 的
+ * margin-top）。层级靠形态不同 + 疏密表达，不靠缩进 ——
+ * 缩进会让这一排比搜索框和列表窄一截，读出来是「谁没对齐」。
+ */
 .picker-controls {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-1);
 }
 .picker-card-head {
   min-height: 23px;
@@ -2813,11 +2837,20 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 「2 + 1」：上面两排是筛（挑法 → 范围），这里往下是「这张列表本身」。
  * 中间留一整档空，把两块分开 —— 它们回答的不是同一个问题。
  */
+/*
+ * 列表头一行装不下就换行，别把范围名挤没。
+ *
+ * 320px 的机子上「胸部动作 18 个」+ 器械 + 视图一共 352px，硬挤的话范围名
+ * 会被截成半个字 —— 那读出来像是渲染坏了。换行之后两个开关整体掉到第二行、
+ * 仍然右对齐，宽屏上照旧一行。
+ */
 .picker-list-head {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-1) var(--space-2);
   margin-top: var(--space-4);
 }
-.picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 150px; }
+.picker-list-tools { margin-left: auto; }
 .picker-scope-name {
   font-size: var(--fs-value); font-weight: var(--w-semibold); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2826,9 +2859,17 @@ h1, h2, h3 { letter-spacing: -.02em; }
   flex: none; color: var(--faint); font-size: var(--fs-footnote);
   font-variant-numeric: tabular-nums;
 }
-/* 视图切换跟着列表头走，不再是筛选区的第三排 */
-.picker-view-switch { margin-top: var(--space-2); }
-.picker-view-switch .chip-btn { min-height: var(--control-sm); }
+/*
+ * 视图切换跟着列表头走，而且比范围那排收窄一档。
+ *
+ * 它作用于下面那张列表（换的是同一批动作的呈现方式），和器械筛选是一类，
+ * 所以和器械并排挂在列表头右边。做成和范围等宽的第三排时，
+ * 三排一模一样的灰槽叠在一起，读出来是三个并列的兄弟。
+ */
+.picker-list-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+.picker-view-switch { margin-top: 0; flex: none; }
+/* 「紧凑」指内边距收窄，不是把字压小 —— 按钮上的字不许压到 12px 那一档 */
+.picker-view-switch .chip-btn { min-height: var(--control-sm); padding: 4px 9px; }
 
 .equip-filter-wrap {
   position: relative;
