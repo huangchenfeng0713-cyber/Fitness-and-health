@@ -146,6 +146,9 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   assert.match(sheet, /wrap\.classList\.add\('is-opening'\)/, '打开瞬间没有给弹层加上不接事件的状态');
   assert.match(css, /\.sheet-wrap\.is-opening \{ pointer-events: none; \}/,
     '打开瞬间弹层仍接得到那次补派的点击');
+  const openBody = sheet.slice(sheet.indexOf('export function openSheet'), sheet.indexOf('export function setSheetFooter'));
+  assert.ok(openBody.indexOf('armOpenGuard()') < openBody.indexOf('wrap.hidden = false'),
+    '再次打开时先显示再挡事件，补派的点击会先把弹层关掉');
   assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
 });
 

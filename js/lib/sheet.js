@@ -133,8 +133,15 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   if (exitAnim) { exitAnim.cancel(); exitAnim = null; }
   resetDragStyles();
   mount(scrollArea, content);
-  wrap.hidden = false;
+  /*
+   * 必须先挡住事件，再把弹层露出来。
+   *
+   * 第一次打开是新建节点，点食物的那一下打在食物上，弹层还没进命中测试。
+   * 之后再打开只是把同一个节点 hidden 去掉 —— Safari 会把**这一次点击**
+   * 补派到刚露出来的遮罩上。先 arm 再显示，那一下才会被丢掉，而不是先关后挡。
+   */
   armOpenGuard();
+  wrap.hidden = false;
   scrollArea.scrollTop = 0;
   lockBody();
   return closeSheet;
