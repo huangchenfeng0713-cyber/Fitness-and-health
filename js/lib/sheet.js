@@ -32,13 +32,25 @@ let closing = false;
 let exitAnim = null;
 let openGuardTimer = null;
 let exitTimer = null;
-const OPEN_GUARD_MS = 600;
+const OPEN_GUARD_MS = 700;
 const EXIT_MS = 280;
+/*
+ * 打开手势还没结束时，任何「点背景 / 下滑 / Esc / 取消」都不能把弹层关掉。
+ *
+ * iOS 给带 backdrop-filter 的节点开过洞：父级 pointer-events:none 挡不住
+ * 毛玻璃弹层本身。所以 CSS 拦一层，closeSheet 再拦一层。真正记完一笔、
+ * 复制昨天那些调用传 force。
+ */
+let userCanDismiss = false;
 const sheetReady = () => !!wrap && !wrap.hidden && wrap.classList.contains('is-ready');
 
 function setSheetReady(on) {
   if (!wrap) return;
   wrap.classList.toggle('is-ready', on);
+  userCanDismiss = on;
+  if (panel) panel.style.pointerEvents = on ? '' : 'none';
+  const backdrop = wrap.querySelector('.sheet-backdrop');
+  if (backdrop) backdrop.style.pointerEvents = on ? '' : 'none';
 }
 
 function armOpenGuard() {
@@ -52,8 +64,14 @@ function armOpenGuard() {
 
 function restartRise() {
   if (!panel) return;
-  panel.style.animation = 'none';
+  if (typeof panel.getAnimations === 'function') {
+    for (const anim of panel.getAnimations()) anim.cancel();
+  }
   const backdrop = wrap.querySelector('.sheet-backdrop');
+  if (backdrop && typeof backdrop.getAnimations === 'function') {
+    for (const anim of backdrop.getAnimations()) anim.cancel();
+  }
+  panel.style.animation = 'none';
   if (backdrop) backdrop.style.animation = 'none';
   void panel.offsetWidth;
   panel.style.animation = '';
@@ -148,7 +166,11 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   restartRise();
   armOpenGuard();
   scrollArea.scrollTop = 0;
-  lockBody();
+  // 等打开那一次点击走完再钉 body。点的当下改 position:fixed，iOS 会
+  // 按新布局把同一次触摸再派到手指底下刚露出来的弹层上。
+  setTimeout(() => {
+    if (wrap && !wrap.hidden && !closing) lockBody();
+  }, 0);
   return closeSheet;
 }
 
@@ -178,8 +200,9 @@ export function setSheetFooter(content) {
  * @param {object} opts
  *  - fromY 从这个位移接着往下退场（跟手关掉时传手指最后的位置）
  */
-export function closeSheet({ fromY = 0 } = {}) {
+export function closeSheet({ fromY = 0, force = false } = {}) {
   if (!wrap || wrap.hidden || closing) return;
+  if (!force && !userCanDismiss) return;
   closing = true;
   setSheetReady(false);
   clearTimeout(openGuardTimer);

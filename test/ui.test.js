@@ -143,9 +143,14 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   // 背景点一下、Esc 都要能关
   assert.match(sheet, /if \(sheetReady\(\)\) closeSheet\(\)/, '点背景关不掉弹层');
   assert.match(sheet, /const OPEN_GUARD_MS = \d+/, '打开弹层后没有推迟可点');
+  assert.match(sheet, /if \(!force && !userCanDismiss\) return/,
+    '打开手势没结束时 closeSheet 仍会把弹层关掉');
+  assert.match(diet, /closeSheet\(\{ force: true \}\)/, '记完一笔后关不掉弹层');
   assert.match(css, /\.sheet-wrap \{[^}]*pointer-events: none/, '弹层默认仍接事件，补派的点击会把它关掉');
   assert.match(css, /\.sheet-wrap\.is-ready \{ pointer-events: auto; \}/,
     '弹层就绪后点不了');
+  assert.match(css, /\.sheet-wrap:not\(\.is-ready\) \.sheet/,
+    '未就绪时毛玻璃弹层自己还能接事件（iOS 上父级 none 挡不住 backdrop-filter）');
   assert.match(sheet, /setTimeout\(finish, EXIT_MS\)/, '退场动画没结束时没有把遮罩收掉，会卡死整页');
   assert.doesNotMatch(sheet, /wrap\.addEventListener\('pointerdown'/,
     '不要在弹层上对所有按下 preventDefault，那会把整页点死');

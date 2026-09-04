@@ -249,7 +249,7 @@ function finishPortion() {
   ui.query = '';
   nodes.searchInput.value = '';
   refreshResults();
-  refreshPortion();
+  closeSheet({ force: true });
   refreshAdvice();
   refreshBasket();
 }
@@ -566,7 +566,7 @@ function refreshMixedPortion(food) {
         foodInfoTip(food, { label: '查看估算依据与误差' }),
         h('button.icon-btn', {
           'aria-label': '取消',
-          onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
+          onclick: () => closeSheet(),
         }, icon('close')))),
 
     h('div.mix-summary', null,
@@ -805,7 +805,7 @@ function refreshPortion() {
         foodInfoTip(food, { label: '查看食物依据与误差' }),
         h('button.icon-btn', {
           'aria-label': '取消',
-          onclick: () => { ui.selected = null; refreshPortion(); refreshAdvice(); },
+          onclick: () => closeSheet(),
         }, icon('close')))),
 
     sugarRow && h('div.field-label', null, '糖度'),
@@ -1390,7 +1390,7 @@ function pickMealsToCopy(counts) {
        * 而 onClose 里是 finish(null)。反过来写的话，用户按了「复制」，
        * 拿到的却是「取消」—— 弹层关掉了，一条都没复制，也没有任何提示。
        */
-      onclick: () => { finish([...chosen]); closeSheet(); },
+      onclick: () => { finish([...chosen]); closeSheet({ force: true }); },
     }, `复制 ${total} 条`);
     openSheet(h('div.portion-panel', null,
       h('div.field-label', null, '复制昨天的哪几餐'),
