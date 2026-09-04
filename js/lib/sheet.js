@@ -30,6 +30,21 @@ let lockedScrollY = 0;
  */
 let closing = false;
 let exitAnim = null;
+let openGuardTimer = null;
+const OPEN_GUARD_MS = 450;
+let openedAt = 0;
+const now = () => (typeof performance === 'object' ? performance.now() : Date.now());
+const stillOpening = () => now() - openedAt < OPEN_GUARD_MS;
+
+function armOpenGuard() {
+  openedAt = now();
+  wrap.classList.add('is-opening');
+  clearTimeout(openGuardTimer);
+  openGuardTimer = setTimeout(() => {
+    wrap?.classList.remove('is-opening');
+    openGuardTimer = null;
+  }, OPEN_GUARD_MS);
+}
 
 function build() {
   if (wrap) return;
@@ -41,13 +56,25 @@ function build() {
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
   wrap = h('div.sheet-wrap', { hidden: true },
-    h('div.sheet-backdrop', { onclick: () => closeSheet() }),
+    h('div.sheet-backdrop', { onclick: () => { if (!stillOpening()) closeSheet(); } }),
     panel);
   document.body.append(wrap);
   attachDragToClose();
+  /*
+   * 打开弹层的那一次点击，iOS 还会再派一次兼容鼠标事件到「现在手指底下的东西」。
+   * 份量面板刚升上来，底下往往是遮罩、取消键或记录按钮 —— 不吞掉的话弹层会闪一下就关。
+   */
+  const swallow = (ev) => {
+    if (!stillOpening() || wrap.hidden) return;
+    ev.stopPropagation();
+    if (ev.cancelable) ev.preventDefault();
+  };
+  wrap.addEventListener('click', swallow, true);
+  wrap.addEventListener('pointerdown', swallow, true);
+  wrap.addEventListener('pointerup', swallow, true);
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !wrap.hidden) closeSheet();
+    if (ev.key === 'Escape' && !wrap.hidden && !stillOpening()) closeSheet();
   });
 }
 
@@ -107,6 +134,7 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   resetDragStyles();
   mount(scrollArea, content);
   wrap.hidden = false;
+  armOpenGuard();
   scrollArea.scrollTop = 0;
   lockBody();
   return closeSheet;
@@ -141,6 +169,9 @@ export function setSheetFooter(content) {
 export function closeSheet({ fromY = 0 } = {}) {
   if (!wrap || wrap.hidden || closing) return;
   closing = true;
+  wrap.classList.remove('is-opening');
+  clearTimeout(openGuardTimer);
+  openGuardTimer = null;
   // 状态同步做完：调用方依赖 onClose 就在这一刻跑（「确认」按钮先 resolve 再关）
   unlockBody();
   const fn = onClose;
@@ -225,6 +256,7 @@ function attachDragToClose() {
     // 12 而不是 8：点那道小横杠时的手抖不该被当成开始拖
     threshold: 12,
     canStart: (ev) => {
+      if (stillOpening()) return false;
       // 手指落在还能往上滚的内容里，这一下归内容
       const scroller = ev.target instanceof Element ? ev.target.closest('.sheet-scroll') : null;
       return !scroller || scroller.scrollTop <= 0;
