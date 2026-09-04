@@ -141,17 +141,15 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
   assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
   // 背景点一下、Esc 都要能关
-  assert.match(sheet, /function dismissFromBackdrop/, '点背景关不掉弹层');
-  assert.match(sheet, /if \(stillOpening\(\) \|\| !downOnSheet\) return/,
-    '没有对应按下的点击也能把弹层关掉');
-  assert.match(sheet, /const OPEN_GUARD_MS = \d+/, '打开弹层后没有挡住同一次触摸补派的点击');
-  assert.match(sheet, /wrap\.classList\.add\('is-opening'\)/, '打开瞬间没有给弹层加上不接事件的状态');
-  assert.match(sheet, /let downOnSheet = false/, '弹层没有记下这次点击是不是在弹层上按下的');
-  assert.match(css, /\.sheet-wrap\.is-opening \{ pointer-events: none; \}/,
-    '打开瞬间弹层仍接得到那次补派的点击');
-  const openBody = sheet.slice(sheet.indexOf('export function openSheet'), sheet.indexOf('export function setSheetFooter'));
-  assert.ok(openBody.indexOf('armOpenGuard()') < openBody.indexOf('wrap.hidden = false'),
-    '再次打开时先显示再挡事件，补派的点击会先把弹层关掉');
+  assert.match(sheet, /if \(sheetReady\(\)\) closeSheet\(\)/, '点背景关不掉弹层');
+  assert.match(sheet, /const OPEN_GUARD_MS = \d+/, '打开弹层后没有推迟可点');
+  assert.match(css, /\.sheet-wrap \{[^}]*pointer-events: none/, '弹层默认仍接事件，补派的点击会把它关掉');
+  assert.match(css, /\.sheet-wrap\.is-ready \{ pointer-events: auto; \}/,
+    '弹层就绪后点不了');
+  assert.match(sheet, /setTimeout\(finish, EXIT_MS\)/, '退场动画没结束时没有把遮罩收掉，会卡死整页');
+  assert.doesNotMatch(sheet, /wrap\.addEventListener\('pointerdown'/,
+    '不要在弹层上对所有按下 preventDefault，那会把整页点死');
+  assert.match(css, /animation: sheet-rise [^;]* both/, '升起动画结束后弹层会弹回屏幕外');
   assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
 });
 
