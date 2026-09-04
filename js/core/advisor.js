@@ -33,6 +33,24 @@ const MEAL_PROTEIN_CAP = {
   breakfast: 0.40, lunch: 0.50, snack: 0.25, dinner: 0.45, late: 0.25,
 };
 
+/*
+ * 同分附近用日期打散。打分只看营养和时段，同一套输入永远同分；
+ * 若不打散，每天同一钟点空腹看到的六条就会一字不差。
+ * 噪声上限远小于早餐 / 正餐 / 蛋白那些档，时段和健康门槛不会被掀翻。
+ * 同一天内噪声不变，刷新列表不会跳。
+ */
+const DAY_SPREAD = 12;
+
+function dayNoise(id, dayKey) {
+  let h = 2166136261;
+  const s = `${dayKey}\0${id}`;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) / 4294967296) * DAY_SPREAD;
+}
+
 const MAIN_MEAL_CATS = new Set(['dish', 'chain', 'staple']);
 const LIGHT_MEAL_CATS = new Set(['dairy', 'fruit', 'nut', 'drink', 'snack', 'egg', 'soy']);
 const PREPARED_NAME = /(熟|水煮|白煮|烤|蒸|炖|焖|煎|炒|卤|拌|汤|粥|饭|面|粉|饺|包|罐头|即食)/;
@@ -434,7 +452,12 @@ export function buildAdvice(input) {
     const s = scoreFood(food, ctx);
     if (s && s.score > 0) scored.push(s);
   }
-  scored.sort((a, b) => b.score - a.score);
+  const dayKey = todayKey(now);
+  scored.sort((a, b) => {
+    const diff = (b.score + dayNoise(b.food.id, dayKey))
+      - (a.score + dayNoise(a.food.id, dayKey));
+    return diff || a.food.id.localeCompare(b.food.id);
+  });
   const recommend = [];
   const catCount = {};
   for (const item of scored) {

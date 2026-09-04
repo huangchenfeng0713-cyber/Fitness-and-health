@@ -162,11 +162,11 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     };
     const hasNumber = model.center.kcal != null;
     if (hasNumber) {
-      const cap = size / 14;     // 标题最小
+      const cap = size / 28;     // 标题再小一档，只要能认出字
       const val = size / 4.9;    // 数字最大
       const unit = size / 8.2;   // kcal 介于两者之间
-      const gapTop = size / 16;   // 标题到数字
-      const gapBot = size / 48;   // 数字到 kcal，更紧
+      const gapTop = size / 22;  // 标题到数字
+      const gapBot = size / 48;  // 数字到 kcal，更紧
       const block = cap + gapTop + val + gapBot + unit;
       const captionY = cy - block / 2 + cap / 2;
       const valueY = captionY + cap / 2 + gapTop + val / 2;

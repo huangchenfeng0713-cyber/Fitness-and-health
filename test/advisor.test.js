@@ -365,6 +365,24 @@ test('每个餐次都能给出可执行的建议', () => {
   }
 });
 
+test('同一时段不同日子推荐会换一批，但仍符合时段；同一天刷新不变', () => {
+  const idsOf = (day) => advise({}, { now: new Date(`${day}T12:30:00`) })
+    .recommend.map((r) => r.food.id);
+  const days = ['2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24', '2026-08-25'];
+  const sets = days.map((d) => idsOf(d).join(','));
+  assert.ok(new Set(sets).size >= 3, `五天午餐推荐几乎没变：${sets.join(' | ')}`);
+
+  const once = idsOf('2026-08-21');
+  assert.deepEqual(idsOf('2026-08-21'), once, '同一天刷新不应换一批');
+
+  for (const d of days) {
+    const a = advise({}, { now: new Date(`${d}T12:30:00`) });
+    const matched = a.recommend.filter((r) => r.reasons.some((reason) => reason === '适合午餐'));
+    assert.ok(matched.length >= 3, `${d} 午餐只有 ${matched.length} 项正餐候选`);
+    assert.ok(a.recommend.every((r) => r.food.state !== 'raw' && !/[（(]生[）)]/.test(r.food.name)));
+  }
+});
+
 test('游离糖：完整水果与纯奶不计入上限，风味酸奶只计添加部分', async () => {
   const { nutrientsFor, freeSugarFactor, FOOD_BY_ID: FB } = await import('../js/data/foods.js');
   assert.equal(nutrientsFor(FB.get('watermelon'), 300).sugar, 0, '西瓜的果糖不算添加糖');

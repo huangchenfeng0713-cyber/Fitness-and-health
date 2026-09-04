@@ -1187,7 +1187,7 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   assert.doesNotMatch(chart, /当前摄入|当前消耗/, '环上不要再写当前摄入 / 当前消耗');
   assert.match(chart, /'ring-caption'/, '圈心没有状态那一行');
   assert.match(chart, /'ring-unit'/, '圈心没有单独的 kcal 一行');
-  assert.match(chart, /const cap = size \/ 14/, '还可摄入没有比 kcal 更小');
+  assert.match(chart, /const cap = size \/ 28/, '还可摄入没有再缩小一半');
   assert.match(chart, /const unit = size \/ 8\.2/, 'kcal 没有放大');
   assert.match(chart, /const val = size \/ 4\.9/, '数字不是三行里最大的');
   assert.match(chart, /captionY = cy - block \/ 2 \+ cap \/ 2/, '三行没有作为整体居中');
