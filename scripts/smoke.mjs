@@ -270,7 +270,53 @@ try {
       && exerciseSearch.resultText.includes('硬拉')
       && exerciseSearch.controlsHidden,
     JSON.stringify(exerciseSearch));
-  await page.fill('.exercise-search-input', '');
+
+  /*
+   * 搜索框本身必须一路活着。
+   *
+   * 这里量的是节点身份，不是文字：搜索词存在模块变量里，整卡重绘之后
+   * 文字照样会被填回来，看起来没事 —— 可输入框已经是另一个节点，
+   * 焦点掉回 body，iOS 上就是键盘当场收起、拼音没了。
+   *
+   * 两种「变空」都要过：用户自己退格清空，以及中文键盘上拼音没上屏就失焦时
+   * iOS 补来的那个空值 input 事件（后者不是清空，搜索词和结果都该留着）。
+   */
+  const searchAlive = await page.evaluate(() => {
+    const el = document.querySelector('.exercise-search-input');
+    el.focus();
+    const first = el;
+    const fire = (v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+    fire('h');
+    const rowsWhileSearching = document.querySelectorAll('.exercise-search-results .ex-row').length;
+    // iOS 丢拼音：先失焦，再补一个空值事件
+    el.blur();
+    fire('');
+    const kept = {
+      value: document.querySelector('.exercise-search-input')?.value,
+      rows: document.querySelectorAll('.exercise-search-results .ex-row').length,
+    };
+    // 用户自己退格清空：焦点在框里，这一下才算数
+    el.focus();
+    fire('');
+    const after = document.querySelector('.exercise-search-input');
+    return {
+      rowsWhileSearching,
+      keptQuery: kept.value === 'h' && kept.rows === rowsWhileSearching,
+      sameNode: first === after,
+      stillFocused: document.activeElement === after,
+      backToList: document.querySelector('.exercise-search-results')?.hidden === true
+        && document.querySelectorAll('.picker-normal-results .ex-row').length > 0,
+    };
+  });
+  const searchProblems = [
+    !searchAlive.rowsWhileSearching && '搜索没有出结果，后面几条量不准',
+    !searchAlive.keptQuery && '拼音被 iOS 丢掉时搜索词和结果跟着没了',
+    !searchAlive.sameNode && '清空搜索词把整张卡重绘了，输入框已是另一个节点',
+    !searchAlive.stillFocused && '清空搜索词后焦点掉出输入框，iOS 上键盘会收起',
+    !searchAlive.backToList && '清空后没回到普通列表',
+  ].filter(Boolean);
+  check('搜索框在清空和失焦时都不被重建', searchProblems.length === 0,
+    searchProblems.join('；') || JSON.stringify(searchAlive));
   await page.waitForTimeout(100);
 
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----

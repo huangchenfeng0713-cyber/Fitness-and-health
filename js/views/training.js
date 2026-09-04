@@ -397,10 +397,12 @@ function pickerCard(rerender) {
    * 不打乱原顺序（同部位是按主次排的）。
    * pending 也算已选：搜到勾上、清掉搜索词回到列表，✓ 必须还在。
    */
-  const kept = new Set([...picked(), ...pending]);
-  const visible = showAllExercises
-    ? list
-    : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => kept.has(e.id))];
+  const visibleRows = () => {
+    const kept = new Set([...picked(), ...pending]);
+    return showAllExercises
+      ? list
+      : [...list.slice(0, LIST_PREVIEW), ...list.slice(LIST_PREVIEW).filter((e) => kept.has(e.id))];
+  };
 
   /* 全部动作与推荐组合是两种并列视图，文字直接说出当前选择，避免只写“推荐”。 */
   const rec = showRecommend ? recommendFor({
@@ -467,18 +469,18 @@ function pickerCard(rerender) {
   const searchInput = search.input;
   /* 搜索时列表头整块让位，结果数临时挂到卡头 —— 那时范围和器械都不参与筛选 */
   const searchCount = h('span.card-tag', { hidden: true });
-  const normalContent = h('div.picker-normal-results', null,
-    showRecommend
-      ? recommendBody(rec)
-      : [
-        list.length
-          ? h('div.ex-list', null, visible.map((e) => exerciseRow(e, rerender, scopeMuscles)))
-          /* 别把档位名嵌进句子：「胸里没有全部器械动作」念不通 */
-          : h('p.empty-hint', null, `${scopeLabel}里没有符合当前器械档位的动作，换一档看看。`),
-        list.length > LIST_PREVIEW ? h('button.more-btn', {
-          onclick: () => { showAllExercises = !showAllExercises; rerender(); },
-        }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
-      ]);
+  const normalBody = () => (showRecommend
+    ? recommendBody(rec)
+    : [
+      list.length
+        ? h('div.ex-list', null, visibleRows().map((e) => exerciseRow(e, rerender, scopeMuscles)))
+        /* 别把档位名嵌进句子：「胸里没有全部器械动作」念不通 */
+        : h('p.empty-hint', null, `${scopeLabel}里没有符合当前器械档位的动作，换一档看看。`),
+      list.length > LIST_PREVIEW ? h('button.more-btn', {
+        onclick: () => { showAllExercises = !showAllExercises; rerender(); },
+      }, showAllExercises ? `只看前 ${LIST_PREVIEW} 个` : `展开其余 ${list.length - LIST_PREVIEW} 个`) : null,
+    ]);
+  const normalContent = h('div.picker-normal-results', null, normalBody());
   const searchContent = h('div.exercise-search-results', { hidden: true });
 
   const updateSearch = () => {
@@ -486,8 +488,13 @@ function pickerCard(rerender) {
     const searching = Boolean(query);
     /*
      * 搜索结果是另建的一批行。勾选改的是那批 DOM 上的 ✓，底下那条栏读 pending。
-     * 清掉搜索词时若不重绘，原先那列还是进搜索前的样子 —— 栏上写着已选，
-     * 列表里仍是 ＋。只在「正在搜 → 不搜了」时整页重绘：输入过程中重绘会丢键盘。
+     * 清掉搜索词时不刷新的话，原先那列还是进搜索前的样子 —— 栏上写着已选，
+     * 列表里仍是 ＋。
+     *
+     * **这一下只能重建下面那列，不能走 rerender()。** rerender() 会连搜索框一起
+     * 换掉：实测清空搜索词后输入框已经是另一个节点、焦点掉回 body，iOS 上表现为
+     * 键盘当场收起、刚打的字没了。而「清空」在中文键盘上不只是用户按退格 ——
+     * 拼音没上屏就失焦时，iOS 会丢掉那段拼音并补一个空值的 input 事件。
      */
     const leavingSearch = !searching && !searchContent.hidden;
     controls.hidden = searching;
@@ -500,7 +507,7 @@ function pickerCard(rerender) {
     searchCount.hidden = !searching;
     if (!searching) {
       scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
-      if (leavingSearch) rerender();
+      if (leavingSearch) mount(clearEl(normalContent), normalBody());
       return;
     }
     // 搜索是全库搜的，器械档位这时候不参与筛选，所以列表头整块让位
@@ -512,8 +519,25 @@ function pickerCard(rerender) {
           matches.map((e) => exerciseRow(e, rerender)))
         : h('p.empty-hint.exercise-search-empty', null, '没有找到动作，试试动作名、拼音或英文。'));
   };
+  /*
+   * 中文键盘上还没上屏的拼音是 composition 文本，不是输入框真正的值。
+   * 点结果里任何一行都会让输入框失焦，iOS 当场把这段拼音丢掉，并补一个
+   * value 为空的 input 事件 —— 于是刚打的字和整列结果一起没了，
+   * 而用户只是想把这个动作加进来。
+   *
+   * 所以「空值」只在输入框自己还拿着焦点时才算用户在清空；失焦带来的那一下
+   * 把字放回去，结果照旧。清除键（searchField 里那个 ×）会先 focus 再派事件，
+   * 落在这个判断的另一边。
+   */
   searchInput.addEventListener('input', (event) => {
-    exerciseQuery = event.target.value;
+    const next = event.target.value;
+    if (!next && exerciseQuery && document.activeElement !== searchInput) {
+      searchInput.value = exerciseQuery;
+      search.sync();
+      return;
+    }
+    if (next === exerciseQuery) return;
+    exerciseQuery = next;
     updateSearch();
   });
 

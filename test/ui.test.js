@@ -597,8 +597,17 @@ test('动作列表默认只出前几个，但已选的绝不会被藏起来', ()
     '搜索里勾上的动作清掉搜索词后也要留在列表里');
   assert.match(training, /leavingSearch && !searchContent\.hidden|const leavingSearch = !searching && !searchContent\.hidden/,
     '离开搜索时没有把勾选态画回列表');
-  assert.match(training, /if \(leavingSearch\) rerender\(\)/,
-    '离开搜索应当重绘以恢复 ✓，输入过程中不许重绘');
+  /*
+   * 离开搜索时只能重建下面那列，不能走 rerender()：rerender() 会把搜索框
+   * 一起换掉（焦点掉回 body，iOS 当场收键盘），而「离开搜索」在中文键盘上
+   * 不止是用户按退格 —— 拼音没上屏就失焦时 iOS 也会补一个空值的 input 事件。
+   */
+  assert.match(training, /if \(leavingSearch\) mount\(clearEl\(normalContent\), normalBody\(\)\)/,
+    '离开搜索应当只重建普通列表，把 ✓ 画回去');
+  assert.doesNotMatch(training, /if \(leavingSearch\) rerender\(\)/,
+    '离开搜索不许整卡重绘，那会连搜索框和键盘一起换掉');
+  assert.match(training, /document\.activeElement !== searchInput/,
+    '空值只有在输入框自己拿着焦点时才算清空，否则是 iOS 丢掉了没上屏的拼音');
   // 换部位、换器械档位都要收回去，否则换一档还是满屏
   const resets = training.match(/showAllExercises = false/g) || [];
   assert.ok(resets.length >= 2, `切部位和切器械档位都要收回预览：只找到 ${resets.length} 处`);

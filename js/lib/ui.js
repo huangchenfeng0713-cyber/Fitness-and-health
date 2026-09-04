@@ -51,9 +51,16 @@ export function searchField({
     onclick: () => {
       input.value = '';
       syncClear();
+      /*
+       * 先把焦点还给输入框，再派事件。
+       *
+       * 调用方要靠「派事件时输入框是不是焦点」分辨这一下是不是用户真的在清空 ——
+       * 中文键盘上拼音没上屏就失焦时，iOS 也会补一个空值的 input 事件，
+       * 那一下不该当成清空。顺序反过来的话，这个叉自己就落到了错的一边。
+       */
+      input.focus();
       // 派发 input 事件，让调用方的搜索逻辑照常跑一遍，不用各自再记一份清空逻辑
       input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.focus();
     },
   }, icon('close'));
   function syncClear() {
@@ -64,6 +71,8 @@ export function searchField({
   return {
     input,
     clear,
+    // 调用方改了 input.value 之后要能把叉的显隐补上（它只跟着 input 事件走）
+    sync: syncClear,
     el: h('div.search-row.search-row-full.ui-search-field', { class: className }, input, clear),
   };
 }
