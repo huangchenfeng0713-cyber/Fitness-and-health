@@ -1193,7 +1193,7 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   assert.match(chart, /toSvg\(14\)/, '还可摄入应是 13–15px');
   assert.match(chart, /toSvg\(42\)/, '数字应是 40–44px');
   assert.match(chart, /toSvg\(15\)/, 'kcal 应是 14–16px');
-  assert.match(chart, /toSvg\(6\)/, '三行没有轻微上移');
+  assert.match(chart, /toSvg\(3\)/, '三行只轻微上移一丁点');
   assert.match(chart, /line\(captionY, cap, 400/, '还可摄入应是常规字重');
   assert.match(chart, /line\(valueY, val, 700/, '数字应是加粗');
   assert.match(chart, /line\(unitY, unit, 400/, 'kcal 应比现在更轻');

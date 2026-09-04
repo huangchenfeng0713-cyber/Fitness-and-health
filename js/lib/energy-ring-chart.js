@@ -171,7 +171,7 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
       const unit = toSvg(15);
       const gapTop = toSvg(5);
       const gapBot = toSvg(2);
-      const lift = toSvg(6);
+      const lift = toSvg(3);
       const block = cap + gapTop + val + gapBot + unit;
       const captionY = cy - lift - block / 2 + cap / 2;
       const valueY = captionY + cap / 2 + gapTop + val / 2;
