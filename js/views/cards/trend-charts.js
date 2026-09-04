@@ -255,7 +255,14 @@ export function trendCharts(rerender) {
       showAllDates: true,
       interactive: true,
       selectedX: selectedDay,
-      onPick: (date) => { selectedDay = selectedDay === date ? null : date; rerender(); },
+      /*
+       * 点同一天是「取消选中」；扫过去的时候每一天都得选上 ——
+       * 手指从周三划到周四再划回周三，照点击的逻辑走反而会把它取消掉。
+       */
+      onPick: (date, { viaDrag = false } = {}) => {
+        selectedDay = !viaDrag && selectedDay === date ? null : date;
+        rerender();
+      },
     }
     : {};
   const valueAt = (fmt) => (getter) => {

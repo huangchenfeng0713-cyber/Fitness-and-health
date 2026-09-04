@@ -13,6 +13,7 @@
  */
 
 import { h, clearEl, mount } from './utils.js';
+import { dragGesture } from './gesture.js';
 
 let wrap = null;
 let panel = null;
@@ -34,6 +35,7 @@ function build() {
     h('div.sheet-backdrop', { onclick: () => closeSheet() }),
     panel);
   document.body.append(wrap);
+  attachDragToClose();
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && !wrap.hidden) closeSheet();
@@ -120,6 +122,11 @@ export function setSheetFooter(content) {
 export function closeSheet() {
   if (!wrap || wrap.hidden) return;
   wrap.hidden = true;
+  // 跟手时写在行内的位移和遮罩透明度要清掉，否则下次打开是歪的、背景还是透的
+  panel.style.transform = '';
+  panel.style.transition = '';
+  const backdrop = wrap.querySelector('.sheet-backdrop');
+  if (backdrop) backdrop.style.opacity = '';
   clearEl(scrollArea);
   clearEl(footer);
   footer.hidden = true;
@@ -132,3 +139,62 @@ export function closeSheet() {
 }
 
 export const sheetIsOpen = () => !!wrap && !wrap.hidden;
+
+/*
+ * 往下滑关掉弹层。
+ *
+ * iOS 上人人都会试这一下，而这个弹层原先只能点背景关 —— 而背景那圈在
+ * 份量面板打开时只剩顶上一条。
+ *
+ * 两件事得写对：
+ *
+ * 1. **内容还能往上滚的时候不接管。** 手指在 .sheet-scroll 里往下拖，
+ *    如果那块内容没滚到顶，那一下是在滚内容，不是在关弹层。
+ *    只有滚到顶（scrollTop <= 0）才让位移变成关闭手势。
+ * 2. **关不掉就得弹回去。** 松手时位移不够、甩速也不够，要把 transform 收回 0；
+ *    收回的过程走 Web Animations，别留一个歪着的弹层。
+ */
+const CLOSE_DISTANCE = 96;     // 拖过这么远就算要关
+const CLOSE_VELOCITY = 0.5;    // 或者甩得够快（px/ms）
+
+function attachDragToClose() {
+  let height = 0;
+  dragGesture(panel, {
+    axis: 'y',
+    threshold: 8,
+    canStart: (ev) => {
+      // 手指落在还能往上滚的内容里，这一下归内容
+      const scroller = ev.target instanceof Element ? ev.target.closest('.sheet-scroll') : null;
+      return !scroller || scroller.scrollTop <= 0;
+    },
+    onStart: () => {
+      height = panel.getBoundingClientRect().height || 1;
+      panel.style.transition = 'none';
+    },
+    onMove: ({ dy }) => {
+      // 只跟着往下走；往上拖时给一点阻尼，让人知道到头了
+      const offset = dy >= 0 ? dy : dy / 6;
+      panel.style.transform = `translateY(${offset}px)`;
+      const backdrop = wrap.querySelector('.sheet-backdrop');
+      if (backdrop) backdrop.style.opacity = String(Math.max(0, 1 - (Math.max(0, dy) / height) * 1.2));
+    },
+    onEnd: ({ dy, velocity }) => {
+      const backdrop = wrap.querySelector('.sheet-backdrop');
+      const leaving = dy > CLOSE_DISTANCE || velocity > CLOSE_VELOCITY;
+      if (leaving) {
+        closeSheet();
+        panel.style.transform = '';
+        if (backdrop) backdrop.style.opacity = '';
+        return;
+      }
+      // 不够，弹回去
+      const from = panel.style.transform || 'translateY(0px)';
+      panel.style.transform = '';
+      if (backdrop) backdrop.style.opacity = '';
+      if (typeof panel.animate === 'function') {
+        panel.animate([{ transform: from }, { transform: 'translateY(0px)' }],
+          { duration: 240, easing: 'cubic-bezier(.32,.72,0,1)' });
+      }
+    },
+  });
+}

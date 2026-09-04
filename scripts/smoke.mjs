@@ -888,6 +888,141 @@ try {
   });
   check('离线外壳已缓存', (cached?.count || 0) > 20, JSON.stringify(cached));
 
+  // ---- 手势：三处都得跟手，而且不能被那 60 秒一次的重绘打断 ----
+  /*
+   * 用真实指针事件走一遍，不用 dispatchEvent —— 要连 pointer capture、
+   * touch-action 和「拖到一半整页重绘」一起验。前两样只有真事件才走得到。
+   */
+  const swipe = async (from, to, steps = 12) => {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    for (let i = 1; i <= steps; i += 1) {
+      await page.mouse.move(from.x + ((to.x - from.x) * i) / steps,
+        from.y + ((to.y - from.y) * i) / steps);
+      await page.waitForTimeout(12);
+    }
+    await page.mouse.up();
+  };
+  const currentDay = () => page.evaluate(async (b) => (await import(`${b}/js/lib/store.js`)).state.day, BASE);
+
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('今日'))?.click());
+  await page.waitForTimeout(500);
+  const dayStart = await currentDay();
+  const topbarBox = await page.$eval('.topbar-context', (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  // 右滑 = 往回翻一天（和左边那个「<」同一个动作）；左滑翻回来
+  await swipe({ x: topbarBox.x - 60, y: topbarBox.y }, { x: topbarBox.x + 60, y: topbarBox.y });
+  await page.waitForTimeout(400);
+  const dayBack = await currentDay();
+  await swipe({ x: topbarBox.x + 60, y: topbarBox.y }, { x: topbarBox.x - 60, y: topbarBox.y });
+  await page.waitForTimeout(400);
+  const dayForward = await currentDay();
+  // 竖着划是在滚页面，不该翻日期
+  await swipe({ x: topbarBox.x, y: topbarBox.y }, { x: topbarBox.x + 8, y: topbarBox.y + 70 });
+  await page.waitForTimeout(300);
+  const dayAfterVertical = await currentDay();
+  check('顶栏左右滑翻日期，竖着划不翻',
+    dayBack !== dayStart && dayForward === dayStart && dayAfterVertical === dayStart,
+    JSON.stringify({ dayStart, dayBack, dayForward, dayAfterVertical }));
+
+  /*
+   * 图表按住横扫：手势挂在 document 上，所以每选一天重绘整张卡也不会把它掐断。
+   *
+   * 先种几天健康数据 —— 冒烟前面那些用例跑的是空库，趋势卡是「数据不足」的
+   * 空状态，压根没有可扫的图，这条检查会永远报 0 而看着像手势坏了。
+   * 放在整个脚本最后，不会影响前面那条「一条记录都没有时给空状态」。
+   */
+  await page.evaluate(async (b) => {
+    const { mergeHealthDays } = await import(`${b}/js/lib/store.js`);
+    const days = [];
+    for (let i = 0; i < 20; i += 1) {
+      days.push({
+        date: new Date(Date.now() - i * 86400000).toISOString().slice(0, 10),
+        weight: 72 - i * 0.04, steps: 7000 + (i % 7) * 800,
+        activeEnergy: 500, restingEnergy: 1600, sleepMinutes: 410,
+        restingHeartRate: 58, exerciseMinutes: 30, waterMl: 900,
+      });
+    }
+    await mergeHealthDays(days);
+  }, BASE);
+  await page.waitForTimeout(600);
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('数据'))?.click());
+  await page.waitForTimeout(700);
+  await page.evaluate(() => document.querySelector('.trend-card')?.scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(300);
+  const chartEl = await page.$('.trend-card svg.chart');
+  const chartBox = chartEl ? await chartEl.boundingBox() : null;
+  let scrubbed = 0;
+  if (chartBox) {
+    const seen = new Set();
+    await page.exposeFunction('__smokePick', (t) => seen.add(t));
+    await page.evaluate(() => {
+      window.__smokeWatch = setInterval(() => {
+        const t = document.querySelector('.chart-readout')?.textContent || '';
+        if (t) window.__smokePick(t.slice(0, 12));
+      }, 40);
+    });
+    await swipe({ x: chartBox.x + chartBox.width * 0.2, y: chartBox.y + chartBox.height / 2 },
+      { x: chartBox.x + chartBox.width * 0.85, y: chartBox.y + chartBox.height / 2 }, 18);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => clearInterval(window.__smokeWatch));
+    scrubbed = seen.size;
+  }
+  check('图表按住横扫能连着换日子', scrubbed >= 2,
+    scrubbed >= 2 ? `扫过 ${scrubbed} 天`
+      : `扫过去只认到 ${scrubbed} 天 —— 手势多半又挂回被重绘换掉的那棵 SVG 上了`);
+
+  // 弹层：拖一小段弹回、拖过阈值才关
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('饮食'))?.click());
+  await page.waitForTimeout(600);
+  await page.fill('.exercise-search-input, .ui-search-input', '米饭');
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('.search-results .ui-list-row, .search-item')?.click());
+  await page.waitForTimeout(600);
+  const sheetShown = await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === false);
+  let sheetDrag = null;
+  if (sheetShown) {
+    const sheetBox = await page.$eval('.sheet', (el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + 24 };
+    });
+    await swipe({ x: sheetBox.x, y: sheetBox.y }, { x: sheetBox.x, y: sheetBox.y + 40 }, 8);
+    await page.waitForTimeout(400);
+    const heldOpen = await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === false);
+    const leftover = await page.evaluate(() => document.querySelector('.sheet')?.style.transform || '');
+    await swipe({ x: sheetBox.x, y: sheetBox.y }, { x: sheetBox.x, y: sheetBox.y + 200 }, 14);
+    await page.waitForTimeout(500);
+    const gone = await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === true);
+    sheetDrag = { heldOpen, leftover, gone };
+  }
+  check('弹层拖一点弹回、拖过阈值才关',
+    sheetShown && sheetDrag?.heldOpen === true && sheetDrag?.leftover === '' && sheetDrag?.gone === true,
+    JSON.stringify({ sheetShown, ...sheetDrag }));
+
+  // 毛玻璃只给真的叠在内容上面的那几处
+  await page.evaluate(async (b) => {
+    const { toast } = await import(`${b}/js/lib/utils.js`);
+    toast('冒烟：量一下毛玻璃', 'info');
+  }, BASE);
+  await page.waitForTimeout(300);
+  const glass = await page.evaluate(() => {
+    const read = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+    };
+    return { toast: read('.toast'), actionbar: read('.actionbar-slot'), drawer: read('.settings-drawer') };
+  });
+  check('毛玻璃只给真的叠在内容上面的那几处',
+    /blur/.test(glass.toast || '') && !/blur/.test(glass.actionbar || '') && !/blur/.test(glass.drawer || ''),
+    JSON.stringify(glass));
+
   check('运行期无 JS 错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

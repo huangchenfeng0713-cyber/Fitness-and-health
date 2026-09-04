@@ -1,5 +1,7 @@
 /** 纯 SVG 图表，无第三方依赖，配色跟随 CSS 变量以适配深色模式 */
 
+import { holdGesture } from './gesture.js';
+
 const NS = 'http://www.w3.org/2000/svg';
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -65,10 +67,20 @@ function markSelected({ svg, pad, width, height, color, x, y }) {
   svg.append(g);
 }
 
-/** 铺一层透明落点区，点哪天回调哪天 */
+/**
+ * 落点区：点一下看某一天，按住横着扫也行。
+ *
+ * 扫和点是两件事，回调里要分得开（`viaDrag`）：
+ * 点同一天是「取消选中」，而扫过去的时候每一天都得选上 ——
+ * 手指从周三划到周四再划回周三，如果照点击的逻辑走，回到周三反而把它取消了。
+ *
+ * 横着扫的时候要吃掉默认行为，否则 iOS 会把它当成页面滚动；
+ * `.chart` 那条 `touch-action: pan-y` 已经放行了竖向滚动，两者配合。
+ */
 function attachHits({ svg, pad, width, height, items, onPick }) {
   if (!items.length || typeof onPick !== 'function') return;
   const hits = el('g', { class: 'chart-hits' });
+  const rects = [];
   items.forEach((it, i) => {
     const left = i === 0 ? pad.l : (items[i - 1].x + it.x) / 2;
     const right = i === items.length - 1 ? width - pad.r : (it.x + items[i + 1].x) / 2;
@@ -76,10 +88,62 @@ function attachHits({ svg, pad, width, height, items, onPick }) {
       x: left, y: pad.t, width: Math.max(1, right - left), height: height - pad.t - pad.b,
       fill: 'transparent',
     });
-    r.addEventListener('click', (ev) => { ev.stopPropagation(); onPick(it.date); });
+    r.addEventListener('click', (ev) => { ev.stopPropagation(); onPick(it.date, { viaDrag: false }); });
+    rects.push({ node: r, date: it.date });
     hits.append(r);
   });
   svg.append(hits);
+
+  /*
+   * 按住横着扫。
+   *
+   * **手势不能挂在 SVG 自己身上。** 每选中一天，调用方都会重绘那张卡，
+   * 这棵 SVG 连同上面的监听器一起被换掉 —— 实测扫过去只认到第一天，
+   * 后面整段拖动落在一个已经离开文档的节点上。pointer capture 也救不了，
+   * 被捕获的那个节点本身没了。
+   *
+   * 所以按下时先把几何量下来（落点区在 viewBox 里的位置、SVG 在屏幕上的盒子），
+   * 之后整段拖动都跟 document 走：重绘换掉多少节点都不影响，
+   * 因为卡片没有移动，屏幕坐标换算回去仍然对得上。
+   */
+  hits.addEventListener('pointerdown', (ev) => {
+    if (!ev.isPrimary) return;
+    const box = svg.getBoundingClientRect();
+    if (!box.width) return;
+    const zones = rects.map(({ node, date }) => ({
+      date,
+      from: Number(node.getAttribute('x')),
+      to: Number(node.getAttribute('x')) + Number(node.getAttribute('width')),
+    }));
+    const dateAt = (clientX) => {
+      const x = ((clientX - box.left) / box.width) * width;
+      let best = null;
+      for (const z of zones) {
+        if (x >= z.from && x <= z.to) return z.date;
+        const d = Math.min(Math.abs(x - z.from), Math.abs(x - z.to));
+        if (!best || d < best.d) best = { date: z.date, d };
+      }
+      return best ? best.date : null;
+    };
+    const release = holdGesture();
+    let lastDate = null;
+    const move = (e) => {
+      if (e.cancelable) e.preventDefault();
+      const date = dateAt(e.clientX);
+      if (!date || date === lastDate) return;
+      lastDate = date;
+      onPick(date, { viaDrag: true });
+    };
+    const end = () => {
+      release();
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', end);
+      document.removeEventListener('pointercancel', end);
+    };
+    document.addEventListener('pointermove', move, { passive: false });
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+  });
 }
 
 function el(tag, attrs = {}) {

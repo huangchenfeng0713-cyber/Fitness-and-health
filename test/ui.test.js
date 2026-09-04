@@ -779,7 +779,7 @@ test('账号归属未确认时锁定业务界面和设置，只允许原账号�
   '可操作冲突被 ownershipPending 加载态挡住，用户将无法选择版本');
   // 隐私锁必须无视输入焦点：焦点在体重框里也得立刻把旧账号的数据从界面上撤掉
   assert.ok(/const locked = accountDataLocked\(account\)/.test(app), '账号回调里没有算出锁定态');
-  assert.ok(app.includes('locked || !isEditing()'), '输入框聚焦时隐私锁仍可能保留旧设置 DOM');
+  assert.ok(app.includes('locked || !busy()'), '输入框聚焦时隐私锁仍可能保留旧设置 DOM');
   assert.ok(app.includes('renderCurrentSafely({ force: locked })'),
     '隐私锁触发时业务页面也必须强制重绘，不能因为焦点在输入框里就跳过');
   assert.ok(settings.includes('确认属于我并上传'));
@@ -1009,8 +1009,8 @@ test('一次点选让同一页所有图标注同一天', () => {
   const trends = page('health');
   assert.match(trends, /^let selectedDay = null;$/m, '选中日应是模块级状态');
   assert.match(trends, /selectedX: selectedDay/, '图表没有接收选中日');
-  assert.match(trends, /onPick: \(date\) => \{ selectedDay = selectedDay === date \? null : date; rerender\(\); \}/,
-    '点同一天两次应取消选中');
+  assert.match(trends, /selectedDay = !viaDrag && selectedDay === date \? null : date;/,
+    '点同一天两次应取消选中；而按住扫过去时每一天都要选上，不能取消');
   assert.match(trends, /if \(selectedDay && \(!isWeek \|\| !days\.includes\(selectedDay\)\)\) selectedDay = null;/,
     '切换区间后应清掉落在窗口外的选中日');
 
@@ -1358,8 +1358,18 @@ test('输入框有焦点时不许整页重绘，但事后要补上', () => {
    */
   const app = read('js/app.js');
   assert.match(app, /function renderCurrentSafely\(\{ force = false \} = \{\}\)/, '缺少带输入保护的重绘入口');
-  assert.match(app, /if \(!force && isEditing\(\)\) \{ renderPending = true; return; \}/,
+  assert.match(app, /if \(!force && busy\(\)\) \{ renderPending = true; return; \}/,
     '重绘时没有躲开输入框，或者跳过之后没记下来');
+  /*
+   * 手指正压在某个手势上时同样不能重绘 —— 和输入框是同一件事，
+   * 只是把焦点换成了手指：重绘会把正在拖的那个节点连根换掉，手势断在半路。
+   */
+  assert.match(app, /const busy = \(\) => isEditing\(\) \|\| isGesturing\(\);/,
+    '手势没有和输入框走同一道闸门');
+  assert.doesNotMatch(app, /if \(document\.hidden \|\| isEditing\(\)\) return;/,
+    '定时器那几条路要走 busy()，不然手势拖到一半会被 60 秒的重绘打断');
+  assert.match(app, /for \(const type of \['pointerup', 'pointercancel'\]\)/,
+    '手势跳过的那次重绘没有在手指抬起来时补上');
 
   // store 订阅这条必须走带保护的那个入口
   const sub = app.slice(app.indexOf('subscribe(() => {'), app.indexOf('let healthAccountUserId'));
@@ -1368,7 +1378,7 @@ test('输入框有焦点时不许整页重绘，但事后要补上', () => {
 
   // 跳过不能就这么算了：失焦之后要补一次，否则页面停在旧数据上
   assert.match(app, /document\.addEventListener\('focusout'/, '跳过重绘之后没有补回来的入口');
-  assert.match(app, /if \(renderPending && !isEditing\(\)\) renderCurrentSafely\(\)/,
+  assert.match(app, /if \(renderPending && !busy\(\)\) renderCurrentSafely\(\)/,
     '补重绘时没有再确认一次焦点 —— 在两个格子之间跳会把人从第二个框里踢出去');
 });
 
@@ -1992,10 +2002,22 @@ test('健身选择栏常驻应用壳底部并紧邻底栏', () => {
     '选择栏仍在动作卡内做 sticky 定位');
   assert.match(dock, /margin:\s*0/, '固定栏仍带着卡片内负边距');
   assert.match(dock, /border-radius:\s*0/, '固定栏仍长得像卡片的一部分');
-  assert.match(dock, /backdrop-filter:\s*saturate\(145%\) blur\(18px\)/,
-    '固定栏没有使用轻量毛玻璃降低实体横幅的厚重感');
-  assert.match(dock, /background:\s*color-mix\(in srgb, var\(--card\) 90%, transparent\)/,
-    '固定栏仍是完全不透明的大色块');
+  /*
+   * 这里**不该**有毛玻璃。
+   *
+   * 它和顶栏、底栏一样是 flex 纵列里的一格，内容被 .view 自己的盒子裁掉，
+   * 从来不从它下面穿过 —— 实测背后压着的只有 body。blur 糊的是一块纯色，
+   * 白花 GPU；原先那层 saturate 做的事一个颜色值就够。
+   * 毛玻璃只给真正叠在内容上面的三处：弹层、设置抽屉、toast。
+   */
+  assert.doesNotMatch(dock, /backdrop-filter/,
+    '横条底下没有内容可透，毛玻璃在这儿是空跑的');
+  /*
+   * 底色不再用 transparent 调：背后只有 body，「半透明」在这儿等于
+   * 「和 --bg 混一点」，那就直接写成和 --bg 混，别绕一圈让人以为它是块玻璃。
+   */
+  assert.match(dock, /background:\s*color-mix\(in srgb, var\(--card\) 96%, var\(--bg\)\)/,
+    '固定栏的底色应当直接和页面底混，不装成半透明');
 });
 
 /*
@@ -2281,4 +2303,37 @@ test('图上的字不小于全应用的可读下限', () => {
   assert.match(charts, /function axisPad\(/, '纵轴留白没有按最长刻度算');
   const uses = (charts.match(/pad\.l = axisPad\(/g) || []).length;
   assert.equal(uses, 2, `折线图和柱状图都要算留白，实际 ${uses} 处`);
+});
+
+test('毛玻璃只给真的叠在内容上面的那几处，而且有落回实色的兜底', () => {
+  /*
+   * 这个应用的外壳是 flex 纵列（顶栏 / 内容 / 多选条 / 底栏），内容被 .view
+   * 自己的盒子裁掉，从来不从任何一根横条底下穿过 —— 实测多选条背后压着的
+   * 元素栈是 `div.select-bar → div.actionbar-slot → div → body`，没有内容。
+   * 给横条加 blur 糊的是一块纯色，白花 GPU。
+   *
+   * 真的叠在内容上面的只有三处：份量弹层、设置抽屉、toast。
+   */
+  const css = read('css/app.css');
+  const glassy = ['.sheet {', '.toast {'];
+  for (const sel of glassy) {
+    const block = css.slice(css.indexOf(sel), css.indexOf('}', css.indexOf(sel)));
+    assert.match(block, /backdrop-filter:/, `${sel} 应当是毛玻璃`);
+    assert.match(block, /-webkit-backdrop-filter:/, `${sel} 缺了 iOS 要的前缀`);
+    assert.match(block, /background: color-mix/, `${sel} 底色不透的话，毛玻璃没有意义`);
+  }
+  /*
+   * 不支持 backdrop-filter 时必须落回实色：半透明底 + 不模糊 =
+   * 字直接压在背后花花绿绿的内容上，比根本没有玻璃糟得多。
+   */
+  assert.match(css, /@supports not \(\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\)\)/,
+    '没有落回实色的兜底');
+  /*
+   * 设置抽屉是实色。它宽 94%、高 100%，背后只是刚才那一页的随机一截 ——
+   * 实测透出来的是搜索结果那一列，24px 模糊之后字形还认得出，
+   * 同一片区域比实色版本多出 19 倍细节，而那些细节一个也不该在这儿看。
+   */
+  const drawer = css.slice(css.indexOf('.settings-drawer {'), css.indexOf('}', css.indexOf('.settings-drawer {')));
+  assert.doesNotMatch(drawer, /backdrop-filter/,
+    '整屏推出来的抽屉背后没有值得透出来的东西，玻璃在这儿只是噪音');
 });
