@@ -1052,17 +1052,22 @@ html, body { height: 100%; overflow: hidden; }
 
 /* ============ 健康数据（带图标的指标格） ============ */
 /*
- * 一行三到四个、每格自己居中，末行按列对齐，不居中也不拉宽。
+ * 一行三到四个、每格自己居中；末行**整组居中**，格子宽度和行内间距和上一行一样。
  *
  * 原先是两列、图标在左文字在右：左格的字结束在半屏处，右格的图标又从半屏开始，
- * 中间那道参差的缝把整块拉歪了。改成居中的格子解决了这一半。剩下的一半是末行：
+ * 中间那道参差的缝把整块拉歪了。改成居中的格子解决了这一半。剩下的一半是末行 ——
+ * 7 项排成 4 + 3 时，那一格空缺该摆在哪儿，前后试了三版：
  *
- * 平衡不是平均：7 项排成 4 + 3 时，第二行那三格该和第一行的前三格**同宽同起点**，
- * 行内间距也一样 —— 末尾空一格是事实（这一项今天没有），不是没排完。
- * 居中过一版：末行被推到半格的位置上，图标和上一行对不齐，整张卡看着在晃。
- * 拉宽占满也试过：那是把 4 格和 3 格各自均分，两行的列就再也对不上了。
+ * - **靠左**：右边空出一整格，整块的重心偏到左边，读出来是「没排完」。
+ * - **拉开占满**（flex-grow: 1）：那是把 4 格和 3 格各自均分 —— 平均，不是平衡。
+ *   右边确实不空了，代价是两行的列再也对不上，每一列都错位。
+ * - **整组居中**：格子还是那么宽、缝还是那么大，只把这三格作为一个整体摆在
+ *   行的正中，空缺一分为二落到两端。
+ *
+ * 最后一版是对的。**对齐是为了平衡，但平衡不总是靠对齐**：上一行四格本身
+ * 左右对称，末行三格要和它平衡，得跟它共用同一条中轴，而不是同一个左边缘。
  */
-.metric-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-4) var(--space-1); --metric-cols: 3; }
+.metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4) var(--space-1); --metric-cols: 3; }
 .metric-cell {
   flex: 0 0 calc((100% - (var(--metric-cols) - 1) * var(--space-1)) / var(--metric-cols));
   display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
@@ -2311,7 +2316,13 @@ body.sheet-open {
  * 整块淡底、不加左侧色条 —— 有色条的话读起来像一条警告，而它只是一段话。
  */
 .chart-note {
-  margin-top: var(--space-2); padding: 11px 13px;
+  /*
+   * 底下那一档必须显式写 0：它是个 <p>，只覆盖 margin-top 的话，
+   * 浏览器默认的 margin-block-end: 1em 会留下来 —— 在 --fs-footnote 上正好是
+   * 13px，既不在六档阶梯上，又跟着字号浮动，CSS 里还查不到。
+   * 它是卡片的最后一块，底部留白本来就该由卡片自己的 padding 负责。
+   */
+  margin: var(--space-2) 0 0; padding: 11px 13px;
   background: var(--card-2); border-radius: var(--r-md);
   font-size: var(--fs-footnote); line-height: 1.65; color: var(--muted);
 }

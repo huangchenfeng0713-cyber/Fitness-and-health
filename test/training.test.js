@@ -474,6 +474,59 @@ test('动作推荐避开已选动作，也避开和已选高度重合的', async
   assert.ok(patterns.size >= 4, `推日六个动作只覆盖了 ${patterns.size} 种模式`);
 });
 
+/*
+ * 推荐要有变化，但变的只能是「同样够格的那几个里挑哪一个」。
+ *
+ * 原先它是全定死的：每个动作模式的槽位里永远挑排在最前面的那一个，
+ * 于是练胸永远是「杠铃卧推 + 上斜杠铃 + 绳索夹胸」，翻多少天都一样，
+ * 推荐这个功能就只剩第一次有用。
+ *
+ * 但换的方式很要紧：不能变成随便抓几个。挑选规则一条都没松 ——
+ * 每个模式一个槽、复合优先、彼此不高度重合、器械档位照筛。
+ */
+test('推荐每天有变化，但覆盖的动作模式和动作质量不变', async () => {
+  const { recommendFor, overlapScore, overlapLevel } = await import('../js/core/training.js');
+  for (const [mode, key, patternMin] of [['group', 'chest', 4], ['group', 'leg', 5], ['split', 'push', 4]]) {
+    const combos = [];
+    for (let seed = 0; seed < 6; seed += 1) {
+      const rec = recommendFor({ mode, [mode === 'group' ? 'groupKey' : 'splitKey']: key, seed });
+      combos.push(rec.items.map((i) => i.id));
+
+      // 变了也得是一套说得通的方案：模式散得开、互相不重复
+      const list = rec.items.map((i) => EXERCISE_BY_ID.get(i.id));
+      const patterns = new Set(list.map((e) => e.pattern));
+      assert.ok(patterns.size >= patternMin,
+        `${key} seed ${seed} 只覆盖了 ${patterns.size} 种动作模式`);
+      for (let a = 0; a < list.length; a += 1) {
+        for (let b = a + 1; b < list.length; b += 1) {
+          assert.notEqual(overlapLevel(overlapScore(list[a], list[b])), 'high',
+            `${key} seed ${seed} 推荐里 ${list[a].name} 和 ${list[b].name} 高度重合`);
+        }
+      }
+    }
+    const distinct = new Set(combos.map((c) => c.join('|')));
+    assert.ok(distinct.size >= 3, `${key} 六天里只给出了 ${distinct.size} 种组合，等于没变`);
+    // 同一个 seed 必须给同一套：同一天里翻来翻去、每 60 秒重绘都不能让它自己跳
+    const again = recommendFor({ mode, [mode === 'group' ? 'groupKey' : 'splitKey']: key, seed: 2 });
+    assert.deepEqual(again.items.map((i) => i.id), combos[2], `${key} 同一个 seed 给出了两套`);
+  }
+});
+
+test('轮换不会把复合动作的槽位换成孤立动作', async () => {
+  const { recommendFor } = await import('../js/core/training.js');
+  /*
+   * 每个模式的第一顺位是复合动作（深蹲日不该开头就给腿屈伸）。
+   * 轮换只在同一档里转，所以任意一天的第一个动作都还得是复合的。
+   */
+  for (let seed = 0; seed < 6; seed += 1) {
+    for (const key of ['chest', 'back', 'leg']) {
+      const first = recommendFor({ mode: 'group', groupKey: key, seed }).items[0];
+      assert.ok(EXERCISE_BY_ID.get(first.id).compound,
+        `${key} seed ${seed} 的头一个推荐是孤立动作 ${first.name}`);
+    }
+  }
+});
+
 test('器械档位也管着推荐，不然列表和推荐说的不是一件事', async () => {
   const { recommendFor } = await import('../js/core/training.js');
   for (const [equip, ok] of [['bodyweight', (e) => ['bodyweight', 'band'].includes(e.equipment)],

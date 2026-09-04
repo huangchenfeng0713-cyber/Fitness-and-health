@@ -433,22 +433,32 @@ try {
         .filter((c) => Math.round(c.getBoundingClientRect().top) === t)
         .map((c) => c.getBoundingClientRect()));
       /*
-       * 平衡不是平均：末行那几格要和第一行的前几格同宽同起点，
-       * 末尾空一格是事实。居中会让它落在半格上，拉宽占满会让两行的列错开。
+       * 末行整组居中，且格子宽度、行内间距和上一行完全一样。
+       * 拉宽占满（flex-grow: 1）会让宽度对不上；靠左会让两端的余量一边 0 一边一整格。
        */
-      const misaligned = boxes.slice(1).some((row) => row
-        .some((b, i) => Math.abs(b.left - boxes[0][i].left) > 0.6
-          || Math.abs(b.width - boxes[0][i].width) > 0.6));
-      return { rows: boxes.map((b) => b.length), misaligned,
+      const gridBox = grid.getBoundingClientRect();
+      const width0 = boxes[0][0].width;
+      const gapOf = (row) => (row.length > 1 ? +(row[1].left - row[0].left - row[0].width).toFixed(1) : null);
+      const gap0 = gapOf(boxes[0]);
+      const badWidth = boxes.flat().some((b) => Math.abs(b.width - width0) > 0.6);
+      const badGap = boxes.slice(1).some((row) => gapOf(row) != null && Math.abs(gapOf(row) - gap0) > 0.6);
+      // 两端余量相等 = 这一组落在行的正中
+      const offCenter = boxes.some((row) => {
+        const left = row[0].left - gridBox.left;
+        const right = gridBox.right - row[row.length - 1].right;
+        return Math.abs(left - right) > 1.2;
+      });
+      return { rows: boxes.map((b) => b.length), badWidth, badGap, offCenter,
         cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
     });
     if (!r) badLayouts.push(`${n} 项没渲染出格子`);
     else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
     else if (r.rows.length > 1 && r.rows[r.rows.length - 1] === 1) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一个`);
-    else if (r.misaligned) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，两行的列没对齐`);
+    else if (r.badWidth) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，格子被拉成了不同宽度`);
+    else if (r.badGap) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行的行内间距和上一行不一样`);
+    else if (r.offCenter) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，有一行没落在正中`);
   }
-  check('健康数据 1~8 项都排得平整，末行按列对齐', badLayouts.length === 0, badLayouts.join('；'));
-
+  check('健康数据 1~8 项都排得平整，末行整组居中', badLayouts.length === 0, badLayouts.join('；'));
   /*
    * 颜色语义：红色只留给真上限。
    *
@@ -940,6 +950,29 @@ try {
     JSON.stringify({ dayStart, dayBack, dayForward, dayAfterVertical }));
 
   /*
+   * 「正在做手势」漏一次释放，不能把整个应用卡死。
+   *
+   * app.js 的 busy() 拿 isGesturing() 闸着全应用的重绘：它一旦永久为真，
+   * 每次落库都只记一笔 renderPending，再在下一次 pointerup 补跑 ——
+   * 表现就是「点哪儿哪儿重绘」，正在打字的输入框被换掉、键盘收起、
+   * 刚打开的弹层弹走，而且不重开应用就好不了。
+   * 指针捕获在节点被隐藏或换掉时会失效（弹层退场、重绘都会），
+   * 那一下的 pointerup 就送不到原来的元素上，所以这不是假想的情况。
+   */
+  const gestureState = await page.evaluate(async (b) => {
+    const g = await import(`${b}/js/lib/gesture.js`);
+    g.holdGesture(999);   // 有主但那根手指永远不会抬起来
+    g.holdGesture();      // 无主
+    return g.isGesturing();
+  }, BASE);
+  await page.touchscreen.tap(200, 400);
+  await page.waitForTimeout(200);
+  const gestureHealed = await page.evaluate(async (b) => (await import(`${b}/js/lib/gesture.js`)).isGesturing(), BASE);
+  check('手势占用漏了也能自己恢复，不会把重绘永久闸住',
+    gestureState === true && gestureHealed === false,
+    JSON.stringify({ 漏掉之后: gestureState, 抬一次手之后: gestureHealed }));
+
+  /*
    * 图表按住横扫：手势挂在 document 上，所以每选一天重绘整张卡也不会把它掐断。
    *
    * 先种几天健康数据 —— 冒烟前面那些用例跑的是空库，趋势卡是「数据不足」的
@@ -986,6 +1019,41 @@ try {
   check('图表按住横扫能连着换日子', scrubbed >= 2,
     scrubbed >= 2 ? `扫过 ${scrubbed} 天`
       : `扫过去只认到 ${scrubbed} 天 —— 手势多半又挂回被重绘换掉的那棵 SVG 上了`);
+
+  /*
+   * 算出来的竖向外边距也得落在六档阶梯上。
+   *
+   * test/ui.test.js 那条只读得到 app.css 里写着的值，读不到**浏览器补的**：
+   * <p> 默认带 margin-block-end: 1em，只覆盖 margin-top 的话它就留在那儿 ——
+   * .chart-note 上正好是 13px，既不在阶梯上，还跟着字号浮动，
+   * 而且在 CSS 里搜不到，排查时会以为是别处的问题。只有量计算样式才看得见。
+   */
+  const offLadder = new Map();
+  for (const tab of ['今日', '饮食', '数据', '健身']) {
+    await page.evaluate((t) => [...document.querySelectorAll('.tab')]
+      .find((x) => x.textContent.includes(t))?.click(), tab);
+    await page.waitForTimeout(500);
+    const rows = await page.evaluate((label) => {
+      const LADDER = new Set([0, 2, 4, 8, 12, 16, 24]);
+      const out = [];
+      for (const el of document.querySelectorAll('#view *')) {
+        const box = el.getBoundingClientRect();
+        if (!box.width || !box.height || el.closest('svg')) continue;
+        const cs = getComputedStyle(el);
+        for (const side of ['marginTop', 'marginBottom']) {
+          const v = Math.round(parseFloat(cs[side]) * 10) / 10;
+          if (!Number.isFinite(v) || v < 0 || LADDER.has(v)) continue;
+          const cls = typeof el.className === 'string' && el.className
+            ? `.${el.className.trim().split(/\s+/)[0]}` : el.tagName.toLowerCase();
+          out.push(`${label} ${el.tagName.toLowerCase()}${cls} ${side}=${v}px`);
+        }
+      }
+      return out;
+    }, tab);
+    for (const r of rows) offLadder.set(r, true);
+  }
+  check('算出来的竖向间距也在六档阶梯上（浏览器默认值不许漏进来）',
+    offLadder.size === 0, [...offLadder.keys()].slice(0, 5).join('；'));
 
   // 弹层：拖一小段弹回、拖过阈值才关
   await page.evaluate(() => [...document.querySelectorAll('.tab')]

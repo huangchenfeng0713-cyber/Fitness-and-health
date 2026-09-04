@@ -4,6 +4,11 @@
  * 这一组防的是「同一个日期上下各写一遍」：原先大标题写「昨天」，
  * 副标题又写「08-28 · 回今天」——日期印了两遍，
  * 而「回今天」在标题已经点明是哪天的时候才有用。
+ *
+ * 后来又收了一次：只有今天配「词 + 日期」，别的一律「日期 + 回今天」。
+ * 副标题是同一个位置，一格只该有一个职责 —— 原先它在今天和昨天上是
+ * 「这是几号」，再远一天就变成「回今天」。而除了今天，每一天都需要那个出口，
+ * 昨天也不例外。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,22 +16,21 @@ import { dayHeading, dayOffset, shiftDay, todayKey } from '../js/core/day.js';
 
 const TODAY = '2026-08-29';
 
-test('今天和昨天：标题是词，副标题才是日期', () => {
+test('只有今天是词 + 日期，昨天已经跟其余日子一样', () => {
   const today = dayHeading('2026-08-29', TODAY);
   assert.equal(today.title, '今天');
   assert.equal(today.sub, '08-29');
   assert.equal(today.isToday, true);
+  assert.equal(today.backToToday, false, '今天不需要回今天的出口');
+  // 标题里不许再出现日期，副标题里不许再出现那个词
+  assert.doesNotMatch(today.title, /\d/, `标题重复了日期：${today.title}`);
+  assert.doesNotMatch(today.sub, /今天/, `副标题重复了标题：${today.sub}`);
 
   const yesterday = dayHeading('2026-08-28', TODAY);
-  assert.equal(yesterday.title, '昨天');
-  assert.equal(yesterday.sub, '08-28');
+  assert.equal(yesterday.title, '08月28日');
+  assert.equal(yesterday.sub, '回今天');
   assert.equal(yesterday.isToday, false);
-
-  // 标题里不许再出现日期，副标题里不许再出现那个词
-  for (const heading of [today, yesterday]) {
-    assert.doesNotMatch(heading.title, /\d/, `标题重复了日期：${heading.title}`);
-    assert.doesNotMatch(heading.sub, /今天|昨天/, `副标题重复了标题：${heading.sub}`);
-  }
+  assert.equal(yesterday.backToToday, true, '昨天也得给得出回今天的出口');
 });
 
 test('更远的日期：标题就是日期，副标题只留回今天的出口', () => {
@@ -50,8 +54,9 @@ test('跨年补上年份，同一年里不写', () => {
   assert.equal(dayHeading('2026-03-05', TODAY).title, '03月05日');
 });
 
-test('明天仍然是个词；坏日期退回今天，不印出 NaN', () => {
-  assert.equal(dayHeading('2026-08-30', TODAY).title, '明天');
+test('明天也走日期那一路；坏日期退回今天，不印出 NaN', () => {
+  assert.equal(dayHeading('2026-08-30', TODAY).title, '08月30日');
+  assert.equal(dayHeading('2026-08-30', TODAY).sub, '回今天');
   for (const bad of [null, undefined, '', 'x', '2026-8-9']) {
     const h = dayHeading(bad, TODAY);
     assert.equal(h.title, '今天', `坏输入 ${bad} 没退回今天`);

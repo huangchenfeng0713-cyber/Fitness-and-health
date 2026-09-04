@@ -34,19 +34,26 @@ const VALID = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * 顶栏日期该怎么写。
  *
+ * 只有今天配「词 + 日期」，别的一律「日期 + 回今天」。
+ *
+ * 昨天、明天原先也走词的那一路（标题「昨天」、副标题 `09-04`），代价是
+ * 副标题这一格在不同日子上说着两件不同的事：今天和昨天是「这是几号」，
+ * 再远一天就变成「回今天」。而副标题是**同一个位置**，一格只该有一个职责。
+ * 更要紧的是，只有今天不需要出口 —— 翻到别的任何一天都需要，昨天也不例外，
+ * 而那时候「回今天」被日期挤掉了，人得自己去找那两个箭头。
+ *
  * @returns {{title, sub, offset, isToday, backToToday}}
- *  - 今天 / 昨天 / 明天：标题是那个词，副标题给出具体日期（`08-28`）
- *  - 更远的日期：标题就是日期本身（`08月27日`，跨年补上年份），
- *    副标题不再重复它，只留一个回今天的出口
+ *  - 今天：标题「今天」，副标题给出具体日期（`09-05`）
+ *  - 其余任何一天：标题就是日期本身（`08月27日`，跨年补上年份），
+ *    副标题只留一个回今天的出口
  */
 export function dayHeading(day, today) {
   const base = VALID.test(String(today)) ? String(today) : todayKey();
   const key = VALID.test(String(day)) ? String(day) : base;
   const [y, m, d] = key.split('-');
   const offset = dayOffset(key, base);
-  const word = { 0: '今天', '-1': '昨天', 1: '明天' }[String(offset)];
-  if (word) {
-    return { title: word, sub: `${m}-${d}`, offset, isToday: offset === 0, backToToday: false };
+  if (offset === 0) {
+    return { title: '今天', sub: `${m}-${d}`, offset, isToday: true, backToToday: false };
   }
   // 跨年才写年份：同一年里「2026年」每天都对、每天都一样，等于没说
   const sameYear = y === base.slice(0, 4);
@@ -67,4 +74,16 @@ export function dayHeading(day, today) {
 /** 一天已过去的比例，用于实时预算分配 */
 export function dayFraction(now = new Date()) {
   return (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400;
+}
+
+/**
+ * 把某一天折成一个稳定的整数，给「每天换一批」这类轮换用。
+ *
+ * 要的是「同一天里怎么翻都一样、隔天才换」。Math.random() 做不到这件事 ——
+ * 这个应用每 60 秒重绘一次，随机数会让那一列内容在人眼皮底下自己跳。
+ * 直接用天数差就够：不需要散列，只需要逐日递增。
+ */
+export function daySeed(day = todayKey()) {
+  const key = VALID.test(String(day)) ? String(day) : todayKey();
+  return Math.abs(dayOffset(key, '2020-01-01'));
 }
