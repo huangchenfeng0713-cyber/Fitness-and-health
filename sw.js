@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v3.9.11';
+const CACHE = 'health-diet-v3.9.12';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
 // 根模块及其固定版本依赖只在账号功能首次成功加载后按需缓存；不为本地模式访客预下载。
@@ -73,8 +73,26 @@ const SHELL = [
 const SHELL_URLS = new Set(SHELL.map((path) => new URL(path, self.registration.scope).href));
 const INDEX_URL = new URL('./index.html', self.registration.scope).href;
 
+async function fetchFresh(request) {
+  const res = await fetch(request, { cache: 'reload' });
+  if (!res.ok) throw new Error(`${request.url} ${res.status}`);
+  return res;
+}
+
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  /*
+   * 必须绕开 HTTP 缓存去拉外壳。GitHub Pages 给每个文件 max-age=600，
+   * cache.addAll 会把十分钟内的旧 app.js 写进新版本的 Cache Storage ——
+   * 缓存名已经是 v3.9.12，里面跑的还是上一版，点「立即更新」也换不掉。
+   */
+  e.waitUntil((async () => {
+    const cache = await caches.open(CACHE);
+    await Promise.all(SHELL.map(async (path) => {
+      const req = new Request(new URL(path, self.registration.scope), { cache: 'reload' });
+      await cache.put(req, await fetchFresh(req));
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
@@ -123,7 +141,7 @@ self.addEventListener('fetch', (e) => {
       const cacheKey = navigation ? INDEX_URL : e.request;
       const cached = await cache.match(cacheKey);
       if (cached) return cached;
-      const response = await fetch(e.request);
+      const response = await fetch(e.request, { cache: 'reload' });
       if (response.ok) await cache.put(cacheKey, response.clone()).catch(() => {});
       return response;
     }).catch(() => caches.match(INDEX_URL)));

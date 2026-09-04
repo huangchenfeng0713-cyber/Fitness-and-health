@@ -942,6 +942,8 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
+  assert.ok(app.includes('function applyPendingUpdate'), '立即更新不能只 reload，iOS 会继续用旧页');
+  assert.ok(app.includes('location.replace'), '立即更新要用换地址导航，不能 reload');
   // 目标线画的是现在这套设置算出来的目标，历史那几天当时未必是这个数
   assert.ok(trends.includes("targetContext = '当前目标'"));
 });
@@ -1097,7 +1099,8 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
   assert.ok(worker.includes('k.startsWith(CACHE_PREFIX)'), '应用升级时只能清理本应用命名空间内的旧缓存');
   assert.ok(worker.includes('const shellRequest = navigation || SHELL_URLS.has(e.request.url)'));
   assert.ok(worker.includes('if (cached) return cached'), '当前控制器必须固定读取同一版应用外壳');
-  assert.ok(worker.includes('addAll(SHELL)'), '新缓存必须在激活前一次性取得全部应用外壳');
+  assert.ok(worker.includes("cache: 'reload'"), '新外壳不能沿用 GitHub Pages 的十分钟 HTTP 缓存');
+  assert.ok(worker.includes('cache.put(req'), '新缓存必须在激活前一次性取得全部应用外壳');
   assert.ok(app.indexOf('void registerServiceWorker({ waitForControl: false })')
     < app.indexOf('const cloudInitialization = initCloud()'),
   '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
