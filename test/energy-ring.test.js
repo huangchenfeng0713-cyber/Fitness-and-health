@@ -70,13 +70,13 @@ test('v1 存的圆周不认：那时候存的是按预计消耗算的，含义�
   assert.equal(lockTrackScale('2026-09-03', 2168, old), 2200);
 });
 
-test('圈心只说还能吃 / 热量盈余 / 接近目标', () => {
+test('圈心只说还能吃 / 超出目标 / 接近目标', () => {
   const left = ring(1500, 1200);
   assert.equal(left.center.label, '还能吃');
   assert.equal(left.center.kcal, TARGET - 1500);
 
   const over = ring(2400, 1200);
-  assert.equal(over.center.label, '热量盈余');
+  assert.equal(over.center.label, '超出目标');
   assert.equal(over.center.kcal, 2400 - TARGET);
 
   const near = ring(TARGET - 20, 1200);
@@ -86,7 +86,36 @@ test('圈心只说还能吃 / 热量盈余 / 接近目标', () => {
   for (const m of [left, over, near]) {
     assert.doesNotMatch(m.center.label, /领先|平衡|缺口/,
       '不写「摄入领先 / 消耗领先」，也不把还能吃的额度叫成缺口');
+    /*
+     * 「盈余」在这个应用里已经表示**摄入减消耗**（近 7 日速览的累计收支、
+     * 趋势解读都这么用）。圈心说的是摄入减**目标**，借这个词会让同一天
+     * 同时出现「热量盈余 400」和「缺口 xxx」。
+     */
+    assert.doesNotMatch(m.center.label, /盈余/, '「盈余」是收支那个数的词，圈心不许借用');
   }
+});
+
+test('计划要求吃到消耗之上时，没吃满那句改说「还应吃」', () => {
+  const bulk = (eaten) => energyRing({
+    eaten, burned: 1200, target: TARGET, dailyDelta: 300, scale: SCALE,
+  });
+  assert.equal(bulk(1500).center.label, '还应吃', '增肌少吃了是没做完，不是省下了额度');
+  assert.equal(bulk(1500).center.kcal, TARGET - 1500);
+  // 吃超和接近这两句不分档
+  assert.equal(bulk(2400).center.label, '超出目标');
+  assert.equal(bulk(TARGET).center.label, '接近目标');
+
+  // 减脂 / 维持仍然是「还能吃」——那是一份额度
+  assert.equal(ring(1500, 1200).center.label, '还能吃');
+  assert.equal(energyRing({
+    eaten: 1500, burned: 1200, target: TARGET, dailyDelta: -330, scale: SCALE,
+  }).center.label, '还能吃');
+  /*
+   * 判据是计划的每日盈亏，不是目标名：增肌档把速率设成 0 时并没有要补的量。
+   */
+  assert.equal(energyRing({
+    eaten: 1500, burned: 1200, target: TARGET, dailyDelta: 0, scale: SCALE,
+  }).center.label, '还能吃');
 });
 
 test('圈心对着摄入目标算，和消耗无关', () => {

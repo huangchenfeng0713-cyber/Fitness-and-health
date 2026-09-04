@@ -107,6 +107,7 @@ function heroCard(advice, targets, derived) {
     eaten: gaps.kcal.eaten,
     burned: derived.liveEnergy?.burnedNow ?? null,
     target: targets.kcal,
+    dailyDelta: targets.dailyDelta,
     scale: ringScale,
   });
 
@@ -172,6 +173,26 @@ function heroInfo(derived, targets) {
     ['游离糖上限', '含糖浆、蜂蜜和果汁中的糖；低于总热量 10%'],
     ['饮水参考', '温和气候、低活动；运动或炎热天气需额外补充'],
   ];
+  /*
+   * 黄线怎么读。
+   *
+   * 环的整圈是**摄入目标**，而黄线画的是**实际消耗** —— 两者差着计划里的
+   * 每日盈亏。所以减脂档的黄线几乎每天都会越过 12 点，那恰恰是计划在生效；
+   * 不说清楚，用户会天天读成「我今天烧超了」。
+   */
+  const delta = Number(targets.dailyDelta) || 0;
+  const burnedNow = derived.liveEnergy?.burnedNow;
+  const goldNote = burnedNow == null ? null
+    : delta < 0
+      ? `环上那条黄线是今天已经烧掉的。它和 12 点的距离，约等于计划里每天少吃的 `
+        + `${num(Math.abs(delta))} kcal —— 减脂时它每天都会越过 12 点，是计划在生效，不是出问题；`
+        + '烧得比平时多会离得更远。'
+      : delta > 0
+        ? `环上那条黄线是今天已经烧掉的。它和 12 点的距离，约等于计划里每天多吃的 `
+          + `${num(delta)} kcal —— 增肌时它通常停在 12 点之前；烧得比平时多会往 12 点靠。`
+        : '环上那条黄线是今天已经烧掉的。维持计划下它大致停在 12 点附近，'
+          + '烧得比平时多或少都会让它移动。';
+
   let freshness = null;
   if (meta?.observedAt && derived.dynamic && !meta.stale) {
     const observed = new Date(meta.observedAt);
@@ -193,6 +214,7 @@ function heroInfo(derived, targets) {
           + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'
         : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
+    goldNote && h('p', null, goldNote),
     h('p', null, '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),

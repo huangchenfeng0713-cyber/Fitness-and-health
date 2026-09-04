@@ -94,24 +94,38 @@ export function lap(x, scale) {
  * 不写「摄入领先 / 消耗领先」—— 谁在前面看两条刻度线就知道了，
  * 而上午消耗跑在摄入前面本来就是常态，把它印成一句结论会读成「今天出问题了」。
  * 也不写「缺口」：白天没吃满是正常的，那段灰是还能吃的额度。
+ *
+ * 吃超了那句叫**「超出目标」不叫「热量盈余」**。
+ * 「盈余」在这个应用里已经有确定含义 —— 近 7 日速览的「累计收支」和趋势解读
+ * 都用它表示**摄入减消耗**，也就是另一个差值。减脂时吃超目标 400，实际仍然
+ * 是赤字，屏幕上就会同时出现今日卡「热量盈余 400」和数据页「缺口 xxx」，
+ * 同一个词两个意思还能一正一负。「超出目标」和「接近目标」共用同一个参照词。
+ *
+ * 没吃满那句分两种，看**计划要不要你吃到消耗之上**（surplusPlan）：
+ * 减脂 / 维持是一份额度，用「还能吃」；增肌是一件没做完的事，用「还应吃」。
+ * 判据用计划的每日盈亏而不是目标名 —— 增肌档把速率设成 0 时并没有要补的量，
+ * 那时候「还能吃」才对。
  */
-function centerOf(ate, goal) {
-  if (goal == null || goal <= 0) return { key: 'none', label: '还能吃', kcal: null };
+function centerOf(ate, goal, surplusPlan) {
+  const shortLabel = surplusPlan ? '还应吃' : '还能吃';
+  if (goal == null || goal <= 0) return { key: 'none', label: shortLabel, kcal: null };
   const diff = Math.round(goal - ate);
   if (Math.abs(diff) <= BALANCE_WITHIN) return { key: 'onTarget', label: '接近目标', kcal: null };
-  if (diff > 0) return { key: 'left', label: '还能吃', kcal: diff };
-  return { key: 'over', label: '热量盈余', kcal: -diff };
+  if (diff > 0) return { key: 'left', label: shortLabel, kcal: diff };
+  return { key: 'over', label: '超出目标', kcal: -diff };
 }
 
 /**
  * @param {object} input
  *   eaten   已摄入 kcal
  *   burned  当前消耗（设备到此刻的静息 + 活动）。没有设备数据时传 null
- *   target  今日摄入目标，只用来在没传 scale 时算尺子、以及算圈心的差额
- *   scale   当天锁定的圆周。传入则不再改
+ *   target      今日摄入目标，只用来在没传 scale 时算尺子、以及算圈心的差额
+ *   dailyDelta  计划里每天的盈亏（摄入目标 − 计划消耗）。>0 表示计划要求吃到
+ *               消耗之上，圈心那句改说「还应吃」
+ *   scale       当天锁定的圆周。传入则不再改
  */
 export function energyRing({
-  eaten = 0, burned = null, target = null, scale = null,
+  eaten = 0, burned = null, target = null, dailyDelta = null, scale = null,
 } = {}) {
   const ate = Math.max(0, n(eaten) || 0);
   const burnRaw = n(burned);
@@ -178,7 +192,7 @@ export function energyRing({
     ticks,
     legend,
     laps: { eaten: eatLap, burned: burnLap },
-    center: centerOf(ate, goal),
+    center: centerOf(ate, goal, (n(dailyDelta) || 0) > 0),
     /** 还能吃多少（负数表示已经超出计划）。界面用圈心，这个数留给测试和提示层 */
     remaining: goal != null ? Math.round(goal - ate) : null,
   };
