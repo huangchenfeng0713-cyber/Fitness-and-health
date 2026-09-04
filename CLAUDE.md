@@ -15,7 +15,14 @@ npm run serve                                         # python3 -m http.server 8
 node scripts/smoke.mjs http://127.0.0.1:8080
 ```
 
-`.github/workflows/ci.yml` 在每个 PR 上跑单元测试 + 浏览器冒烟。
+`.github/workflows/ci.yml` 在**每次推功能分支**、每个 PR、每次推 main 上跑
+单元测试 + 浏览器冒烟。功能分支那条是补上的：**`pull_request` 跑的是合并后的
+那个提交**（现场合出来的 merge ref），PR 有冲突时这个 ref 合不出来，于是一次
+run 都不起——PR 上不是红叉，是干干净净什么检查都没有，看着像 CI 坏了。
+而「有冲突」恰恰是最需要知道分支本身还过不过得了测试的时候。
+push 这条跑的是分支 head 本身，不受合不合得上影响。
+同一个提交只跑一次（`concurrency` 按 `head.sha` 归组，不按 `github.ref`——
+两个事件的 ref 长得不一样，按 ref 归组等于没去重）。
 **浏览器那一层不是可有可无的**：启动失败吞掉自救按钮、身体信息不合格白屏、
 推荐份量漏出浮点数，这三个都是几百项单元测试全绿的情况下漏过去的。
 

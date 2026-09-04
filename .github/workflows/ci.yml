@@ -1,14 +1,34 @@
-# 每次 PR 和推 main 都跑：单元测试 + 浏览器冒烟。
+# 每次推功能分支、每个 PR、每次推 main 都跑：单元测试 + 浏览器冒烟。
 #
 # 为什么要有浏览器那一层：过去几次真出问题的地方都在浏览器集成层，
 # 不在计算函数里——启动失败吞掉自救按钮、身体信息不合格白屏、
 # 推荐份量漏出浮点数，三个都是 393 项单元测试全绿的情况下漏过去的。
+#
+# 为什么 push 要带上功能分支：`pull_request` 那条跑的是**合并后的那个提交**
+# （base + head 现场合出来的 merge ref）。PR 有冲突时这个 ref 根本合不出来，
+# 于是一次 run 都不起 —— PR 页面上不是红叉，是干干净净什么检查都没有，
+# 看着像 CI 坏了。PR #85 就是这样：分支上还留着一个已经被 squash 合并过的
+# 提交，PR 一建出来就是 dirty，十几分钟没有任何 run；rebase 之后才跑上。
+# 而「有冲突」恰恰是最需要知道分支本身还过不过得了测试的时候。
+# push 这条跑的是分支的 head 本身，不受合不合得上影响，正好补上这个空档。
 name: CI
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
+  # 手动补跑的口子：run 因为任何原因没起来时，不必靠推一个空提交去凑
+  workflow_dispatch:
+
+# 同一个提交只跑一次。
+#
+# 带上功能分支之后，「PR 开着的时候推一次」会同时满足 push 和 pull_request
+# 两个事件。两个事件里指向的是同一个提交，所以按它归组：后来的那次把前一次顶掉。
+# 用 head.sha 而不是 github.ref —— 两个事件的 ref 长得不一样（一个是分支名，
+# 一个是 refs/pull/N/merge），按 ref 归组的话它们会落进两个组，等于没去重。
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   # 零依赖，几秒就跑完；跑不过就没必要开浏览器了
