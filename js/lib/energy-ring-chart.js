@@ -143,28 +143,44 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
   }
 
   /*
-   * 圈心只有一句话。差得很少时（「接近目标」）没有数字，
-   * 那一句就自己占住中间，不留一个空的大号数字位。
+   * 圈心两行作为一块居中：上一行状态，下一行「数字 + kcal」是一组。
+   * 旧版把数字单独贴在圆心、标题掉到下半圆 —— 数字就独自占了上半圆，
+   * 单位还缩成小小附注。差得很少时没有数字，那一句自己占住中间。
    */
   if (model.center) {
     const hasNumber = model.center.kcal != null;
     if (hasNumber) {
-      const main = el('text', {
-        x: cx, y: cy - 3, 'text-anchor': 'middle',
-        class: 'ring-label', 'font-size': size / 4.6, 'font-weight': 650,
+      const cap = size / 10.2;
+      const val = size / 6.5;
+      const gap = size / 34;
+      const block = cap + gap + val;
+      const captionY = cy - block / 2 + cap / 2;
+      const valueY = cy + block / 2 - val / 2;
+      const caption = el('text', {
+        x: cx, y: captionY, 'text-anchor': 'middle',
+        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
+        class: 'ring-caption', 'font-size': cap, 'font-weight': 560,
       });
-      main.textContent = String(model.center.kcal);
-      svg.append(main);
-      const sub = el('text', {
-        x: cx, y: cy + size / 5.6, 'text-anchor': 'middle',
-        class: 'ring-sub', 'font-size': size / 11.5,
+      caption.textContent = model.center.label;
+      svg.append(caption);
+      const value = el('text', {
+        x: cx, y: valueY, 'text-anchor': 'middle',
+        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
+        class: 'ring-value', 'font-size': val, 'font-weight': 650,
       });
-      sub.textContent = model.center.label;
-      svg.append(sub);
+      const num = el('tspan', { class: 'ring-kcal' });
+      num.textContent = String(model.center.kcal);
+      const unit = el('tspan', {
+        class: 'ring-unit', dx: '0.28em', 'font-size': '0.72em', 'font-weight': 560,
+      });
+      unit.textContent = 'kcal';
+      value.append(num, unit);
+      svg.append(value);
     } else {
       const only = el('text', {
-        x: cx, y: cy + size / 26, 'text-anchor': 'middle',
-        class: 'ring-label', 'font-size': size / 8.5, 'font-weight': 620,
+        x: cx, y: cy, 'text-anchor': 'middle',
+        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
+        class: 'ring-caption', 'font-size': size / 8.5, 'font-weight': 620,
       });
       only.textContent = model.center.label;
       svg.append(only);
