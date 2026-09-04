@@ -143,11 +143,13 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
   }
 
   /*
-   * 圈心三行，整块居中：
-   *   还可摄入     ← 最小
-   *     2184       ← 最大
-   *     kcal       ← 介于两者之间，贴着数字
+   * 圈心三行，整块略偏上：
+   *   还可摄入     ← 14px 常规 中灰
+   *     2184       ← 42px 加粗
+   *     kcal       ← 15px 常规 更浅，贴着数字
    *
+   * 字号按环的显示宽 232px（见 .energy-ring）换成 viewBox 单位，
+   * 环跟着屏幕缩的时候这三行一起缩。
    * 差得很少时没有数字，那一句自己占住中间。
    */
   if (model.center) {
@@ -162,18 +164,21 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     };
     const hasNumber = model.center.kcal != null;
     if (hasNumber) {
-      const cap = size / 14;     // 标题最小
-      const val = size / 4.9;    // 数字最大
-      const unit = size / 8.2;   // kcal 介于两者之间
-      const gapTop = size / 16;  // 标题到数字
-      const gapBot = size / 48;  // 数字到 kcal，更紧
+      const DISPLAY = 232;
+      const toSvg = (px) => px * vb / DISPLAY;
+      const cap = toSvg(14);
+      const val = toSvg(42);
+      const unit = toSvg(15);
+      const gapTop = toSvg(5);
+      const gapBot = toSvg(2);
+      const lift = toSvg(6);
       const block = cap + gapTop + val + gapBot + unit;
-      const captionY = cy - block / 2 + cap / 2;
+      const captionY = cy - lift - block / 2 + cap / 2;
       const valueY = captionY + cap / 2 + gapTop + val / 2;
       const unitY = valueY + val / 2 + gapBot + unit / 2;
-      line(captionY, cap, 500, 'ring-caption', model.center.label);
+      line(captionY, cap, 400, 'ring-caption', model.center.label);
       line(valueY, val, 700, 'ring-value', String(model.center.kcal));
-      line(unitY, unit, 500, 'ring-unit', 'kcal');
+      line(unitY, unit, 400, 'ring-unit', 'kcal');
     } else {
       line(cy, size / 8.5, 600, 'ring-caption', model.center.label);
     }
