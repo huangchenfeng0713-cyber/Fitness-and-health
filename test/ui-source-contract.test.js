@@ -25,8 +25,10 @@ test('选择动作是三种形态，不是三排一样的灰槽', () => {
     'picker-controls 里只该有挑法和范围');
   assert.match(training, /const listHead = h\('div\.picker-list-head'/,
     '缺少「这张列表是什么」那一行');
-  assert.match(training, /h\('div\.picker-list-tools', null, equipMenu\(rerender, all\), viewTabs\)/,
-    '视图切换没有和器械筛选一起挂在列表头右边');
+  assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
+    '口径那一行没有把两端撑住（左挑法、右器械档位）');
+  assert.match(training, /h\('div\.picker-scope', null, scopeName, scopeCount\),\s*\n\s*viewTabs\)/,
+    '视图切换没有跟着列表头走');
   assert.ok(!/picker-list-toolbar/.test(training), '列表工具条应当已经取消');
   assert.doesNotMatch(training, /equipTabs\(rerender, all\)/);
   // 器械筛选得看得出是能点的：图标 + 文字 + 箭头，不是一行裸文字

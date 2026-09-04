@@ -118,12 +118,14 @@ try {
       card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
       controlRows: controlRows.map(rect),
       viewSwitch: rect(document.querySelector('.picker-list-head .picker-view-switch')),
+      scopeRow: rect(document.querySelector('.picker-scope-row')),
+      equipInRow: rect(document.querySelector('.picker-scope-row .equip-filter-btn')),
       modeField: rect(document.querySelector('.picker-mode-field')),
       modeIsSelect: document.querySelector('.picker-mode-select')?.tagName === 'SELECT',
       searchRow: rect(document.querySelector('.exercise-picker-card .exercise-search-row')),
       listHead: rect(document.querySelector('.picker-list-head')),
       equipBordered: (() => {
-        const btn = document.querySelector('.picker-list-head .equip-filter-btn');
+        const btn = document.querySelector('.picker-scope-row .equip-filter-btn');
         return btn ? getComputedStyle(btn).borderTopWidth !== '0px' : false;
       })(),
     };
@@ -247,18 +249,32 @@ try {
           + `左 ${[scope, searchRow, listHead].map((r) => r.left.toFixed(1)).join('/')}`;
     })(),
     (() => {
-      const mode = allState.modeField;
+      const row = allState.scopeRow;
       const scope = allState.controlRows[0];
       const { listHead } = allState;
-      if (!mode || !scope || !listHead) return null;
-      const inner = scope.top - (mode.top + mode.height);
+      if (!row || !scope || !listHead) return null;
+      const inner = scope.top - (row.top + row.height);
       const outer = listHead.top - (scope.top + scope.height);
       return inner >= outer
-        && `挑法和范围之间（${inner.toFixed(1)}px）不比范围到列表头（${outer.toFixed(1)}px）更紧，看不出是父子`;
+        && `口径行和范围之间（${inner.toFixed(1)}px）不比范围到列表头（${outer.toFixed(1)}px）更紧，看不出是父子`;
     })(),
     allState.modeField && allState.controlRows[0]
       && allState.modeField.width > allState.controlRows[0].width - 40
       && `挑法下拉几乎铺满一整行（${allState.modeField.width.toFixed(1)}），又变回一排灰槽了`,
+    /*
+     * 每一行要么满宽，要么两端都有东西。
+     * 只有一侧有控件、另一侧空着一大片，夹在两个满宽的块中间就是一道豁口。
+     */
+    (() => {
+      const row = allState.scopeRow;
+      const mode = allState.modeField;
+      const equip = allState.equipInRow;
+      if (!row || !mode || !equip) return '口径行里少了挑法或器械档位';
+      const leftGap = mode.left - row.left;
+      const rightGap = (row.left + row.width) - (equip.left + equip.width);
+      return (leftGap > 1 || rightGap > 1)
+        && `口径行没有把两端撑住：左 ${leftGap.toFixed(1)}px、右 ${rightGap.toFixed(1)}px`;
+    })(),
     allState.viewSwitch && allState.listHead
       && (allState.viewSwitch.top < allState.listHead.top - 1
         || allState.viewSwitch.top > allState.listHead.top + allState.listHead.height + 1)

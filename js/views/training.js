@@ -447,15 +447,21 @@ function pickerCard(rerender) {
     }));
 
   /*
-   * 筛选区：一个下拉 + 一排分段控件。
+   * 筛选区：一行「口径」+ 一排「范围」。
    *
-   * 挑法（按身体部位 / 按动作模式）是「用哪套分类法」，范围（胸 肩臂 背 腿 腹）
-   * 是它的下一级 —— 父子关系由**形态不同 + 贴得近**表达：
-   * 两者之间只留一档间距，而它们到列表头之间隔了两档。
+   * 第一行左右各站一个下拉形态的控件 —— 左边挑法（用哪套分类法）、
+   * 右边器械档位（哪些动作算数）。两个都是「这批动作怎么圈出来的」，
+   * 形态也一样，配成一行正好把两端撑住。
+   *
+   * **不能只放左边那个下拉。** 一行只有一侧有控件、右边空着一大片，
+   * 夹在满宽的搜索框和满宽的范围之间，边缘就是豁的 —— 那不是层级，是没排完。
+   *
+   * 范围是挑法的下一级，父子关系由**形态不同 + 贴得近**表达：
+   * 两者之间只留一档间距，而它们到列表头之间隔了四档。
    * 不用缩进，缩进会让这一排比搜索框和列表窄一截，读出来是「谁没对齐」。
    */
   const controls = h('div.picker-controls', null,
-    modeSelect(rerender),
+    h('div.picker-scope-row', null, modeSelect(rerender), equipMenu(rerender, all)),
     byGroup ? groupTabs(rerender) : splitTabs(rerender));
   const compactScope = byGroup ? group.label : split.label;
   let card = null;
@@ -469,8 +475,8 @@ function pickerCard(rerender) {
   h('span.picker-compact-action', null, '回到顶部'));
 
   /*
-   * 列表头：左边说「这张列表是什么」（范围名 + 个数），右边挂着两个只作用于这张
-   * 列表的开关 —— 器械筛选（列出哪些）和全部 / 推荐（怎么呈现）。
+   * 列表头：左边说「这张列表是什么」（范围名 + 个数），右边是这批动作用哪种
+   * 呈现方式（列表 / 推荐）。两端各有东西，中间那段空白才读得出是留白。
    * 计数放在这儿而不是卡头：它说的是下面这一列，不是整张卡。
    */
   const scopeName = h('strong.picker-scope-name', null, byGroup ? `${group.label}部动作` : `${split.label}的动作`);
@@ -478,7 +484,7 @@ function pickerCard(rerender) {
     showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`);
   const listHead = h('div.picker-list-head', null,
     h('div.picker-scope', null, scopeName, scopeCount),
-    h('div.picker-list-tools', null, equipMenu(rerender, all), viewTabs));
+    viewTabs);
   const search = searchField({
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',

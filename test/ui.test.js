@@ -413,8 +413,15 @@ test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () =>
     '选中项要在节点建好之后再设，否则会被按 selectedIndex 打回第一项');
   assert.match(polish, /\.picker-mode-select\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
     '挑法下拉仍然过厚');
-  // 视图切换挂在列表头右边，和器械筛选一起 —— 它们都只作用于下面那张列表
-  assert.match(training, /h\('div\.picker-list-tools', null, equipMenu\(rerender, all\), viewTabs\)/,
+  /*
+   * 「口径」那一行左右各站一个下拉形态的控件：挑法在左、器械档位在右。
+   * 只放左边那个的话，右边空着一大片，夹在满宽的搜索框和满宽的范围之间，
+   * 边缘读出来是豁的 —— 那不是层级，是没排完。
+   */
+  assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
+    '口径那一行没有把两端撑住');
+  // 视图切换挂在列表头右边，和左边的「这张列表是什么」各占一端
+  assert.match(training, /h\('div\.picker-scope', null, scopeName, scopeCount\),\s*\n\s*viewTabs\)/,
     '视图切换没有跟着列表头走');
   /*
    * 视图切换和器械筛选现在并排站，两个都叫「全部」的话光看字分不出

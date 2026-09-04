@@ -2760,6 +2760,16 @@ h1, h2, h3 { letter-spacing: -.02em; }
   display: grid;
   gap: var(--space-1);
 }
+/*
+ * 「口径」那一行：左边挑法、右边器械档位，两个都是下拉形态，各撑一端。
+ *
+ * 一行只有一侧有控件的话（左边一个下拉、右边空着一大片），夹在满宽的搜索框
+ * 和满宽的范围之间，边缘读出来是豁的 —— 那不是层级，是没排完。
+ */
+.picker-scope-row {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-1) var(--space-2);
+}
 .picker-card-head {
   min-height: 23px;
   align-items: center;
@@ -2850,7 +2860,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   margin-top: var(--space-4);
 }
 .picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 150px; }
-.picker-list-tools { margin-left: auto; }
+.picker-view-switch { margin-left: auto; }
 .picker-scope-name {
   font-size: var(--fs-value); font-weight: var(--w-semibold); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -2866,7 +2876,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 所以和器械并排挂在列表头右边。做成和范围等宽的第三排时，
  * 三排一模一样的灰槽叠在一起，读出来是三个并列的兄弟。
  */
-.picker-list-tools { display: flex; align-items: center; gap: 6px; flex: none; }
 .picker-view-switch { margin-top: 0; flex: none; }
 /* 「紧凑」指内边距收窄，不是把字压小 —— 按钮上的字不许压到 12px 那一档 */
 .picker-view-switch .chip-btn { min-height: var(--control-sm); padding: 4px 9px; }
