@@ -367,7 +367,7 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
   assert.match(app, /tab\.key === 'training' \? trainingContextNote\(\) : ''/,
     '数据页顶栏又开始写副标题了，会和今日健康数据卡上的同步状态重复');
   assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
-  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
+  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*var\(--space-1\)/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
 });
 
@@ -2345,15 +2345,34 @@ test('竖向间距只有六档，和字号、字重一样是个阶梯', () => {
    * 而 5 和 6、9 和 10、11 和 12 肉眼分不出，却让同一种关系在不同卡片上长出
    * 不同的距离：健身页搜索框和下面那行隔 12，而它下面两行只隔 4，再下面又是 16。
    *
-   * 只卡竖向那几个属性：padding 是组件内部的事，横向 gap 是另一回事。
+   * padding 是组件内部的事，不在这条里。
+   *
+   * gap 一开始被放过了（「横向 gap 是另一回事」），代价是它自己长出了一套
+   * 1/4/5/6/7/8/10 —— 5 和 6、6 和 7 一样分不出，而 flex 行里的 gap 和竖排的
+   * margin 说的是同一件事：这两块是一组还是两组。横竖不同的只是方向，不是尺度。
+   *
+   * 值在阶梯上还不够，写法也要一致：全写成 var(--space-*)。
+   * 同一个 8px 有的写字面量有的写 token 的话，改一档就得两处都翻一遍。
    */
   const css = read('css/app.css');
   const ladder = new Set([0, 2, 4, 8, 12, 16, 24]);
   const bad = [];
-  for (const m of css.matchAll(/\b(margin-top|margin-bottom|row-gap):\s*(\d+)px/g)) {
-    if (!ladder.has(Number(m[2]))) bad.push(`${m[1]}: ${m[2]}px`);
+  for (const m of css.matchAll(/\b(margin-top|margin-bottom|row-gap|column-gap|gap):\s*([^;]+);/g)) {
+    for (const px of m[2].matchAll(/(?<![\w.])(\d+(?:\.\d+)?)px/g)) {
+      bad.push(`${m[1]}: ${px[1]}px`);
+      if (!ladder.has(Number(px[1]))) bad.push(`${m[1]}: ${px[1]}px（还不在阶梯上）`);
+    }
   }
-  assert.deepEqual(bad, [], `竖向间距不在阶梯上：${bad.slice(0, 8).join('、')}`);
+  /* margin 简写里的上下两个值同样要走 token，左右不管（那是横向对齐的事） */
+  for (const m of css.matchAll(/(?<![-\w])margin:\s*([^;{}]+);/g)) {
+    const parts = m[1].trim().split(/\s+/);
+    if (parts.length > 4) continue;
+    const vertical = { 1: [0], 2: [0], 3: [0, 2], 4: [0, 2] }[parts.length];
+    for (const i of vertical) {
+      if (/^\d+(\.\d+)?px$/.test(parts[i])) bad.push(`margin: ${m[1].trim()}`);
+    }
+  }
+  assert.deepEqual(bad, [], `间距没走阶梯 token：${bad.slice(0, 8).join('、')}`);
   for (const name of ['--space-0: 2px', '--space-1: 4px', '--space-2: 8px',
     '--space-3: 12px', '--space-4: 16px', '--space-5: 24px']) {
     assert.ok(css.includes(name), `间距阶梯少了 ${name}`);

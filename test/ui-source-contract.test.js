@@ -171,7 +171,7 @@ test('估算菜品统一使用弱标签，误差来源集中到信息面板', ()
     '估算呈现模块没有进入离线应用外壳');
   assert.ok((diet.match(/div\.portion-title-line/g) || []).length >= 2,
     '普通与复合食物的菜名、估算和分类没有共用标题行');
-  assert.match(css, /\.portion-title-line\s*\{[^}]*column-gap:\s*6px/s,
+  assert.match(css, /\.portion-title-line\s*\{[^}]*column-gap:\s*var\(--space-2\)/s,
     '估算与分类标签之间没有稳定留白');
   assert.match(css, /\.info-tip-panel strong\s*\{[^}]*font-size:\s*inherit/s,
     '信息面板的黑体说明仍会擅自放大字号');
