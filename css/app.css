@@ -1449,11 +1449,13 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 /*
- * 默认不接事件。打开手势还没结束时，Safari 补派的点击会穿过这一层打在
- * 食物上，而不会落到遮罩或取消键。is-ready 之后才真正可点、可拖。
- * 关掉的瞬间立刻拿掉 is-ready，退场动画没跑完也不会盖住整页。
+ * 默认不接事件。iOS 上父级 pointer-events:none 挡不住带 backdrop-filter
+ * 的子节点（这份弹层就有毛玻璃），所以未就绪时连 .sheet 自己也写死 none。
+ * is-ready 之后才真正可点、可拖。关掉的瞬间立刻拿掉 is-ready。
  */
 .sheet-wrap.is-ready { pointer-events: auto; }
+.sheet-wrap:not(.is-ready) .sheet,
+.sheet-wrap:not(.is-ready) .sheet-backdrop { pointer-events: none; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
   animation: sheet-fade .18s ease both;
