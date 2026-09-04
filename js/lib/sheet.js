@@ -248,6 +248,19 @@ function playExit(fromY) {
   clearTimeout(exitTimer);
   exitTimer = setTimeout(finish, EXIT_MS);
   if (reduce || typeof panel.animate !== 'function') { finish(); return; }
+  /*
+   * 升起动画如果还占着 transform（fill-mode 残留、没跑完都算），
+   * 下面这段 Web Animation 写了也看不见，弹层会直接消失。
+   * 退场前先把 CSS 动画清掉，这一下才滑得下去。
+   */
+  panel.style.animation = 'none';
+  if (backdrop) backdrop.style.animation = 'none';
+  if (typeof panel.getAnimations === 'function') {
+    for (const anim of panel.getAnimations()) anim.cancel();
+  }
+  if (backdrop && typeof backdrop.getAnimations === 'function') {
+    for (const anim of backdrop.getAnimations()) anim.cancel();
+  }
   panel.style.transition = 'none';
   exitAnim = panel.animate(
     [{ transform: `translateY(${fromY}px)` }, { transform: 'translateY(100%)' }],

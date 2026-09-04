@@ -154,7 +154,10 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   assert.match(sheet, /setTimeout\(finish, EXIT_MS\)/, '退场动画没结束时没有把遮罩收掉，会卡死整页');
   assert.doesNotMatch(sheet, /wrap\.addEventListener\('pointerdown'/,
     '不要在弹层上对所有按下 preventDefault，那会把整页点死');
-  assert.match(css, /animation: sheet-rise [^;]* both/, '升起动画结束后弹层会弹回屏幕外');
+  assert.match(css, /animation: sheet-rise [^;]* backwards/,
+    '升起动画应用 forwards 会占住 transform，关掉时滑不下去');
+  assert.match(sheet, /退场前先把 CSS 动画清掉/,
+    '关掉时没有清掉升起动画，退场那一下看不见');
   assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
 });
 

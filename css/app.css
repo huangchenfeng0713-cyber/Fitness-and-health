@@ -1458,7 +1458,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .sheet-wrap:not(.is-ready) .sheet-backdrop { pointer-events: none; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
-  animation: sheet-fade .18s ease both;
+  animation: sheet-fade .18s ease backwards;
   /* 背景上不该能拖动页面 */
   touch-action: none;
 }
@@ -1481,7 +1481,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   backdrop-filter: saturate(180%) blur(24px);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
-  animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) both;
+  animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) backwards;
 }
 .sheet-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
