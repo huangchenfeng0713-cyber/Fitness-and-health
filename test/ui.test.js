@@ -2337,3 +2337,56 @@ test('毛玻璃只给真的叠在内容上面的那几处，而且有落回实�
   assert.doesNotMatch(drawer, /backdrop-filter/,
     '整屏推出来的抽屉背后没有值得透出来的东西，玻璃在这儿只是噪音');
 });
+
+test('竖向间距只有六档，和字号、字重一样是个阶梯', () => {
+  /*
+   * 分不出大小的层级不是层级 —— 和字号那七档、字重那四档是同一条道理。
+   * 收之前卡片内相邻块的实际间距有 1/2/3/4/5/6/7/8/9/10/11/12/14/16 十四种，
+   * 而 5 和 6、9 和 10、11 和 12 肉眼分不出，却让同一种关系在不同卡片上长出
+   * 不同的距离：健身页搜索框和下面那行隔 12，而它下面两行只隔 4，再下面又是 16。
+   *
+   * 只卡竖向那几个属性：padding 是组件内部的事，横向 gap 是另一回事。
+   */
+  const css = read('css/app.css');
+  const ladder = new Set([0, 2, 4, 8, 12, 16, 24]);
+  const bad = [];
+  for (const m of css.matchAll(/\b(margin-top|margin-bottom|row-gap):\s*(\d+)px/g)) {
+    if (!ladder.has(Number(m[2]))) bad.push(`${m[1]}: ${m[2]}px`);
+  }
+  assert.deepEqual(bad, [], `竖向间距不在阶梯上：${bad.slice(0, 8).join('、')}`);
+  for (const name of ['--space-0: 2px', '--space-1: 4px', '--space-2: 8px',
+    '--space-3: 12px', '--space-4: 16px', '--space-5: 24px']) {
+    assert.ok(css.includes(name), `间距阶梯少了 ${name}`);
+  }
+  /*
+   * 挑选卡里「搜索框 → 口径行」和「范围 → 列表头」是同一种关系（上面那组说完了，
+   * 换一组），必须同一档。原先一个 12 一个 16，读出来是两种关系。
+   */
+  assert.match(css, /\.exercise-search-row \{ margin-bottom: var\(--space-3\); \}/,
+    '搜索框下面那一档不是 --space-3');
+  assert.match(css, /\.picker-list-head \{[^}]*margin-top: var\(--space-3\)/s,
+    '范围到列表头那一档没有和搜索框下面那一档对齐');
+});
+
+test('弹层关掉要有退场动画，且点那道小横杠不会误关', () => {
+  /*
+   * 那道小横杠是 `.sheet::before`，点它就是点弹层本身 —— 手指按下再抬起
+   * 难免有几像素抖动，只看甩速的话这一下就把弹层关了。
+   * 而关闭原先是一句 `hidden = true`：开有 240ms 的升起动画，关一帧都没有，
+   * 读出来是「一闪就不见」，不是「被推下去了」。
+   */
+  const sheet = read('js/lib/sheet.js');
+  assert.match(sheet, /const MIN_FLICK = \d+;/, '甩速那条路没有最小距离');
+  assert.match(sheet, /dy > CLOSE_DISTANCE \|\| \(dy > MIN_FLICK && velocity > CLOSE_VELOCITY\)/,
+    '甩速那条路仍然可以零距离触发');
+  assert.match(sheet, /threshold: 12,/, '起拖阈值太小，点那道横杠时的手抖会被当成拖动');
+  assert.match(sheet, /function playExit\(/, '关闭没有退场动画');
+  assert.match(sheet, /export const sheetIsOpen = \(\) => !!wrap && !wrap\.hidden && !closing;/,
+    '退场期间 sheetIsOpen 仍报 true，调用方会以为它还开着');
+  // 状态同步、只有画面留给动画：调用方依赖 onClose 就在关的那一刻跑
+  assert.ok(sheet.indexOf('if (fn) fn();') < sheet.indexOf('playExit(fromY)'),
+    'onClose 必须在退场动画之前同步跑完');
+  // 退场没跑完又开一层时，要掐掉上一次的收尾，否则新的这层会被清空
+  assert.match(sheet, /if \(exitAnim\) \{ exitAnim\.cancel\(\); exitAnim = null; \}/,
+    '重新打开时没有掐掉上一次的退场动画');
+});

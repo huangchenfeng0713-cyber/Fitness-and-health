@@ -53,6 +53,18 @@
   --safe-bottom: var(--env-bottom);
   --safe-left: var(--env-left);
   --safe-right: var(--env-right);
+  /*
+   * 竖向节奏六档。
+   *
+   * 理由和字号那七档、字重那四档一模一样：分不出大小的层级不是层级。
+   * 收之前卡片内相邻块的实际间距有 1/2/3/4/5/6/7/8/9/10/11/12/14/16 十四种，
+   * 而 5 和 6、9 和 10、11 和 12 肉眼分不出，却让同一种关系在不同卡片上
+   * 长出不同的距离 —— 搜索框和下面那行隔 12，而它下面两行只隔 4。
+   *
+   * --space-0 是「这两行本来就是同一块东西」（数值和它的标签），
+   * 比它更小的距离没有意义；--space-4 起是「换一段了」。
+   */
+  --space-0: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -321,7 +333,7 @@ html, body { height: 100%; overflow: hidden; }
   cursor: pointer; padding: 2px 4px;
 }
 .topbar-day strong { font-size: var(--fs-headline); font-weight: var(--w-bold); letter-spacing: 0; }
-.topbar-date { display: block; font-size: var(--fs-caption); color: var(--faint); margin-top: 1px; }
+.topbar-date { display: block; font-size: var(--fs-caption); color: var(--faint); margin-top: 2px; }
 /* 返回箭头是画出来的，不是打出来的：和底栏、健康数据那几个图标同一套描边参数 */
 .topbar-date.back { display: flex; align-items: center; justify-content: center; gap: 3px; }
 .topbar-back-icon { display: inline-flex; }
@@ -548,24 +560,24 @@ html, body { height: 100%; overflow: hidden; }
   visibility: visible; opacity: 1; pointer-events: auto; transform: none;
 }
 .info-tip-panel p { margin: 0; }
-.info-tip-panel p + p { margin-top: 7px; }
+.info-tip-panel p + p { margin-top: 8px; }
 .info-tip-panel ul { margin: 0; padding-left: 18px; }
-.info-tip-panel li + li { margin-top: 5px; }
+.info-tip-panel li + li { margin-top: 4px; }
 .info-tip-panel strong {
   color: var(--text); font-size: inherit; line-height: inherit; font-weight: var(--w-semibold);
 }
 
 .card-danger { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
 
-.empty-hint { color: var(--muted); font-size: var(--fs-body); margin: 6px 0; }
+.empty-hint { color: var(--muted); font-size: var(--fs-body); margin: 4px 0; }
 /* 颜色和字号由下面「说明类小字」那条统一给 */
 .form-hint { margin: 8px 0 0; }
 .warn-note {
-  margin: 10px 0 0; padding: 9px 11px; font-size: var(--fs-footnote); line-height: 1.5;
+  margin: 8px 0 0; padding: 9px 11px; font-size: var(--fs-footnote); line-height: 1.5;
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   border-radius: var(--r-md); color: var(--text);
 }
-.privacy-note { font-size: var(--fs-caption); color: var(--faint); margin: 10px 0 0; }
+.privacy-note { font-size: var(--fs-caption); color: var(--faint); margin: 8px 0 0; }
 
 /* ============ 主卡（状态 + 热量 + 宏量） ============ */
 /*
@@ -593,7 +605,7 @@ html, body { height: 100%; overflow: hidden; }
  */
 .hero-ring {
   display: flex; flex-direction: column; align-items: center;
-  gap: 10px; overflow: visible;
+  gap: var(--space-2); overflow: visible;
 }
 .ring-label { fill: var(--text); }
 .ring-sub { fill: var(--faint); }
@@ -679,8 +691,8 @@ html, body { height: 100%; overflow: hidden; }
  * 前三条挤在一行、第四条孤零零掉到下一行，左右对不齐。
  */
 .hero-foot {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px;
-  margin-top: 14px; padding-top: 12px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+  margin-top: 12px; padding-top: 12px;
   border-top: 1px solid var(--border); font-size: var(--fs-caption); color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -693,7 +705,7 @@ html, body { height: 100%; overflow: hidden; }
  * 文案还在，但长得和正文一模一样，等于白说。
  */
 .data-freshness {
-  margin: 14px 0 0; padding: 9px 11px; border-radius: var(--r-sm);
+  margin: 12px 0 0; padding: 9px 11px; border-radius: var(--r-sm);
   font-size: var(--fs-footnote); line-height: 1.55;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--muted);
@@ -705,8 +717,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* 指标行：一行一个，性质不同画法不同 */
 .metric-list {
-  display: flex; flex-direction: column; gap: 11px;
-  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline, var(--border));
+  display: flex; flex-direction: column; gap: var(--space-3);
+  margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--hairline, var(--border));
 }
 
 /* 能量收支：和圆环并排，一行一个键值对 */
@@ -718,7 +730,7 @@ html, body { height: 100%; overflow: hidden; }
   font-size: var(--fs-body); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .metric-row-top {
-  display: flex; align-items: baseline; gap: 6px; margin-bottom: 5px;
+  display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px;
   font-size: var(--fs-footnote);
 }
 .metric-row-label { color: var(--muted); white-space: nowrap; }
@@ -751,13 +763,13 @@ html, body { height: 100%; overflow: hidden; }
  * 430px 这个断点是量出来的：390px 宽的机子上强行四列，每格只有 78px，
  * 而「2427 /2000mg」需要 90px —— 数字和分母被折成两行，四个格子一起长到 74px 高。
  */
-.hero-micros { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.hero-micros { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); margin-top: var(--space-3); }
 @media (max-width: 430px) {
   .hero-micros { grid-template-columns: repeat(2, 1fr); }
 }
 .micro-chip {
   display: grid; grid-template-columns: auto auto;
-  justify-content: center; align-items: baseline; column-gap: 3px; row-gap: 1px;
+  justify-content: center; align-items: baseline; column-gap: 3px; row-gap: 2px;
   background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-sm);
   padding: 7px 8px; font-size: var(--fs-caption); min-width: 0;
 }
@@ -831,8 +843,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* 标题写碳水 / 脂肪，克数和横轴也必须按相同的左右顺序。 */
 .split-grams {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: 8px;
-  margin-top: 7px; font-size: var(--fs-caption); color: var(--faint);
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: var(--space-2);
+  margin-top: var(--space-2); font-size: var(--fs-caption); color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
 .split-grams span { white-space: nowrap; }
@@ -863,7 +875,7 @@ html, body { height: 100%; overflow: hidden; }
 .rec-info { flex: 1; min-width: 0; }
 .rec-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-value); font-weight: var(--w-semibold); flex-wrap: wrap; }
 .rec-portion { font-size: var(--fs-footnote); color: var(--accent); font-weight: var(--w-semibold); margin-top: 2px; }
-.rec-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.rec-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .reason {
   font-size: var(--fs-caption); color: var(--muted); background: var(--card-2);
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border);
@@ -935,7 +947,7 @@ html, body { height: 100%; overflow: hidden; }
 .estimate-disclosure-row { overflow-wrap: anywhere; }
 .estimate-disclosure-date { color: var(--faint); font-size: var(--fs-caption); }
 .estimate-disclosure-list {
-  margin-top: 9px; padding-right: 2px;
+  margin-top: 8px; padding-right: 2px;
 }
 .estimate-disclosure-item { padding: 9px 0; border-top: 1px solid var(--hairline); }
 .estimate-disclosure-item:first-child { padding-top: 0; border-top: 0; }
@@ -948,19 +960,19 @@ html, body { height: 100%; overflow: hidden; }
 }
 
 /* ============ 健康摘要 ============ */
-.health-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
+.health-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 6px; }
 .health-cell { text-align: center; min-width: 0; }
 .health-value { font-size: var(--fs-headline); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums; }
 .health-unit { font-size: var(--fs-caption); color: var(--faint); font-weight: var(--w-regular); margin-left: 1px; }
-.health-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 1px; }
+.health-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 2px; }
 
 /* ============ 展开按钮 ============ */
 .feedback-link {
-  display: block; width: 100%; margin-top: 10px; padding: 6px;
+  display: block; width: 100%; margin-top: 8px; padding: 6px;
   font-size: var(--fs-footnote); text-align: center;
 }
 .more-btn {
-  width: 100%; margin-top: 10px; min-height: var(--control-md); padding: 9px;
+  width: 100%; margin-top: 8px; min-height: var(--control-md); padding: 9px;
   border: 1px solid var(--border);
   border-radius: var(--r-md); background: var(--card-2); color: var(--muted);
   font-size: var(--fs-body); cursor: pointer;
@@ -968,7 +980,7 @@ html, body { height: 100%; overflow: hidden; }
 .more-btn:active { background: var(--border); }
 
 /* ============ 提示 ============ */
-.insight-list { display: flex; flex-direction: column; gap: 11px; }
+.insight-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .insight { padding-left: 11px; border-left: 3px solid var(--border); }
 .insight.warn { border-left-color: var(--warn); }
 .insight.bad { border-left-color: var(--danger); }
@@ -982,7 +994,7 @@ html, body { height: 100%; overflow: hidden; }
 .insight.down, .insight.fiber { border-left-color: var(--warn); }
 .insight-title { font-size: var(--fs-body); font-weight: var(--w-semibold); }
 /* 建议是「那我该做什么」；判断依据集中收进卡片右上角的一个入口。 */
-.insight-action { font-size: var(--fs-footnote); color: var(--muted); line-height: 1.6; margin-top: 3px; }
+.insight-action { font-size: var(--fs-footnote); color: var(--muted); line-height: 1.6; margin-top: 2px; }
 .insight-main { min-width: 0; }
 .insight-evidence-list strong { display: inline; }
 .insight-evidence-tip .info-tip-panel {
@@ -1002,7 +1014,7 @@ html, body { height: 100%; overflow: hidden; }
 .plan-row .text-btn { flex: none; white-space: nowrap; }
 
 .set-editor { padding: 4px 0 12px 34px; }
-.set-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.set-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .set-index {
   width: 20px; flex: none; text-align: center; font-size: var(--fs-caption);
   color: var(--faint); font-variant-numeric: tabular-nums;
@@ -1048,15 +1060,16 @@ html, body { height: 100%; overflow: hidden; }
  * 剩一个剩两个都还是对称的。
  */
 /*
- * 最后一行不居中。
+ * 末行铺满，不居中也不靠左留一个空格。
  *
- * metricColumns 保证第一行一定是满的，所以居中只会影响末行：7 项排成 4 + 3 时，
- * 第二行三格被推到半格的位置上，图标和上一行对不齐，整张卡看着在晃。
- * 靠左排的话空的是最后一格，读出来是「这一项今天没有」，那正是事实。
+ * 居中过一版：7 项排成 4 + 3 时第二行被推到半格的位置上，图标和上一行对不齐，
+ * 整张卡看着在晃。改成靠左之后右边空出一整格，左右又不平衡了。
+ * 现在让末行那几格**长开占满整行**（`flex-grow: 1`）——两行都齐着卡片内边，
+ * 读出来是「4 个 + 3 个」两行，而不是「谁没对齐」或者「谁少了一块」。
  */
-.metric-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 16px 6px; --metric-cols: 3; }
+.metric-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: var(--space-4) 6px; --metric-cols: 3; }
 .metric-cell {
-  flex: 0 0 calc((100% - (var(--metric-cols) - 1) * 6px) / var(--metric-cols));
+  flex: 1 1 calc((100% - (var(--metric-cols) - 1) * 6px) / var(--metric-cols));
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   min-width: 0; text-align: center;
 }
@@ -1074,7 +1087,7 @@ html, body { height: 100%; overflow: hidden; }
 .metric-grid.cols-4 .metric-value { font-size: var(--fs-value); }
 .metric-unit { font-size: var(--fs-caption); font-weight: var(--w-medium); color: var(--muted); }
 .metric-unit.gap { margin-left: 3px; }
-.metric-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; white-space: nowrap; }
+.metric-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 2px; white-space: nowrap; }
 /* 缺数据那格整体压暗：那道杠不该和真实数字一样醒目 */
 .metric-cell.empty { opacity: .45; }
 
@@ -1195,7 +1208,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .toggle-row:first-of-type { border-top: 0; }
 .toggle-row strong { font-size: var(--fs-body); }
-.toggle-row p { margin: 3px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55; }
+.toggle-row p { margin: 2px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55; }
 .toggle-row input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; accent-color: var(--accent); }
 
 /*
@@ -1215,14 +1228,14 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .setting-choice-head strong { font-size: var(--fs-body); }
 .setting-choice-head p {
-  margin: 3px 0 10px; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55;
+  margin: 2px 0 8px; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55;
 }
 .setting-choice-desc {
-  margin: 10px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55;
+  margin: 8px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.55;
 }
 .setting-choice-desc.warn { color: var(--warn); }
 
-.stat-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.stat-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .stat {
   flex: 1; min-width: 74px; background: var(--card-2); border: 1px solid var(--border);
   border-radius: var(--r-md); padding: 9px 6px; text-align: center;
@@ -1275,7 +1288,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  * 320px 上这三块要折成两行，动作行凭空高出 40%。
  */
 .exercise-meta {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; margin-top: 3px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 5px; margin-top: 2px;
   font-size: var(--fs-caption); color: var(--faint-readable); line-height: 1.5;
 }
 .exercise-meta-tag + .exercise-meta-tag::before {
@@ -1291,9 +1304,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* 已经选了高度重合的一对时，把「换掉哪个」直接摆出来 */
 .rec-swap {
   background: var(--card-2); border-radius: var(--r-sm);
-  padding: 9px 11px; margin-bottom: 10px;
+  padding: 9px 11px; margin-bottom: 8px;
 }
-.rec-swap-title { font-size: var(--fs-footnote); color: var(--warn); margin-bottom: 6px; }
+.rec-swap-title { font-size: var(--fs-footnote); color: var(--warn); margin-bottom: 4px; }
 
 /* 近 7 日训练记录：一行一个动作，点开才看每组明细 */
 .log-list { display: flex; flex-direction: column; }
@@ -1374,14 +1387,14 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .ui-search-field .search-input { padding-right: 44px; }
 /* Safari 的原生小叉在有自绘按钮时是多余的第二个 */
 .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
-.search-card-head { margin-bottom: 10px; }
+.search-card-head { margin-bottom: 8px; }
 .search-input {
   flex: 1; min-width: 0; padding: 10px 12px;
   /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
   color: var(--text);
   font-size: var(--fs-headline);   /* 同上：避免 iOS 聚焦时缩放页面 */
 }
-.search-results { margin-top: 10px; display: flex; flex-direction: column; }
+.search-results { margin-top: 8px; display: flex; flex-direction: column; }
 .search-item {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 9px 2px; border: 0; border-top: 1px solid var(--border);
@@ -1409,7 +1422,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .result-caption {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-  margin: 11px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: var(--w-semibold);
+  margin: 12px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: var(--w-semibold);
 }
 /*
  * 可关闭的筛选胶囊：这一屏是从今日提示跳进来的，得有个看得见的出口。
@@ -1477,7 +1490,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 /* 顶上那道小横杠：告诉人这层是能关掉的 */
 .sheet::before {
-  content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 10px;
+  content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 8px;
   border-radius: 999px; background: var(--border);
 }
 @keyframes sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
@@ -1498,7 +1511,7 @@ body.sheet-open {
 .sheet-summary { margin: 12px 0 0; text-align: center; font-size: var(--fs-body); color: var(--muted); }
 .water-sheet { display: flex; flex-direction: column; align-items: center; }
 .water-sheet .water-ring { margin-top: 4px; }
-.water-sheet .water-custom { width: 100%; max-width: 220px; margin-top: 14px; }
+.water-sheet .water-custom { width: 100%; max-width: 220px; margin-top: 12px; }
 .water-sheet .sheet-action { width: 100%; }
 
 /*
@@ -1658,7 +1671,7 @@ body.sheet-open {
 .select-bar {
   position: sticky; bottom: calc(0px - var(--view-bottom-pad)); z-index: 3;
   /* 顶到卡片的内边距外面，让它横贯整张卡 */
-  margin: 10px calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
+  margin: 8px calc(-1 * var(--card-pad)) calc(-1 * var(--card-pad));
   /*
    * 底部不加安全区。这一条钉的是**滚动容器**的底边，而滚动容器下面还有 tab 栏，
    * 安全区已经由 .tabbar 的 padding-bottom 吃掉了 —— 这里再加一次就是双算：
@@ -1711,7 +1724,7 @@ body.sheet-open {
 /* 展开后逐项列出：多选之后最想确认的就是「我到底选了什么」 */
 .select-bar-list {
   max-height: 40vh; overflow-y: auto; overscroll-behavior: contain;
-  margin-bottom: 6px; border-bottom: 1px solid var(--border);
+  margin-bottom: 4px; border-bottom: 1px solid var(--border);
 }
 .select-bar-item {
   display: flex; align-items: center; gap: 8px; padding: 7px 0;
@@ -1738,28 +1751,28 @@ body.sheet-open {
 }
 .portion-title-line > strong { font-size: var(--fs-value); margin: 0; }
 .portion-head-actions { display: flex; align-items: center; gap: 8px; flex: none; }
-.portion-per100 { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; }
+.portion-per100 { font-size: var(--fs-caption); color: var(--faint); margin-top: 2px; }
 .portion-meal, .unit-row, .qty-quick, .sugar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 .field-label {
-  font-size: var(--fs-footnote); color: var(--faint); margin-top: 14px; font-weight: var(--w-semibold);
+  font-size: var(--fs-footnote); color: var(--faint); margin-top: 12px; font-weight: var(--w-semibold);
 }
 .functional-warning {
-  margin: 9px 0 0; padding: 9px 11px; border-radius: var(--r-md);
+  margin: 8px 0 0; padding: 9px 11px; border-radius: var(--r-md);
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--text); font-size: var(--fs-footnote); line-height: 1.5;
 }
 
 /* 份数步进器：主视觉是「几份」，克数作为副标注 */
 .qty-stepper {
-  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  display: flex; align-items: center; gap: 10px; margin-top: 8px;
   background: var(--card-2); border: 1px solid var(--border);
   border-radius: var(--r-md); padding: 10px;
 }
 .qty-readout { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
 .qty-value { font-size: var(--fs-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .qty-unit { font-size: var(--fs-value); color: var(--muted); margin-left: 4px; }
-.grams-hint { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.grams-hint { font-size: var(--fs-caption); color: var(--faint); margin-top: 2px; font-variant-numeric: tabular-nums; }
 
 .step-btn.round {
   width: var(--control-md); height: var(--control-md); border-radius: 50%; flex-shrink: 0;
@@ -1769,7 +1782,7 @@ body.sheet-open {
 .step-btn.round:active { background: var(--border); }
 
 .gram-input-wrap {
-  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
   font-size: var(--fs-footnote); color: var(--muted);
 }
 
@@ -1787,10 +1800,10 @@ body.sheet-open {
   border-radius: var(--r-md);
 }
 .impact-title {
-  font-size: var(--fs-caption); color: var(--faint); font-weight: var(--w-semibold); margin-bottom: 9px;
+  font-size: var(--fs-caption); color: var(--faint); font-weight: var(--w-semibold); margin-bottom: 8px;
   display: flex; justify-content: space-between; gap: 8px;
 }
-.impact-row + .impact-row { margin-top: 10px; }
+.impact-row + .impact-row { margin-top: 8px; }
 .impact-head {
   display: flex; align-items: baseline; gap: 4px; font-size: var(--fs-footnote); margin-bottom: 4px;
 }
@@ -1801,7 +1814,7 @@ body.sheet-open {
 .impact-to.over { color: var(--danger); }
 .impact-target { color: var(--faint); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
 .impact-note {
-  margin: 9px 0 0; font-size: var(--fs-caption); line-height: 1.5;
+  margin: 8px 0 0; font-size: var(--fs-caption); line-height: 1.5;
 }
 .impact-note.warn { color: var(--danger); }
 .impact-note.ok { color: var(--accent); }
@@ -1838,7 +1851,7 @@ body.sheet-open {
 }
 .mix-picker-head .field-label { margin-top: 0; }
 .mix-selected-count { display: block; margin-top: 2px; color: var(--faint); font-size: var(--fs-caption); }
-.mix-help { margin-top: 5px; line-height: 1.5; }
+.mix-help { margin-top: 4px; line-height: 1.5; }
 .mix-grid {
   margin-top: 8px; overflow: hidden; border: 1px solid var(--border);
   border-radius: var(--r-md); background: var(--card-2);
@@ -1874,10 +1887,10 @@ body.sheet-open {
 .mix-unit { width: 17px; color: var(--faint); font-size: var(--fs-caption); text-align: left; }
 
 .custom-form {
-  margin: 10px 0; padding: 12px; background: var(--card-2);
+  margin: 8px 0; padding: 12px; background: var(--card-2);
   border: 1px solid var(--border); border-radius: var(--r-md);
 }
-.custom-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.custom-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .custom-chip {
   font-size: var(--fs-caption); background: var(--card); border: 1px solid var(--border);
   border-radius: 999px; padding: 2px 4px 2px 10px; display: inline-flex; align-items: center; gap: 4px;
@@ -1907,7 +1920,7 @@ body.sheet-open {
 .energy-unit-btn:active { background: var(--accent-soft); }
 .checkbox-field { flex-direction: row; align-items: center; gap: 8px; }
 .checkbox-field input { width: auto; flex: none; }
-.custom-form-actions { display: flex; gap: 8px; margin-top: 10px; }
+.custom-form-actions { display: flex; gap: 8px; margin-top: 8px; }
 .custom-form-actions .primary-btn, .custom-form-actions .secondary-btn { margin-top: 0; }
 
 /* 记录指向的食物已经不在库里时，那一行要说出来 —— 但这不是错误，用中性灰 */
@@ -1917,7 +1930,7 @@ body.sheet-open {
 .recovery-actions { display: flex; gap: 8px; margin-top: 12px; }
 .recovery-actions .primary-btn, .recovery-actions .secondary-btn { margin-top: 0; }
 
-.meal-group + .meal-group { margin-top: 14px; }
+.meal-group + .meal-group { margin-top: 12px; }
 .meal-group-head {
   display: flex; align-items: center; gap: 6px; font-size: var(--fs-body);
   padding-bottom: 5px; border-bottom: 1px solid var(--border);
@@ -1937,7 +1950,7 @@ body.sheet-open {
 .entry-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-body); font-weight: var(--w-semibold); }
 .entry-name .info-tip > summary { width: var(--info-size); height: var(--info-size); }
 .entry-meta {
-  font-size: var(--fs-caption); color: var(--faint); margin-top: 1px;
+  font-size: var(--fs-caption); color: var(--faint); margin-top: 2px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /*
@@ -1993,7 +2006,7 @@ body.sheet-open {
  * 左边缘完全对齐，七种块平铺在同一条线上，看不出任何嵌套。
  */
 .manager-panel { padding: 3px 0 16px 48px; }
-.manager-panel .primary-btn { margin-top: 10px; }
+.manager-panel .primary-btn { margin-top: 8px; }
 .manager-panel .dropzone { padding-top: 18px; padding-bottom: 16px; }
 
 /*
@@ -2028,10 +2041,10 @@ body.sheet-open {
 .sync-credential-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .sync-credential-head > div { min-width: 0; }
 .sync-credential-head strong { display: block; font-size: var(--fs-footnote); }
-.sync-credential-head div > span { display: block; margin-top: 3px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.45; }
+.sync-credential-head div > span { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.45; }
 .sync-secret-field {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px;
-  align-items: center; margin-top: 10px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px;
+  align-items: center; margin-top: 8px;
 }
 .sync-secret-field > span { grid-column: 1 / -1; color: var(--muted); font-size: var(--fs-caption); }
 .sync-secret-field code {
@@ -2039,7 +2052,7 @@ body.sheet-open {
   border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--card-2);
   color: var(--text); font-size: var(--fs-caption); -webkit-overflow-scrolling: touch;
 }
-.sync-credential-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-top: 10px; }
+.sync-credential-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-top: 8px; }
 .sync-credential-actions .primary-btn { margin: 0; min-height: var(--control-md); }
 .sync-credential-actions .secondary-btn { min-height: var(--control-md); }
 .sync-credential-note { margin: 8px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.5; }
@@ -2069,23 +2082,23 @@ body.sheet-open {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .sync-field-fix {
-  margin-top: 10px; padding: 9px 11px; border-radius: var(--r-md);
+  margin-top: 8px; padding: 9px 11px; border-radius: var(--r-md);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
   border-left: 3px solid var(--warn); font-size: var(--fs-footnote); line-height: 1.6;
 }
-.sync-field-fix ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
-.sync-field-fix p { margin: 6px 0 0; color: var(--faint); font-size: var(--fs-caption); }
+.sync-field-fix ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); }
+.sync-field-fix p { margin: 4px 0 0; color: var(--faint); font-size: var(--fs-caption); }
 .sync-fields-ok { margin-top: 8px; font-size: var(--fs-footnote); color: var(--muted); }
 .auto-sync-status {
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 3px 10px;
-  margin-top: 10px; color: var(--faint); font-size: var(--fs-caption); line-height: 1.45;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px;
+  margin-top: 8px; color: var(--faint); font-size: var(--fs-caption); line-height: 1.45;
 }
 /*
  * 底色跟着 .secondary-btn 走，别再自己写一遍。
  * 它原先写 var(--card)（白）是为了在淡绿盒子上衬出来；盒子去掉之后
  * 白底压在白卡上，这个按钮就成了一行居中的绿字，看不出能按。
  */
-.sync-section > .secondary-btn.full { margin-top: 9px; }
+.sync-section > .secondary-btn.full { margin-top: 8px; }
 /*
  * 二级分区标题：标题一行、说明一行，上面一条边线把它和上一节分开。
  * 原先标题和说明左右分栏，窄屏上标题折成两行、说明右对齐，两块字对着中间挤。
@@ -2121,12 +2134,12 @@ body.sheet-open {
   color: var(--faint); background: var(--card); border: 1px solid var(--border);
   border-radius: var(--r-xs); padding: 2px 6px; font-size: var(--fs-caption); font-weight: var(--w-semibold); letter-spacing: .03em;
 }
-.import-clipboard { margin-top: 10px; }
+.import-clipboard { margin-top: 8px; }
 
 .progress { margin-top: 12px; }
 .progress-track { height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; }
 .progress-fill { height: 100%; width: 2%; background: var(--accent); border-radius: 999px; transition: width .3s; }
-.progress-text { font-size: var(--fs-caption); color: var(--muted); margin-top: 5px; text-align: center; }
+.progress-text { font-size: var(--fs-caption); color: var(--muted); margin-top: 4px; text-align: center; }
 
 /*
  * 次级折叠：箭头和一级折叠节共用同一个 chevron，转 90° 表示展开。
@@ -2160,7 +2173,7 @@ body.sheet-open {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5;
 }
 .feedback-area {
-  width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; margin-top: 10px;
+  width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; margin-top: 8px;
   /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
   color: var(--text); resize: vertical; font-size: var(--fs-body); line-height: 1.6;
 }
@@ -2180,7 +2193,7 @@ body.sheet-open {
 .sync-result-head strong { display: block; font-size: var(--fs-body); }
 .sync-result-head span { display: block; color: var(--muted); font-size: var(--fs-caption); margin-top: 2px; overflow-wrap: anywhere; }
 .sync-result-head time { flex-shrink: 0; color: var(--faint); font-size: var(--fs-caption); }
-.sync-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.sync-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .sync-pills span {
   padding: 2px 7px; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
   font-size: var(--fs-caption); font-weight: var(--w-semibold); overflow-wrap: anywhere;
@@ -2188,7 +2201,7 @@ body.sheet-open {
 .sync-details { margin-top: 8px; }
 .sync-details summary { color: var(--accent); font-size: var(--fs-caption); cursor: pointer; }
 .sync-details ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.65; }
-.sync-details p { margin: 7px 0 0; color: var(--faint); font-size: var(--fs-caption); line-height: 1.55; overflow-wrap: anywhere; }
+.sync-details p { margin: 8px 0 0; color: var(--faint); font-size: var(--fs-caption); line-height: 1.55; overflow-wrap: anywhere; }
 
 /*
  * 备份那三行和「同步帮助」那三段是同一级，左边缘必须一样。
@@ -2239,7 +2252,7 @@ body.sheet-open {
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); white-space: nowrap;
 }
 .method-badge.fast { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
-.method p { margin: 5px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.65; }
+.method p { margin: 4px 0 0; font-size: var(--fs-footnote); color: var(--muted); line-height: 1.65; }
 .method details { margin-top: 8px; }
 
 
@@ -2291,22 +2304,19 @@ body.sheet-open {
 .range-switch .chip-btn.empty { opacity: .45; }
 /*
  * 连着摞的两三排分段控件之间要留一道缝。
- * 它们各自 margin: 0，直接摞在一起就是两条灰槽贴着边，看着像一块被割开的色块，
- * 分不出「这是两组不同的选择」—— 截图里圈出来的就是这个。
- */
-.range-switch + .range-switch { margin-top: var(--space-2); }
+ * 它们各自 margin: 0，直接摞在一起就是两条灰槽贴着边，看着像一块被割开的色块， * 分不出「这是两组不同的选择」—— 截图里圈出来的就是这个。 */ .range-switch + .range-switch{ margin-top: var(--space-2); }
 .body-part-switch { gap: 5px; }
 /* 没有数据的图仍可点开——点进去会说明缺什么，比直接藏起来好找 */
 .chip-btn.empty { opacity: .45; }
 .chip-btn.empty.active { opacity: 1; }
-.trend-picker .card-head { margin-bottom: 10px; }
+.trend-picker .card-head { margin-bottom: 8px; }
 
 /*
  * 走势解读：这是结论不是脚注，比 .form-hint 更实一点。
  * 整块淡底、不加左侧色条 —— 有色条的话读起来像一条警告，而它只是一段话。
  */
 .chart-note {
-  margin-top: 10px; padding: 11px 13px;
+  margin-top: 8px; padding: 11px 13px;
   background: var(--card-2); border-radius: var(--r-md);
   font-size: var(--fs-footnote); line-height: 1.65; color: var(--muted);
 }
@@ -2332,7 +2342,7 @@ body.sheet-open {
 /* 数值显示在图外，不遮数据、也不会被手指挡住 */
 .chart-readout {
   display: flex; align-items: baseline; gap: 8px;
-  margin-top: 6px; padding: 6px 10px; min-height: 30px;
+  margin-top: 4px; padding: 6px 10px; min-height: 30px;
   background: var(--card-2); border-radius: var(--r-md);
   font-size: var(--fs-body);
 }
@@ -2345,15 +2355,15 @@ body.sheet-open {
 .banner-slot { flex: none; }
 .banner-slot:empty { display: none; }
 .onboard {
-  margin: 14px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left)); padding: 16px; background: var(--accent-soft);
+  margin: 12px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left)); padding: 16px; background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   border-radius: var(--r-lg); text-align: center;
 }
-.onboard h2 { margin: 0 0 6px; font-size: var(--fs-headline); }
-.onboard p { margin: 0 0 10px; font-size: var(--fs-body); color: var(--muted); line-height: 1.6; }
+.onboard h2 { margin: 0 0 4px; font-size: var(--fs-headline); }
+.onboard p { margin: 0 0 8px; font-size: var(--fs-body); color: var(--muted); line-height: 1.6; }
 .onboard .primary-btn { margin-top: 0; }
 .update-notice {
-  margin: 10px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left));
+  margin: 8px calc(14px + var(--safe-right)) 0 calc(14px + var(--safe-left));
   padding: 10px 12px; border-radius: var(--r-md); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   background: var(--accent-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
@@ -2370,7 +2380,7 @@ body.sheet-open {
 .account-form .primary-btn { margin-top: 0; }
 .account-actions {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px; margin-top: 10px;
+  gap: 8px; margin-top: 8px;
 }
 .account-actions > * { min-width: 0; margin-top: 0; }
 .account-offline-signout {
@@ -2380,7 +2390,7 @@ body.sheet-open {
 }
 .account-offline-signout span { color: var(--muted); font-size: var(--fs-caption); line-height: 1.45; }
 .account-offline-signout .text-btn { flex: none; }
-.account-link-row { display: flex; justify-content: flex-end; margin-top: 5px; }
+.account-link-row { display: flex; justify-content: flex-end; margin-top: 4px; }
 .account-identity {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
   padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--r-md);
@@ -2389,7 +2399,7 @@ body.sheet-open {
 .account-identity > div { min-width: 0; }
 .account-identity strong, .account-identity span { display: block; overflow-wrap: anywhere; }
 .account-identity strong { font-size: var(--fs-body); }
-.account-identity > div span { margin-top: 3px; color: var(--muted); font-size: var(--fs-caption); }
+.account-identity > div span { margin-top: 2px; color: var(--muted); font-size: var(--fs-caption); }
 .account-sync-badge {
   flex: none; max-width: 42%; padding: 3px 8px; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent); font-size: var(--fs-caption); font-weight: var(--w-semibold);
@@ -2399,13 +2409,13 @@ body.sheet-open {
 .account-sync-badge.warn { background: color-mix(in srgb, var(--warn) 13%, transparent); color: var(--warn); }
 .account-sync-badge.error { background: color-mix(in srgb, var(--danger) 11%, transparent); color: var(--danger); }
 .account-conflict {
-  margin-top: 10px; padding: 11px; border-radius: var(--r-md);
+  margin-top: 8px; padding: 11px; border-radius: var(--r-md);
   background: color-mix(in srgb, var(--warn) 11%, transparent);
   border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
 }
 .account-conflict strong { font-size: var(--fs-body); }
 .account-conflict p { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
-.account-conflict-versions { display: grid; gap: 6px; margin-top: 10px; }
+.account-conflict-versions { display: grid; gap: 6px; margin-top: 8px; }
 .account-conflict-version {
   padding: 8px 9px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--card) 72%, transparent);
 }
@@ -2415,20 +2425,20 @@ body.sheet-open {
 .account-loading strong { color: var(--text); font-size: var(--fs-body); }
 .account-linking { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 .account-linking summary { color: var(--accent); font-size: var(--fs-footnote); font-weight: var(--w-semibold); cursor: pointer; }
-.account-linking > p { margin: 7px 0 10px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
-.account-linking .form-field { margin-top: 9px; }
+.account-linking > p { margin: 8px 0 8px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
+.account-linking .form-field { margin-top: 8px; }
 .account-provider-ok { color: var(--accent) !important; }
 .account-error {
-  margin: 10px 0 0; padding: 8px 10px; border-radius: var(--r-sm);
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--danger) 9%, transparent); color: var(--danger);
   font-size: var(--fs-caption); line-height: 1.55; overflow-wrap: anywhere;
 }
 .account-data-lock { margin: auto 0; text-align: center; }
-.account-data-lock h2 { margin: 12px 0 7px; font-size: var(--fs-title); }
+.account-data-lock h2 { margin: 12px 0 8px; font-size: var(--fs-title); }
 .account-data-lock > p { max-width: 520px; margin: 0 auto 8px; line-height: 1.65; }
 .account-data-lock .account-actions { max-width: 420px; margin: 16px auto 0; }
 .inline-link {
-  display: inline-flex; align-items: center; min-height: var(--control-sm); margin: 1px 0 10px;
+  display: inline-flex; align-items: center; min-height: var(--control-sm); margin: 2px 0 8px;
   color: var(--accent); font-size: var(--fs-footnote); font-weight: var(--w-semibold); text-decoration: none;
 }
 .inline-link::after { content: ' →'; margin-left: 3px; }
@@ -2541,12 +2551,12 @@ body.sheet-open {
   font-size: var(--fs-value); line-height: 1.6;
 }
 .ex-muscle { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.ex-muscle-old { font-size: var(--fs-footnote); color: var(--faint); margin-top: 3px; }
+.ex-muscle-old { font-size: var(--fs-footnote); color: var(--faint); margin-top: 2px; }
 /*
  * 重复提示用橙不用红。选了两个卧推变式不是错误，是取舍 ——
  * 红色留给真正的错误（全应用一致：「红色只留给真上限」）。
  */
-.ex-clash { font-size: var(--fs-footnote); color: var(--warn); margin-top: 3px; }
+.ex-clash { font-size: var(--fs-footnote); color: var(--warn); margin-top: 2px; }
 .ex-clash.soft { color: var(--muted); }
 
 .plan-list { display: flex; flex-direction: column; }
@@ -2639,7 +2649,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
 /* ---- 趋势卡的下拉选择 ---- */
 .trend-pickers {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  margin: 10px 0 2px;
+  margin: 8px 0 2px;
 }
 .trend-picker-field { min-width: 0; }
 .trend-select-wrap { position: relative; }
@@ -2663,7 +2673,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   pointer-events: none; color: var(--faint); display: grid; place-items: center;
 }
 .trend-select-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
-.trend-card .chart-wrap { margin-top: 6px; }
+.trend-card .chart-wrap { margin-top: 4px; }
 /* 颜色和字号由下面那条「说明类文字」统一给，别在这儿再写一份 */
 .trend-summary {
   /* 左右不缩：缩了它就比同一张卡里的图和解读多退 2px，读出来是没对齐 */
@@ -2674,7 +2684,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   min-height: 156px; display: grid; place-items: center;
   color: var(--faint-readable); font-size: var(--fs-footnote); text-align: center;
 }
-.plan-start { width: 100%; margin-top: 10px; }
+.plan-start { width: 100%; margin-top: 8px; }
 
 
 /* ============ 从 ux-polish.css 并回来的规则 ============
@@ -2803,10 +2813,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
   min-height: 23px;
   align-items: center;
 }
+/* 和「范围 → 列表头」是同一种关系（换一组），两处必须同一档 */
 .exercise-search-row { margin-bottom: var(--space-3); }
 .exercise-search-input { width: 100%; }
 .exercise-search-results .ex-list { margin-top: 0; }
-.exercise-search-empty { margin: 14px 2px 4px; }
+.exercise-search-empty { margin: 12px 2px 4px; }
 /*
  * 三排分段控件必须一样宽。
  *
@@ -2886,7 +2897,8 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .picker-list-head {
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: var(--space-1) var(--space-2);
-  margin-top: var(--space-4);
+  /* 和「搜索框 → 口径行」同一档：都是「上面那组说完了，换一组」 */
+  margin-top: var(--space-3);
 }
 .picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 1 1 150px; }
 .picker-view-switch { margin-left: auto; }
@@ -3005,12 +3017,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 
 /* 份量面板里的结构行和今日主卡用同一根碳水/脂肪刻度。 */
-.impact-split-row { margin-top: 9px; }
+.impact-split-row { margin-top: 8px; }
 .impact-split-head {
   display: flex;
   align-items: baseline;
   gap: 7px;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
   font-size: var(--fs-footnote);
 }
 .impact-split-head > span:first-child { color: var(--muted); }
@@ -3093,7 +3105,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 8px;
   padding-top: 10px;
   border-top: 1px solid var(--hairline);
   color: var(--muted);
@@ -3126,14 +3138,14 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .water-add { justify-content: center; min-width: 88px; font-size: var(--fs-body); }
 
 /* 推荐预算独占一行，避免卡片标题右边的长句断成两行。 */
-.recommend-card-head { align-items: center; margin-bottom: 9px; }
+.recommend-card-head { align-items: center; margin-bottom: 8px; }
 .recommend-budget {
   display: grid;
   grid-template-columns: auto 1fr 1fr;
   align-items: center;
   gap: 8px;
   min-height: var(--control-sm);
-  margin-bottom: 7px;
+  margin-bottom: 8px;
   padding: 0 10px;
   border-radius: var(--r-sm);
   background: var(--card-2);
@@ -3198,7 +3210,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
   font-size: var(--fs-caption); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
 }
 .entry-merged-list {
-  margin: 2px 0 6px 12px; padding-left: 10px;
+  margin: 2px 0 4px 12px; padding-left: 10px;
   border-left: 2px solid var(--border);
 }
 .entry-merged-list .entry-row { opacity: .8; }

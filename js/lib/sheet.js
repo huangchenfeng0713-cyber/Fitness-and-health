@@ -21,6 +21,15 @@ let scrollArea = null;
 let footer = null;
 let onClose = null;
 let lockedScrollY = 0;
+/*
+ * 正在往下退场。
+ *
+ * 状态（onClose、解锁、还滚动位置）关的那一刻就同步做完 —— 调用方依赖这个时序，
+ * 「确认」按钮先 resolve 再关就是靠它。只有**画面上那一下**留给动画，
+ * 所以 sheetIsOpen() 立刻就报 false，内容也等动画跑完再清，免得半路空掉。
+ */
+let closing = false;
+let exitAnim = null;
 
 function build() {
   if (wrap) return;
@@ -92,6 +101,10 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   clearEl(footer);
   footer.hidden = true;
   panel.classList.remove('has-footer');
+  // 上一层还在往下退场：掐掉它的收尾，否则新开的这一层会被那次 finish 清空
+  closing = false;
+  if (exitAnim) { exitAnim.cancel(); exitAnim = null; }
+  resetDragStyles();
   mount(scrollArea, content);
   wrap.hidden = false;
   scrollArea.scrollTop = 0;
@@ -119,26 +132,67 @@ export function setSheetFooter(content) {
   }
 }
 
-export function closeSheet() {
-  if (!wrap || wrap.hidden) return;
-  wrap.hidden = true;
-  // 跟手时写在行内的位移和遮罩透明度要清掉，否则下次打开是歪的、背景还是透的
-  panel.style.transform = '';
-  panel.style.transition = '';
-  const backdrop = wrap.querySelector('.sheet-backdrop');
-  if (backdrop) backdrop.style.opacity = '';
-  clearEl(scrollArea);
-  clearEl(footer);
-  footer.hidden = true;
-  panel.classList.remove('has-footer');
+/**
+ * 关掉弹层。
+ *
+ * @param {object} opts
+ *  - fromY 从这个位移接着往下退场（跟手关掉时传手指最后的位置）
+ */
+export function closeSheet({ fromY = 0 } = {}) {
+  if (!wrap || wrap.hidden || closing) return;
+  closing = true;
+  // 状态同步做完：调用方依赖 onClose 就在这一刻跑（「确认」按钮先 resolve 再关）
   unlockBody();
   const fn = onClose;
   onClose = null;
   if (fn) fn();
   restoreScroll();
+  playExit(fromY);
 }
 
-export const sheetIsOpen = () => !!wrap && !wrap.hidden;
+/*
+ * 退场：往下滑出去，遮罩跟着淡掉。
+ *
+ * 原先是一句 `wrap.hidden = true` —— 开有 240ms 的升起动画，关一帧都没有，
+ * 读出来是「一闪就不见」，而不是「被推下去了」。现在两头对称。
+ */
+function playExit(fromY) {
+  const backdrop = wrap.querySelector('.sheet-backdrop');
+  const finish = () => {
+    exitAnim = null;
+    if (!closing) return;         // 动画没跑完又被重新打开了，别把新的这层收掉
+    closing = false;
+    wrap.hidden = true;
+    clearEl(scrollArea);
+    clearEl(footer);
+    footer.hidden = true;
+    panel.classList.remove('has-footer');
+    resetDragStyles();
+  };
+  const reduce = typeof matchMedia === 'function'
+    && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || typeof panel.animate !== 'function') { finish(); return; }
+  panel.style.transition = 'none';
+  exitAnim = panel.animate(
+    [{ transform: `translateY(${fromY}px)` }, { transform: 'translateY(100%)' }],
+    { duration: 220, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'forwards' },
+  );
+  if (backdrop) {
+    backdrop.animate([{ opacity: backdrop.style.opacity || '1' }, { opacity: '0' }],
+      { duration: 220, easing: 'ease-out', fill: 'forwards' });
+  }
+  exitAnim.finished.then(finish).catch(finish);
+}
+
+/* 跟手时写在行内的位移和遮罩透明度：留着的话下次打开是歪的、背景还是透的 */
+function resetDragStyles() {
+  panel.style.transform = '';
+  panel.style.transition = '';
+  const backdrop = wrap?.querySelector('.sheet-backdrop');
+  if (backdrop) backdrop.style.opacity = '';
+}
+
+export const sheetIsOpen = () => !!wrap && !wrap.hidden && !closing;
 
 /*
  * 往下滑关掉弹层。
@@ -156,12 +210,20 @@ export const sheetIsOpen = () => !!wrap && !wrap.hidden;
  */
 const CLOSE_DISTANCE = 96;     // 拖过这么远就算要关
 const CLOSE_VELOCITY = 0.5;    // 或者甩得够快（px/ms）
+/*
+ * 甩速那条路必须同时走够一段距离。
+ *
+ * 顶上那道小横杠是 `.sheet::before`，点它就是点弹层本身 —— 手指按下再抬起
+ * 难免有几像素抖动，只看甩速的话这一下就把弹层关了，而人只是想碰一下那道杠。
+ */
+const MIN_FLICK = 32;
 
 function attachDragToClose() {
   let height = 0;
   dragGesture(panel, {
     axis: 'y',
-    threshold: 8,
+    // 12 而不是 8：点那道小横杠时的手抖不该被当成开始拖
+    threshold: 12,
     canStart: (ev) => {
       // 手指落在还能往上滚的内容里，这一下归内容
       const scroller = ev.target instanceof Element ? ev.target.closest('.sheet-scroll') : null;
@@ -180,11 +242,10 @@ function attachDragToClose() {
     },
     onEnd: ({ dy, velocity }) => {
       const backdrop = wrap.querySelector('.sheet-backdrop');
-      const leaving = dy > CLOSE_DISTANCE || velocity > CLOSE_VELOCITY;
+      const leaving = dy > CLOSE_DISTANCE || (dy > MIN_FLICK && velocity > CLOSE_VELOCITY);
       if (leaving) {
-        closeSheet();
-        panel.style.transform = '';
-        if (backdrop) backdrop.style.opacity = '';
+        // 从手指松开的位置接着往下走，别从头再演一遍
+        closeSheet({ fromY: Math.max(0, dy) });
         return;
       }
       // 不够，弹回去
