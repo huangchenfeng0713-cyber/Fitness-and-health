@@ -10,7 +10,7 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
 import {
-  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,
+  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow,
 } from '../lib/ui.js';
 import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
 import { macroBar, splitBar } from '../lib/charts.js';
@@ -1327,7 +1327,14 @@ function entryRow(e, editing) {
       h('button.icon-btn.danger', {
         'aria-label': `删除 ${e.name}`,
         onclick: async (ev) => {
-          const result = await runLocalAction(ev.currentTarget, () => removeEntry(e.id), '删除记录');
+          /*
+           * 按钮要先抓在手里：`event.currentTarget` 只在事件派发的那一刻有效，
+           * 过了下面这个 await 就是 null，`runLocalAction` 会拿不到要禁用的控件。
+           */
+          const btn = ev.currentTarget;
+          // 先把这一行收起来，再落库：删完整段瞬间上跳的话，人分不清删掉的是哪一条
+          await collapseRow(btn.closest('.entry-row'));
+          const result = await runLocalAction(btn, () => removeEntry(e.id), '删除记录');
           if (result.ok) toast(`已删除「${e.name}」`, 'info', {
             label: '撤销',
             onClick: async () => {

@@ -2143,3 +2143,27 @@ test('搜索框有清除键，两页共用一个组件', () => {
   assert.match(css, /\.search-input::-webkit-search-cancel-button/,
     '没有藏掉原生小叉，桌面上会出现两个');
 });
+
+test('动画只在真的变了的时候跑，且都躲开「减少动态效果」', () => {
+  /*
+   * 两处动画（热量环的弧长、删记录时那一行收拢）都不是装饰：
+   * 前者说的是「刚才这口饭走了这么远」，后者说的是「删掉的是这一行」。
+   * 但两处都必须能安静地不跑：值没变时不跑、系统开了减少动态效果时不跑。
+   */
+  const ring = read('js/lib/energy-ring-chart.js');
+  assert.match(ring, /prefers-reduced-motion: reduce/, '弧长动画没有躲开减少动态效果');
+  assert.match(ring, /Math\.abs\(prev - len\) < 0\.5/, '值没变也要动一下的话，每 60 秒的定时重绘都会闪');
+  assert.match(ring, /`\$\{animateKey\}\|\$\{model\.scale\}\|\$\{memoKey\}`/,
+    '换了日期或换了尺子还接着动画，等于把两份数据说成「长了一截」');
+  const dash = read('js/views/dashboard.js');
+  assert.match(dash, /animateKey: state\.day/, '主卡没有把日期交给环，环会跨日期动画');
+
+  const ui = read('js/lib/ui.js');
+  assert.match(ui, /export async function collapseRow/, '收拢动画应当和别的 UI 组件放在一起，别再开一层');
+  assert.match(ui, /prefers-reduced-motion: reduce/, '收拢动画没有躲开减少动态效果');
+  const diet = read('js/views/diet.js');
+  assert.match(diet, /const btn = ev\.currentTarget;/,
+    'currentTarget 过了 await 就是 null，要先抓在手里');
+  assert.match(diet, /await collapseRow\(btn\.closest\('\.entry-row'\)\)/,
+    '删记录时那一行应当先收拢再落库');
+});

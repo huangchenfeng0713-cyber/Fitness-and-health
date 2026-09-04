@@ -11,7 +11,7 @@
  */
 
 /** 肌肉键 → 中文名 */
-import { matchesInitials } from '../core/pinyin.js';
+import { matchesInitials, substringMatch } from '../core/pinyin.js';
 
 export const MUSCLES = {
   pec_upper: '上胸', pec_mid: '胸大肌中部', pec_lower: '下胸',
@@ -204,8 +204,8 @@ export const GROUP_BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
 export function searchExercises(query, list = EXERCISES) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
-  return list.filter((e) => e.name.toLowerCase().includes(q)
-    || e.alias.toLowerCase().includes(q)
+  return list.filter((e) => substringMatch(q, e.name)
+    || substringMatch(q, e.alias)
     || matchesInitials(q, e.alias)
     || (MUSCLES[e.primary[0]] || '').includes(q));
 }

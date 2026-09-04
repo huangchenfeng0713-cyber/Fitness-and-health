@@ -28,7 +28,7 @@
  *            functional 功能/运动饮料 / caffeinated 含咖啡因
  */
 
-import { matchesInitials } from '../core/pinyin.js';
+import { matchesInitials, substringMatch } from '../core/pinyin.js';
 
 export const CATEGORIES = {
   staple: '主食',
@@ -2142,10 +2142,10 @@ export function searchFoods(query, list = FOODS, limit = 30) {
     let score = 0;
     if (name === q) score = 100;
     else if (name.startsWith(q)) score = 80;
-    else if (name.includes(q)) score = 60;
+    else if (substringMatch(q, name)) score = 60;
     else if (alias.startsWith(q)) score = 50;
-    else if (alias.includes(q)) score = 35;
-    else if ((CATEGORIES[f.cat] || '').includes(q)) score = 20;
+    else if (substringMatch(q, alias)) score = 35;
+    else if (substringMatch(q, CATEGORIES[f.cat])) score = 20;
     // 首字母缩写：别名里本来就写着全拼，打 tznf 也该找到「脱脂奶粉」
     else if (matchesInitials(q, alias)) score = 30;
     else if (q.length >= 3) {
