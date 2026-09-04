@@ -1447,15 +1447,16 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  *  - overscroll-behavior: contain —— 弹层内部滚到头之后不把背后的页面带着跑；
  *  - body 钉成 fixed —— iOS 上只给 overflow:hidden 拦不住手指拖动。
  */
-.sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+.sheet-wrap { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 /*
- * 点食物打开弹层时，iOS 会把同一次触摸再派成一次点击，落到刚出现的遮罩或取消键上。
- * 升起那一小段时间整层不接事件，这份点击才会被丢掉，而不是把弹层立刻关掉。
+ * 默认不接事件。打开手势还没结束时，Safari 补派的点击会穿过这一层打在
+ * 食物上，而不会落到遮罩或取消键。is-ready 之后才真正可点、可拖。
+ * 关掉的瞬间立刻拿掉 is-ready，退场动画没跑完也不会盖住整页。
  */
-.sheet-wrap.is-opening { pointer-events: none; }
+.sheet-wrap.is-ready { pointer-events: auto; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
-  animation: sheet-fade .18s ease;
+  animation: sheet-fade .18s ease both;
   /* 背景上不该能拖动页面 */
   touch-action: none;
 }
@@ -1478,7 +1479,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   backdrop-filter: saturate(180%) blur(24px);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
-  animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1);
+  animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) both;
 }
 .sheet-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;

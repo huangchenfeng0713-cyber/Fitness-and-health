@@ -31,21 +31,33 @@ let lockedScrollY = 0;
 let closing = false;
 let exitAnim = null;
 let openGuardTimer = null;
-const OPEN_GUARD_MS = 500;
-let openedAt = 0;
-let downOnSheet = false;
-const now = () => (typeof performance === 'object' ? performance.now() : Date.now());
-const stillOpening = () => now() - openedAt < OPEN_GUARD_MS;
+let exitTimer = null;
+const OPEN_GUARD_MS = 600;
+const EXIT_MS = 280;
+const sheetReady = () => !!wrap && !wrap.hidden && wrap.classList.contains('is-ready');
+
+function setSheetReady(on) {
+  if (!wrap) return;
+  wrap.classList.toggle('is-ready', on);
+}
 
 function armOpenGuard() {
-  openedAt = now();
-  downOnSheet = false;
-  wrap.classList.add('is-opening');
+  setSheetReady(false);
   clearTimeout(openGuardTimer);
   openGuardTimer = setTimeout(() => {
-    wrap?.classList.remove('is-opening');
+    if (wrap && !wrap.hidden && !closing) setSheetReady(true);
     openGuardTimer = null;
   }, OPEN_GUARD_MS);
+}
+
+function restartRise() {
+  if (!panel) return;
+  panel.style.animation = 'none';
+  const backdrop = wrap.querySelector('.sheet-backdrop');
+  if (backdrop) backdrop.style.animation = 'none';
+  void panel.offsetWidth;
+  panel.style.animation = '';
+  if (backdrop) backdrop.style.animation = '';
 }
 
 function build() {
@@ -58,43 +70,14 @@ function build() {
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
   wrap = h('div.sheet-wrap', { hidden: true },
-    h('div.sheet-backdrop', { onclick: dismissFromBackdrop }),
+    h('div.sheet-backdrop', { onclick: () => { if (sheetReady()) closeSheet(); } }),
     panel);
   document.body.append(wrap);
   attachDragToClose();
-  /*
-   * 点食物打开弹层时，Safari 会把同一次触摸再派成一次点击，落到刚露出来
-   * 的遮罩或取消键上。上一版用时间窗吞掉「打开后 450ms 内的所有事件」，
-   * 挡不住「显示已有节点时同步补派的那一次 click」——那一次没有对应的
-   * pointerdown 落在弹层上。所以改成：
-   * 弹层上的 click 如果前面没有 pointerdown，直接丢掉。
-   */
-  wrap.addEventListener('pointerdown', (ev) => {
-    if (stillOpening()) {
-      ev.stopPropagation();
-      if (ev.cancelable) ev.preventDefault();
-      downOnSheet = false;
-      return;
-    }
-    downOnSheet = true;
-  }, true);
-  wrap.addEventListener('click', (ev) => {
-    if (downOnSheet && !stillOpening()) return;
-    ev.stopPropagation();
-    if (ev.cancelable) ev.preventDefault();
-  }, true);
-  wrap.addEventListener('pointerup', () => {
-    setTimeout(() => { downOnSheet = false; }, 0);
-  }, true);
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !wrap.hidden && !stillOpening()) closeSheet();
+    if (ev.key === 'Escape' && sheetReady()) closeSheet();
   });
-}
-
-function dismissFromBackdrop() {
-  if (stillOpening() || !downOnSheet) return;
-  closeSheet();
 }
 
 /*
@@ -150,17 +133,20 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   // 上一层还在往下退场：掐掉它的收尾，否则新开的这一层会被那次 finish 清空
   closing = false;
   if (exitAnim) { exitAnim.cancel(); exitAnim = null; }
+  clearTimeout(exitTimer);
+  exitTimer = null;
   resetDragStyles();
   mount(scrollArea, content);
   /*
-   * 必须先挡住事件，再把弹层露出来。
-   *
-   * 第一次打开是新建节点，点食物的那一下打在食物上，弹层还没进命中测试。
-   * 之后再打开只是把同一个节点 hidden 去掉 —— Safari 会把**这一次点击**
-   * 补派到刚露出来的遮罩上。先 arm 再显示，那一下才会被丢掉，而不是先关后挡。
+   * 默认不接事件（.sheet-wrap { pointer-events: none }），等打开手势彻底
+   * 结束后再 is-ready。Safari 把同一次触摸补派到遮罩上时，点击会穿过弹层
+   * 打在食物上，而不会把弹层关掉。上一版在 wrap 上 preventDefault，退场
+   * 动画没结束时整页都点不了。
    */
-  armOpenGuard();
+  setSheetReady(false);
   wrap.hidden = false;
+  restartRise();
+  armOpenGuard();
   scrollArea.scrollTop = 0;
   lockBody();
   return closeSheet;
@@ -195,10 +181,9 @@ export function setSheetFooter(content) {
 export function closeSheet({ fromY = 0 } = {}) {
   if (!wrap || wrap.hidden || closing) return;
   closing = true;
-  wrap.classList.remove('is-opening');
+  setSheetReady(false);
   clearTimeout(openGuardTimer);
   openGuardTimer = null;
-  downOnSheet = false;
   // 状态同步做完：调用方依赖 onClose 就在这一刻跑（「确认」按钮先 resolve 再关）
   unlockBody();
   const fn = onClose;
@@ -216,10 +201,16 @@ export function closeSheet({ fromY = 0 } = {}) {
  */
 function playExit(fromY) {
   const backdrop = wrap.querySelector('.sheet-backdrop');
+  let settled = false;
   const finish = () => {
+    if (settled) return;
+    settled = true;
     exitAnim = null;
+    clearTimeout(exitTimer);
+    exitTimer = null;
     if (!closing) return;         // 动画没跑完又被重新打开了，别把新的这层收掉
     closing = false;
+    setSheetReady(false);
     wrap.hidden = true;
     clearEl(scrollArea);
     clearEl(footer);
@@ -229,6 +220,10 @@ function playExit(fromY) {
   };
   const reduce = typeof matchMedia === 'function'
     && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // 动画的 finished 在 iOS 上碰到 CSS animation 抢 transform 时可能不兑现。
+  // 超时必须能把 hidden 设回去，否则透明遮罩会盖住整页。
+  clearTimeout(exitTimer);
+  exitTimer = setTimeout(finish, EXIT_MS);
   if (reduce || typeof panel.animate !== 'function') { finish(); return; }
   panel.style.transition = 'none';
   exitAnim = panel.animate(
@@ -283,7 +278,7 @@ function attachDragToClose() {
     // 12 而不是 8：点那道小横杠时的手抖不该被当成开始拖
     threshold: 12,
     canStart: (ev) => {
-      if (stillOpening()) return false;
+      if (!sheetReady()) return false;
       // 手指落在还能往上滚的内容里，这一下归内容
       const scroller = ev.target instanceof Element ? ev.target.closest('.sheet-scroll') : null;
       return !scroller || scroller.scrollTop <= 0;
