@@ -143,47 +143,39 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
   }
 
   /*
-   * 圈心两行作为一块居中：上一行状态，下一行「数字 + kcal」是一组。
-   * 旧版把数字单独贴在圆心、标题掉到下半圆 —— 数字就独自占了上半圆，
-   * 单位还缩成小小附注。差得很少时没有数字，那一句自己占住中间。
+   * 圈心三行，整块居中：
+   *   还可摄入     ← 小
+   *     2184       ← 大
+   *     kcal       ← 小，贴着数字，比上面那档更紧
+   *
+   * 差得很少时没有数字，那一句自己占住中间。
    */
   if (model.center) {
+    const line = (y, sizePx, weight, cls, text) => {
+      const t = el('text', {
+        x: cx, y, 'text-anchor': 'middle',
+        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
+        class: cls, 'font-size': sizePx, 'font-weight': weight,
+      });
+      t.textContent = text;
+      svg.append(t);
+    };
     const hasNumber = model.center.kcal != null;
     if (hasNumber) {
-      const cap = size / 10.2;
-      const val = size / 6.5;
-      const gap = size / 34;
-      const block = cap + gap + val;
+      const cap = size / 11;
+      const val = size / 4.9;
+      const unit = size / 11;
+      const gapTop = size / 16;   // 标题到数字
+      const gapBot = size / 48;   // 数字到 kcal，更紧
+      const block = cap + gapTop + val + gapBot + unit;
       const captionY = cy - block / 2 + cap / 2;
-      const valueY = cy + block / 2 - val / 2;
-      const caption = el('text', {
-        x: cx, y: captionY, 'text-anchor': 'middle',
-        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
-        class: 'ring-caption', 'font-size': cap, 'font-weight': 560,
-      });
-      caption.textContent = model.center.label;
-      svg.append(caption);
-      const value = el('text', {
-        x: cx, y: valueY, 'text-anchor': 'middle',
-        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
-        class: 'ring-value', 'font-size': val, 'font-weight': 650,
-      });
-      const num = el('tspan', { class: 'ring-kcal' });
-      num.textContent = String(model.center.kcal);
-      const unit = el('tspan', {
-        class: 'ring-unit', dx: '0.28em', 'font-size': '0.72em', 'font-weight': 560,
-      });
-      unit.textContent = 'kcal';
-      value.append(num, unit);
-      svg.append(value);
+      const valueY = captionY + cap / 2 + gapTop + val / 2;
+      const unitY = valueY + val / 2 + gapBot + unit / 2;
+      line(captionY, cap, 500, 'ring-caption', model.center.label);
+      line(valueY, val, 700, 'ring-value', String(model.center.kcal));
+      line(unitY, unit, 500, 'ring-unit', 'kcal');
     } else {
-      const only = el('text', {
-        x: cx, y: cy, 'text-anchor': 'middle',
-        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
-        class: 'ring-caption', 'font-size': size / 8.5, 'font-weight': 620,
-      });
-      only.textContent = model.center.label;
-      svg.append(only);
+      line(cy, size / 8.5, 600, 'ring-caption', model.center.label);
     }
   }
   lastArc.clear();
