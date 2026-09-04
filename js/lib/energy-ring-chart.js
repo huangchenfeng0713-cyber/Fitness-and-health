@@ -144,9 +144,9 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
 
   /*
    * 圈心三行，整块居中：
-   *   还可摄入     ← 小
-   *     2184       ← 大
-   *     kcal       ← 小，贴着数字，比上面那档更紧
+   *   还可摄入     ← 最小
+   *     2184       ← 最大
+   *     kcal       ← 介于两者之间，贴着数字
    *
    * 差得很少时没有数字，那一句自己占住中间。
    */
@@ -162,9 +162,9 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     };
     const hasNumber = model.center.kcal != null;
     if (hasNumber) {
-      const cap = size / 11;
-      const val = size / 4.9;
-      const unit = size / 11;
+      const cap = size / 14;     // 标题最小
+      const val = size / 4.9;    // 数字最大
+      const unit = size / 8.2;   // kcal 介于两者之间
       const gapTop = size / 16;   // 标题到数字
       const gapBot = size / 48;   // 数字到 kcal，更紧
       const block = cap + gapTop + val + gapBot + unit;
