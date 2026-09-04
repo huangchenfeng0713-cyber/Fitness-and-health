@@ -367,7 +367,7 @@ test('挑动作的两种入口都在，部位标签标出今天已练到的组',
   assert.match(app, /tab\.key === 'training' \? trainingContextNote\(\) : ''/,
     '数据页顶栏又开始写副标题了，会和今日健康数据卡上的同步状态重复');
   assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
-  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*5px/s,
+  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*var\(--space-1\)/s,
     '胸、肩臂、背、腿、腹之间应留出轻微间距');
 });
 
@@ -2336,4 +2336,76 @@ test('毛玻璃只给真的叠在内容上面的那几处，而且有落回实�
   const drawer = css.slice(css.indexOf('.settings-drawer {'), css.indexOf('}', css.indexOf('.settings-drawer {')));
   assert.doesNotMatch(drawer, /backdrop-filter/,
     '整屏推出来的抽屉背后没有值得透出来的东西，玻璃在这儿只是噪音');
+});
+
+test('竖向间距只有六档，和字号、字重一样是个阶梯', () => {
+  /*
+   * 分不出大小的层级不是层级 —— 和字号那七档、字重那四档是同一条道理。
+   * 收之前卡片内相邻块的实际间距有 1/2/3/4/5/6/7/8/9/10/11/12/14/16 十四种，
+   * 而 5 和 6、9 和 10、11 和 12 肉眼分不出，却让同一种关系在不同卡片上长出
+   * 不同的距离：健身页搜索框和下面那行隔 12，而它下面两行只隔 4，再下面又是 16。
+   *
+   * padding 是组件内部的事，不在这条里。
+   *
+   * gap 一开始被放过了（「横向 gap 是另一回事」），代价是它自己长出了一套
+   * 1/4/5/6/7/8/10 —— 5 和 6、6 和 7 一样分不出，而 flex 行里的 gap 和竖排的
+   * margin 说的是同一件事：这两块是一组还是两组。横竖不同的只是方向，不是尺度。
+   *
+   * 值在阶梯上还不够，写法也要一致：全写成 var(--space-*)。
+   * 同一个 8px 有的写字面量有的写 token 的话，改一档就得两处都翻一遍。
+   */
+  const css = read('css/app.css');
+  const ladder = new Set([0, 2, 4, 8, 12, 16, 24]);
+  const bad = [];
+  for (const m of css.matchAll(/\b(margin-top|margin-bottom|row-gap|column-gap|gap):\s*([^;]+);/g)) {
+    for (const px of m[2].matchAll(/(?<![\w.])(\d+(?:\.\d+)?)px/g)) {
+      bad.push(`${m[1]}: ${px[1]}px`);
+      if (!ladder.has(Number(px[1]))) bad.push(`${m[1]}: ${px[1]}px（还不在阶梯上）`);
+    }
+  }
+  /* margin 简写里的上下两个值同样要走 token，左右不管（那是横向对齐的事） */
+  for (const m of css.matchAll(/(?<![-\w])margin:\s*([^;{}]+);/g)) {
+    const parts = m[1].trim().split(/\s+/);
+    if (parts.length > 4) continue;
+    const vertical = { 1: [0], 2: [0], 3: [0, 2], 4: [0, 2] }[parts.length];
+    for (const i of vertical) {
+      if (/^\d+(\.\d+)?px$/.test(parts[i])) bad.push(`margin: ${m[1].trim()}`);
+    }
+  }
+  assert.deepEqual(bad, [], `间距没走阶梯 token：${bad.slice(0, 8).join('、')}`);
+  for (const name of ['--space-0: 2px', '--space-1: 4px', '--space-2: 8px',
+    '--space-3: 12px', '--space-4: 16px', '--space-5: 24px']) {
+    assert.ok(css.includes(name), `间距阶梯少了 ${name}`);
+  }
+  /*
+   * 挑选卡里「搜索框 → 口径行」和「范围 → 列表头」是同一种关系（上面那组说完了，
+   * 换一组），必须同一档。原先一个 12 一个 16，读出来是两种关系。
+   */
+  assert.match(css, /\.exercise-search-row \{ margin-bottom: var\(--space-3\); \}/,
+    '搜索框下面那一档不是 --space-3');
+  assert.match(css, /\.picker-list-head \{[^}]*margin-top: var\(--space-3\)/s,
+    '范围到列表头那一档没有和搜索框下面那一档对齐');
+});
+
+test('弹层关掉要有退场动画，且点那道小横杠不会误关', () => {
+  /*
+   * 那道小横杠是 `.sheet::before`，点它就是点弹层本身 —— 手指按下再抬起
+   * 难免有几像素抖动，只看甩速的话这一下就把弹层关了。
+   * 而关闭原先是一句 `hidden = true`：开有 240ms 的升起动画，关一帧都没有，
+   * 读出来是「一闪就不见」，不是「被推下去了」。
+   */
+  const sheet = read('js/lib/sheet.js');
+  assert.match(sheet, /const MIN_FLICK = \d+;/, '甩速那条路没有最小距离');
+  assert.match(sheet, /dy > CLOSE_DISTANCE \|\| \(dy > MIN_FLICK && velocity > CLOSE_VELOCITY\)/,
+    '甩速那条路仍然可以零距离触发');
+  assert.match(sheet, /threshold: 12,/, '起拖阈值太小，点那道横杠时的手抖会被当成拖动');
+  assert.match(sheet, /function playExit\(/, '关闭没有退场动画');
+  assert.match(sheet, /export const sheetIsOpen = \(\) => !!wrap && !wrap\.hidden && !closing;/,
+    '退场期间 sheetIsOpen 仍报 true，调用方会以为它还开着');
+  // 状态同步、只有画面留给动画：调用方依赖 onClose 就在关的那一刻跑
+  assert.ok(sheet.indexOf('if (fn) fn();') < sheet.indexOf('playExit(fromY)'),
+    'onClose 必须在退场动画之前同步跑完');
+  // 退场没跑完又开一层时，要掐掉上一次的收尾，否则新的这层会被清空
+  assert.match(sheet, /if \(exitAnim\) \{ exitAnim\.cancel\(\); exitAnim = null; \}/,
+    '重新打开时没有掐掉上一次的退场动画');
 });

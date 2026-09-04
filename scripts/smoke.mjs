@@ -429,14 +429,25 @@ try {
       if (!grid) return null;
       const cells = [...grid.querySelectorAll('.metric-cell')];
       const tops = [...new Set(cells.map((c) => Math.round(c.getBoundingClientRect().top)))];
-      const rows = tops.map((t) => cells.filter((c) => Math.round(c.getBoundingClientRect().top) === t).length);
-      return { rows, cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
+      const boxes = tops.map((t) => cells
+        .filter((c) => Math.round(c.getBoundingClientRect().top) === t)
+        .map((c) => c.getBoundingClientRect()));
+      /*
+       * 平衡不是平均：末行那几格要和第一行的前几格同宽同起点，
+       * 末尾空一格是事实。居中会让它落在半格上，拉宽占满会让两行的列错开。
+       */
+      const misaligned = boxes.slice(1).some((row) => row
+        .some((b, i) => Math.abs(b.left - boxes[0][i].left) > 0.6
+          || Math.abs(b.width - boxes[0][i].width) > 0.6));
+      return { rows: boxes.map((b) => b.length), misaligned,
+        cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
     });
     if (!r) badLayouts.push(`${n} 项没渲染出格子`);
     else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
     else if (r.rows.length > 1 && r.rows[r.rows.length - 1] === 1) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一个`);
+    else if (r.misaligned) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，两行的列没对齐`);
   }
-  check('健康数据 1~8 项都排得平整', badLayouts.length === 0, badLayouts.join('；'));
+  check('健康数据 1~8 项都排得平整，末行按列对齐', badLayouts.length === 0, badLayouts.join('；'));
 
   /*
    * 颜色语义：红色只留给真上限。
