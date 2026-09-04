@@ -84,7 +84,10 @@ async function removeExerciseWithUndo(exercise) {
   const index = current.findIndex((item) => item.id === exercise.id);
   if (index < 0) return;
   const removed = cloneTrainingItem(current[index]);
+  // 撤掉最后一个动作时「今日动作」那张卡会消失，挑选卡往上跳，同样要补
+  const restore = keepPickerInPlace();
   await updateSession((items) => items.filter((item) => item.id !== exercise.id));
+  restore();
   toast(`已移除「${exercise.name}」`, 'info', {
     label: '撤销',
     onClick: () => updateSession((items) => {
@@ -532,11 +535,36 @@ function pickerCard(rerender) {
 }
 
 /** 勾中的这一批一次加进计划：一次落库、一次重绘 */
+/*
+ * 记住挑选卡在视口里的位置，重绘之后把滚动补回来。
+ *
+ * 加进第一个动作时，页面顶部会**从无到有**多出一张「今日动作」卡，
+ * 把挑选卡整个往下推 —— 实测 173px。滚动位置本身没变，可你刚才盯着的
+ * 那一行已经跑到屏幕下半截，看起来就像页面自己跳了回去、搜索结果也没了
+ * （其实搜索词一直在）。撤掉最后一个动作时那张卡消失，是反方向的同一件事。
+ *
+ * 锚点用挑选卡而不是某一行：搜索态和列表态下它都在，行却可能被换掉。
+ */
+function keepPickerInPlace() {
+  const view = document.querySelector('main.view');
+  const before = document.querySelector('.exercise-picker-card')?.getBoundingClientRect().top;
+  if (!view || before == null) return () => {};
+  return () => {
+    const after = document.querySelector('.exercise-picker-card')?.getBoundingClientRect().top;
+    if (after == null) return;
+    const shift = after - before;
+    if (Math.abs(shift) < 1) return;
+    view.scrollTop += shift;
+  };
+}
+
 async function commitPending() {
   const ids = [...pending].filter((id) => !picked().includes(id));
   if (!ids.length) { pending = new Set(); return; }
+  const restore = keepPickerInPlace();
   pending = new Set();
   await updateSession((items) => [...items, ...ids.map((id) => ({ id, sets: [], done: false }))]);
+  restore();
   toast(`已加入 ${ids.length} 个动作`, 'ok');
 }
 

@@ -744,10 +744,16 @@ try {
    * 设置主页是一张分组列表：每组一行，点进去才是那张表单。
    * 光看得见五行不算数——真正会坏的是「点进去里面是空的」，所以逐个点开看。
    */
-  const drawer = await page.$$eval('.settings-drawer .set-row .set-title', (h) => h.map((x) => x.textContent.trim()));
+  /*
+   * 行的类名是 .settings-row，不是 .set-row —— 后者是训练页记组数那一行。
+   * 这条守卫曾经查着 .set-row，两边同名的时候看着是对的；设置行改名之后
+   * 它就一直匹配到 0 个元素、报「一行都没有」，而设置页本身好好的。
+   * 查不到元素时报「一行都没有」和真的坏掉长得一模一样，所以下面额外断言行数是 5。
+   */
+  const drawer = await page.$$eval('.settings-drawer .settings-row .set-title', (h) => h.map((x) => x.textContent.trim()));
   const opened = [];
   for (let i = 0; i < drawer.length; i += 1) {
-    await page.evaluate((n) => document.querySelectorAll('.settings-drawer .set-row')[n]?.click(), i);
+    await page.evaluate((n) => document.querySelectorAll('.settings-drawer .settings-row')[n]?.click(), i);
     await page.waitForTimeout(250);
     const inner = await page.evaluate(() => ({
       back: !!document.querySelector('.settings-drawer .set-back-btn'),
