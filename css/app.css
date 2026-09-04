@@ -1448,6 +1448,11 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  *  - body 钉成 fixed —— iOS 上只给 overflow:hidden 拦不住手指拖动。
  */
 .sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+/*
+ * 点食物打开弹层时，iOS 会把同一次触摸再派成一次点击，落到刚出现的遮罩或取消键上。
+ * 升起那一小段时间整层不接事件，这份点击才会被丢掉，而不是把弹层立刻关掉。
+ */
+.sheet-wrap.is-opening { pointer-events: none; }
 .sheet-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, .34);
   animation: sheet-fade .18s ease;

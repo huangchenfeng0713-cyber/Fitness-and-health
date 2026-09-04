@@ -141,7 +141,11 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
   assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
   // 背景点一下、Esc 都要能关
-  assert.match(sheet, /sheet-backdrop', \{ onclick: \(\) => closeSheet\(\) \}/, '点背景关不掉弹层');
+  assert.match(sheet, /if \(!stillOpening\(\)\) closeSheet\(\)/, '点背景关不掉弹层');
+  assert.match(sheet, /const OPEN_GUARD_MS = \d+/, '打开弹层后没有挡住同一次触摸补派的点击');
+  assert.match(sheet, /wrap\.classList\.add\('is-opening'\)/, '打开瞬间没有给弹层加上不接事件的状态');
+  assert.match(css, /\.sheet-wrap\.is-opening \{ pointer-events: none; \}/,
+    '打开瞬间弹层仍接得到那次补派的点击');
   assert.match(sheet, /ev\.key === 'Escape'/, 'Esc 关不掉弹层');
 });
 
