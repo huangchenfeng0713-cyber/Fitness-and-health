@@ -2167,3 +2167,92 @@ test('动画只在真的变了的时候跑，且都躲开「减少动态效果�
   assert.match(diet, /await collapseRow\(btn\.closest\('\.entry-row'\)\)/,
     '删记录时那一行应当先收拢再落库');
 });
+
+test('同一个选择器不许把同一个属性写两遍', () => {
+  /*
+   * 这条规矩 CLAUDE.md 里立过，但一直没人执行 —— 实测全文件有 45 处。
+   * 其中一半不是无害的重复，是**写在组件旁边的值根本不作数**：
+   * `.card-head h3` 写着 letter-spacing: 0，文件后面又改成 -.015em；
+   * `.card-tag` 写着 caption/faint，后面被统一成 footnote/muted；
+   * `.chart-note` 的 padding 写了 9px 11px，后面又写 11px 13px。
+   * 看代码的人得先算层叠顺序才知道真值，改样式时改到的那一份往往是死代码。
+   *
+   * @media 里的覆写不算，那是正当的第二次声明。
+   */
+  const css = read('css/app.css');
+  const noComment = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  // 把 @media / @supports 整段跳过
+  let rest = '';
+  for (let i = 0; i < noComment.length;) {
+    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i)) {
+      let depth = 0;
+      let j = i;
+      for (; j < noComment.length; j += 1) {
+        if (noComment[j] === '{') depth += 1;
+        else if (noComment[j] === '}') { depth -= 1; if (depth === 0) { j += 1; break; } }
+      }
+      i = j;
+    } else { rest += noComment[i]; i += 1; }
+  }
+  const bySelector = new Map();
+  for (const match of rest.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = match[1].trim().replace(/\s+/g, ' ');
+    if (selector.startsWith('@') || selector.startsWith(':root')) continue;
+    for (const one of selector.split(',').map((x) => x.trim()).filter(Boolean)) {
+      if (!bySelector.has(one)) bySelector.set(one, []);
+      for (const decl of match[2].split(';')) {
+        const prop = decl.split(':')[0].trim();
+        if (prop) bySelector.get(one).push(prop);
+      }
+    }
+  }
+  const dupes = [];
+  for (const [selector, props] of bySelector) {
+    const seen = new Set();
+    for (const prop of props) {
+      if (seen.has(prop)) dupes.push(`${selector} → ${prop}`);
+      seen.add(prop);
+    }
+  }
+  assert.equal(dupes.length, 0, `同一属性写了两遍：${dupes.slice(0, 8).join('；')}`);
+});
+
+test('字重只有四档，和字号一样是个阶梯', () => {
+  /*
+   * 分不出粗细的层级不是层级 —— 和字号那七档是同一条道理。
+   * 重构前散着 400 / 450 / 500 / 550 / 560 / 600 / 620 / 650 / 680 / 700 十个值，
+   * 而 550 和 560、650 和 680 在 SF 上肉眼分不出；更糟的是同一件事拿了不同的值：
+   * 数值有 600 也有 650，食物名在推荐卡里 600、在饮食记录里 550，
+   * `.chip-btn` 是 650 而选中之后降到 600 —— 按下去字反而变细。
+   */
+  const css = read('css/app.css');
+  const raw = [...css.matchAll(/font-weight:\s*(\d+)/g)].map((m) => m[1]);
+  assert.deepEqual(raw, [], `字重要写 var(--w-*)，别写裸数字：还有 ${raw.length} 处`);
+  for (const name of ['--w-regular: 400', '--w-medium: 500', '--w-semibold: 600', '--w-bold: 700']) {
+    assert.ok(css.includes(name), `字重阶梯少了 ${name}`);
+  }
+  const used = new Set([...css.matchAll(/font-weight:\s*var\((--w-[a-z]+)\)/g)].map((m) => m[1]));
+  for (const token of used) {
+    assert.ok(['--w-regular', '--w-medium', '--w-semibold', '--w-bold'].includes(token),
+      `${token} 不在四档里`);
+  }
+});
+
+test('两个页面上的「把这一行加进来」长得一样大', () => {
+  // 圆的直径已经共用 --control-inline，里面那个加号也得共用一个尺寸：
+  // 实测饮食页 20px、健身页 21.25px（那边没写死，1.25em 跟着 17px 的行盒走）。
+  const css = read('css/app.css');
+  assert.match(css, /\.add-btn \.icon-slot svg,\s*\n\.exercise-choice-action \.icon-slot svg \{[^}]*var\(--icon-md\)/,
+    '饮食页和健身页的加号没有共用同一条尺寸规则');
+});
+
+test('图上的字不小于全应用的可读下限', () => {
+  // --fs-caption 12px 是写死的下限，而趋势图的日期和刻度曾经是 9.5 / 10px，
+  // 是全屏最小的字。提上来之后左边留白要跟着算，否则五位数会被切掉第一位。
+  const charts = read('js/lib/charts.js');
+  assert.match(charts, /const AXIS_FONT = 11;/, '轴字号没有收进一个常量');
+  assert.doesNotMatch(charts, /'font-size': (9\.5|10)\b/, '图上还有小于 11px 的字');
+  assert.match(charts, /function axisPad\(/, '纵轴留白没有按最长刻度算');
+  const uses = (charts.match(/pad\.l = axisPad\(/g) || []).length;
+  assert.equal(uses, 2, `折线图和柱状图都要算留白，实际 ${uses} 处`);
+});

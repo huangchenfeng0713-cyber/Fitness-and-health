@@ -106,6 +106,21 @@
   --fs-display: 26px;      /* 圆环里的大数 */
 
   /*
+   * 字重四档，理由和字号那七档一模一样：**分不出粗细的层级不是层级**。
+   *
+   * 重构前散着 400 / 450 / 500 / 550 / 560 / 600 / 620 / 650 / 680 / 700
+   * 十个值，而 550 和 560、650 和 680 在 SF 上肉眼分不出。更糟的是同一件事
+   * 拿了不同的值：数值有 600 也有 650，食物名在推荐里是 600、在饮食记录里是 550，
+   * 而 `.chip-btn` 是 650、选中之后反而降到 600 —— 按下去字变细了。
+   *
+   * 新增样式从这四档里挑，别再自己造一个中间值。
+   */
+  --w-regular: 400;        /* 正文、说明 */
+  --w-medium: 500;         /* 单位、弱标签、次要按钮 */
+  --w-semibold: 600;       /* 数值、列表主行、按钮 */
+  --w-bold: 700;           /* 卡片标题、页面标题、主数字 */
+
+  /*
    * 圆角四档。别再引入 --radius / --radius-sm 那种别名 ——
    * 它们只是 --r-lg / --r-md 的另一个名字，结果同一个圆角有两种写法，
    * 「从这几档里挑」这句话就没法执行了。
@@ -275,8 +290,9 @@ html, body { height: 100%; overflow: hidden; }
 .topbar-context:has(.topbar-day) .nav-arrow { position: relative; z-index: 2; }
 .topbar-page-context { flex-direction: column; align-items: flex-start; gap: 0; padding-left: 4px; }
 .topbar-page-context h1 { margin-left: 0; line-height: 1.15; }
+/* 颜色和字号由下面「说明类小字」那条统一给，这里不再写第二份 */
 .topbar-context-note {
-  max-width: 100%; margin-top: 2px; color: var(--faint); font-size: var(--fs-caption);
+  max-width: 100%; margin-top: 2px;
   line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .topbar-settings-btn {
@@ -293,7 +309,7 @@ html, body { height: 100%; overflow: hidden; }
  * 不靠加粗加色加背景。
  */
 .topbar h1 {
-  font-size: var(--fs-display); margin: 0 0 0 2px; font-weight: 700; letter-spacing: -.02em;
+  font-size: var(--fs-display); margin: 0 0 0 2px; font-weight: var(--w-bold); letter-spacing: -.02em;
 }
 
 /* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
@@ -304,7 +320,7 @@ html, body { height: 100%; overflow: hidden; }
   border: 0; background: none; color: inherit; font-family: inherit;
   cursor: pointer; padding: 2px 4px;
 }
-.topbar-day strong { font-size: var(--fs-headline); font-weight: 700; letter-spacing: 0; }
+.topbar-day strong { font-size: var(--fs-headline); font-weight: var(--w-bold); letter-spacing: 0; }
 .topbar-date { display: block; font-size: var(--fs-caption); color: var(--faint); margin-top: 1px; }
 /* 返回箭头是画出来的，不是打出来的：和底栏、健康数据那几个图标同一套描边参数 */
 .topbar-date.back { display: flex; align-items: center; justify-content: center; gap: 3px; }
@@ -378,7 +394,7 @@ html, body { height: 100%; overflow: hidden; }
  * iOS 的标签栏从来不在图标后面画色块——那一小块绿底会把视线钉在底栏上，
  * 而底栏本来就该是最不起眼的一层。加粗 + 变色已经够分辨了。
  */
-.tab.active { color: var(--accent); font-weight: 620; }
+.tab.active { color: var(--accent); font-weight: var(--w-semibold); }
 /*
  * 选中态也不加粗描边。原先 1.8 → 2.1，于是同一个图标在底栏上有两种粗细，
  * 而「统一描边」这条规矩恰恰是从底栏定下来的。染色 + 字重已经够分辨了。
@@ -429,7 +445,7 @@ html, body { height: 100%; overflow: hidden; }
   gap: var(--space-2); margin-bottom: var(--space-3);
 }
 .card-head > div { min-width: 0; }
-.card-head h3 { margin: 0; font-size: var(--fs-headline); line-height: 1.35; font-weight: 680; letter-spacing: 0; }
+.card-head h3 { margin: 0; font-size: var(--fs-headline); line-height: 1.35; font-weight: var(--w-bold); letter-spacing: -.015em; }
 /*
  * 卡头右边那一格钉死在一个标题行高上。
  *
@@ -446,9 +462,10 @@ html, body { height: 100%; overflow: hidden; }
   min-width: 0; height: var(--card-head-line);
 }
 .card-head-actions .card-tag { max-width: 180px; }
-.card-desc { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-footnote); line-height: 1.55; font-weight: 400; }
+.card-desc { margin: 4px 0 0; color: var(--muted); font-size: var(--fs-footnote); line-height: 1.55; font-weight: var(--w-regular); }
+/* 颜色和字号由下面「说明类小字」那条统一给，这里不再写第二份 */
 .card-tag {
-  max-width: 44%; font-size: var(--fs-caption); line-height: 1.4; color: var(--faint);
+  max-width: 44%; line-height: 1.4;
   text-align: right; flex-shrink: 0; overflow-wrap: anywhere;
   /*
    * 中文默认可以在任意两个字之间断行，「1g 蛋白」会被断成「蛋 / 白」。
@@ -508,7 +525,7 @@ html, body { height: 100%; overflow: hidden; }
   padding: 11px 12px;
   border: 1px solid var(--border); border-radius: var(--r-md);
   background: var(--card); color: var(--muted); box-shadow: 0 12px 36px rgba(9, 28, 22, .16);
-  font-size: var(--fs-caption); line-height: 1.55; text-align: left; font-weight: 400;
+  font-size: var(--fs-caption); line-height: 1.55; text-align: left; font-weight: var(--w-regular);
   visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(-2px);
   transition: opacity .12s ease, transform .12s ease;
 }
@@ -520,13 +537,14 @@ html, body { height: 100%; overflow: hidden; }
 .info-tip-panel ul { margin: 0; padding-left: 18px; }
 .info-tip-panel li + li { margin-top: 5px; }
 .info-tip-panel strong {
-  color: var(--text); font-size: inherit; line-height: inherit; font-weight: 650;
+  color: var(--text); font-size: inherit; line-height: inherit; font-weight: var(--w-semibold);
 }
 
 .card-danger { border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); }
 
 .empty-hint { color: var(--muted); font-size: var(--fs-body); margin: 6px 0; }
-.form-hint { color: var(--faint); font-size: var(--fs-footnote); margin: 8px 0 0; }
+/* 颜色和字号由下面「说明类小字」那条统一给 */
+.form-hint { margin: 8px 0 0; }
 .warn-note {
   margin: 10px 0 0; padding: 9px 11px; font-size: var(--fs-footnote); line-height: 1.5;
   background: color-mix(in srgb, var(--warn) 12%, transparent);
@@ -542,10 +560,10 @@ html, body { height: 100%; overflow: hidden; }
 
 .hero-head { display: flex; align-items: center; gap: 10px; }
 .hero-head-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 1; }
-.hero-head h2 { font-size: var(--fs-headline); margin: 0; font-weight: 650; letter-spacing: -.015em; }
+.hero-head h2 { font-size: var(--fs-headline); margin: 0; font-weight: var(--w-bold); letter-spacing: -.015em; }
 .status-pill {
   font-size: var(--fs-caption); padding: 2.5px 9px; border-radius: 999px; white-space: nowrap;
-  background: var(--accent-soft); color: var(--accent); font-weight: 600;
+  background: var(--accent-soft); color: var(--accent); font-weight: var(--w-semibold);
 }
 .hero.warn .status-pill { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
 .hero.bad .status-pill { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
@@ -589,7 +607,13 @@ html, body { height: 100%; overflow: hidden; }
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
  * 它只是主卡的一部分，下面还有蛋白、碳水脂肪和四个方框要看。
  */
-.energy-ring { display: block; width: min(168px, 46vw); height: auto; overflow: visible; }
+/*
+ * 环占住卡片里那块地方。
+ *
+ * 环两侧那两列文字删掉之后，宽度一直停在 168px —— 卡片内宽 329px，
+ * 于是左右各空着 80px 什么都没有，而这是整张主卡最该看清的东西。
+ */
+.energy-ring { display: block; width: min(232px, 62vw); height: auto; overflow: visible; }
 
 /*
  * 图例：一项对着环上一条弧。色块的颜色和深浅必须和环上完全一致 ——
@@ -602,7 +626,7 @@ html, body { height: 100%; overflow: hidden; }
 .ring-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .ring-legend-k { color: var(--muted); }
 .ring-legend-v {
-  font-size: var(--fs-body); font-weight: 650; font-variant-numeric: tabular-nums;
+  font-size: var(--fs-body); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 /*
@@ -684,11 +708,12 @@ html, body { height: 100%; overflow: hidden; }
 }
 .metric-row-label { color: var(--muted); white-space: nowrap; }
 .metric-row-value {
-  font-size: var(--fs-value); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
+  font-size: var(--fs-value); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 /* 说明推到最右：左边是「多少」，右边是「这个多少意味着什么」 */
+/* 颜色和字号由下面「说明类小字」那条统一给，这里不再写第二份 */
 .metric-row-note {
-  margin-left: auto; color: var(--faint); font-size: var(--fs-caption);
+  margin-left: auto;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /*
@@ -697,7 +722,7 @@ html, body { height: 100%; overflow: hidden; }
  */
 .metric-row.met .metric-row-note { color: var(--accent); }
 .metric-row.near .metric-row-note { color: var(--warn); }
-.metric-row.over .metric-row-note { color: var(--danger); font-weight: 600; }
+.metric-row.over .metric-row-note { color: var(--danger); font-weight: var(--w-semibold); }
 .metric-row.over .metric-row-value { color: var(--danger); }
 
 /*
@@ -722,7 +747,7 @@ html, body { height: 100%; overflow: hidden; }
   padding: 7px 8px; font-size: var(--fs-caption); min-width: 0;
 }
 .micro-label { grid-column: 1 / -1; text-align: center; white-space: nowrap; color: var(--faint); }
-.micro-val { font-weight: 650; font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.micro-val { font-weight: var(--w-semibold); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
 .micro-target { color: var(--faint); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
 /* 记录类只有一个数，单位跟在后面——它没有分母，写成分数就等于凭空给了个目标 */
 .micro-unit { color: var(--faint); font-size: var(--fs-caption); }
@@ -821,15 +846,15 @@ html, body { height: 100%; overflow: hidden; }
 .rec-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
 .rec-list > .rec-row:first-child { border-top: 0; padding-top: 4px; }
 .rec-info { flex: 1; min-width: 0; }
-.rec-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-value); font-weight: 600; flex-wrap: wrap; }
-.rec-portion { font-size: var(--fs-footnote); color: var(--accent); font-weight: 600; margin-top: 2px; }
+.rec-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-value); font-weight: var(--w-semibold); flex-wrap: wrap; }
+.rec-portion { font-size: var(--fs-footnote); color: var(--accent); font-weight: var(--w-semibold); margin-top: 2px; }
 .rec-reasons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .reason {
   font-size: var(--fs-caption); color: var(--muted); background: var(--card-2);
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border);
 }
 .rec-nums { text-align: right; flex-shrink: 0; line-height: 1.25; }
-.rec-kcal { font-size: var(--fs-headline); font-weight: 680; font-variant-numeric: tabular-nums; }
+.rec-kcal { font-size: var(--fs-headline); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .rec-unit { font-size: var(--fs-caption); color: var(--faint); margin-left: 2px; }
 /* 推荐行里的蛋白克数是说明文字，不是图 —— 数据色只在图表和营养条上用 */
 .rec-prot { display: block; font-size: var(--fs-caption); color: var(--muted); }
@@ -845,9 +870,15 @@ html, body { height: 100%; overflow: hidden; }
   display: flex; align-items: center; justify-content: center;
   transition: transform .12s, opacity .15s, background-color .12s;
 }
-.add-btn .icon-slot svg { width: var(--icon-md); height: var(--icon-md); }
+/*
+ * 「把这一行加进来」在饮食页和健身页是同一件事，圆的直径已经共用
+ * --control-inline，里面那个加号也得共用一个尺寸 —— 各写一遍必然会漂：
+ * 实测饮食页 20px、健身页 21.25px（那边没写死，1.25em 跟着 17px 的行盒走）。
+ */
+.add-btn .icon-slot svg,
+.exercise-choice-action .icon-slot svg { width: var(--icon-md); height: var(--icon-md); }
+/* 按下去的缩放和主按钮共用一条（见下面「按钮」那一节），这里只管配色 */
 .add-btn:active {
-  transform: scale(.9);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
@@ -866,7 +897,7 @@ html, body { height: 100%; overflow: hidden; }
   padding: 0 5px; border-radius: var(--r-xs); white-space: nowrap;
   display: inline-flex; align-items: center;
   /* 行高压到和正文一样高：1.6 会让这块比它注解的食物名还高一截 */
-  font-size: var(--fs-caption); line-height: 1.35; font-weight: 450;
+  font-size: var(--fs-caption); line-height: 1.35; font-weight: var(--w-medium);
   background: var(--card-2); color: var(--faint); border: 1px solid transparent;
 }
 .ui-weak-tag-soft { background: var(--card-2); color: var(--faint-readable); }
@@ -881,7 +912,7 @@ html, body { height: 100%; overflow: hidden; }
   color: var(--faint);
   border-color: color-mix(in srgb, var(--faint) 26%, transparent);
   font-size: var(--fs-caption);
-  font-weight: 450;
+  font-weight: var(--w-medium);
 }
 .search-item-tags { display: flex; gap: 4px; flex-shrink: 0; }
 
@@ -904,8 +935,8 @@ html, body { height: 100%; overflow: hidden; }
 /* ============ 健康摘要 ============ */
 .health-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 6px; }
 .health-cell { text-align: center; min-width: 0; }
-.health-value { font-size: var(--fs-headline); font-weight: 650; font-variant-numeric: tabular-nums; }
-.health-unit { font-size: var(--fs-caption); color: var(--faint); font-weight: 400; margin-left: 1px; }
+.health-value { font-size: var(--fs-headline); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums; }
+.health-unit { font-size: var(--fs-caption); color: var(--faint); font-weight: var(--w-regular); margin-left: 1px; }
 .health-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 1px; }
 
 /* ============ 展开按钮 ============ */
@@ -934,7 +965,7 @@ html, body { height: 100%; overflow: hidden; }
  * 读的人会以为它是第三种严重程度 —— 它其实就是「值得注意」。
  */
 .insight.down, .insight.fiber { border-left-color: var(--warn); }
-.insight-title { font-size: var(--fs-body); font-weight: 600; }
+.insight-title { font-size: var(--fs-body); font-weight: var(--w-semibold); }
 /* 建议是「那我该做什么」；判断依据集中收进卡片右上角的一个入口。 */
 .insight-action { font-size: var(--fs-footnote); color: var(--muted); line-height: 1.6; margin-top: 3px; }
 .insight-main { min-width: 0; }
@@ -951,7 +982,7 @@ html, body { height: 100%; overflow: hidden; }
 .plan-row-wrap { border-bottom: 1px solid var(--border); }
 .plan-row-wrap:last-child { border-bottom-color: transparent; }
 .plan-row-wrap .plan-row { border-bottom: 0; }
-.text-btn.has-sets { color: var(--accent); font-weight: 600; }
+.text-btn.has-sets { color: var(--accent); font-weight: var(--w-semibold); }
 /* 一行四列本来就挤：按钮不换行、不参与收缩，把宽度全留给动作名和肌肉行 */
 .plan-row .text-btn { flex: none; white-space: nowrap; }
 
@@ -964,8 +995,8 @@ html, body { height: 100%; overflow: hidden; }
 /* 输入框要够大才好点：iOS 上小于 16px 的字号会触发页面缩放 */
 .set-input {
   width: 68px; min-width: 0; padding: 7px 8px; font-size: var(--fs-headline);
-  border: 1px solid var(--border); border-radius: var(--r-sm);
-  background: var(--card-2); color: var(--text);
+  /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
+  color: var(--text);
   font-variant-numeric: tabular-nums; text-align: center;
 }
 .set-unit { font-size: var(--fs-footnote); color: var(--faint); white-space: nowrap; }
@@ -1001,7 +1032,14 @@ html, body { height: 100%; overflow: hidden; }
  * 最后总剩一个孤零零贴在左边。改成居中的格子后，凑不满的那行自己居中，
  * 剩一个剩两个都还是对称的。
  */
-.metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 6px; --metric-cols: 3; }
+/*
+ * 最后一行不居中。
+ *
+ * metricColumns 保证第一行一定是满的，所以居中只会影响末行：7 项排成 4 + 3 时，
+ * 第二行三格被推到半格的位置上，图标和上一行对不齐，整张卡看着在晃。
+ * 靠左排的话空的是最后一格，读出来是「这一项今天没有」，那正是事实。
+ */
+.metric-grid { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 16px 6px; --metric-cols: 3; }
 .metric-cell {
   flex: 0 0 calc((100% - (var(--metric-cols) - 1) * 6px) / var(--metric-cols));
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -1011,7 +1049,7 @@ html, body { height: 100%; overflow: hidden; }
 .metric-body { min-width: 0; }
 /* 中文默认可在任意两字之间断行，「静息心率」会被拆成两截 */
 .metric-value {
-  font-size: var(--fs-headline); font-weight: 600; line-height: 1.15;
+  font-size: var(--fs-headline); font-weight: var(--w-semibold); line-height: 1.15;
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 /*
@@ -1019,7 +1057,7 @@ html, body { height: 100%; overflow: hidden; }
  * nowrap 让它直接把格子撑破——密一档的排布得配密一档的字号。
  */
 .metric-grid.cols-4 .metric-value { font-size: var(--fs-value); }
-.metric-unit { font-size: var(--fs-caption); font-weight: 500; color: var(--muted); }
+.metric-unit { font-size: var(--fs-caption); font-weight: var(--w-medium); color: var(--muted); }
 .metric-unit.gap { margin-left: 3px; }
 .metric-label { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; white-space: nowrap; }
 /* 缺数据那格整体压暗：那道杠不该和真实数字一样醒目 */
@@ -1053,16 +1091,17 @@ html, body { height: 100%; overflow: hidden; }
 /* ============ 按钮 / 表单 ============ */
 button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
 
+/* 圆角、字重、过渡在下面「按钮」那一节里和次按钮一起给，这里只管排布和配色 */
 .primary-btn {
-  width: 100%; padding: 11px; border: 0; border-radius: var(--r-md);
-  background: var(--accent); color: #fff; font-weight: 650; font-size: var(--fs-value);
-  cursor: pointer; margin-top: 12px; transition: opacity .15s;
+  width: 100%; padding: 11px; border: 0;
+  background: var(--accent); color: #fff; font-size: var(--fs-value);
+  cursor: pointer; margin-top: 12px;
 }
 .primary-btn:active { opacity: .8; }
 
 /* 配色在下面「按钮」那一节里统一给，这里只管排布 —— 别再各写各的底色。 */
 .secondary-btn {
-  flex: 1; padding: 10px; border-radius: var(--r-md);
+  flex: 1; padding: 10px;
   /* 和实心主按钮并排站，字号必须一样 —— 早先它比旁边小一档，一眼看得出没对齐 */
   font-size: var(--fs-value); cursor: pointer; text-align: center;
 }
@@ -1070,7 +1109,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .text-btn {
   border: 0; background: none; color: var(--accent); min-height: var(--control-sm);
-  font-size: var(--fs-body); cursor: pointer; padding: 5px 6px; font-weight: 550;
+  font-size: var(--fs-body); cursor: pointer; padding: 5px 6px; font-weight: var(--w-medium);
 }
 .text-btn.danger { color: var(--danger); }
 
@@ -1085,7 +1124,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .mini-btn {
   border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent);
-  font-size: var(--fs-footnote); font-weight: 650; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  font-size: var(--fs-footnote); font-weight: var(--w-semibold); padding: 4px 10px; border-radius: 999px; cursor: pointer;
   white-space: nowrap;
 }
 .mini-btn:disabled { opacity: .5; }
@@ -1099,7 +1138,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   border: 1px solid var(--border); background: var(--card-2); color: var(--muted);
   border-radius: 999px; padding: 4.5px 11px; font-size: var(--fs-footnote); cursor: pointer; white-space: nowrap;
 }
-.chip-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.chip-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: var(--w-semibold); }
 
 .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -1115,8 +1154,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  * 一行 40 一行 42，整张表看着像没对齐。高度显式钉在阶梯的 --control-inline 上。
  */
 .form-field input, .form-field select {
-  padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-md);
-  background: var(--card-2); color: var(--text);
+  padding: 9px 10px;
+  /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
+  color: var(--text);
   width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
   height: var(--control-inline); line-height: 1.2;
   font-size: var(--fs-headline);   /* iOS Safari 对小于 16px 的输入框会自动放大页面 */
@@ -1132,7 +1172,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .field-hint { font-size: var(--fs-caption); color: var(--faint); line-height: 1.4; }
 /* 填速率时的即时判断：越线是橙（能存，只是有代价），填错是红（存不下去） */
 .rate-hint.over { color: var(--warn); }
-.rate-hint.absurd { color: var(--danger); font-weight: 600; }
+.rate-hint.absurd { color: var(--danger); font-weight: var(--w-semibold); }
 
 .toggle-row {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
@@ -1226,7 +1266,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .exercise-meta-tag + .exercise-meta-tag::before {
   content: '·'; margin-right: 5px; color: var(--border);
 }
-.exercise-meta-tag.pattern { color: var(--muted); font-weight: 560; }
+.exercise-meta-tag.pattern { color: var(--muted); font-weight: var(--w-medium); }
 .exercise-meta-tag.type { color: var(--faint); }
 /* 「上次 60kg × 8,8,6」：比标签还轻一档，扫列表时不该跟动作名抢 */
 .ex-last {
@@ -1296,7 +1336,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   color: var(--accent); font-size: var(--fs-body); display: inline-flex;
   align-items: center; gap: 2px;
 }
-.set-back strong { font-size: var(--fs-body); color: var(--muted); font-weight: 600; }
+.set-back strong { font-size: var(--fs-body); color: var(--muted); font-weight: var(--w-semibold); }
 
 /* ============ 记录页 ============ */
 
@@ -1321,8 +1361,9 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 .search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .search-card-head { margin-bottom: 10px; }
 .search-input {
-  flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border);
-  border-radius: var(--r-md); background: var(--card-2); color: var(--text);
+  flex: 1; min-width: 0; padding: 10px 12px;
+  /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
+  color: var(--text);
   font-size: var(--fs-headline);   /* 同上：避免 iOS 聚焦时缩放页面 */
 }
 .search-results { margin-top: 10px; display: flex; flex-direction: column; }
@@ -1353,7 +1394,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .result-caption {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
-  margin: 11px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: 600;
+  margin: 11px 2px 2px; color: var(--faint); font-size: var(--fs-caption); font-weight: var(--w-semibold);
 }
 /*
  * 可关闭的筛选胶囊：这一屏是从今日提示跳进来的，得有个看得见的出口。
@@ -1427,7 +1468,7 @@ body.sheet-open {
   overflow: hidden;
 }
 
-.sheet-title { margin: 2px 0 12px; font-size: var(--fs-headline); font-weight: 650; text-align: center; }
+.sheet-title { margin: 2px 0 12px; font-size: var(--fs-headline); font-weight: var(--w-bold); text-align: center; }
 .sheet-summary { margin: 12px 0 0; text-align: center; font-size: var(--fs-body); color: var(--muted); }
 .water-sheet { display: flex; flex-direction: column; align-items: center; }
 .water-sheet .water-ring { margin-top: 4px; }
@@ -1468,7 +1509,7 @@ body.sheet-open {
 }
 .week-row:last-child > * { border-bottom-color: transparent; }
 .week-row-label { padding-right: 10px; font-size: var(--fs-footnote); color: var(--muted); }
-.week-row-value { padding-right: 8px; font-size: var(--fs-body); font-weight: 600; white-space: nowrap; }
+.week-row-value { padding-right: 8px; font-size: var(--fs-body); font-weight: var(--w-semibold); white-space: nowrap; }
 /* 字号和颜色由下面那条「抬高真正承担信息的小字」统一给，这里只管排版 */
 .week-row-note { min-width: 0; }
 /* 只有两档着色：做到了给绿，该留意给橙。小结不是体检报告，不上红色 */
@@ -1476,7 +1517,7 @@ body.sheet-open {
 .week-row.warn .week-row-value { color: var(--warn); }
 
 /* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
-.chip-focus { color: var(--accent); font-weight: 600; }
+.chip-focus { color: var(--accent); font-weight: var(--w-semibold); }
 .chip-focus.active { color: var(--card); background: var(--accent); border-color: var(--accent); }
 
 /* 可点的提示：右下角一行「去看…›」，告诉人这条能点 */
@@ -1484,14 +1525,15 @@ body.sheet-open {
   display: block; width: 100%; text-align: left;
   border: 0; background: none; padding: 0; font: inherit; cursor: pointer;
 }
-.insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: 600; }
+.insight-go { margin-top: 4px; font-size: var(--fs-caption); color: var(--accent); font-weight: var(--w-semibold); }
 
 /* 喝水：一个大点击区 + 次数。不画完成条 —— 它没有「该喝几次」这回事 */
 /*
  * 喝水一行：左边一条浅绿的状态条，右边一个「＋饮水」。
  * 状态条不是按钮 —— 点击区只有一个，免得点哪儿都能加一次。
  */
-.water-row { display: flex; align-items: center; gap: 10px; }
+/* 两块并排等高，所以是 stretch 不是 center —— 高度在下面那条里和按钮一起给 */
+.water-row { display: flex; align-items: stretch; gap: 10px; }
 /*
  * 状态条走中性灰，只有右边那个按钮染色。
  *
@@ -1500,10 +1542,10 @@ body.sheet-open {
  * 染成主色会让人以为它也能按。强调色一屏只用在一个地方。
  */
 .water-pill {
-  flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
+  flex: 1; min-width: 0; gap: 7px;
   padding: 10px 12px; border-radius: var(--r-md);
   background: var(--card-2);
-  color: var(--muted); font-size: var(--fs-footnote); font-weight: 600;
+  color: var(--muted); font-size: var(--fs-footnote); font-weight: var(--w-semibold);
 }
 /*
  * 这一行里唯一该有颜色的是右边那个「＋饮水」。
@@ -1511,8 +1553,6 @@ body.sheet-open {
  * 数据色本来就不该出现在这儿（水滴在弹层里那个环上才是图，那儿保留蓝）。
  */
 .water-pill .water-drop { color: var(--muted); }
-/* 按钮是「做这件事」，属于语义层，仍然是主绿；水滴和计数才是数据色 */
-.water-add { color: var(--accent); }
 .water-drop { width: 17px; height: 17px; flex: none; fill: currentColor; stroke: none; }
 .water-sep { opacity: .5; }
 .water-count {
@@ -1558,12 +1598,13 @@ body.sheet-open {
  * 左边的状态条已经是中性灰了，右边再来一块浅绿填充，两块加起来还是一条色带。
  * 描边 + 绿字既留下「这里能点」的暗示，又不会在一张以灰为底的卡上砸一块颜色。
  */
+/* 按钮是「做这件事」，属于语义层，仍然是主绿；水滴和计数才是数据色 */
 .water-add {
   flex: none; white-space: nowrap; cursor: pointer;
   padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
   border-radius: var(--r-md);
   background: transparent;
-  color: var(--accent); font-weight: 600;
+  color: var(--accent); font-weight: var(--w-semibold);
 }
 .water-add:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
@@ -1612,7 +1653,7 @@ body.sheet-open {
 /* 主行和副行分开摆：挤在一行上「已选 4 样 · 966 kcal · 蛋白 52g」会折成两截 */
 .select-bar-summary-text { min-width: 0; }
 .select-bar-summary-text strong {
-  display: block; font-size: var(--fs-footnote); color: var(--text); font-weight: 600;
+  display: block; font-size: var(--fs-footnote); color: var(--text); font-weight: var(--w-semibold);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .select-bar-detail { display: block; font-size: var(--fs-caption); color: var(--muted); }
@@ -1653,7 +1694,7 @@ body.sheet-open {
 .select-bar-item:last-child { border-bottom-color: transparent; }
 .select-bar-item-main { flex: 1 1 auto; min-width: 0; }
 .select-bar-item-title { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.select-bar-item-main strong { font-size: var(--fs-footnote); font-weight: 500; }
+.select-bar-item-main strong { font-size: var(--fs-footnote); font-weight: var(--w-medium); }
 .select-bar-item-note { display: block; font-size: var(--fs-caption); color: var(--muted); }
 
 .portion-panel { margin-top: 2px; }
@@ -1675,7 +1716,7 @@ body.sheet-open {
 .portion-meal, .unit-row, .qty-quick, .sugar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 .field-label {
-  font-size: var(--fs-footnote); color: var(--faint); margin-top: 14px; font-weight: 600;
+  font-size: var(--fs-footnote); color: var(--faint); margin-top: 14px; font-weight: var(--w-semibold);
 }
 .functional-warning {
   margin: 9px 0 0; padding: 9px 11px; border-radius: var(--r-md);
@@ -1690,7 +1731,7 @@ body.sheet-open {
   border-radius: var(--r-md); padding: 10px;
 }
 .qty-readout { flex: 1; text-align: center; line-height: 1.15; min-width: 0; }
-.qty-value { font-size: var(--fs-display); font-weight: 680; font-variant-numeric: tabular-nums; }
+.qty-value { font-size: var(--fs-display); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .qty-unit { font-size: var(--fs-value); color: var(--muted); margin-left: 4px; }
 .grams-hint { font-size: var(--fs-caption); color: var(--faint); margin-top: 3px; font-variant-numeric: tabular-nums; }
 
@@ -1709,7 +1750,7 @@ body.sheet-open {
 .grams-input {
   flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--border);
   border-radius: var(--r-md); background: var(--card-2); color: var(--text);
-  text-align: center; font-size: var(--fs-headline); font-weight: 600; font-variant-numeric: tabular-nums;
+  text-align: center; font-size: var(--fs-headline); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
 }
 .unit { font-size: var(--fs-footnote); color: var(--faint); }
 
@@ -1720,7 +1761,7 @@ body.sheet-open {
   border-radius: var(--r-md);
 }
 .impact-title {
-  font-size: var(--fs-caption); color: var(--faint); font-weight: 600; margin-bottom: 9px;
+  font-size: var(--fs-caption); color: var(--faint); font-weight: var(--w-semibold); margin-bottom: 9px;
   display: flex; justify-content: space-between; gap: 8px;
 }
 .impact-row + .impact-row { margin-top: 10px; }
@@ -1730,7 +1771,7 @@ body.sheet-open {
 .impact-name { flex: 1; color: var(--muted); }
 .impact-from { color: var(--faint); font-variant-numeric: tabular-nums; }
 .impact-arrow { color: var(--faint); font-size: var(--fs-caption); }
-.impact-to { font-weight: 680; font-variant-numeric: tabular-nums; }
+.impact-to { font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .impact-to.over { color: var(--danger); }
 .impact-target { color: var(--faint); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
 .impact-note {
@@ -1821,7 +1862,7 @@ body.sheet-open {
   border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
   padding: 4px 0; min-height: var(--control-sm);
 }
-.custom-chip.active .custom-chip-name { color: var(--accent); font-weight: 600; }
+.custom-chip.active .custom-chip-name { color: var(--accent); font-weight: var(--w-semibold); }
 .custom-chip button {
   border: 0; background: none; color: var(--faint); cursor: pointer; padding: 0 4px;
 }
@@ -1834,7 +1875,7 @@ body.sheet-open {
   flex: none; min-width: 52px; min-height: var(--control-md); padding: 0 8px;
   border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--card); color: var(--accent);
-  font: inherit; font-size: var(--fs-footnote); font-weight: 650;
+  font: inherit; font-size: var(--fs-footnote); font-weight: var(--w-semibold);
   font-variant-numeric: tabular-nums; cursor: pointer;
 }
 .energy-unit-btn:active { background: var(--accent-soft); }
@@ -1867,7 +1908,7 @@ body.sheet-open {
 }
 .entry-row:last-child { border-bottom-color: transparent; }
 .entry-main { flex: 1; min-width: 0; }
-.entry-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-body); font-weight: 550; }
+.entry-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-body); font-weight: var(--w-semibold); }
 .entry-name .info-tip > summary { width: var(--info-size); height: var(--info-size); }
 .entry-meta {
   font-size: var(--fs-caption); color: var(--faint); margin-top: 1px;
@@ -1879,7 +1920,7 @@ body.sheet-open {
  * 所以这时候让它折行。多一行总比把碳水那截吞掉强。
  */
 .entry-row.editing .entry-meta { white-space: normal; overflow: visible; }
-.entry-meta strong { color: var(--muted); font-weight: 600; }
+.entry-meta strong { color: var(--muted); font-weight: var(--w-semibold); }
 .entry-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .entry-grams {
   width: 62px; flex-shrink: 0; padding: 6px; border: 1px solid var(--border);
@@ -2052,7 +2093,7 @@ body.sheet-open {
 .file-types { display: flex; gap: 5px; margin-top: 8px; }
 .file-types span {
   color: var(--faint); background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--r-xs); padding: 2px 6px; font-size: var(--fs-caption); font-weight: 650; letter-spacing: .03em;
+  border-radius: var(--r-xs); padding: 2px 6px; font-size: var(--fs-caption); font-weight: var(--w-semibold); letter-spacing: .03em;
 }
 .import-clipboard { margin-top: 10px; }
 
@@ -2071,7 +2112,7 @@ body.sheet-open {
   display: flex; align-items: center; gap: 5px;
   min-height: var(--control-sm);
   font-size: var(--fs-body); color: var(--accent); cursor: pointer;
-  list-style: none; font-weight: 550;
+  list-style: none; font-weight: var(--w-medium);
 }
 .sub-fold > summary::-webkit-details-marker { display: none; }
 .sub-fold-caret { display: grid; place-items: center; transition: transform .16s ease; }
@@ -2094,8 +2135,8 @@ body.sheet-open {
 }
 .feedback-area {
   width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; margin-top: 10px;
-  border: 1px solid var(--border); border-radius: var(--r-md);
-  background: var(--card-2); color: var(--text); resize: vertical; font-size: var(--fs-body); line-height: 1.6;
+  /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
+  color: var(--text); resize: vertical; font-size: var(--fs-body); line-height: 1.6;
 }
 
 .sync-empty {
@@ -2116,7 +2157,7 @@ body.sheet-open {
 .sync-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
 .sync-pills span {
   padding: 2px 7px; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
-  font-size: var(--fs-caption); font-weight: 600; overflow-wrap: anywhere;
+  font-size: var(--fs-caption); font-weight: var(--w-semibold); overflow-wrap: anywhere;
 }
 .sync-details { margin-top: 8px; }
 .sync-details summary { color: var(--accent); font-size: var(--fs-caption); cursor: pointer; }
@@ -2168,7 +2209,7 @@ body.sheet-open {
 .method-head { display: flex; align-items: center; gap: 8px; }
 .method-head strong { font-size: var(--fs-body); }
 .method-badge {
-  font-size: var(--fs-caption); font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  font-size: var(--fs-caption); font-weight: var(--w-semibold); padding: 2px 8px; border-radius: 999px;
   background: var(--card-2); color: var(--faint); border: 1px solid var(--border); white-space: nowrap;
 }
 .method-badge.fast { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
@@ -2186,12 +2227,12 @@ body.sheet-open {
 .table-scroll thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--fs-footnote); white-space: nowrap; }
 .data-table th {
-  text-align: right; padding: 6px 8px; color: var(--faint); font-weight: 550;
+  text-align: right; padding: 6px 8px; color: var(--faint); font-weight: var(--w-medium);
   border-bottom: 1px solid var(--border);
 }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
 .data-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
-.data-table tr.current td { background: var(--accent-soft); font-weight: 600; }
+.data-table tr.current td { background: var(--accent-soft); font-weight: var(--w-semibold); }
 
 /* ============ 趋势图 ============ */
 /*
@@ -2213,12 +2254,12 @@ body.sheet-open {
    */
   flex: 1 1 auto; min-width: 0; border: 0; background: none;
   border-radius: var(--r-xs); padding: 6px 2px; font-size: var(--fs-footnote);
-  color: var(--muted); font-weight: 500;
+  color: var(--muted); font-weight: var(--w-medium);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   transition: background .16s ease, color .16s ease;
 }
 .range-switch .chip-btn.active {
-  background: var(--card); color: var(--text); font-weight: 600;
+  background: var(--card); color: var(--text); font-weight: var(--w-semibold);
   box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
 }
 .range-switch .chip-btn.empty { opacity: .45; }
@@ -2234,16 +2275,18 @@ body.sheet-open {
 .chip-btn.empty.active { opacity: 1; }
 .trend-picker .card-head { margin-bottom: 10px; }
 
-/* 走势解读：这是结论不是脚注，比 .form-hint 更实一点 */
+/*
+ * 走势解读：这是结论不是脚注，比 .form-hint 更实一点。
+ * 整块淡底、不加左侧色条 —— 有色条的话读起来像一条警告，而它只是一段话。
+ */
 .chart-note {
-  margin-top: 10px; padding: 9px 11px;
+  margin-top: 10px; padding: 11px 13px;
   background: var(--card-2); border-radius: var(--r-md);
-  border-left: 3px solid var(--accent);
   font-size: var(--fs-footnote); line-height: 1.65; color: var(--muted);
 }
 .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 8px; }
 .summary-item { text-align: center; }
-.summary-value { font-size: var(--fs-title); font-weight: 650; font-variant-numeric: tabular-nums; }
+.summary-value { font-size: var(--fs-title); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums; }
 .summary-label { font-size: var(--fs-caption); color: var(--muted); }
 .summary-sub { font-size: var(--fs-caption); color: var(--faint); }
 
@@ -2268,7 +2311,7 @@ body.sheet-open {
   font-size: var(--fs-body);
 }
 .readout-day { color: var(--muted); font-variant-numeric: tabular-nums; }
-.readout-value { font-weight: 650; font-variant-numeric: tabular-nums; margin-left: auto; }
+.readout-value { font-weight: var(--w-semibold); font-variant-numeric: tabular-nums; margin-left: auto; }
 /* 图表本身不该吃掉页面滚动，只在可点的落点区拦手势 */
 .chart { touch-action: pan-y; }
 
@@ -2293,7 +2336,7 @@ body.sheet-open {
 .update-notice span { color: var(--muted); font-size: var(--fs-caption); line-height: 1.35; }
 .update-notice button {
   flex: none; min-height: var(--control-sm); padding: 7px 11px; border: 0; border-radius: var(--r-sm);
-  background: var(--accent); color: #fff; font: inherit; font-size: var(--fs-caption); font-weight: 650;
+  background: var(--accent); color: #fff; font: inherit; font-size: var(--fs-caption); font-weight: var(--w-semibold);
 }
 
 .about p { font-size: var(--fs-footnote); color: var(--muted); line-height: 1.65; margin: 0 0 8px; }
@@ -2323,7 +2366,7 @@ body.sheet-open {
 .account-identity > div span { margin-top: 3px; color: var(--muted); font-size: var(--fs-caption); }
 .account-sync-badge {
   flex: none; max-width: 42%; padding: 3px 8px; border-radius: 999px;
-  background: var(--accent-soft); color: var(--accent); font-size: var(--fs-caption); font-weight: 650;
+  background: var(--accent-soft); color: var(--accent); font-size: var(--fs-caption); font-weight: var(--w-semibold);
   text-align: center; overflow-wrap: anywhere;
 }
 .account-sync-badge.busy { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
@@ -2345,7 +2388,7 @@ body.sheet-open {
 .account-loading { display: flex; flex-direction: column; gap: 3px; color: var(--muted); font-size: var(--fs-footnote); }
 .account-loading strong { color: var(--text); font-size: var(--fs-body); }
 .account-linking { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.account-linking summary { color: var(--accent); font-size: var(--fs-footnote); font-weight: 600; cursor: pointer; }
+.account-linking summary { color: var(--accent); font-size: var(--fs-footnote); font-weight: var(--w-semibold); cursor: pointer; }
 .account-linking > p { margin: 7px 0 10px; color: var(--muted); font-size: var(--fs-caption); line-height: 1.55; }
 .account-linking .form-field { margin-top: 9px; }
 .account-provider-ok { color: var(--accent) !important; }
@@ -2360,7 +2403,7 @@ body.sheet-open {
 .account-data-lock .account-actions { max-width: 420px; margin: 16px auto 0; }
 .inline-link {
   display: inline-flex; align-items: center; min-height: var(--control-sm); margin: 1px 0 10px;
-  color: var(--accent); font-size: var(--fs-footnote); font-weight: 620; text-decoration: none;
+  color: var(--accent); font-size: var(--fs-footnote); font-weight: var(--w-semibold); text-decoration: none;
 }
 .inline-link::after { content: ' →'; margin-left: 3px; }
 
@@ -2392,7 +2435,7 @@ body.sheet-open {
 .toast-message { flex: 1 1 auto; min-width: 0; }
 .toast-action {
   flex: none; min-height: var(--control-sm); padding: 0 8px; border: 0; background: none;
-  color: #fff; font: inherit; font-weight: 700; cursor: pointer;
+  color: #fff; font: inherit; font-weight: var(--w-bold); cursor: pointer;
 }
 .toast.ok { background: var(--accent); }
 .toast.warn { background: var(--warn); }
@@ -2441,7 +2484,7 @@ body.sheet-open {
 
 /* ============ 未保存提示 / 布局插槽 ============ */
 .dirty-mark {
-  font-size: var(--fs-caption); color: var(--warn); font-weight: 600; white-space: nowrap;
+  font-size: var(--fs-caption); color: var(--warn); font-weight: var(--w-semibold); white-space: nowrap;
   background: color-mix(in srgb, var(--warn) 14%, transparent);
   padding: 2px 8px; border-radius: 999px;
 }
@@ -2500,8 +2543,7 @@ body.sheet-open {
  *   3. 分隔线用 hairline 颜色而不是 --border，描边色在深色下会显脏。
  */
 
-/* 标题层级：字重更大、字距收紧，接近 SF 的观感 */
-.card-head h3 { letter-spacing: -.015em; }
+/* 标题层级：字距收紧，接近 SF 的观感（.card-head h3 的字距写在它自己那条里） */
 h1, h2, h3 { letter-spacing: -.02em; }
 
 /* 列表分隔线统一走 hairline，并且左侧内缩——iOS 的分组列表就是这么分行的 */
@@ -2516,7 +2558,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 同一个属性两条规则，看代码的人得先算层叠顺序才知道按钮到底多高。
  */
 .primary-btn, .secondary-btn {
-  border-radius: var(--r-md); font-weight: 600;
+  border-radius: var(--r-md); font-weight: var(--w-semibold);
   letter-spacing: -.01em;
   transition: transform .12s ease, opacity .12s ease, background-color .12s ease;
 }
@@ -2543,12 +2585,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
   background: var(--card-2);
   border: 1px solid var(--border);
   color: var(--text);
-  font-weight: 550;
+  font-weight: var(--w-semibold);
 }
 
-/* 胶囊按钮做成 iOS 分段控件的观感 */
+/* 胶囊按钮做成 iOS 分段控件的观感（圆角在上面 .chip-btn 那条里已经给过，别写第二遍） */
 .chip-btn {
-  border-radius: 999px;
   transition: background-color .12s ease, color .12s ease, transform .12s ease;
 }
 
@@ -2582,7 +2623,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   width: 100%; min-height: 40px; padding: 0 30px 0 12px;
   border: 0; border-radius: var(--r-sm);
   background: var(--card-2); color: var(--text);
-  font: inherit; font-size: var(--fs-value); font-weight: 600; letter-spacing: -.01em;
+  font: inherit; font-size: var(--fs-value); font-weight: var(--w-semibold); letter-spacing: -.01em;
   cursor: pointer;
 }
 .trend-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -2594,27 +2635,18 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 .trend-select-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
 .trend-card .chart-wrap { margin-top: 6px; }
+/* 颜色和字号由下面那条「说明类文字」统一给，别在这儿再写一份 */
 .trend-summary {
-  margin: 8px 2px 0; color: var(--muted); font-size: var(--fs-footnote);
+  /* 左右不缩：缩了它就比同一张卡里的图和解读多退 2px，读出来是没对齐 */
+  margin: 8px 0 0;
   font-variant-numeric: tabular-nums;
 }
 .trend-insufficient {
   min-height: 156px; display: grid; place-items: center;
   color: var(--faint-readable); font-size: var(--fs-footnote); text-align: center;
 }
-.picker-view-switch { margin-top: 10px; }
 .plan-start { width: 100%; margin-top: 10px; }
 
-/* 走势解读：去掉左侧色条，改成整块淡底，读起来更像一段话而不是一条警告 */
-.chart-note {
-  border-left: 0;
-  background: var(--card-2);
-  padding: 11px 13px;
-  border-radius: var(--r-md);
-}
-
-/* 数值读数行也统一到同一种淡底卡片 */
-.chart-readout { border-radius: var(--r-md); }
 
 /* ============ 从 ux-polish.css 并回来的规则 ============
  *
@@ -2656,10 +2688,14 @@ h1, h2, h3 { letter-spacing: -.02em; }
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
-  font-weight: 700;
+  font-weight: var(--w-bold);
 }
 
-/* 只抬高真正承担信息的小字，其余不整体放大。 */
+/*
+ * 说明类小字：真正承担信息的那几处不压到最小档。
+ * 六个选择器做同一件事，就写成一条 —— 早先字号被拆成两条一模一样的规则，
+ * 而颜色和字号在各自组件那边还各有一份被压掉的旧值。
+ */
 .topbar-context-note,
 .card-tag,
 .metric-row-note,
@@ -2667,13 +2703,8 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .trend-summary,
 .form-hint {
   color: var(--muted);
+  font-size: var(--fs-footnote);
 }
-.card-tag,
-.metric-row-note,
-.topbar-context-note { font-size: var(--fs-footnote); }
-.week-row-note,
-.trend-summary,
-.form-hint { font-size: var(--fs-footnote); }
 
 /* 空趋势缩短到 156px；不再用大面积留白放大“没有数据”这件事。 */
 .chart-wrap:has(.chart-empty) { position: relative; }
@@ -2776,7 +2807,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   visibility: visible;
   pointer-events: auto;
 }
-.picker-compact-action { flex: none; color: var(--accent); font-weight: 650; }
+.picker-compact-action { flex: none; color: var(--accent); font-weight: var(--w-semibold); }
 
 /*
  * 「2 + 1」：上面两排是筛（挑法 → 范围），这里往下是「这张列表本身」。
@@ -2788,7 +2819,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 .picker-scope { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .picker-scope-name {
-  font-size: var(--fs-value); font-weight: 650; color: var(--text);
+  font-size: var(--fs-value); font-weight: var(--w-semibold); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .picker-scope-count {
@@ -2822,19 +2853,15 @@ h1, h2, h3 { letter-spacing: -.02em; }
   color: var(--muted);
   font: inherit;
   font-size: var(--fs-footnote);
-  font-weight: 600;
+  font-weight: var(--w-semibold);
   white-space: nowrap;
   cursor: pointer;
-}
-.equip-filter-btn[aria-expanded='true'] {
-  border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
 }
 .equip-filter-icon { flex: none; }
 .equip-filter-btn .equip-filter-icon svg { width: var(--icon-xs); height: var(--icon-xs); }
 .equip-filter-label { overflow: hidden; text-overflow: ellipsis; }
 .equip-filter-btn[aria-expanded='true'] {
-  color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
 }
 /* 展开箭头是右向的 chevron 转 90°，和设置页那个用的是同一个形 */
 .equip-filter-caret { display: grid; place-items: center; color: var(--faint); }
@@ -2873,11 +2900,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .equip-filter-option.active {
   background: var(--accent-soft);
   color: var(--accent);
-  font-weight: 600;
+  font-weight: var(--w-semibold);
 }
 .equip-filter-option.empty { opacity: .45; }
 .equip-filter-count { color: var(--muted); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
-.equip-filter-check { color: var(--accent); text-align: center; font-weight: 700; }
+.equip-filter-check { color: var(--accent); text-align: center; font-weight: var(--w-bold); }
 
 /* 重复原因本来就属于辅助信息：短标签常驻，点一下再看具体和谁冲突。 */
 .ex-clash-slot.ex-clash {
@@ -2889,7 +2916,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   background: color-mix(in srgb, var(--warn) 12%, transparent);
   color: var(--warn);
   font-size: var(--fs-caption);
-  font-weight: 650;
+  font-weight: var(--w-semibold);
   line-height: 1.35;
   cursor: pointer;
 }
@@ -2969,7 +2996,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
   white-space: nowrap;
   color: var(--muted);
 }
-.search-card-head .text-btn .icon-slot svg { width: .95em; height: .95em; color: var(--faint); }
+/*
+ * 「＋ 自定义」一天用不到一次，所以退成灰的 —— 但**只退颜色**。
+ * 原先还把加号缩到 .95em，于是同一个加号在同一页上印成 13.3 和 14.7 两个尺寸，
+ * 而颜色本来就已经把主次说清楚了。
+ */
+.search-card-head .text-btn .icon-slot svg { color: var(--faint); }
 .search-card-head .text-btn:active { color: var(--accent); }
 .search-row.search-row-full .search-input {
   flex: 1 1 auto;
@@ -3007,14 +3039,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .chip-btn { min-height: var(--control-sm); }
 .search-input { min-height: var(--control-lg); }
 
-/* 饮水与本应用主色统一；左右两块等高，文字基线一致。 */
-.water-row { align-items: stretch; }
+/* 左右两块等高，文字基线一致。 */
+.water-pill { display: flex; align-items: center; }
+/* .water-add 的 display 由下面「图标 + 文字的按钮」那条给（inline-flex），这里只管高度 */
 .water-pill,
-.water-add {
-  min-height: var(--control-lg);
-  display: flex;
-  align-items: center;
-}
+.water-add { min-height: var(--control-lg); }
 .water-add { justify-content: center; min-width: 88px; font-size: var(--fs-body); }
 
 /* 推荐预算独占一行，避免卡片标题右边的长句断成两行。 */
@@ -3034,7 +3063,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   font-variant-numeric: tabular-nums;
 }
 .recommend-budget span { min-width: 0; white-space: nowrap; text-align: center; }
-.recommend-budget span:first-child { color: var(--accent); font-weight: 600; text-align: left; }
+.recommend-budget span:first-child { color: var(--accent); font-weight: var(--w-semibold); text-align: left; }
 .recommend-budget span + span { border-left: 1px solid var(--hairline); }
 .recommend-card .rec-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto var(--control-inline);
@@ -3076,7 +3105,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
   font: inherit; font-size: var(--fs-body); cursor: pointer; text-align: left;
 }
 .copy-meal-row.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.copy-meal-name { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.copy-meal-name { flex: 1 1 auto; min-width: 0; font-weight: var(--w-semibold); }
 .copy-meal-count { flex: none; color: var(--faint); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
 .copy-meal-row.active .copy-meal-count { color: var(--accent); }
 .copy-meal-row .icon-slot svg { width: var(--icon-sm); height: var(--icon-sm); flex: none; }
@@ -3087,7 +3116,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .entry-times {
   margin-left: 6px; padding: 0 5px; border-radius: 999px;
   background: var(--card-2); color: var(--muted);
-  font-size: var(--fs-caption); font-weight: 650; font-variant-numeric: tabular-nums;
+  font-size: var(--fs-caption); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
 }
 .entry-merged-list {
   margin: 2px 0 6px 12px; padding-left: 10px;
