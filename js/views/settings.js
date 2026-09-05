@@ -75,8 +75,8 @@ function rhythmPicker(rerender) {
     sample.fellBack
       ? h('p.setting-choice-desc.warn', null,
         sample.days > 0
-          ? `目前只有 ${sample.days} 天有记录，还算不出你自己的分布，暂时按膳食指南比对。`
-          : '还没有饮食记录，算不出你自己的分布，暂时按膳食指南比对。')
+          ? `目前只有 ${sample.days} 个有效记录日，还算不出你自己的三餐分布，暂时按膳食指南比对。`
+          : '还没有符合条件的有效记录日，算不出你自己的三餐分布，暂时按膳食指南比对。')
       : null);
 }
 

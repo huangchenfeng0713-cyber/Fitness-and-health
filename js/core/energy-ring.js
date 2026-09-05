@@ -1,7 +1,7 @@
 /**
  * 今日热量环。
  *
- * **整圈 = 今天计划吃多少**（今日摄入目标，取整到百）。12 点就是吃满计划。
+ * **整圈 = 今天计划吃多少**（今日摄入目标）。12 点就是吃满计划。
  * 绿弧是已经吃了的，绿弧到 12 点那段灰是剩余的。
  * 黄弧是已经烧掉的，画在自己那条轨道上，只作对照。
  *
@@ -20,21 +20,18 @@
  * 才从改的那一天起换一把新尺子，改回去同理。
  */
 
-/*
- * 键里带 v2：v1 存的圆周是按「预计日消耗」算的，和现在这把「摄入目标」
- * 不是一个含义。沿用旧键会让升级当天的环还按旧尺子画，12 点就不等于吃满计划。
- */
-const SCALE_KEY = 'health-diet-ring-scale-v2';
-/** 差这么点以内就说「接近目标」，不报数 —— 几十千卡的估算误差不值得算成缺口 */
+/** v3 精确使用计划值；不沿用 v2 取整到百的旧缓存。 */
+const SCALE_KEY = 'health-diet-ring-scale-v3';
+/** 建议层对计划偏差的容差；当前收支圆心不使用此门槛 */
 export const BALANCE_WITHIN = 40;
 
 const n = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
-/** 圆周 = 今日摄入目标取整到百。没有目标时给一个中性的兜底，不让圆周变成 0。 */
+/** 圆周 = 今日摄入目标精确值。没有目标时给一个中性的兜底，不让圆周变成 0。 */
 export function trackScale(target) {
   const raw = n(target);
   const base = raw != null && raw > 0 ? raw : 2000;
-  return Math.max(100, Math.round(base / 100) * 100);
+  return Math.max(100, base);
 }
 
 function memoryStore() {
@@ -91,30 +88,16 @@ export function lap(x, scale) {
   };
 }
 
-/*
- * 圈心只有对着**摄入目标**的话。
- *
- * 「盈余」在本应用里已经是 摄入 − 消耗（近 7 日累计收支、体重解读）。
- * 圈心比的是摄入和今日目标，不能再用这个词 —— 减脂时吃超目标仍可能是赤字。
- *
- * 没吃满写「还可摄入」。不要写成「还应吃」：计划要增肌、但今天已经吃得比烧掉的多，
- * 体重趋势已经是增，再说明义务会把「没吃满计划」说成「身体还缺」。
- * 吃超了写「超出目标」。差得很少写「接近目标」。
- * 不写「摄入领先 / 消耗领先」，也不写「缺口」。
- */
-function centerOf(ate, goal) {
-  if (goal == null || goal <= 0) return { key: 'none', label: '还可摄入', kcal: null };
-  const diff = Math.round(goal - ate);
-  if (Math.abs(diff) <= BALANCE_WITHIN) return { key: 'onTarget', label: '接近目标', kcal: null };
-  if (diff > 0) return { key: 'left', label: '还可摄入', kcal: diff };
-  return { key: 'over', label: '超出目标', kcal: -diff };
+/** 当前事实收支；缺失设备消耗时保持未知，不把缺失当成零。 */
+function centerOf(ate, burn) {
+  return { key: 'balance', label: '当前收支', kcal: burn == null ? null : Math.round(ate - burn) };
 }
 
 /**
  * @param {object} input
  *   eaten   已摄入 kcal
  *   burned  当前消耗（设备到此刻的静息 + 活动）。没有设备数据时传 null
- *   target  今日摄入目标，只用来在没传 scale 时算尺子、以及算圈心的差额
+ *   target  今日摄入目标，只用来在没传 scale 时算尺子、图例中显示计划
  *   scale   当天锁定的圆周。传入则不再改
  */
 export function energyRing({
@@ -156,7 +139,7 @@ export function energyRing({
   ];
   if (hasBurn) {
     legend.push({
-      key: 'burned', track: 'burn', label: '消耗', kcal: Math.round(burn), deep: burnLap.laps >= 1,
+      key: 'burned', track: 'burn', label: '当前消耗', kcal: Math.round(burn), deep: burnLap.laps >= 1,
     });
   }
 
@@ -169,7 +152,7 @@ export function energyRing({
     segments,
     legend,
     laps: { eaten: eatLap, burned: burnLap },
-    center: centerOf(ate, goal),
+    center: centerOf(ate, hasBurn ? burn : null),
     /** 相对今日目标还剩多少（负数表示已经超出计划）。界面用圈心，这个数留给测试和提示层 */
     remaining: goal != null ? Math.round(goal - ate) : null,
   };

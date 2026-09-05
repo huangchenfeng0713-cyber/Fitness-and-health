@@ -1,104 +1,86 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  expectedShare, paceNote, rhythmMode, rhythmBasis, RHYTHM_MODES,
-  DEFAULT_RHYTHM_MODE, MIN_DAYS_FOR_PERSONAL,
-} from '../js/core/eating-rhythm.js';
-
-const entriesFor = (days, hours) => {
+import { expectedShare, personalMealReference, paceNote, rhythmMode, RHYTHM_MODES } from '../js/core/eating-rhythm.js';
+const rows = (count, { gap = 1, start = 0, meals = [['breakfast', 8, 480], ['lunch', 12.5, 780], ['dinner', 19, 740]] } = {}) => {
   const out = [];
-  for (let d = 0; d < days; d += 1) {
-    const date = `2026-08-${String(10 + d).padStart(2, '0')}`;
-    for (const [hour, kcal] of hours) {
-      out.push({ date, kcal, time: `${date}T${String(hour).padStart(2, '0')}:00:00` });
-    }
+  for (let i = 0; i < count; i++) {
+    const date = new Date(Date.UTC(2025, 0, 1 + (start + i) * gap)).toISOString().slice(0, 10);
+    for (const [meal, hour, kcal] of meals) out.push({ date, meal, kcal,
+      time: `${date}T${String(Math.floor(hour)).padStart(2, '0')}:${hour % 1 ? '30' : '00'}:00` });
   }
   return out;
 };
-
-test('膳食指南那条曲线随钟点单调上升，不是匀速直线', () => {
-  const at = (h) => expectedShare({ hour: h }).share;
-  assert.equal(at(5), 0, '一天开始时是 0');
-  assert.equal(at(21), 1, '晚餐结束就该吃满');
-  for (let h = 6; h <= 21; h += 1) {
-    assert.ok(at(h) >= at(h - 1), `${h} 点比 ${h - 1} 点低了`);
+const personal = entries => personalMealReference(entries);
+test('固定三餐窗口：窗口内平滑、餐间保持，比例30/40/30', () => {
+  const at = hour => expectedShare({ hour }).share;
+  for (const [h, value] of [[6.5,0],[9,.3],[11.5,.3],[14,.7],[17.5,.7],[20,1],[24,1],[7.75,.15]]) assert.equal(at(h), value);
+  for (let h = 0; h <= 24; h += .01) {
+    assert.ok(at(h + .01) >= at(h));
+    assert.ok(at(h + .01) - at(h) < .003, '不能瞬间跳台阶');
   }
-  /*
-   * 它是**折线**，不是直线：每一餐的窗口内按那一餐的供能比往上走，
-   * 换一餐就换一个斜率。匀速那条 `(hour-6)/16` 到 21 点才 93.75%，
-   * 而按三餐比例晚餐一结束就是 100% —— 这正是要区别开的地方。
-   */
-  assert.ok(at(10.5) > at(9), '早餐窗口内应当在涨');
-  const slope = (a, b) => (at(b) - at(a)) / (b - a);
-  const slopeLunch = slope(11, 14.5);
-  const slopeSnack = slope(15, 17.5);
-  const slopeBreakfast = slope(9, 10.5);
-  assert.ok(slopeLunch > slopeSnack * 2,
-    `正餐段该比加餐段陡得多，实际 ${slopeLunch.toFixed(3)} vs ${slopeSnack.toFixed(3)}`);
-  assert.ok(slopeBreakfast > slopeSnack,
-    `早餐段不该比加餐段还平，实际 ${slopeBreakfast.toFixed(3)} vs ${slopeSnack.toFixed(3)}`);
-  assert.ok(Math.abs(at(21) - 1) < 1e-9 && (21 - 6) / 16 < 0.95, '和匀速直线的区别没体现出来');
 });
-
-test('样本够就用自己的分布', () => {
-  // 这个人 70% 的热量在晚上：早 200、晚 800
-  const entries = entriesFor(10, [[8, 200], [19, 800]]);
-  const mine = expectedShare({ mode: 'personal', hour: 12, entries });
-  assert.equal(mine.mode, 'personal');
-  assert.equal(mine.fellBack, false);
-  assert.ok(Math.abs(mine.share - 0.2) < 0.02, `中午该在 20% 上下，实际 ${mine.share}`);
-  // 同一时刻，指南口径要高得多 —— 这正是「按我平常」存在的理由
-  assert.ok(expectedShare({ hour: 12 }).share > mine.share + 0.1);
+test('0–6个有效日回退，7–27天全用，28天封顶', () => {
+  for (const days of [0,1,6,7,13,27,28,40]) {
+    const r = expectedShare({ mode: 'personal', entries: rows(days) });
+    assert.equal(r.days, Math.min(days,28));
+    assert.equal(r.fellBack, days < 7);
+    assert.equal(r.mode, days < 7 ? 'guideline' : 'personal');
+  }
 });
-
-test('样本不够就退回指南，并且说出来', () => {
-  const few = expectedShare({
-    mode: 'personal', hour: 12, entries: entriesFor(MIN_DAYS_FOR_PERSONAL - 1, [[8, 500]]),
+test('最近28个有效日跨空白自然日，不含查看日期及未来', () => {
+  const entries = rows(50, {gap:4});
+  const dates = [...new Set(entries.map(e=>e.date))];
+  const r = personalMealReference(entries, {asOf:dates[40]});
+  assert.equal(r.days,28);
+  assert.equal(r.dates[0],dates[39]);
+  assert.equal(r.dates[27],dates[12]);
+});
+test('直接采用主餐标签，不根据时刻猜餐次', () => {
+  const entries = rows(10,{meals:[['breakfast',11,480],['lunch',15,780],['dinner',21,740]]});
+  const r = personal(entries);
+  assert.equal(r.meals[0].key,'breakfast');
+  assert.equal(r.meals[0].startHour,10.5);
+  assert.equal(r.meals[1].startHour,14.5);
+  assert.ok(Math.abs(r.meals[0].share-.24)<1e-9);
+  assert.equal(personal(entries.map(({meal,...e})=>e)).days,0);
+});
+test('至少两顿有实质记录，少量、只有加餐、单餐无效', () => {
+  assert.equal(personal(rows(8,{meals:[['breakfast',8,400],['dinner',19,600]]})).days,8);
+  for (const meals of [[['breakfast',8,50],['lunch',12,50]],[['snack',8,1000],['late',22,1000]],[['breakfast',8,1500]],[['breakfast',8,20],['lunch',12,1200]]]) assert.equal(personal(rows(10,{meals})).days,0);
+  const normal = rows(10,{meals:[['breakfast',8,900],['lunch',12,1200],['dinner',19,900]]});
+  const partial = rows(2,{start:15,meals:[['breakfast',8,400],['lunch',12,500]]});
+  assert.equal(personal([...normal,...partial]).days,10);
+});
+test('偶尔漏餐不作为零摄入，极端餐量和时间不拉偏典型结果', () => {
+  const normal = rows(14);
+  const missing = normal.filter(e=>!(e.date==='2025-01-05'&&e.meal==='breakfast'));
+  const extreme = rows(1,{start:20,meals:[['breakfast',3,15000],['lunch',15,120],['dinner',23,120]]});
+  const a=personal(normal).meals, b=personal([...missing,...extreme]).meals;
+  a.forEach((m,i)=>{
+    assert.ok(Math.abs(m.share-b[i].share)<.01);
+    assert.equal(m.startHour,b[i].startHour);
+    assert.equal(m.endHour,b[i].endHour);
   });
-  assert.equal(few.mode, 'guideline');
-  assert.equal(few.requested, 'personal');
-  assert.equal(few.fellBack, true, '退回了却不说，用户会以为看的是自己的节奏');
-  assert.deepEqual(expectedShare({ mode: 'personal', hour: 12, entries: [] }).mode, 'guideline');
 });
-
-test('每天各自归一化，一顿火锅不该把曲线拽偏', () => {
-  const normal = entriesFor(9, [[8, 300], [19, 300]]);
-  const feast = [{ date: '2026-08-20', kcal: 6000, time: '2026-08-20T21:00:00' }];
-  const a = expectedShare({ mode: 'personal', hour: 12, entries: normal });
-  const b = expectedShare({ mode: 'personal', hour: 12, entries: [...normal, ...feast] });
-  assert.ok(Math.abs(a.share - b.share) < 0.06,
-    `一天 6000 kcal 就把曲线拽走了：${a.share} → ${b.share}`);
+test('加餐属于实际日总量，历史夜宵不形成参照阶段', () => {
+  const normal=rows(10), snacks=rows(10,{meals:[['snack',16,250],['late',23,500]]});
+  const r=personal([...normal,...snacks]);
+  assert.equal(r.meals.length,3);
+  r.meals.forEach((m,i)=>assert.ok(Math.abs(m.share-personal(normal).meals[i].share)<1e-9));
+  assert.equal(expectedShare({mode:'personal',entries:[...normal,...snacks],hour:22}).share,1);
 });
-
-test('差得不多说中性的一句；夜里不催人补热量', () => {
-  assert.equal(paceNote({ hour: 12, eatenPct: 40 }).tone, 'onTrack', '差一点点不该说成偏离');
-  assert.equal(paceNote({ hour: 18, eatenPct: 30 }).tone, 'behind', '差四成该说一句');
-  assert.equal(paceNote({ hour: 12, eatenPct: 90 }).tone, 'ahead', '吃得快也该说一句');
-  assert.equal(paceNote({ hour: 6, eatenPct: 0 }).tone, 'early', '天没亮时 0% 是必然，不作数');
-  const night = paceNote({ hour: 22, eatenPct: 30 });
-  assert.equal(night.tone, 'late');
-  assert.doesNotMatch(night.text, /漏记|缺口/,
-    '晚上 10 点催人补热量，等于劝人睡前大吃一顿');
-  assert.match(night.text, /明天/);
-  // 说的时候要点明依据是哪一套口径
-  assert.match(paceNote({ hour: 18, eatenPct: 30 }).text, /膳食指南/);
-  assert.match(
-    paceNote({ hour: 18, eatenPct: 30, mode: 'personal', entries: entriesFor(10, [[8, 500]]) }).text,
-    /你近两周/,
-  );
-  // 每一句都得带上那个百分比，否则「低于」没有参照物
-  for (const tone of [12, 18, 22]) {
-    const note = paceNote({ hour: tone, eatenPct: 30 });
-    if (note.tone !== 'early') assert.match(note.text, /\d+%/, `${tone} 点这句没写出参照值`);
-  }
-  assert.equal(rhythmBasis('personal'), '你近两周的节奏');
-  assert.equal(rhythmBasis('guideline'), '膳食指南');
+test('个人参照餐间保持，学习比例随今日计划映射kcal', () => {
+  const entries=rows(10), at=hour=>expectedShare({mode:'personal',entries,hour}).share;
+  assert.equal(at(10),at(11)); assert.equal(at(15),at(17));
+  assert.equal(Math.round(at(10)*2000),480);
+  assert.equal(Math.round(at(10)*2400),576);
+  assert.deepEqual(personal(entries).meals,personal(entries.map(e=>({...e,kcal:e.kcal*2}))).meals);
 });
-
-test('模式表能查、有兜底', () => {
-  assert.equal(rhythmMode('personal').key, 'personal');
-  assert.equal(rhythmMode('不存在').key, DEFAULT_RHYTHM_MODE);
-  assert.equal(rhythmMode().key, DEFAULT_RHYTHM_MODE);
-  assert.equal(RHYTHM_MODES.length, 2);
-  for (const m of RHYTHM_MODES) assert.ok(m.label && m.desc, `${m.key} 缺少说明`);
+test('模式可切换，未知模式兜底，夜间不催补热量', () => {
+  assert.equal(rhythmMode('invalid').key,'guideline');
+  assert.deepEqual(RHYTHM_MODES.map(m=>m.label),['参照膳食','参照平常']);
+  assert.equal(paceNote({hour:6,eatenPct:0}).tone,'early');
+  assert.equal(paceNote({hour:12,eatenPct:40}).tone,'onTrack');
+  const night=paceNote({hour:22,eatenPct:30});
+  assert.equal(night.tone,'late'); assert.match(night.text,/明天/);
 });

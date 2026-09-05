@@ -19,6 +19,7 @@ let wrap = null;
 let panel = null;
 let scrollArea = null;
 let footer = null;
+let handle = null;
 let onClose = null;
 let lockedScrollY = 0;
 /*
@@ -114,6 +115,7 @@ function build() {
     // 弹层里的点击不该冒到背景那层去，否则点自己就把自己关了
     onclick: (ev) => ev.stopPropagation(),
   },
+  handle = h('div.sheet-handle', { 'aria-hidden': 'true' }),
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
   const backdrop = h('div.sheet-backdrop');
@@ -125,6 +127,7 @@ function build() {
    */
   scrimDismiss(backdrop, () => { if (sheetReady()) closeSheet(); });
   document.body.append(wrap);
+  containContentScroll();
   attachDragToClose();
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
   document.addEventListener('keydown', (ev) => {
@@ -315,49 +318,65 @@ function resetDragStyles() {
 
 export const sheetIsOpen = () => !!wrap && !wrap.hidden && !closing;
 
-/*
- * 往下滑关掉弹层。
- *
- * iOS 上人人都会试这一下，而这个弹层原先只能点背景关 —— 而背景那圈在
- * 份量面板打开时只剩顶上一条。
- *
- * 两件事得写对：
- *
- * 1. **内容还能往上滚的时候不接管。** 手指在 .sheet-scroll 里往下拖，
- *    如果那块内容没滚到顶，那一下是在滚内容，不是在关弹层。
- *    只有滚到顶（scrollTop <= 0）才让位移变成关闭手势。
- * 2. **关不掉就得弹回去。** 松手时位移不够、甩速也不够，要把 transform 收回 0；
- *    收回的过程走 Web Animations，别留一个歪着的弹层。
- */
+/** 只有顶部 handle 接收 sheet 拖动；正文始终只负责滚动。 */
 const CLOSE_DISTANCE = 96;     // 拖过这么远就算要关
 const CLOSE_VELOCITY = 0.5;    // 或者甩得够快（px/ms）
 /*
  * 甩速那条路必须同时走够一段距离。
  *
- * 顶上那道小横杠是 `.sheet::before`，点它就是点弹层本身 —— 手指按下再抬起
+ * 横条绘制在 `.sheet-handle::before`，触摸由 44px 高的透明 handle 接收 —— 手指按下再抬起
  * 难免有几像素抖动，只看甩速的话这一下就把弹层关了，而人只是想碰一下那道杠。
  */
 const MIN_FLICK = 32;
 
+// 在浏览器执行滚动前拦截越界触摸；不通过 scroll 事件纠正已发生的位移。
+// CSS overscroll-behavior 负责惯性边界，这层兼容 Safari 的触摸边界。
+function containContentScroll() {
+  let lastY = null;
+  let target = null;
+  scrollArea.addEventListener('touchstart', (ev) => {
+    lastY = ev.touches.length === 1 ? ev.touches[0].clientY : null;
+    target = ev.target;
+  }, { passive: true });
+  scrollArea.addEventListener('touchmove', (ev) => {
+    if (lastY == null || ev.touches.length !== 1) return;
+    const y = ev.touches[0].clientY;
+    const dy = y - lastY;
+    lastY = y;
+    if (!dy) return;
+    // 支持正文里的 textarea 等嵌套滚动区，手势绝不转交给 sheet。
+    let node = target instanceof Element ? target : scrollArea;
+    let canScroll = false;
+    while (node && scrollArea.contains(node)) {
+      const style = getComputedStyle(node);
+      const max = node.scrollHeight - node.clientHeight;
+      if (/(auto|scroll)/.test(style.overflowY) && max > 1) {
+        canScroll = dy > 0 ? node.scrollTop > 0 : node.scrollTop < max - 1;
+        break; // 内部滚动容器到边界也不产生滚动链。
+      }
+      if (node === scrollArea) break;
+      node = node.parentElement;
+    }
+    if (!canScroll && ev.cancelable) ev.preventDefault();
+  }, { passive: false });
+  const end = () => { lastY = null; target = null; };
+  scrollArea.addEventListener('touchend', end, { passive: true });
+  scrollArea.addEventListener('touchcancel', end, { passive: true });
+}
+
 function attachDragToClose() {
   let height = 0;
-  dragGesture(panel, {
+  dragGesture(handle, {
     axis: 'y',
     // 12 而不是 8：点那道小横杠时的手抖不该被当成开始拖
     threshold: 12,
-    canStart: (ev) => {
-      if (!sheetReady()) return false;
-      // 手指落在还能往上滚的内容里，这一下归内容
-      const scroller = ev.target instanceof Element ? ev.target.closest('.sheet-scroll') : null;
-      return !scroller || scroller.scrollTop <= 0;
-    },
+    canStart: () => sheetReady(),
     onStart: () => {
       height = panel.getBoundingClientRect().height || 1;
       panel.style.transition = 'none';
     },
     onMove: ({ dy }) => {
-      // 只跟着往下走；往上拖时给一点阻尼，让人知道到头了
-      const offset = dy >= 0 ? dy : dy / 6;
+      const offset = Math.max(0, dy);
       panel.style.transform = `translateY(${offset}px)`;
       const backdrop = wrap.querySelector('.sheet-backdrop');
       if (backdrop) backdrop.style.opacity = String(Math.max(0, 1 - (Math.max(0, dy) / height) * 1.2));

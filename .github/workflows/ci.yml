@@ -72,4 +72,6 @@ jobs:
           done
 
       - name: 冒烟
-        run: node scripts/smoke.mjs http://127.0.0.1:8137
+        run: |
+          node scripts/smoke.mjs http://127.0.0.1:8137
+          node scripts/diet-today-smoke.mjs http://127.0.0.1:8137

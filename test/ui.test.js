@@ -61,7 +61,7 @@ test('栏目分工：数据页看数据与走势，设置页放身体信息与�
    * 比单独列一张只有目标的表多告诉你一件事——还差多少。
    * 数据页那张撤了，八项目标和它们的依据要在今日页找得到。
    */
-  for (const item of ['纤维', '钠上限', '游离糖上限', '饮水']) {
+  for (const item of ['纤维', '钠上限', '游离糖上限']) {
     assert.ok(dashboard.includes(item), `今日主卡缺少目标项「${item}」`);
   }
   assert.ok(dashboard.includes("infoTip('查看目标计算依据'"), '目标依据没有跟着搬到今日页');

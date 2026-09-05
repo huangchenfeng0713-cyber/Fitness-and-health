@@ -51,7 +51,7 @@ export const state = {
   healthByDate: new Map(),
   dietEntries: [],       // 当前日期的饮食条目
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
-  dietRhythm: [],        // 近三周 { date, kcal, time }，只给进食节奏曲线用
+  dietRhythm: [],        // 历史精简样本 { date, kcal, time, meal }，只给进食节奏曲线用
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
   portionMemory: {},     // { foodId: { grams, sugarLevel, meal } } —— 用户自己的选择
@@ -186,19 +186,13 @@ function rebuildDietDaily(entries) {
   state.dietDaily = [...byDate.entries()]
     .map(([date, list]) => ({ date, ...sumNutrients(list), count: list.length }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
-  /*
-   * 「按我平常」那条曲线要的是钟点，日汇总里没有，所以另存一份精简样本。
-   * 只留 date / kcal / time 三个字段：整份记录挂在内存里，几个月之后就是
-   * 几千条带七项营养和配料快照的对象，而这条曲线只用得上其中三个数。
-   */
-  const from = shiftDay(state.day, -RHYTHM_WINDOW_DAYS);
+  // 保留全部历史精简字段，参照层再向前选最多 28 个有效日。
+  // 不能先按自然日截断；餐次使用记录时明确选择的标签。
   state.dietRhythm = entries
-    .filter((e) => e.date >= from && Number(e.kcal) > 0 && e.time)
-    .map((e) => ({ date: e.date, kcal: Number(e.kcal), time: e.time }));
+    .filter(e => Number(e.kcal) > 0)
+    .map(e => ({ date: e.date, kcal: Number(e.kcal), time: e.time, meal: e.meal }));
 }
 
-/* 取三周而不是两周：曲线用近 14 个「有记录的天」，中间漏记几天也还够 */
-const RHYTHM_WINDOW_DAYS = 21;
 
 // ---------------------------------------------------------------- 计算
 

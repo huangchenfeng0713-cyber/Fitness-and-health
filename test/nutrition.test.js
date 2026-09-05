@@ -357,12 +357,13 @@ test('脂肪当量沿用 Wishnofsky 的 7700 kcal/kg', () => {
 
 test('微量目标对齐各自的权威推荐值', () => {
   const t = dailyTargets({ ...male, weightKg: 72, activity: 'light' });
-  // 膳食纤维：按 14 g / 1000 kcal 计算，并收敛到中国成人常用的 25–30 g 参考范围
-  assert.equal(t.fiber, Math.round(Math.min(30, Math.max(25, (t.kcal / 1000) * 14))));
+  // 膳食纤维：中国 DRIs 2023 成人 AI 区间 25–30g
+  assert.equal(t.fiber, 25);
+  assert.equal(t.fiberUpper, 30);
   // 钠：WHO 建议成人 < 2000 mg/天（约合 5 g 食盐）
   assert.equal(t.sodium, 2000);
-  // 添加糖：WHO 建议游离糖 < 总能量的 10%
-  assert.equal(t.sugar, Math.round((t.kcal * 0.1) / 4));
+  // 游离糖：保留 WHO 10% 供能参考，并采用中国指南 50g 克数护栏
+  assert.equal(t.sugar, Math.min(50, (t.kcal * 0.1) / 4));
 });
 
 test('脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）', () => {
