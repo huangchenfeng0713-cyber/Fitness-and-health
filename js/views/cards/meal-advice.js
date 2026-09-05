@@ -23,36 +23,32 @@ function moreToggle(key, total, shown, rerender) {
 }
 
 /*
- * 推荐行和搜索结果走同一条路：**先开份量面板**。
+ * 推荐行的 ＋ 和搜索结果里的 ＋ 走同一条路：**先开份量面板**。
  *
  * 原先它直接按推荐的克数落库。可推荐给的克数是「按剩余预算算出来的一份」，
  * 不是这个人自己的份量 —— 而克数是乘数，差一倍热量就差一倍。
  * 落库那一步交给份量面板，`addEntry` 在饮食页仍然只出现一次。
  *
- * **整行就是「打开份量」，加号只是那件事的记号。**
- *
- * 搜索结果那一列早就是这样（`.search-item` 整行是个 button），健身页的推荐行
- * 也是（`.rec-pick`，右边那个 ＋ 是 aria-hidden 的 span）。只有这儿是一行 div
- * 挂一个真按钮：三列食物长得一模一样，点行有两处管用、一处没反应，
- * 而没反应的那处恰好是「今天该吃什么」的答案。
- * 加号不再是独立的可聚焦控件 —— 一行两个焦点点、读屏念两遍，说的还是同一件事。
+ * **只有 ＋ 能加，点行本身不算**（健身页那两列同一条规矩）。
+ * 整行可点会把「读一读这条推荐为什么给我」和「把它记下来」并成同一下，
+ * 而这一行里有食物名、份量、两条理由和三个数字，全是拿来读的。
  */
 function recRow(item, meal, onPick) {
   const f = item.food;
-  return listRow({
-    as: 'button', className: 'rec-row',
-    type: 'button', 'aria-label': `选择 ${f.name} 的份量`,
-    onclick: () => onPick?.(f, { meal }),
-  },
-  h('div.rec-info', null,
-    h('div.rec-name', null, f.name, estimateTag(f)),
-    h('div.rec-portion', null, item.portionLabel),
-    h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
-  h('div.rec-nums', null,
-    h('span.rec-kcal', null, `${item.nutrients.kcal}`),
-    h('span.rec-unit', null, 'kcal'),
-    h('span.rec-prot', null, `蛋白 ${item.nutrients.protein}g`)),
-  h('span.add-btn', { 'aria-hidden': 'true' }, icon('plus')));
+  return listRow({ className: 'rec-row' },
+    h('div.rec-info', null,
+      h('div.rec-name', null, f.name, estimateTag(f)),
+      h('div.rec-portion', null, item.portionLabel),
+      h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
+    h('div.rec-nums', null,
+      h('span.rec-kcal', null, `${item.nutrients.kcal}`),
+      h('span.rec-unit', null, 'kcal'),
+      h('span.rec-prot', null, `蛋白 ${item.nutrients.protein}g`)),
+    h('button.add-btn', {
+      type: 'button',
+      'aria-label': `选择 ${f.name} 的份量`,
+      onclick: () => onPick?.(f, { meal }),
+    }, icon('plus')));
 }
 
 export function recommendCard(rerender, onPick) {

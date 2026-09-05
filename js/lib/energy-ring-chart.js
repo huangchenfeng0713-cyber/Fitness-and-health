@@ -92,13 +92,12 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
    * 立刻变成一个整圆的点 —— 弧的起点上就鼓出一个比描边还宽的疙瘩，
    * 和弧身之间还留着一道豁口。实测就是这么来的。
    */
-  const arc = (radius, width, cls, colour, fromPct, toPct, memoKey = null, round = true) => {
+  const arc = (radius, width, cls, colour, fromPct, toPct, memoKey = null) => {
     const circ = 2 * Math.PI * radius;
     const usable = (span / 360) * circ;
     const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
     const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
-    const cap = round ? width / 2 : 0;
-    const insetOf = (l) => Math.min(cap, Math.max(0, l) / 2);
+    const insetOf = (l) => Math.min(width / 2, Math.max(0, l) / 2);
     const dash = (l) => `${Math.max(0.01, Math.max(0, l) - insetOf(l) * 2)} ${circ}`;
     const memo = memoKey && { key: `${animateKey}|${model.scale}|${memoKey}`, len };
     if (memo) nextArc.set(memo.key, len);
@@ -125,14 +124,19 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
   };
 
   /*
-   * 灰轨先铺满 —— 没画到的地方就是还没走到的部分。方头：圆头会把 12 点那道缺口糊上。
+   * 灰轨先铺满 —— 没画到的地方就是还没走到的部分。
+   *
+   * **灰轨的两端也是圆头。** 一圈圆头的弧躺在一条方切的槽里，两端对不上，
+   * 12 点那道缺口读出来像是被裁出来的，不像特意留的。
+   * 圆头会往两端各鼓出半个描边，所以和弧走同一套长度补偿（`round` 那条路）：
+   * 落笔范围仍是 352°，缺口一点没被糊上。
    *
    * **消耗那条轨道只在真有设备数据时才铺。** 手表没连、今天没同步的时候，
    * 里面那圈灰是画给一条永远不会出现的弧的：它说「这儿还有一样东西」，
    * 然后一整天什么都不来。粗细从 3.5 提到 5 之后这一圈更显眼，更不能空着。
    */
-  arc(r, stroke, 'ring-track', null, 0, 100, null, false);
-  if (model.hasBurn) arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100, null, false);
+  arc(r, stroke, 'ring-track', null, 0, 100);
+  if (model.hasBurn) arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100);
 
   /*
    * 先画完所有第一圈，再画所有第二圈。

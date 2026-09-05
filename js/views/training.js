@@ -250,23 +250,20 @@ function lastLine(exercise) {
 function exerciseRow(e, rerender, scopeMuscles = null) {
   const chosen = picked().includes(e.id);
   const marked = pending.has(e.id);
-  // 单独留住这两个节点，勾选时只改它们，不重建整行
-  const pickNode = h('span.ex-pick.exercise-choice-action', { 'aria-hidden': 'true' },
-    icon(chosen || marked ? 'check' : 'plus'));
-  const clashNode = h('span.ex-clash-slot', {
-    onclick: (event) => {
-      const detail = clashNode.dataset.detail;
-      if (!detail) return;
-      event.preventDefault();
-      event.stopPropagation();
-      toast(detail, 'info');
-    },
-  });
-  const row = listRow({
-    as: 'button',
-    className: `ex-row exercise-choice-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
+  /*
+   * **只有右边那个 ＋ 能把动作加进来，点行本身不算。**
+   *
+   * 整行可点会把「读一读这个动作练哪儿」和「把它加进今天」并成同一下：
+   * 一列十几行、每行 76px 高，滑动时手指蹭到就多出一个动作，
+   * 而撤掉它得再点一次、还得先找到它跑到哪儿去了。加号是个明确的目标，
+   * 行里那三条标签和「上次练了多少」则是拿来读的，读不该有副作用。
+   *
+   * 单独留住这两个节点，勾选时只改它们，不重建整行。
+   */
+  const pickNode = h('button.ex-pick.exercise-choice-action', {
     type: 'button',
     'aria-pressed': String(chosen || marked),
+    'aria-label': `${chosen ? '撤掉' : '加入'} ${e.name}`,
     onclick: async () => {
       // 已在计划里的：点一下就撤掉。撤销不常做，重绘一次可以接受。
       if (chosen) {
@@ -281,12 +278,24 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
       if (pending.has(e.id)) pending.delete(e.id); else pending.add(e.id);
       const on = pending.has(e.id);
       row.classList.toggle('marked', on);
-      row.setAttribute('aria-pressed', String(on));
+      pickNode.setAttribute('aria-pressed', String(on));
       setIcon(pickNode, on ? 'check' : 'plus');
       // 勾中一个会改变其它行「和已选的重不重」，所以整列的提示都要跟一下
       for (const other of row.parentNode?.children || []) other.syncClash?.();
       if (pickerBar) pickerBar.render();
     },
+  }, icon(chosen || marked ? 'check' : 'plus'));
+  const clashNode = h('span.ex-clash-slot', {
+    onclick: (event) => {
+      const detail = clashNode.dataset.detail;
+      if (!detail) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toast(detail, 'info');
+    },
+  });
+  const row = listRow({
+    className: `ex-row exercise-choice-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
   },
   h('div.ex-main.exercise-choice-main', null,
     h('div.ex-name', null, h('strong', null, e.name)),
@@ -889,11 +898,7 @@ function recommendBody(rec) {
         ]),
       }, h('span', null, `换成 ${o.name}`)))))),
     h('div.rec-picks', null, rec.items.map((item) => listRow({
-      as: 'button', className: 'rec-pick exercise-choice-row',
-      type: 'button', 'aria-label': `加入 ${item.name}`,
-      onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
-        ? items
-        : [...items, { id: item.id, sets: [], done: false }])),
+      className: 'rec-pick exercise-choice-row',
     },
       h('div.rec-pick-main.exercise-choice-main', null,
         h('div.ex-name', null, h('strong', null, item.name)),
@@ -902,8 +907,15 @@ function recommendBody(rec) {
       /*
        * 加号用描边的小圆，不用实心绿。五个实心绿圆排成一列就是一整块色斑，
        * 而这一屏真正的主要动作是下面那个「全部加入」。
+       *
+       * **只有它能加，点行本身不算** —— 和上面「全部动作」那一列同一条规矩。
        */
-      h('span.rec-add.exercise-choice-action', { 'aria-hidden': 'true' }, icon('plus'))))),
+      h('button.rec-add.exercise-choice-action', {
+        type: 'button', 'aria-label': `加入 ${item.name}`,
+        onclick: () => updateSession((items) => (items.some((i) => i.id === item.id)
+          ? items
+          : [...items, { id: item.id, sets: [], done: false }])),
+      }, icon('plus'))))),
     rec.items.length > 1 ? h('button.secondary-btn.full', {
       style: { marginTop: '12px' },
       onclick: () => updateSession((items) => [
