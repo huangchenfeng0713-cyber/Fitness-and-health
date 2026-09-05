@@ -1552,42 +1552,36 @@ body.sheet-open {
  * 多选条：钉在滚动容器底部，饮食页和健身页共用。
  * 钉在 .view 上而不是视口上 —— 视口底部是 tab 栏的位置。
  */
-/* 一周小结：一行一项，值和说明左右分栏 */
 /*
- * 一张三列的表，不是七个各自排版的行。
+ * 一周小结：**一张两列的表**，标签靠左、数值靠右，不是七个各自排版的行。
  *
- * 每行各自 flex 的时候，数值那格按自己的内容分宽：「0 / 7 天」占 61px、
- * 「—」占 22px，后面的注释就有两个起点。数值列改成整张表统一的 max-content，
- * 七行的注释才对得上一条竖线。
+ * 网格定宽，七行的数值才对得上同一条右边线；每行各自 flex 的话，
+ *「7 / 7 天」和「盈余 3130 kcal」一宽一窄，右边缘就有七个起点。
+ * 右边那列注释已经删了 —— 它把每一行拉宽，数值悬在中间够不着两边，
+ * 而它写的那些结论同一页的趋势卡下面各有一段，说得比一句话细。
  *
- * 列间距不用 column-gap 而用 padding-right：底下那道分隔线是每格各画一段的，
- * gap 会在格与格之间把它切出两道缺口。
+ * 数值一色 `--text`，不按好坏染绿染橙：那是判断，判断归图。
+ * 一列数字里挑两个染绿，读出来是「这两行更要紧」，可它们并不是。
+ *
+ * 两格拉平到同一高度（网格默认的 stretch），不按 baseline 排 ——
+ * 底下那道分隔线是两格各画一段接起来的，按 baseline 对齐时每格只有自己内容
+ * 那么高，两段线会落在两个 y 上，一行分隔线断成两截。
  */
 .week-rows {
   display: grid;
-  grid-template-columns: 68px max-content minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 .week-row { display: contents; }
-/*
- * 三格拉平到同一高度（网格默认的 stretch），不能按各自内容排 baseline。
- *
- * 分隔线是三格各画一段接起来的：按 baseline 对齐时每格只有自己内容那么高，
- * 三段线落在三个不同的 y 上，一行分隔线就断成三截 —— 「累计收支」那行注释
- * 有三行，它那一段直接掉到下面去了。
- * 拉平之后文字改成顶对齐，三格行高统一，首行基线差不到 1px，看不出来。
- */
 .week-row > * {
   padding: 9px 0; line-height: 1.5;
   border-bottom: 1px solid var(--hairline);
 }
 .week-row:last-child > * { border-bottom-color: transparent; }
-.week-row-label { padding-right: 10px; font-size: var(--fs-footnote); color: var(--muted); }
-.week-row-value { padding-right: 8px; font-size: var(--fs-body); font-weight: var(--w-semibold); white-space: nowrap; }
-/* 字号和颜色由下面那条「抬高真正承担信息的小字」统一给，这里只管排版 */
-.week-row-note { min-width: 0; }
-/* 只有两档着色：做到了给绿，该留意给橙。小结不是体检报告，不上红色 */
-.week-row.good .week-row-value { color: var(--ok, var(--accent)); }
-.week-row.warn .week-row-value { color: var(--warn); }
+.week-row-label { padding-right: var(--space-4); font-size: var(--fs-footnote); color: var(--muted); }
+.week-row-value {
+  text-align: right; font-size: var(--fs-body); font-weight: var(--w-semibold);
+  color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
 
 /* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
 .chip-focus { color: var(--accent); font-weight: var(--w-semibold); }
@@ -2773,13 +2767,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
 
 /*
  * 说明类小字：真正承担信息的那几处不压到最小档。
- * 六个选择器做同一件事，就写成一条 —— 早先字号被拆成两条一模一样的规则，
+ * 几个选择器做同一件事，就写成一条 —— 早先字号被拆成两条一模一样的规则，
  * 而颜色和字号在各自组件那边还各有一份被压掉的旧值。
  */
 .topbar-context-note,
 .card-tag,
 .metric-row-note,
-.week-row-note,
 .trend-summary,
 .form-hint {
   color: var(--muted);
@@ -3106,7 +3099,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
   .exercise-meta-tag,
   .card-tag,
   .metric-row-note,
-  .week-row-note,
   .trend-summary,
   .form-hint { color: var(--faint-readable); }
 }
