@@ -1651,6 +1651,9 @@ export const FOODS = [
   { id: 'pork_snow_pea', name: '荷兰豆炒肉片', alias: 'helandouchaoroupian snow pea pork', cat: 'dish', n: [155, 9.5, 11.0, 5.5, 2.0, 2.5, 660], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'pork_water_bamboo', name: '茭白炒肉丝', alias: 'jiaobaichaorousi water bamboo pork', cat: 'dish', n: [150, 9.0, 11.0, 4.5, 1.5, 1.8, 650], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'pork_garlic_leaf', name: '蒜苗炒肉', alias: 'suanmiaochaorou garlic sprout pork', cat: 'dish', n: [175, 10.0, 13.0, 5.0, 1.5, 1.5, 700], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
+  // 胡萝卜比这一排里的青椒、黄瓜、莴笋含糖和纤维都高，所以碳水 / 纤维 / 总糖都往上抬一档；
+  // 那 4g 糖几乎全是胡萝卜自带的，属于完整蔬菜的内源糖，不是游离糖（见 DISH_ADDED_SUGAR）
+  { id: 'pork_carrot', name: '胡萝卜丝炒肉', alias: 'huluobosichaorou huluobochaorou huluobochaorousi carrot pork shredded', cat: 'dish', n: [160, 10.0, 10.5, 7.5, 2.2, 4.0, 660], s: [['一份', 250]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'egg_cucumber', name: '黄瓜炒鸡蛋', alias: 'huangguachaojidan cucumber egg', cat: 'dish', n: [130, 7.5, 10.0, 2.5, 0.6, 1.5, 520], s: [['一份', 200]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'egg_bittergourd', name: '苦瓜炒蛋', alias: 'kuguachaodan bitter gourd egg', cat: 'dish', n: [135, 7.0, 10.5, 3.0, 1.2, 1.0, 540], s: [['一份', 200]], ...META_RECIPE_READY, f: ['est'] },
   { id: 'egg_onion', name: '洋葱炒蛋', alias: 'yangcongchaodan onion egg', cat: 'dish', n: [140, 7.0, 10.5, 5.0, 1.0, 3.0, 530], s: [['一份', 200]], ...META_RECIPE_READY, f: ['est'] },
@@ -1784,8 +1787,8 @@ const DISH_ADDED_SUGAR = Object.freeze({
   suanla_fen: 0.5, tomato_beef_brisket: 0.5, wolf_tooth_potato: 0.5, bbq_skewer_veg: 0.3,
   chicken_leg_rice: 0.3, dry_fried_bean: 0.3, dry_pot_cauliflower: 0.3, duck_leg_rice: 0.3,
   egg_onion: 0.3, farm_pork_stirfry: 0.3, garlic_sprout_pork: 0.3, luobo_niunanbao: 0.3,
-  pork_edamame: 0.3, pork_green_bean: 0.3, pork_pepper_shred: 0.3, pork_snow_pea: 0.3,
-  pork_water_bamboo: 0.3, sour_beef_hotpot: 0.3, soy_sauce_fried_rice: 0.3,
+  pork_carrot: 0.3, pork_edamame: 0.3, pork_green_bean: 0.3, pork_pepper_shred: 0.3,
+  pork_snow_pea: 0.3, pork_water_bamboo: 0.3, sour_beef_hotpot: 0.3, soy_sauce_fried_rice: 0.3,
   stir_pork_cabbage: 0.3, tomato_beef_noodle: 0.3, tomato_cauliflower: 0.3, tomato_fish: 0.3,
   broccoli_shrimp: 0.2, hotpot_clear: 0.2, hotpot_spicy: 0.2, zucchini_egg: 0.2,
   nongjia_yiwangxiang: 0.5, soybean_pork_trotter: 0.8, dry_pot_qianye_tofu: 0.8,
