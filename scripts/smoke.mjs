@@ -1083,6 +1083,54 @@ try {
     sheetShown && sheetDrag?.heldOpen === true && sheetDrag?.leftover === '' && sheetDrag?.gone === true,
     JSON.stringify({ sheetShown, ...sheetDrag }));
 
+  /*
+   * 幽灵点击关不掉遮罩（lib/utils.js 的 scrimDismiss）。
+   *
+   * iOS 上轻点让一层覆盖物出现在手指底下时，随后补派的那个合成 click 会落到
+   * 新出现的那一层上 —— 遮罩铺满整屏，它的 onclick 就是「关掉」，
+   * 表现就是「点一下食物，弹层升起来又立刻收回去」。
+   * 这里照着补派那一下的样子造一次：**没有 pointerdown 的 click，detail 为 1**
+   * （兼容鼠标事件就长这样）。闸门早过了，所以这一条量的是配对，不是时间窗。
+   * 两层遮罩一起量：设置抽屉那层是同一个形状，现在只是碰巧被抽屉自己挡住了坐标。
+   */
+  const ghostClick = async (selector, x, y) => page.evaluate(([sel, cx, cy]) => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    el.dispatchEvent(new MouseEvent('click', {
+      bubbles: true, cancelable: true, detail: 1, clientX: cx, clientY: cy,
+    }));
+    return true;
+  }, [selector, x, y]);
+
+  let ghost = null;
+  await page.evaluate(() => document.querySelector('.search-results .ui-list-row, .search-item')?.click());
+  await page.waitForTimeout(1000);
+  if (await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === false)) {
+    await ghostClick('.sheet-backdrop', 196, 40);
+    await page.waitForTimeout(400);
+    const sheetHeld = await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === false);
+    // 真按在遮罩上再抬手，仍然要关得掉
+    await swipe({ x: 196, y: 40 }, { x: 196, y: 40 }, 1);
+    await page.waitForTimeout(500);
+    const sheetGone = await page.evaluate(() => document.querySelector('.sheet-wrap')?.hidden === true);
+
+    await page.evaluate(() => [...document.querySelectorAll('button')]
+      .find((b) => b.getAttribute('aria-label')?.includes('设置'))?.click());
+    await page.waitForTimeout(600);
+    const drawerShown = await page.evaluate(() => document.querySelector('.settings-overlay')?.hidden === false);
+    await ghostClick('.settings-overlay', 4, 400);
+    await page.waitForTimeout(400);
+    const drawerHeld = await page.evaluate(() => document.querySelector('.settings-overlay')?.hidden === false);
+    await swipe({ x: 5, y: 400 }, { x: 5, y: 400 }, 1);
+    await page.waitForTimeout(600);
+    const drawerGone = await page.evaluate(() => document.querySelector('.settings-overlay')?.getAttribute('aria-hidden') === 'true');
+    ghost = { sheetHeld, sheetGone, drawerShown, drawerHeld, drawerGone };
+  }
+  check('补派的幽灵点击关不掉遮罩，真按下去仍然关得掉',
+    ghost?.sheetHeld === true && ghost?.sheetGone === true
+    && ghost?.drawerShown === true && ghost?.drawerHeld === true && ghost?.drawerGone === true,
+    JSON.stringify(ghost));
+
   // 毛玻璃只给真的叠在内容上面的那几处
   await page.evaluate(async (b) => {
     const { toast } = await import(`${b}/js/lib/utils.js`);

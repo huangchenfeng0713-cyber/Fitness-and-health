@@ -503,6 +503,13 @@ export function buildAdvice(input) {
  * 「今日提示」里本来就各有一条，同一件事在一屏里说两遍，
  * 而且会把热量的结论挤掉（钠超标 11% 就能顶掉「今天还差 900 kcal」）。
  * 蛋白、钠、纤维、糖一律归 buildInsights。
+ *
+ * **标题写下一步该怎么做，不复述判断。** 这一屏上判断已经有人说了：
+ * 左边那枚胶囊是「节奏正常 / 需要注意」，环心是「还可摄入 684 kcal」
+ * 或者「超出目标 400」。标题原先是「按计划吃 / 今日热量偏高」这一路，
+ * 夹在两者中间，说的还是同一件事 —— 而「按计划吃」尤其空：
+ * 一笔都没记的人看到的也是它，读起来像句口号，不知道它在要求什么。
+ * 现在这一格专门回答「那我接下来怎么办」，一句话、不报数字。
  */
 export function judgeStatus({
   gaps, kcalLeft, hour, targets, budget, hasIntake = true,
@@ -523,13 +530,14 @@ export function judgeStatus({
   const expected = pace.should;
 
   /*
-   * 标题只说判断，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，
-   * 标题再写一遍余量就叠了。差 40 kcal 以内和圈心同一把尺，说到位即可。
+   * 标题只说下一步，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，
+   * 标题再写一遍余量就叠了。差 40 kcal 以内和圈心同一把尺：那时候要说的是
+   * 「今天不用再补」，不是再念一遍「到位」。
    */
   if (Math.abs(kcalLeft) <= BALANCE_WITHIN) {
     return {
       level: 'good',
-      headline: '今日热量到位',
+      headline: '今天不用再补热量',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`
         + (kcalLeft < 0
           ? '这个幅度对计划几乎没有影响，今天无需补偿性少吃。'
@@ -542,14 +550,14 @@ export function judgeStatus({
       // 热量目标是计划区间，不是安全上限。单日偏高用橙色提醒即可；
       // 红色只留给钠、游离糖等真正的上限，避免诱导跳餐或补偿性节食。
       level: 'warn',
-      headline: '今日热量偏高',
+      headline: '不必少吃补回来',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划为 ${gaps.kcal.target} kcal。单日偏差不能说明增减脂结果，不必跳过下一餐或明天补偿性少吃；如果一周内反复偏高，再结合 7 天体重趋势调整份量。`,
     };
   }
   if (kcalLeft < 0) {
     return {
       level: 'warn',
-      headline: '略超计划',
+      headline: '下一餐回到正常预算',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。这个幅度对计划几乎没有影响，今天无需补偿性少吃，下一餐回到正常预算即可。`,
     };
   }
@@ -570,7 +578,7 @@ export function judgeStatus({
      */
     return {
       level: late ? 'warn' : 'good',
-      headline: '按计划吃',
+      headline: late ? '今晚不必一次补完' : '先照常吃这一餐',
       detail: late
         ? `按计划今天要吃到 ${gaps.kcal.target} kcal。夜里不建议一次补完全天缺口，明天回到正常节奏即可。`
         : `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
@@ -579,14 +587,14 @@ export function judgeStatus({
   if (kcalPct < expected - 30 && dayProgress > 0.5) {
     return {
       level: 'warn',
-      headline: '今天吃得偏少',
+      headline: '下一餐可以多吃些',
       detail: `若记录完整且长期大幅低于目标，可能增加恢复不足和瘦体重流失风险。接下来 ${budget.meal.label} 可先安排约 ${budget.kcal} kcal。`
         + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
     };
   }
   return {
     level: 'good',
-    headline: '按计划吃',
+    headline: '照现在的节奏继续',
     detail: `热量完成 ${kcalPct}%，${pace.text}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
   };
 }

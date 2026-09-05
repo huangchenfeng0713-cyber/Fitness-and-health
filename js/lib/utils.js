@@ -92,6 +92,44 @@ export function field(label, control, hint, extraClass = '') {
     hint && h('small.field-hint', null, hint));
 }
 
+/**
+ * 遮罩上的「点空白处关掉」。
+ *
+ * **只认「按下也落在自己身上」的那一次点击。**
+ *
+ * iOS 上轻点让一层覆盖物出现在手指底下时，随后补派的那个合成 click 会落到
+ * **新出现的那一层**上 —— 而遮罩正好铺满整屏，它的 onclick 就是「关掉」。
+ * 表现就是「点一下食物，弹层升起来又立刻收回去」。那一下没有对应的
+ * pointerdown 落在遮罩上，所以「配没配上」比「过了多久」是更准的判据：
+ * 真机上那一下约 300ms 才到，想靠时间窗拦住，窗口就得开到用户已经能操作的时候。
+ *
+ * 配对**不是**开场闸门的替代品，两道各管一段：闸门管「刚打开的那几百毫秒里
+ * 谁都别想关掉它」，配对管「任何时候，没按下过就不算点过」。
+ *
+ * 判据要落在**遮罩自己**身上（`ev.target === scrim`），不是整片外壳 ——
+ * v3.9.4 那版用的是「外壳上任意一次 pointerdown」，在面板上按一下也会把
+ * 遮罩武装起来；它还顺手在外壳上 preventDefault，退场动画没跑完时整页都点不了。
+ *
+ * 键盘和读屏派来的 click 没有 pointerdown（`detail` 为 0），那是真的「激活」，
+ * 照旧放行 —— 合成的幽灵点击是兼容鼠标事件，`detail` 是 1，拦得住。
+ *
+ * @param {Element} scrim   铺满屏幕的那层遮罩
+ * @param {() => void} dismiss 真的该关掉时调用
+ */
+export function scrimDismiss(scrim, dismiss) {
+  if (!scrim) return;
+  let armed = false;
+  scrim.addEventListener('pointerdown', (ev) => { armed = ev.target === scrim; });
+  // 手指滑走、被系统收走的那一下不算按下过
+  scrim.addEventListener('pointercancel', () => { armed = false; });
+  scrim.addEventListener('click', (ev) => {
+    const fromPointer = ev.detail > 0;
+    if (fromPointer && !armed) return;
+    armed = false;
+    dismiss(ev);
+  });
+}
+
 /*
  * 点开的说明层，点外面就该收起来。
  *

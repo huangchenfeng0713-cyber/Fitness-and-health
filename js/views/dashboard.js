@@ -8,9 +8,15 @@ import { energyRing, lockTrackScale } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
+import { unitGap } from '../core/units.js';
 import { setIntent } from '../lib/nav.js';
 
-const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意', bad: '已超标' };
+/*
+ * 主卡只有两档。红色那一档（'已超标'）删了 —— `judgeStatus` 从来不返回它，
+ * 也不该返回：热量目标是计划区间不是安全上限，把「今天吃多了」画成危险色
+ * 会诱导跳餐。红只留给钠、游离糖那些真上限（见 core/metrics.js）。
+ */
+const LEVEL_TEXT = { good: '节奏正常', warn: '需要注意' };
 const expanded = { insights: false };
 
 function moreToggle(key, total, shown, rerender) {
@@ -91,7 +97,6 @@ function metricChip(m) {
 function heroCard(advice, targets, derived) {
   const { status, gaps } = advice;
   const metrics = dailyMetrics(targets, gaps, derived.health?.waterCount);
-  const kcal = metrics.find((m) => m.key === 'kcal');
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
   /*
@@ -127,8 +132,10 @@ function heroCard(advice, targets, derived) {
      */
     h('div.hero-body', null,
       h('div.hero-ring', null,
-        // 只在同一天里让弧长过去；翻日期是换了一份数据，不是「长了一截」
-        energyRingChart({ model: ringModel, animateKey: state.day }),
+        h('div.ring-stack', null,
+          // 只在同一天里让弧长过去；翻日期是换了一份数据，不是「长了一截」
+          energyRingChart({ model: ringModel, animateKey: state.day }),
+          ringCenter(ringModel)),
         ringLegend(ringModel))),
 
     h('div.metric-list', null,
@@ -137,6 +144,35 @@ function heroCard(advice, targets, derived) {
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
     energyFreshness(derived),
   );
+}
+
+/*
+ * 圈心：**两行，不是三行**。
+ *
+ *     还可摄入        ← --fs-body 中灰
+ *     684 kcal       ← --fs-display 半粗，单位贴着数字、小一档
+ *
+ * 「kcal」原先自己占第三行。它是这三行里信息量最小的一个，却拿到了和
+ * 「还可摄入」一样的分量，还把数字和它的单位拆到了两行上 ——
+ * `core/units.js` 的规矩本来就是西文单位空一格贴着数字写（`116 kcal`）。
+ *
+ * 字走 HTML 不写进 SVG，和下面那行图例同一个理由：
+ * SVG 里的字跟着环缩放，窄屏上环缩到 62vw，那几行就一起掉到 12px 可读下限
+ * 以下（实测 320px 的机子上 11.9px）；字号也接不上 app.css 顶部那七档
+ * —— 数字曾经是 42px，比全应用最大的一档还大 16px，而它上下两行是 14 和 15，
+ * 相邻两行差着三倍。`--fs-display` 的注释写的就是「圆环里的大数」，
+ * 之前唯独圆环没在用它。
+ */
+function ringCenter(model) {
+  const c = model.center;
+  if (!c) return null;
+  // 「接近目标」不报数，那一句就得自己撑住圈心：只剩它一个的时候提一档、加重
+  return h(`div.ring-center${c.kcal == null ? '.is-only' : ''}`, null,
+    h('span.ring-caption', null, c.label),
+    // 空格由 core/units.js 定，不在这儿自己决定；写进 DOM 而不是 CSS 的 margin，
+    // 读屏和复制出来的也才是「684 kcal」
+    c.kcal == null ? null : h('strong.ring-value', null,
+      String(c.kcal), unitGap('kcal'), h('span.ring-unit', null, 'kcal')));
 }
 
 /*

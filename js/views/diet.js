@@ -610,7 +610,9 @@ function refreshPortion() {
    * 份量面板住在公共弹层里（lib/sheet.js）。滚动穿透、背景锁定、Esc 关闭
    * 那几件事在那边统一处理过一次，这里只管往里填内容。
    */
-  if (!food) { closeSheet(); return; }
+  // 程序自己收场（切页重建外壳时选中态是空的），不是用户在关它 —— 这一下必须落地：
+  // nodes.portion 上面刚 clearEl 过，被开场闸门挡下来就会留一层空弹层钉在屏幕上
+  if (!food) { closeSheet({ force: true }); return; }
   if (!sheetIsOpen()) {
     openSheet(nodes.portion, {
       label: '选择份量',

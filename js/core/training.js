@@ -236,7 +236,7 @@ const SPLIT_STARTER_PATTERNS = Object.freeze({
  * 代表动作，而是它的边角变式了。3 个足够让人看出「今天和昨天不一样」，
  * 又不至于把方案质量摊薄。
  */
-const ROTATE_POOL = 3;
+export const ROTATE_POOL = 3;
 
 /** 从合格候选里按 seed 挑一个：还是那几个够格的，只是换着来 */
 function rotate(options, seed) {
@@ -264,9 +264,17 @@ function comboForPatterns(list, patterns, requestedSize, seed = 0) {
     const candidate = rotate(top, seed);
     if (candidate) combo.push(candidate);
   }
-  // 动作库较小或某个模式缺失时仍尽量凑齐，但不塞进高度重复的替代品。
+  /*
+   * 动作库较小或某个模式缺失时仍尽量凑齐，但不塞进高度重复的替代品。
+   *
+   * **这里的轮换也要封在前几名里。** offset 原先是 `seed % rest.length` —— 没有上限，
+   * 于是有些天直接从库尾起扫：实测胸的推荐里出现过第 18 个动作（一共就 18 个），
+   * 背出现过第 25 / 26 个。ROTATE_POOL 立的规矩（只在这个模式的代表动作之间换）
+   * 在模式槽位上守住了，凑数这一段却漏了一道，同一份推荐里两种标准。
+   */
   const rest = list.filter((e) => !combo.some((picked) => picked.id === e.id));
-  const offset = rest.length ? (((Number(seed) || 0) % rest.length) + rest.length) % rest.length : 0;
+  const span = Math.min(ROTATE_POOL, rest.length);
+  const offset = span ? (((Number(seed) || 0) % span) + span) % span : 0;
   for (let i = 0; i < rest.length; i += 1) {
     if (combo.length >= size) break;
     const exercise = rest[(i + offset) % rest.length];

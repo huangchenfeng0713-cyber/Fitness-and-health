@@ -12,7 +12,7 @@
  * 同一时刻只允许一个弹层，所以整个应用共用这一份 DOM。
  */
 
-import { h, clearEl, mount } from './utils.js';
+import { h, clearEl, mount, scrimDismiss } from './utils.js';
 import { dragGesture } from './gesture.js';
 
 let wrap = null;
@@ -30,36 +30,65 @@ let lockedScrollY = 0;
  */
 let closing = false;
 let exitAnim = null;
-let openGuardTimer = null;
+let inputGuardTimer = null;
+let dismissGuardTimer = null;
 let exitTimer = null;
-const OPEN_GUARD_MS = 700;
-const EXIT_MS = 280;
 /*
- * 打开手势还没结束时，任何「点背景 / 下滑 / Esc / 取消」都不能把弹层关掉。
+ * 开场有两道闸门，管的是两件事，所以时长也不一样。
  *
- * iOS 给带 backdrop-filter 的节点开过洞：父级 pointer-events:none 挡不住
- * 毛玻璃弹层本身。所以 CSS 拦一层，closeSheet 再拦一层。真正记完一笔、
- * 复制昨天那些调用传 force。
+ * - **输入闸门**（INPUT_GUARD_MS）：刚升起来的那几帧弹层自己不接事件，
+ *   iOS 把同一次触摸补派过来时，那一下落不到「记录到午餐」上。
+ *   升起动画 240ms，过了就该能按 —— 两道闸门原先合成一个 700ms 的，
+ *   代价是弹层已经稳稳停在那儿了，＋、克数框、记录键还有半秒钟按不动。
+ * - **关闭闸门**（DISMISS_GUARD_MS）：这段时间里点背景、下滑、Esc、取消
+ *   一律关不掉它。这一档要长 —— 「点开又瞬间收起」正是这个弹层踩过的坑。
+ *
+ * **没就绪不等于让开。** wrap 自己一直接事件（CSS 里 .sheet-wrap 不再写
+ * pointer-events: none），把那几下原地吞掉。让开的话点击会穿到背后那一页上：
+ * 实测能点中被弹层盖住的搜索结果，浏览器还会把紧接着的那一下当成滚动接管
+ * （pointerdown 之后直接来一个 pointercancel），于是往下滑关不掉弹层 ——
+ * scripts/smoke.mjs 里那条拖拽用例当场就红了。
  */
+const INPUT_GUARD_MS = 300;
+const DISMISS_GUARD_MS = 700;
+const EXIT_MS = 280;
+/** 用户现在能不能把它关掉。真正记完一笔、复制昨天那些调用传 force 绕过 */
 let userCanDismiss = false;
-const sheetReady = () => !!wrap && !wrap.hidden && wrap.classList.contains('is-ready');
+const sheetReady = () => !!wrap && !wrap.hidden && userCanDismiss;
 
-function setSheetReady(on) {
+/*
+ * iOS 给带 backdrop-filter 的节点开过洞：父级 pointer-events:none 挡不住
+ * 毛玻璃弹层本身。所以 CSS 拦一层（.sheet-wrap:not(.is-ready) .sheet），
+ * 这里的行内样式再拦一层。
+ */
+function setInputReady(on) {
   if (!wrap) return;
   wrap.classList.toggle('is-ready', on);
-  userCanDismiss = on;
   if (panel) panel.style.pointerEvents = on ? '' : 'none';
   const backdrop = wrap.querySelector('.sheet-backdrop');
   if (backdrop) backdrop.style.pointerEvents = on ? '' : 'none';
 }
 
-function armOpenGuard() {
-  setSheetReady(false);
-  clearTimeout(openGuardTimer);
-  openGuardTimer = setTimeout(() => {
-    if (wrap && !wrap.hidden && !closing) setSheetReady(true);
-    openGuardTimer = null;
-  }, OPEN_GUARD_MS);
+function clearOpenGuards() {
+  clearTimeout(inputGuardTimer);
+  inputGuardTimer = null;
+  clearTimeout(dismissGuardTimer);
+  dismissGuardTimer = null;
+  userCanDismiss = false;
+}
+
+function armOpenGuards() {
+  clearOpenGuards();
+  setInputReady(false);
+  const alive = () => wrap && !wrap.hidden && !closing;
+  inputGuardTimer = setTimeout(() => {
+    inputGuardTimer = null;
+    if (alive()) setInputReady(true);
+  }, INPUT_GUARD_MS);
+  dismissGuardTimer = setTimeout(() => {
+    dismissGuardTimer = null;
+    if (alive()) userCanDismiss = true;
+  }, DISMISS_GUARD_MS);
 }
 
 function restartRise() {
@@ -87,9 +116,14 @@ function build() {
   },
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
-  wrap = h('div.sheet-wrap', { hidden: true },
-    h('div.sheet-backdrop', { onclick: () => { if (sheetReady()) closeSheet(); } }),
-    panel);
+  const backdrop = h('div.sheet-backdrop');
+  wrap = h('div.sheet-wrap', { hidden: true }, backdrop, panel);
+  /*
+   * 点背景关掉，但**那一下必须是按在背景上开始的**（scrimDismiss）。
+   * 开场闸门只挡住最初那几百毫秒；配对挡的是「任何时候补派过来的那一下」——
+   * iOS 的幽灵点击约 300ms 才到，靠时间窗拦住它就得把窗口开到用户已经能操作的时候。
+   */
+  scrimDismiss(backdrop, () => { if (sheetReady()) closeSheet(); });
   document.body.append(wrap);
   attachDragToClose();
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来
@@ -156,15 +190,14 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   resetDragStyles();
   mount(scrollArea, content);
   /*
-   * 默认不接事件（.sheet-wrap { pointer-events: none }），等打开手势彻底
-   * 结束后再 is-ready。Safari 把同一次触摸补派到遮罩上时，点击会穿过弹层
-   * 打在食物上，而不会把弹层关掉。上一版在 wrap 上 preventDefault，退场
-   * 动画没结束时整页都点不了。
+   * 弹层自己先不接事件，由整片 wrap 把这几下吞掉：Safari 把同一次触摸补派
+   * 过来时，它既落不到弹层里的按钮上，也穿不到背后那一页上。上一版在 wrap 上
+   * preventDefault，退场动画没结束时整页都点不了。
    */
-  setSheetReady(false);
+  setInputReady(false);
   wrap.hidden = false;
   restartRise();
-  armOpenGuard();
+  armOpenGuards();
   scrollArea.scrollTop = 0;
   // 等打开那一次点击走完再钉 body。点的当下改 position:fixed，iOS 会
   // 按新布局把同一次触摸再派到手指底下刚露出来的弹层上。
@@ -204,9 +237,8 @@ export function closeSheet({ fromY = 0, force = false } = {}) {
   if (!wrap || wrap.hidden || closing) return;
   if (!force && !userCanDismiss) return;
   closing = true;
-  setSheetReady(false);
-  clearTimeout(openGuardTimer);
-  openGuardTimer = null;
+  setInputReady(false);
+  clearOpenGuards();
   // 状态同步做完：调用方依赖 onClose 就在这一刻跑（「确认」按钮先 resolve 再关）
   unlockBody();
   const fn = onClose;
@@ -233,7 +265,7 @@ function playExit(fromY) {
     exitTimer = null;
     if (!closing) return;         // 动画没跑完又被重新打开了，别把新的这层收掉
     closing = false;
-    setSheetReady(false);
+    setInputReady(false);
     wrap.hidden = true;
     clearEl(scrollArea);
     clearEl(footer);

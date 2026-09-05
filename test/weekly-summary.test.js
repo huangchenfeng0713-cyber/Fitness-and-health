@@ -75,10 +75,30 @@ test('体重报首末差，不做拟合', () => {
   ];
   const s = weeklySummary({ endDate: '2026-08-28', healthDays });
   assert.equal(rowOf(s, 'weight').value, '-0.5 kg');
-  assert.match(rowOf(s, 'weight').note, /共 3 次称重/);
+  // 三次称重之间隔着的多半是水分，不够说方向
+  assert.match(rowOf(s, 'weight').note, /方向还看不准/);
 
   const one = weeklySummary({ endDate: '2026-08-28', healthDays: [{ date: day(2), weightKg: 77 }] });
   assert.match(rowOf(one, 'weight').note, /只称了一次/, '一次称重看不出方向，要说出来');
+});
+
+/*
+ * 称够 4 次才敢说方向 —— 和趋势卡「至少 4 次称重、隔开 7 天」是同一道门槛，
+ * 这里的窗口本来就是 7 天，所以只卡次数。
+ */
+test('称够次数才说这一周在往哪走', () => {
+  const at = (vals) => weeklySummary({
+    endDate: '2026-08-28',
+    healthDays: vals.map((w, i) => ({ date: day(vals.length - 1 - i), weightKg: w })),
+  });
+  assert.match(rowOf(at([80, 79.6, 79.3, 79]), 'weight').note, /往下走/);
+  assert.match(rowOf(at([79, 79.3, 79.6, 80]), 'weight').note, /往上走/);
+  assert.match(rowOf(at([79, 79.1, 79.2, 79.2]), 'weight').note, /基本持平/);
+  assert.match(rowOf(at([80, 79.5, 79]), 'weight').note, /看不准/, '只称了三次不该报方向');
+  // 第三列写结论，不写「共 N 次称重」「哪天到哪天」这类口径
+  for (const vals of [[80, 79.6, 79.3, 79], [80, 79.5, 79]]) {
+    assert.doesNotMatch(rowOf(at(vals), 'weight').note, /次称重|→/);
+  }
 });
 
 test('窗口外的数据不算进来', () => {
@@ -138,7 +158,8 @@ test('累计收支只算同时有摄入和消耗的日子', () => {
   assert.equal(s.pairedDays, 4, '配对日应当只有四天');
   // 每个配对日 2000 − 2200 = −200，四天共 −800
   assert.match(by.balance.value, /缺口 800 kcal/);
-  assert.match(by.balance.note, /依据 4 个完整日/);
+  // 第三列折成日均：总数是几天攒的，人排饭是按天排的
+  assert.match(by.balance.note, /^日均缺口 200 kcal$/);
   // 漏记那三天绝不能按 0 kcal 摄入计入（否则会变成 −7400）
   assert.doesNotMatch(by.balance.value, /7400|6600/);
 });
@@ -171,7 +192,12 @@ test('日均锻炼取设备分钟，不拿力量训练次数顶替', () => {
   });
   const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
   assert.equal(by.exercise.value, '40分钟', '20/30/40/50/60 的均值是 40');
-  assert.match(by.exercise.note, /Apple 健康/);
+  /*
+   * 这一行没有第三列。「一周 150 分钟」那个结论同一页的趋势卡已经说过一次，
+   * 剩下能写的只有「按有数据的 5 天算」那类口径 —— 用户拿它做不出任何决定。
+   */
+  assert.equal(by.exercise.note, '');
+  assert.equal(by.steps.note, '');
   assert.equal(by.training, undefined, '力量训练次数应留在健身页');
 });
 
@@ -199,7 +225,16 @@ test('配对不足时点名缺的是哪一半', () => {
   const s = weeklySummary({ endDate: '2026-08-28', healthDays: health, dietDaily: [] });
   const balance = s.rows.find((r) => r.key === 'balance');
   assert.equal(balance.value, '—');
-  assert.match(balance.note, /6 天设备记录/, '没说有几天设备记录');
-  assert.match(balance.note, /0 天饮食记录/, '没说有几天饮食记录');
   assert.match(balance.note, /配对数据不足/);
+  assert.match(balance.note, /缺饮食记录/, '没说清缺的是哪一半');
+  // 几天几天那串数是口径：用户能动手的只有「去补记饮食」，报数改不了什么
+  assert.doesNotMatch(balance.note, /\d+ 天/, '第三列又在报口径');
+
+  // 反过来：饮食记着、手表没同步
+  const noDevice = weeklySummary({
+    endDate: '2026-08-28',
+    dietDaily: Array.from({ length: 5 }, (_, i) => ({ date: day(i), kcal: 2000, protein: 100 })),
+    healthDays: Array.from({ length: 5 }, (_, i) => ({ date: day(i), weightKg: 70 })),
+  });
+  assert.match(noDevice.rows.find((r) => r.key === 'balance').note, /缺设备记录/);
 });

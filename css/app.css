@@ -593,7 +593,6 @@ html, body { height: 100%; overflow: hidden; }
   background: var(--accent-soft); color: var(--accent); font-weight: var(--w-semibold);
 }
 .hero.warn .status-pill { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
-.hero.bad .status-pill { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
 .hero-detail { margin: var(--space-2) 0 0; font-size: var(--fs-body); color: var(--muted); line-height: 1.65; }
 
 .hero-body { display: flex; flex-direction: column; margin: var(--space-3) 0 var(--space-1); overflow: visible; }
@@ -607,9 +606,44 @@ html, body { height: 100%; overflow: hidden; }
   display: flex; flex-direction: column; align-items: center;
   gap: var(--space-2); overflow: visible;
 }
-.ring-caption { fill: var(--muted); }
-.ring-value { fill: var(--text); }
-.ring-unit { fill: var(--muted); opacity: .7; }
+/*
+ * 圈心那两行叠在环中间。**是 HTML，不是 SVG 里的 <text>** ——
+ * 理由和图例一样：SVG 里的字跟着环缩放，窄屏上会掉到 12px 可读下限以下，
+ * 字号也接不上上面那七档。
+ */
+.ring-stack { position: relative; display: flex; }
+.ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--space-0);
+  /* 只是叠在上面的一层字，别把环的手势和点击吃掉 */
+  pointer-events: none;
+}
+.ring-caption { font-size: var(--fs-body); color: var(--muted); }
+/* 差 ≤ 40 kcal 时圈心不报数，那一句就是圈心的全部内容，得撑得住 */
+.ring-center.is-only .ring-caption {
+  font-size: var(--fs-headline); font-weight: var(--w-semibold); color: var(--text);
+}
+.ring-value {
+  position: relative;
+  font-size: var(--fs-display); font-weight: var(--w-semibold);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  /* 一位数变两位数时数字不该左右跳，尺子也没变 */
+  white-space: nowrap;
+}
+/*
+ * 单位挂在数字右边，**不参与居中**。
+ *
+ * 跟着一起居中的话，被居中的是「684 kcal」这一整块，于是数字本身左偏了
+ * 十几个像素 —— 而上面那行「还可摄入」是正的，两行对不上一条中轴，
+ * 环也不是绕着数字转的。现在居中的只有数字，kcal 从它右边挂出去。
+ * 那个空格由 core/units.js 写进 DOM —— 读屏念的、复制出去的都是「684 kcal」。
+ * 但它脱了文档流，行尾的空白会被吃掉，所以看得见的那道缝仍要在这儿给一次。
+ */
+.ring-unit {
+  position: absolute; left: calc(100% + 3px); bottom: .1em;
+  font-size: var(--fs-footnote); font-weight: var(--w-medium); color: var(--muted);
+}
 
 /*
  * 两条轨道，每条两档明度。
@@ -622,14 +656,15 @@ html, body { height: 100%; overflow: hidden; }
  * 这里只管描边端头和灰轨。
  */
 .ring-track, .ring-burn-track { stroke: var(--track); }
-.ring-seg, .ring-track, .ring-burn-track { stroke-linecap: butt; }
-.ring-origin { fill: var(--card); stroke: var(--border); stroke-width: 1; }
 /*
- * 刻度只要细线，不要圈圈。
- * 颜色由画的时候按轨道和圈数直接给（见 energy-ring-chart.js 的 TRACK）——
- * 刻度跟着它标的那条弧走色，跑过一整圈一起换深色，这里只管粗细和端头。
+ * 端头：灰轨方头、弧圆头。
+ *
+ * 圆头读作「走到这儿了」，方头读作「被裁断」，而这只环只说前一件事。
+ * 灰轨不能圆 —— 它铺满 352°，两端各鼓出半个描边就把 12 点那道缺口糊上了。
+ * 长度补偿在 energy-ring-chart.js 的 arc() 里，落笔范围和方头时一样。
  */
-.ring-tick { stroke-width: 2; stroke-linecap: round; }
+.ring-track, .ring-burn-track { stroke-linecap: butt; }
+.ring-seg { stroke-linecap: round; }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
@@ -668,8 +703,6 @@ html, body { height: 100%; overflow: hidden; }
 .ring-swatch-burn { color: var(--ring-burn); }
 .ring-swatch-burn.is-deep { color: var(--ring-burn-wrap); }
 
-.hero-macros { flex: 1; display: grid; gap: var(--space-2); min-width: 0; }
-
 .mini-macro-top { display: flex; align-items: baseline; gap: var(--space-1); font-size: var(--fs-footnote); margin-bottom: var(--space-1); }
 .mini-macro-top span:first-child { flex: 1; color: var(--muted); }
 .mini-macro-top strong { font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
@@ -686,20 +719,6 @@ html, body { height: 100%; overflow: hidden; }
 }
 .macro-bar-over { height: 100%; background: var(--danger); opacity: .55; }
 
-/*
- * 四项排两行两列，不用 flex 换行。
- * 「已摄入 / 目标摄入 / 预计总消耗 / 计划平衡」四条长短不一，让它自己折的话
- * 前三条挤在一行、第四条孤零零掉到下一行，左右对不齐。
- */
-.hero-foot {
-  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1) var(--space-3);
-  margin-top: var(--space-3); padding-top: 12px;
-  border-top: 1px solid var(--border); font-size: var(--fs-caption); color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-.hero-foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* 四项挤成一行时「饮水 550 /1700ml」会折成两截，两行两列反而更矮也更好读 */
 /*
  * 「你现在看到的数字不对」这几条：演示数据、身体信息不合格、能量数据过期。
  * 它们必须一眼能认出是警告 —— 一次重构里这段样式被连带删掉，
@@ -853,25 +872,20 @@ html, body { height: 100%; overflow: hidden; }
 .split-end:last-child { text-align: right; }
 .split-grams-plan { color: color-mix(in srgb, var(--faint) 70%, transparent); text-align: center; }
 
-/*
- * 计划速率的代价。橙字但不是「数字不对」那一档 ——
- * 按 0.8%/周 增重是个可执行的选择，只是要知道多出来的按比例是脂肪。
- */
-.hero-rate-note {
-  margin: var(--space-2) 0 0; padding: 8px 10px; border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
-  color: var(--warn); font-size: var(--fs-caption); line-height: 1.6;
-}
-
-.hero-ring-note {
-  margin: var(--space-2) 0 0; font-size: var(--fs-caption); color: var(--accent);
-  text-align: center; white-space: nowrap;
-}
-.hero-ring-note.warn { color: var(--warn); }
 
 /* ============ 推荐 ============ */
 .rec-list { display: flex; flex-direction: column; }
-.rec-row { display: flex; align-items: center; gap: var(--space-2); padding: 12px 0; border-top: 1px solid var(--border); }
+/*
+ * 整行是个 button（点行就打开份量面板），所以要把浏览器给按钮的那套默认值收掉。
+ * 三列宽度一次写完 —— 早先这儿写 flex、文件末尾的 `.recommend-card .rec-row`
+ * 又写一遍 grid，而 .rec-row 只长在推荐卡里，前面那份 display 从来没生效过。
+ */
+.rec-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto var(--control-inline);
+  align-items: center; gap: var(--space-2); padding: 12px 0;
+  border: 0; border-top: 1px solid var(--border);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
 .rec-list > .rec-row:first-child { border-top: 0; padding-top: 4px; }
 .rec-info { flex: 1; min-width: 0; }
 .rec-name { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-value); font-weight: var(--w-semibold); flex-wrap: wrap; }
@@ -890,11 +904,13 @@ html, body { height: 100%; overflow: hidden; }
  * 列表行右边的加号：描边小圆，不填实心绿。和健身页那个（.exercise-choice-action）
  * 是同一件事——「把这一行加进来」——就该长得一样。
  * 五六个实心绿圆排成一列是一整块色斑，而这一屏真正的主要动作是下面那个记录按钮。
+ *
+ * 它是个记号，不是控件：整行才是按钮，这里只画那个圆（和健身页的 .rec-add 一样）。
  */
 .add-btn {
   width: var(--control-inline); height: var(--control-inline); flex-shrink: 0; border-radius: 50%;
   border: 1px solid var(--border); background: transparent; color: var(--muted);
-  line-height: 1; cursor: pointer;
+  line-height: 1;
   display: flex; align-items: center; justify-content: center;
   transition: transform .12s, opacity .15s, background-color .12s;
 }
@@ -905,12 +921,11 @@ html, body { height: 100%; overflow: hidden; }
  */
 .add-btn .icon-slot svg,
 .exercise-choice-action .icon-slot svg { width: var(--icon-md); height: var(--icon-md); }
-/* 按下去的缩放和主按钮共用一条（见下面「按钮」那一节），这里只管配色 */
-.add-btn:active {
+/* 按下的是整行，不是这个圆 —— 和健身页的 .rec-pick:active 一样 */
+.rec-row:active .add-btn {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
-.add-btn:disabled { opacity: .45; }
 
 /* ============ 避免 ============ */
 
@@ -1028,18 +1043,6 @@ html, body { height: 100%; overflow: hidden; }
   font-variant-numeric: tabular-nums; text-align: center;
 }
 .set-unit { font-size: var(--fs-footnote); color: var(--faint); white-space: nowrap; }
-
-/* 喝水进度：细一条就够，别喧宾夺主 */
-/* 喝水：卡面上只剩四个杯量按钮，两行两列 */
-.water-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
-/*
- * 用中性底，不用强调色淡底。iOS 的 tinted 按钮是留给「这一屏的主要动作」的，
- * 一次出现一个；四个并排全染绿就成了一整块色斑。文字保留强调色，够看出可点。
- */
-.water-actions .secondary-btn { min-height: var(--control-md); padding: 9px 6px; background: var(--card-2); }
-.water-ring { flex: none; color: var(--water); }
-.water-custom { display: flex; align-items: center; gap: var(--space-2); }
-.water-custom .set-input { flex: 1; min-width: 0; text-align: center; }
 
 /* 「关于」并进反馈卡后，两段内容之间要有明确的分界 */
 .about-block {
@@ -1250,12 +1253,6 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  * 按下时用淡色底 + 强调色字，不用实心药丸：这只是「我现在看哪一半」，属于导航，
  * 不该比下面那列内容还抢眼 —— 卡里真正的主要动作是「全部加入」。
  */
-.rec-toggle { flex: none; }
-.rec-toggle.active {
-  background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  color: var(--accent);
-}
-
 /* 全部动作 / 推荐组合共用同一行结构，文字起点、行距与右侧动作完全一致。 */
 .rec-picks,
 .ex-list { display: flex; flex-direction: column; margin-top: var(--space-1); }
@@ -1448,13 +1445,17 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
  *  - overscroll-behavior: contain —— 弹层内部滚到头之后不把背后的页面带着跑；
  *  - body 钉成 fixed —— iOS 上只给 overflow:hidden 拦不住手指拖动。
  */
-.sheet-wrap { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
 /*
- * 默认不接事件。iOS 上父级 pointer-events:none 挡不住带 backdrop-filter
- * 的子节点（这份弹层就有毛玻璃），所以未就绪时连 .sheet 自己也写死 none。
- * is-ready 之后才真正可点、可拖。关掉的瞬间立刻拿掉 is-ready。
+ * 开场那几帧里，弹层和遮罩都不接事件（iOS 上父级 pointer-events:none 挡不住带
+ * backdrop-filter 的子节点，所以这两个各写一条），补派过来的那一下就落不到
+ * 「记录到午餐」上，也关不掉弹层。
+ *
+ * **但 wrap 自己一直接事件**：那几下要被原地吞掉。让开的话它们会穿到背后那一页上
+ * ——实测能点中被弹层盖住的搜索结果；浏览器还会把紧接着的那一下当成滚动接管，
+ * 于是往下滑关不掉弹层。touch-action 一起写死，免得这一段被判成在滚页面。
  */
-.sheet-wrap.is-ready { pointer-events: auto; }
+.sheet-wrap { position: fixed; inset: 0; z-index: 60; }
+.sheet-wrap:not(.is-ready) { touch-action: none; }
 .sheet-wrap:not(.is-ready) .sheet,
 .sheet-wrap:not(.is-ready) .sheet-backdrop { pointer-events: none; }
 .sheet-backdrop {
@@ -1515,13 +1516,6 @@ body.sheet-open {
   position: fixed; left: 0; right: 0; width: 100%;
   overflow: hidden;
 }
-
-.sheet-title { margin: var(--space-0) 0 var(--space-3); font-size: var(--fs-headline); font-weight: var(--w-bold); text-align: center; }
-.sheet-summary { margin: var(--space-3) 0 0; text-align: center; font-size: var(--fs-body); color: var(--muted); }
-.water-sheet { display: flex; flex-direction: column; align-items: center; }
-.water-sheet .water-ring { margin-top: var(--space-1); }
-.water-sheet .water-custom { width: 100%; max-width: 220px; margin-top: var(--space-3); }
-.water-sheet .sheet-action { width: 100%; }
 
 /*
  * 多选条：钉在滚动容器底部，饮食页和健身页共用。
@@ -2616,7 +2610,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   letter-spacing: -.01em;
   transition: transform .12s ease, opacity .12s ease, background-color .12s ease;
 }
-.primary-btn:active, .secondary-btn:active, .chip-btn:active, .add-btn:active {
+.primary-btn:active, .secondary-btn:active, .chip-btn:active, .rec-row:active .add-btn {
   transform: scale(.97);
 }
 /* 次要按钮用「强调色的淡底 + 强调色文字」，这是 iOS 里最常见的 tinted 按钮 */
@@ -3171,10 +3165,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .recommend-budget span { min-width: 0; white-space: nowrap; text-align: center; }
 .recommend-budget span:first-child { color: var(--accent); font-weight: var(--w-semibold); text-align: left; }
 .recommend-budget span + span { border-left: 1px solid var(--hairline); }
-.recommend-card .rec-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto var(--control-inline);
-}
-
 /* 固定选择栏始终是屏幕级横幅，不继承卡片内 sticky 与负边距。 */
 .actionbar-slot .training-select-bar { width: 100%; }
 .actionbar-slot .select-bar-go { min-height: var(--control-md); padding-inline: 18px; }

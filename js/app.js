@@ -1,6 +1,8 @@
 /** 应用入口：标签路由、首次启动引导、定时刷新 */
 
-import { h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText } from './lib/utils.js';
+import {
+  h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText, scrimDismiss,
+} from './lib/utils.js';
 import { isGesturing, dragGesture } from './lib/gesture.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
@@ -57,8 +59,16 @@ function ensureSettingsDrawer() {
   settingsOverlay = h('div.settings-overlay', {
     hidden: true,
     'aria-hidden': 'true',
-    onclick: () => closeSettings(),
   }, drawer);
+  /*
+   * 抽屉外面那圈也是「点空白处关掉」，和份量弹层的遮罩是同一个形状，
+   * 所以走同一个 scrimDismiss —— 同一个坑不留第二份。
+   *
+   * 它现在只是**碰巧**没炸：抽屉宽 94%，露出来的那条缝不在任何按钮的坐标上，
+   * 补派过来的那一下落在抽屉自己身上（抽屉 stopPropagation）。哪天抽屉换个宽度、
+   * 或者从别的位置打开，同一个幽灵点击就会把它一开就关。
+   */
+  scrimDismiss(settingsOverlay, () => closeSettings());
   document.body.append(settingsOverlay);
 }
 
