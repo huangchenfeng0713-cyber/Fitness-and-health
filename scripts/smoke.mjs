@@ -71,6 +71,36 @@ try {
   const tabs = await page.$$eval('.tab', (t) => t.map((x) => x.textContent.trim()));
   check('启动并渲染底部栏目', tabs.length === 4, tabs.join(' / '));
 
+  /*
+   * **刚起来就落库，屏幕要立刻跟上。**
+   *
+   * 重绘订阅原先排在 `await cloudInitialization` 后面：云端握手没回来之前，
+   * 谁都不会因为落库而重绘。实测网络不通时那一段是 8.2 秒 —— 应用已经画出来、
+   * 点得动，可记一笔饮食主卡不动、点推荐里的 ＋「今日动作」不出现、
+   * 喝一次水次数不加一。数据其实都写进去了，等 60 秒的定时器或者切一次页
+   * 才补上，读出来就是「点了没反应，过一会儿又自己出现了」。
+   *
+   * 这一条必须**趁早**跑：跑晚了握手已经回来，订阅挂上了，就测不到那个窗口。
+   * 直接写库（不点界面），量的才是「订阅有没有挂上」这一件事。
+   */
+  await page.evaluate(() => [...document.querySelectorAll('.tab')]
+    .find((x) => x.textContent.includes('健身'))?.click());
+  await page.waitForTimeout(300);
+  const liveUpdate = await page.evaluate(async (b) => {
+    const store = await import(`${b}/js/lib/store.js`);
+    const before = document.querySelectorAll('.plan-list .plan-row').length;
+    await store.saveTraining(new Date().toISOString().slice(0, 10), {
+      items: [{ id: 'bench_press_bb', sets: [], done: false }],
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    const after = document.querySelectorAll('.plan-list .plan-row').length;
+    await store.saveTraining(new Date().toISOString().slice(0, 10), { items: [] });
+    await new Promise((r) => setTimeout(r, 300));
+    return { before, after };
+  }, BASE);
+  check('刚起来就落库，屏幕立刻跟上（重绘订阅没有排在等云端后面）',
+    liveUpdate.before === 0 && liveUpdate.after === 1, JSON.stringify(liveUpdate));
+
   // ---- 四个栏目都能开，且没有脏值 ----
   for (let i = 0; i < tabs.length; i += 1) {
     await page.evaluate((n) => document.querySelectorAll('.tab')[n]?.click(), i);
@@ -744,7 +774,12 @@ try {
   const afterY = await page.evaluate(() => document.querySelector('main.view')?.scrollTop ?? 0);
   const sheetProblems = [
     !sheetBox && '份量弹层没打开',
-    sheetBox && sheetScroll.contain !== 'contain' && '弹层没有拦住滚动链',
+    /*
+     * `none` 而不是 `contain`：contain 只拦滚动链，橡皮筋还在 —— 滚到顶继续往下拉，
+     * 内容被拽下去、顶上留一大片空白，而且那一下被合成器接管之后就停在那儿。
+     */
+    sheetBox && sheetScroll.contain !== 'none'
+      && `弹层正文到顶还能继续往下拉（overscroll-behavior: ${sheetScroll.contain}）`,
     /*
      * 这一条是主判据。上面那个「滚四下看背景动没动」在 Chromium 里用滚轮
      * 复现不出 iOS 的手指拖动——只锁 body 也能过。真正的区别是有没有把
@@ -800,7 +835,17 @@ try {
     !emptyPicker.barVisible && !emptyPicker.slotVisible,
     JSON.stringify(emptyPicker));
 
+  /*
+   * **点行本身不算选中，只有右边那个 ＋ 算。**
+   * 整行可点的时候，滑动一列 76px 高的动作时手指蹭一下就多出一个动作。
+   */
   await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked)')?.click());
+  await page.waitForTimeout(300);
+  const rowClickSelected = await page.evaluate(() => !!document.querySelector('.ex-row.marked, .ex-row.chosen'));
+  check('点动作行本身不会把它加进来，只有加号算', !rowClickSelected,
+    rowClickSelected ? '点了一下行就被选中了' : '');
+
+  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked) .ex-pick')?.click());
   await page.waitForTimeout(300);
   const pickerEdge = await page.evaluate(() => {
     const view = document.querySelector('main.view');

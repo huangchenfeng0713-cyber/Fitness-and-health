@@ -612,37 +612,42 @@ html, body { height: 100%; overflow: hidden; }
  * 字号也接不上上面那七档。
  */
 .ring-stack { position: relative; display: flex; }
+/*
+ * 三行，**中间那行（数字）落在环的正中**。
+ *
+ * `1fr auto 1fr` 让中间那行天然就在正中：上下两条 1fr 永远等高，
+ * 不用去算标题和单位谁高谁矮、也不用写偏移量。标题贴着自己那格的底、
+ * 单位贴着自己那格的顶，两道缝就只由下面这两个 margin 说了算。
+ *
+ * 单位到数字是标题到数字的**一半**（2 对 4，两档都在间距阶梯上）：
+ * 「kcal」是那个数字的一部分，标题是另一件事，间距得说出这层亲疏。
+ * 行高一律 1，免得行盒自带的余量把这两道缝悄悄改掉。
+ */
 .ring-center {
   position: absolute; inset: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: var(--space-0);
+  display: grid; grid-template-rows: 1fr auto 1fr; justify-items: center;
   /* 只是叠在上面的一层字，别把环的手势和点击吃掉 */
   pointer-events: none;
 }
-.ring-caption { font-size: var(--fs-body); color: var(--muted); }
+.ring-caption {
+  align-self: end; margin-bottom: var(--space-1);
+  font-size: var(--fs-body); line-height: 1; color: var(--muted);
+}
 /* 差 ≤ 40 kcal 时圈心不报数，那一句就是圈心的全部内容，得撑得住 */
+.ring-center.is-only { grid-template-rows: 1fr auto 1fr; }
 .ring-center.is-only .ring-caption {
+  grid-row: 2; align-self: center; margin-bottom: 0;
   font-size: var(--fs-headline); font-weight: var(--w-semibold); color: var(--text);
 }
 .ring-value {
-  position: relative;
   font-size: var(--fs-display); font-weight: var(--w-semibold);
-  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
   /* 一位数变两位数时数字不该左右跳，尺子也没变 */
   white-space: nowrap;
 }
-/*
- * 单位挂在数字右边，**不参与居中**。
- *
- * 跟着一起居中的话，被居中的是「684 kcal」这一整块，于是数字本身左偏了
- * 十几个像素 —— 而上面那行「还可摄入」是正的，两行对不上一条中轴，
- * 环也不是绕着数字转的。现在居中的只有数字，kcal 从它右边挂出去。
- * 那个空格由 core/units.js 写进 DOM —— 读屏念的、复制出去的都是「684 kcal」。
- * 但它脱了文档流，行尾的空白会被吃掉，所以看得见的那道缝仍要在这儿给一次。
- */
 .ring-unit {
-  position: absolute; left: calc(100% + 3px); bottom: .1em;
-  font-size: var(--fs-footnote); font-weight: var(--w-medium); color: var(--muted);
+  align-self: start; margin-top: var(--space-0);
+  font-size: var(--fs-footnote); line-height: 1; font-weight: var(--w-medium); color: var(--muted);
 }
 
 /*
@@ -657,14 +662,14 @@ html, body { height: 100%; overflow: hidden; }
  */
 .ring-track, .ring-burn-track { stroke: var(--track); }
 /*
- * 端头：灰轨方头、弧圆头。
+ * 端头一律圆，灰轨也是。
  *
- * 圆头读作「走到这儿了」，方头读作「被裁断」，而这只环只说前一件事。
- * 灰轨不能圆 —— 它铺满 352°，两端各鼓出半个描边就把 12 点那道缺口糊上了。
- * 长度补偿在 energy-ring-chart.js 的 arc() 里，落笔范围和方头时一样。
+ * 圆头读作「走到这儿了」，方切读作「被裁断」，而这只环只说前一件事；
+ * 一圈圆头的弧躺在方切的槽里，两端对不上，12 点那道缺口看着像裁出来的。
+ * 圆头会往两端各鼓出半个描边，所以画之前先从长度里扣掉这一截
+ * （energy-ring-chart.js 的 arc()）—— 落笔范围仍是 352°，缺口一点没被糊上。
  */
-.ring-track, .ring-burn-track { stroke-linecap: butt; }
-.ring-seg { stroke-linecap: round; }
+.ring-track, .ring-burn-track, .ring-seg { stroke-linecap: round; }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
@@ -876,15 +881,14 @@ html, body { height: 100%; overflow: hidden; }
 /* ============ 推荐 ============ */
 .rec-list { display: flex; flex-direction: column; }
 /*
- * 整行是个 button（点行就打开份量面板），所以要把浏览器给按钮的那套默认值收掉。
+ * 行本身只是拿来读的（食物名、份量、两条理由、三个数字），能点的只有右边那个 ＋。
  * 三列宽度一次写完 —— 早先这儿写 flex、文件末尾的 `.recommend-card .rec-row`
  * 又写一遍 grid，而 .rec-row 只长在推荐卡里，前面那份 display 从来没生效过。
  */
 .rec-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto var(--control-inline);
   align-items: center; gap: var(--space-2); padding: 12px 0;
-  border: 0; border-top: 1px solid var(--border);
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  border-top: 1px solid var(--border);
 }
 .rec-list > .rec-row:first-child { border-top: 0; padding-top: 4px; }
 .rec-info { flex: 1; min-width: 0; }
@@ -905,12 +909,11 @@ html, body { height: 100%; overflow: hidden; }
  * 是同一件事——「把这一行加进来」——就该长得一样。
  * 五六个实心绿圆排成一列是一整块色斑，而这一屏真正的主要动作是下面那个记录按钮。
  *
- * 它是个记号，不是控件：整行才是按钮，这里只画那个圆（和健身页的 .rec-add 一样）。
  */
 .add-btn {
   width: var(--control-inline); height: var(--control-inline); flex-shrink: 0; border-radius: 50%;
   border: 1px solid var(--border); background: transparent; color: var(--muted);
-  line-height: 1;
+  line-height: 1; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: transform .12s, opacity .15s, background-color .12s;
 }
@@ -921,8 +924,8 @@ html, body { height: 100%; overflow: hidden; }
  */
 .add-btn .icon-slot svg,
 .exercise-choice-action .icon-slot svg { width: var(--icon-md); height: var(--icon-md); }
-/* 按下的是整行，不是这个圆 —— 和健身页的 .rec-pick:active 一样 */
-.rec-row:active .add-btn {
+/* 按下的就是这个圆 —— 和健身页的 .exercise-choice-action 一样 */
+.add-btn:active {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
 }
@@ -1256,11 +1259,16 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* 全部动作 / 推荐组合共用同一行结构，文字起点、行距与右侧动作完全一致。 */
 .rec-picks,
 .ex-list { display: flex; flex-direction: column; margin-top: var(--space-1); }
+/*
+ * 行本身只是拿来读的：动作名、三条标签、上次练了多少。
+ * **能点的只有右边那个 ＋**（见 views/training.js 的 exerciseRow）——
+ * 整行可点的时候，滑动列表蹭一下就多出一个动作。
+ */
 .exercise-choice-row {
   display: flex; align-items: center; gap: var(--space-2);
   width: 100%; min-height: 76px; padding: 10px var(--space-2);
   border: 0; border-bottom: 1px solid var(--border);
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  background: none; color: inherit; font: inherit; text-align: left;
 }
 .exercise-choice-row:last-child { border-bottom-color: transparent; }
 .exercise-choice-main { flex: 1; min-width: 0; }
@@ -1271,9 +1279,22 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   border: 1px solid var(--border); border-radius: 50%;
   background: transparent; color: var(--muted);
   font: 500 var(--fs-headline)/1 var(--font);
+  cursor: pointer;
 }
-.rec-pick:active .exercise-choice-action {
+.exercise-choice-action:active {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/*
+ * 热区比画出来的圆大一圈。
+ *
+ * 行本身不再可点之后，这个 40px 的圆就是整行唯一的目标了 —— 视觉上它该小
+ * （五六个实心绿圆排一列是块色斑），但手指够不够得着是另一回事。
+ * 和 `.info-tip > summary` 一样用 ::after 撑热区：画的还是 40，点的是 48，
+ * 而 4px 的外扩仍落在行的内边距里，碰不到左边的文字。
+ */
+.exercise-choice-action, .add-btn { position: relative; }
+.exercise-choice-action::after, .add-btn::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
 }
 /* 全部动作与推荐组合共用：主要动作模式 / 主要肌肉 / 动作类型 */
 /*
@@ -1476,7 +1497,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   position: absolute; left: 0; right: 0; bottom: 0;
   max-height: min(80vh, 660px);
   display: flex; flex-direction: column; overflow: hidden;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   padding: 8px 0 0;
   background: color-mix(in srgb, var(--card) 82%, transparent);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
@@ -1485,9 +1506,19 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) backwards;
 }
+/*
+ * `overscroll-behavior: none`，不是 `contain`。
+ *
+ * `contain` 只拦住「把背后的页面带着跑」，**橡皮筋还在**：滚到顶了继续往下拉，
+ * 整块内容被拽下去，弹层顶上留一大片空白 —— 而且拽下去之后就停在那儿了。
+ * 停住的原因是这一下被浏览器的合成器接管了：起拖阈值那 12px 里我们还没
+ * preventDefault，合成器先动了手，之后再 preventDefault 也收不回来
+ * （iOS 直接补一个 pointercancel），于是「往下滑关掉弹层」也一并失灵。
+ * `none` 连橡皮筋一起关掉：到顶就是到顶，那一下原地留给拖拽手势。
+ */
 .sheet-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   /* 没有固定底栏的普通弹层仍要避开 Home 指示条。 */
   padding: 0 16px calc(20px + var(--safe-bottom));
 }
@@ -2610,7 +2641,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
   letter-spacing: -.01em;
   transition: transform .12s ease, opacity .12s ease, background-color .12s ease;
 }
-.primary-btn:active, .secondary-btn:active, .chip-btn:active, .rec-row:active .add-btn {
+.primary-btn:active, .secondary-btn:active, .chip-btn:active, .add-btn:active {
   transform: scale(.97);
 }
 /* 次要按钮用「强调色的淡底 + 强调色文字」，这是 iOS 里最常见的 tinted 按钮 */
@@ -2730,7 +2761,8 @@ h1, h2, h3 { letter-spacing: -.02em; }
   border-radius: 50%;
 }
 
-.ex-row[aria-pressed='true'] .exercise-choice-action,
+/* aria-pressed 现在挂在 ＋ 自己身上（它才是那个按钮），不在行上 */
+.exercise-choice-action[aria-pressed='true'],
 .ex-row.chosen .exercise-choice-action,
 .ex-row.marked .exercise-choice-action {
   border-color: var(--accent);

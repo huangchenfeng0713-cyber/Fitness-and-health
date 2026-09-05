@@ -137,7 +137,13 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
    * 滚动穿透：弹层内部滚到头之后手指继续滑，会带着背后的页面跑，
    * 表现就是「点不中弹层里的东西」。两道都要有，缺一道 iOS 上都会漏。
    */
-  assert.match(css, /\.sheet-scroll \{[\s\S]*?overscroll-behavior: contain/, '弹层正文没有拦住滚动链');
+  /*
+   * `none` 不是 `contain`：contain 只拦滚动链，橡皮筋还在 —— 滚到顶继续往下拉，
+   * 内容被拽下去、顶上留一大片空白，而且这一下被合成器接管之后就停在那儿，
+   * 「往下滑关掉弹层」也一并失灵。
+   */
+  assert.match(css, /\.sheet-scroll \{[\s\S]*?overscroll-behavior: none/, '弹层正文到顶还能继续往下拉');
+  assert.match(css, /\.sheet \{[\s\S]*?overscroll-behavior: none/, '弹层没有拦住滚动链');
   assert.match(css, /body\.sheet-open \{[\s\S]*?position: fixed/, 'iOS 上只有 overflow:hidden 拦不住拖动');
   assert.match(sheet, /document\.body\.style\.top = `-\$\{lockedScrollY\}px`/, '钉住 body 时没有记住滚动位置');
   assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
@@ -572,6 +578,29 @@ test('全部动作与推荐组合共用动作模式、主要肌肉、动作类�
     '全部动作没有使用共用动作行');
   assert.match(training, /className: 'rec-pick exercise-choice-row'/,
     '推荐组合没有使用共用动作行');
+  /*
+   * **能点的只有右边那个 ＋，行本身不能点。**
+   *
+   * 整行可点会把「读一读这个动作练哪儿」和「把它加进今天」并成同一下：
+   * 一列十几行、每行 76px 高，滑动时手指蹭到就多出一个动作，
+   * 而撤掉它得再点一次、还得先找到它跑到哪儿去了。
+   * 三张列表（全部动作 / 推荐组合 / 饮食推荐）走同一条规矩。
+   */
+  const mealAdviceRows = read('js/views/cards/meal-advice.js');
+  for (const [code, name] of [[training, '健身页'], [mealAdviceRows, '饮食推荐']]) {
+    assert.doesNotMatch(code, /listRow\(\{\s*as: 'button'/,
+      `${name}的行整行可点，滑动时会蹭出一个来`);
+  }
+  assert.match(training, /h\('button\.ex-pick\.exercise-choice-action'/, '动作行的 ＋ 不是按钮');
+  assert.match(training, /h\('button\.rec-add\.exercise-choice-action'/, '推荐行的 ＋ 不是按钮');
+  assert.match(mealAdviceRows, /h\('button\.add-btn'/, '饮食推荐行的 ＋ 不是按钮');
+  assert.match(css, /\.exercise-choice-action \{[^}]*cursor: pointer/s, '＋ 看不出能点');
+  /*
+   * 行不可点之后，这个 40px 的圆是整行唯一的目标，热区得比画出来的大一圈
+   * （和 .info-tip > summary 一样用 ::after 撑，画的还是 40）。
+   */
+  assert.match(css, /\.exercise-choice-action::after, \.add-btn::after \{[^}]*inset: -4px/s,
+    '＋ 的热区就只有画出来那么大');
   assert.match(css, /\.exercise-choice-row\s*\{[^}]*padding:\s*10px var\(--space-2\)/s,
     '两个视图的文字位置与行内边距没有统一');
   assert.match(css, /\.exercise-choice-row\s*\{[^}]*min-height:\s*76px/s,
@@ -642,15 +671,8 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(training, /listRow, persistentInfoTip, searchField, weakTag,[\s\S]{0,80}from '\.\.\/lib\/ui\.js'/,
     '选择动作没有接入统一组件');
   assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
-  /*
-   * 推荐行整行就是「打开份量」，和搜索结果（.search-item）、健身页的推荐行
-   * （.rec-pick）一样。原先只有右边那个小 ＋ 管用：三列食物长得一模一样，
-   * 点行有两处有反应、一处没有。
-   */
-  assert.match(mealAdvice, /listRow\(\{\s*as: 'button', className: 'rec-row'/,
-    '饮食推荐列表没有接入统一列表行，或者整行点不开份量面板');
-  assert.match(mealAdvice, /h\('span\.add-btn', \{ 'aria-hidden': 'true' \}/,
-    '推荐行的加号仍是独立控件：一行两个焦点点，读屏念两遍同一件事');
+  assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
+    '饮食推荐列表没有接入统一列表行');
   /*
    * 弱标签要比它旁边的正文轻：不撑最小高度、内边距贴着字。
    * 原先 min-height 21px + padding 1px 6px + 一圈实描边，整块比食物名
@@ -1228,9 +1250,11 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
    */
   assert.doesNotMatch(chart, /ring-tick|ring-origin/, '环上还刻着线 / 还浮着起点方块');
   assert.doesNotMatch(css, /\.ring-tick|\.ring-origin/, 'CSS 里还留着刻度 / 起点方块的样式');
-  assert.match(css, /\.ring-seg \{ stroke-linecap: round; \}/, '弧的端头仍是方切的');
-  assert.match(css, /\.ring-track, \.ring-burn-track \{ stroke-linecap: butt; \}/,
-    '灰轨也圆了头，两端各鼓出半个描边会把 12 点那道缺口糊上');
+  // 弧和灰轨的端头都要圆：一圈圆头的弧躺在方切的槽里，两端对不上
+  assert.match(css, /\.ring-track, \.ring-burn-track, \.ring-seg \{ stroke-linecap: round; \}/,
+    '端头还有方切的');
+  assert.match(chart, /insetOf = \(l\) => Math\.min\(width \/ 2/,
+    '圆头没有做长度补偿，两端各鼓出半个描边会把 12 点那道缺口糊上');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   /*
    * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处
@@ -1249,13 +1273,19 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
   assert.match(dash, /function ringCenter/, '圈心那两行没有交给 HTML');
   assert.match(css, /\.ring-value \{[^}]*font-size: var\(--fs-display\)/,
     '圈心的大数没有走 --fs-display —— 那一档的注释写的就是「圆环里的大数」');
-  assert.match(css, /\.ring-caption \{ font-size: var\(--fs-body\)/, '圈心第一行没有走字号阶梯');
+  assert.match(css, /\.ring-caption \{[^}]*font-size: var\(--fs-body\)/s, '圈心第一行没有走字号阶梯');
   assert.match(css, /\.ring-unit \{[^}]*font-size: var\(--fs-footnote\)/, 'kcal 没有走字号阶梯');
   /*
-   * kcal 不独占第三行：它是这几行里信息量最小的一个，却拿到了和「还可摄入」
-   * 一样的分量，还把数字和它的单位拆到了两行上。空格由 core/units.js 定。
+   * 三行，中间那行（数字）落在环的正中：`1fr auto 1fr` 让它天然就在正中，
+   * 不用算偏移量。单位到数字的缝是标题到数字的一半（--space-0 对 --space-1）——
+   * 「kcal」是那个数字的一部分，标题是另一件事。
    */
-  assert.match(dash, /unitGap\('kcal'\)/, 'kcal 没有贴着数字，或者空格是在这儿自己拍的');
+  assert.match(css, /\.ring-center \{[^}]*grid-template-rows: 1fr auto 1fr/s,
+    '圈心不是「上 / 数字 / 下」三行，数字就落不到环的正中');
+  assert.match(css, /\.ring-caption \{[^}]*align-self: end;\s*margin-bottom: var\(--space-1\)/s,
+    '标题没有贴着数字上方那一档');
+  assert.match(css, /\.ring-unit \{[^}]*align-self: start;\s*margin-top: var\(--space-0\)/s,
+    'kcal 到数字的距离不是标题那一档的一半');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
   assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,
@@ -1458,10 +1488,28 @@ test('输入框有焦点时不许整页重绘，但事后要补上', () => {
   assert.match(app, /for \(const type of \['pointerup', 'pointercancel'\]\)/,
     '手势跳过的那次重绘没有在手指抬起来时补上');
 
-  // store 订阅这条必须走带保护的那个入口
-  const sub = app.slice(app.indexOf('subscribe(() => {'), app.indexOf('let healthAccountUserId'));
+  /*
+   * store 订阅这条必须走带保护的那个入口。
+   *
+   * 只截订阅回调自己那几行（到它的 `});` 为止）—— 上一版一直截到
+   * `let healthAccountUserId`，而订阅被挪到「等云端」之前之后，这一刀
+   * 就把中间那段 boot 代码也扫了进来，里面的 renderCurrent() 是正当的。
+   */
+  const subStart = app.indexOf('subscribe(() => {');
+  const sub = app.slice(subStart, app.indexOf('\n  });', subStart));
+  assert.ok(sub.length > 40 && sub.length < 400, `订阅回调那一段没切对：${sub.length} 字`);
   assert.match(sub, /renderCurrentSafely\(\)/, 'store 订阅仍在直接 renderCurrent');
   assert.ok(!/\brenderCurrent\(\);/.test(sub), 'store 订阅里还留着不带保护的 renderCurrent()');
+  /*
+   * **订阅必须挂在「等云端」之前。**
+   *
+   * 排在后面的话，云端握手没回来之前谁都不会因为落库而重绘 —— 实测网络不通时
+   * 那一段是 8.2 秒：应用已经画出来、点得动，可记一笔饮食主卡不动、
+   * 点推荐里的 ＋「今日动作」不出现、喝一次水次数不加一，等 60 秒的定时器
+   * 或切一次页才补上。云账号是可选增强，不该是看自己数据的前置条件。
+   */
+  assert.ok(subStart < app.indexOf('await cloudInitialization;'),
+    '重绘订阅排在等云端后面，握手回来之前记什么都不会更新到屏幕上');
 
   // 跳过不能就这么算了：失焦之后要补一次，否则页面停在旧数据上
   assert.match(app, /document\.addEventListener\('focusout'/, '跳过重绘之后没有补回来的入口');

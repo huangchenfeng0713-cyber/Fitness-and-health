@@ -8,7 +8,6 @@ import { energyRing, lockTrackScale } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
-import { unitGap } from '../core/units.js';
 import { setIntent } from '../lib/nav.js';
 
 /*
@@ -147,14 +146,17 @@ function heroCard(advice, targets, derived) {
 }
 
 /*
- * 圈心：**两行，不是三行**。
+ * 圈心三行，**中间那行（数字）落在环的正中**：
  *
  *     还可摄入        ← --fs-body 中灰
- *     684 kcal       ← --fs-display 半粗，单位贴着数字、小一档
+ *       684          ← --fs-display 半粗，它的中心 = 环的中心
+ *       kcal         ← --fs-footnote 更轻
  *
- * 「kcal」原先自己占第三行。它是这三行里信息量最小的一个，却拿到了和
- * 「还可摄入」一样的分量，还把数字和它的单位拆到了两行上 ——
- * `core/units.js` 的规矩本来就是西文单位空一格贴着数字写（`116 kcal`）。
+ * 数字才是这三行里唯一要被一眼看到的东西，所以由它对准环心，标题和单位
+ * 各自挂在它上下 —— 而不是把三行当成一块整体去居中（那样谁都没对准）。
+ * 单位到数字的距离是标题到数字的一半（`--space-0` 对 `--space-1`，正好 2 对 4）：
+ * 「kcal」是数字的一部分，标题是另一件事，间距得说出这个亲疏。
+ * 排布用 `1fr auto 1fr` 的网格，中间那行天然就在正中，不用算偏移量。
  *
  * 字走 HTML 不写进 SVG，和下面那行图例同一个理由：
  * SVG 里的字跟着环缩放，窄屏上环缩到 62vw，那几行就一起掉到 12px 可读下限
@@ -169,10 +171,8 @@ function ringCenter(model) {
   // 「接近目标」不报数，那一句就得自己撑住圈心：只剩它一个的时候提一档、加重
   return h(`div.ring-center${c.kcal == null ? '.is-only' : ''}`, null,
     h('span.ring-caption', null, c.label),
-    // 空格由 core/units.js 定，不在这儿自己决定；写进 DOM 而不是 CSS 的 margin，
-    // 读屏和复制出来的也才是「684 kcal」
-    c.kcal == null ? null : h('strong.ring-value', null,
-      String(c.kcal), unitGap('kcal'), h('span.ring-unit', null, 'kcal')));
+    c.kcal == null ? null : h('strong.ring-value', null, String(c.kcal)),
+    c.kcal == null ? null : h('span.ring-unit', null, 'kcal'));
 }
 
 /*

@@ -634,6 +634,27 @@ async function boot() {
   syncOnboarding();
   renderCurrent();
 
+  /*
+   * **订阅要在等云端之前挂上。**
+   *
+   * 它原先排在 `await cloudInitialization` 后面，于是云端握手没回来之前，
+   * 谁都不会因为落库而重绘 —— 实测网络不通时那一段是 **8.2 秒**：
+   * 这几秒里应用已经画出来、点得动，可记一笔饮食主卡不动、点推荐里的 ＋
+   * 「今日动作」那张卡不出现、喝一次水次数不加一。数据其实都写进去了，
+   * 等 60 秒的定时器或者切一次页才补上，读出来就是「点了没反应，
+   * 过一会儿又自己出现了」。
+   *
+   * 这个回调只管重绘，一个字都不依赖账号状态；账号那边的重绘由下面的
+   * subscribeAccount 自己负责。**云账号是可选增强，不该是看自己数据的前置条件**
+   * —— 启动闸门那条已经按这句话改过一次，重绘这条当时漏了。
+   */
+  subscribe(() => {
+    renderTopbar();
+    syncOnboarding();
+    renderCurrentSafely();
+    if (settingsOpen && !busy()) renderSettings(settingsRoot);
+  });
+
   // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
   try {
     await cloudInitialization;
@@ -666,13 +687,6 @@ async function boot() {
       return { skipped: false, error };
     }
   };
-
-  subscribe(() => {
-    renderTopbar();
-    syncOnboarding();
-    renderCurrentSafely();
-    if (settingsOpen && !busy()) renderSettings(settingsRoot);
-  });
 
   let healthAccountUserId = null;
   subscribeAccount((account) => {
