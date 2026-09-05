@@ -12,7 +12,7 @@
  * 同一时刻只允许一个弹层，所以整个应用共用这一份 DOM。
  */
 
-import { h, clearEl, mount } from './utils.js';
+import { h, clearEl, mount, scrimDismiss } from './utils.js';
 import { dragGesture } from './gesture.js';
 
 let wrap = null;
@@ -116,9 +116,14 @@ function build() {
   },
   scrollArea = h('div.sheet-scroll'),
   footer = h('div.sheet-footer', { hidden: true }));
-  wrap = h('div.sheet-wrap', { hidden: true },
-    h('div.sheet-backdrop', { onclick: () => { if (sheetReady()) closeSheet(); } }),
-    panel);
+  const backdrop = h('div.sheet-backdrop');
+  wrap = h('div.sheet-wrap', { hidden: true }, backdrop, panel);
+  /*
+   * 点背景关掉，但**那一下必须是按在背景上开始的**（scrimDismiss）。
+   * 开场闸门只挡住最初那几百毫秒；配对挡的是「任何时候补派过来的那一下」——
+   * iOS 的幽灵点击约 300ms 才到，靠时间窗拦住它就得把窗口开到用户已经能操作的时候。
+   */
+  scrimDismiss(backdrop, () => { if (sheetReady()) closeSheet(); });
   document.body.append(wrap);
   attachDragToClose();
   // Esc 关闭：桌面上没有「点空白处」的手感，键盘得能退出来

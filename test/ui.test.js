@@ -166,6 +166,32 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
     '被吞掉的那一段仍会被判成在滚页面');
   assert.match(css, /\.sheet-wrap:not\(\.is-ready\) \.sheet/,
     '未就绪时毛玻璃弹层自己还能接事件（iOS 上父级 none 挡不住 backdrop-filter）');
+  /*
+   * 「点空白处关掉」必须配对：那一下要**按在遮罩上**开始的才算数。
+   *
+   * iOS 上轻点让覆盖层出现在手指底下时，补派的那个合成 click 会落到新出现的
+   * 那一层上 —— 遮罩铺满整屏，它的 onclick 就是「关掉」。那一下没有对应的
+   * pointerdown，所以配对拦得住，而时间窗拦不住：真机上它约 300ms 才到。
+   * 两道各管一段，闸门管开场那几百毫秒，配对管任何时候。
+   *
+   * 判据要落在遮罩自己身上（`ev.target === scrim`）——v3.9.4 那版用的是
+   * 「外壳上任意一次 pointerdown」，在面板上按一下也会把遮罩武装起来。
+   */
+  const utils = read('js/lib/utils.js');
+  assert.match(utils, /export function scrimDismiss\(/, '遮罩关闭没有抽成共用件');
+  assert.match(utils, /armed = ev\.target === scrim/, '配对判的不是「按在遮罩自己身上」');
+  assert.match(utils, /if \(fromPointer && !armed\) return/, '没按下过的合成点击仍能关掉遮罩');
+  assert.match(sheet, /scrimDismiss\(backdrop, \(\) => \{ if \(sheetReady\(\)\) closeSheet\(\); \}\)/,
+    '弹层遮罩没走共用的配对判断');
+  /*
+   * 设置抽屉那层遮罩是同一个形状，现在只是碰巧被抽屉自己挡住了坐标才没炸
+   * （抽屉宽 94%，露出来那条缝不在任何按钮的坐标上）。同一个坑不留第二份。
+   */
+  const app = read('js/app.js');
+  assert.match(app, /scrimDismiss\(settingsOverlay, \(\) => closeSettings\(\)\)/,
+    '设置抽屉的遮罩没走同一个共用件');
+  assert.doesNotMatch(app, /h\('div\.settings-overlay', \{[^}]*onclick/,
+    '设置抽屉的遮罩又自己挂了一个不配对的 onclick');
   assert.match(sheet, /setTimeout\(finish, EXIT_MS\)/, '退场动画没结束时没有把遮罩收掉，会卡死整页');
   assert.doesNotMatch(sheet, /wrap\.addEventListener\('pointerdown'/,
     '不要在弹层上对所有按下 preventDefault，那会把整页点死');
