@@ -43,10 +43,9 @@ export const KIND = {
  */
 export const LEVEL = { met: 'met', plain: 'plain', near: 'near', over: 'over' };
 
-/** 上限接近到多少算「该留意了」。纯工程取值，不是生理阈值。 */
-export const CEILING_NEAR_PCT = 80;
-/** 上限超过多少才算真超。留 5% 是给四舍五入和份量估算的余量。 */
-export const CEILING_OVER_PCT = 105;
+// 上限指标的提醒点来自各自营养标准，不使用统一百分比，也不延迟超限警示。
+const ceilingLevel = (value, target, attention = target) => value > target ? LEVEL.over
+  : value >= attention ? LEVEL.near : LEVEL.plain;
 /**
  * 热量区间的宽度：计划目标的 ±10%。
  *
@@ -79,6 +78,7 @@ const pctOf = (value, base) => (base > 0 ? (value / base) * 100 : 0);
  */
 export function metricState({
   kind, eaten = 0, target = 0, lo = null, hi = null, unit = 'g', decimals = 0, roundUp = false,
+  attention = target,
   // 区间是谁定的：热量那条是「你的计划」（目标 ±10%），
   // 脂肪碳水那两条是「文献建议」（IOM AMDR）。措辞不能混。
   rangeWord = '建议',
@@ -128,8 +128,7 @@ export function metricState({
 
   if (kind === KIND.ceiling) {
     const pct = pctOf(eaten, target);
-    const level = pct > CEILING_OVER_PCT ? LEVEL.over
-      : pct >= CEILING_NEAR_PCT ? LEVEL.near : LEVEL.plain;
+    const level = ceilingLevel(eaten, target, attention);
     return {
       level,
       note: pct > 100 ? `已超 ${n(eaten - target)}`
@@ -338,10 +337,12 @@ export function dailyMetrics(targets, gaps, water = null) {
     {
       key: 'fiber', label: '膳食纤维', unit: 'g', kind: KIND.floor,
       eaten: gaps.fiber.eaten, target: targets.fiber,
+      recommendedLo: 25, recommendedHi: targets.fiberUpper ?? 30,
     },
     {
       key: 'sodium', label: '钠', unit: 'mg', kind: KIND.ceiling,
       eaten: gaps.sodium.eaten, target: targets.sodium,
+      attention: targets.sodiumAttention ?? 1500,
     },
     {
       /*
@@ -353,6 +354,7 @@ export function dailyMetrics(targets, gaps, water = null) {
        */
       key: 'sugar', label: '游离糖', unit: 'g', kind: KIND.ceiling,
       eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 0, roundUp: true,
+      attention: targets.sugarAttention ?? Math.min(25, targets.sugar / 2),
     },
     {
       /*
@@ -375,4 +377,20 @@ export function dailyMetrics(targets, gaps, water = null) {
       ? String(Math.ceil(Math.round(Math.max(0, Number(m.eaten) || 0) * 100) / 100))
       : null,
   }));
+}
+
+/** 三个短刻度只映射读数，不缩放真实数据。最高建议量在 78% 处。 */
+export function nutrientScale(m) {
+  const value = Math.max(0, Number(m.eaten) || 0);
+  const fiber = m.key === 'fiber';
+  const axisMax = fiber ? 50 : m.target / 0.78;
+  return {
+    axisMax,
+    markerPct: Math.max(0, Math.min(100, value / axisMax * 100)),
+    zoneStart: fiber ? (m.recommendedLo ?? 25) / axisMax * 100 : null,
+    zoneEnd: fiber ? (m.recommendedHi ?? 30) / axisMax * 100 : null,
+    limitPct: fiber ? null : 78,
+    level: fiber ? (value < (m.recommendedLo ?? 25) ? LEVEL.near : LEVEL.plain)
+      : ceilingLevel(value, m.target, m.attention),
+  };
 }

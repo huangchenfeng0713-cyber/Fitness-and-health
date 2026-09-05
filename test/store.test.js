@@ -1,9 +1,32 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { energyRing } from '../js/core/energy-ring.js';
 import {
   compositionNote, findFood, LEGACY_FOOD_ID_REDIRECTS,
   migrateStoredProfile, resolveEnergyObservation, recompute, state,
 } from '../js/lib/store.js';
+
+test('设备当日活动更新只改变实际消耗与收支，不增加计划和圆周', () => {
+  const saved = { ...state };
+  try {
+    const now = new Date(2026, 7, 27, 12);
+    const date = '2026-08-27';
+    const health = { date, restingEnergy: 1000, activeEnergy: 200, energyObservedAt: now.toISOString() };
+    Object.assign(state, { day: date, profile: { sex: 'male', age: 30, heightCm: 175, weightKg: 70,
+      activity: 'light', goal: 'maintain', useAppleEnergy: true, onboarded: true },
+      healthDays: [health], healthByDate: new Map([[date, health]]),
+      dietEntries: [], dietDaily: [], dietRhythm: [], trainingDays: [], lastImport: null });
+    const a = recompute(now);
+    assert.equal(a.liveEnergy.burnedNow, 1200);
+    health.activeEnergy = 1500;
+    const b = recompute(now);
+    assert.equal(b.liveEnergy.burnedNow, 2500);
+    assert.equal(b.targets.kcal, a.targets.kcal);
+    const ring = energyRing({ eaten: 1730, burned: b.liveEnergy.burnedNow, target: b.targets.kcal });
+    assert.equal(ring.scale, a.targets.kcal);
+    assert.equal(ring.center.kcal, -770);
+  } finally { Object.assign(state, saved); }
+});
 
 test('食物库去重后旧 id 仍能读取到保留项', () => {
   const expected = {

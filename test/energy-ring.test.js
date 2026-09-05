@@ -10,9 +10,9 @@ const ring = (eaten, burned, extra = {}) => energyRing({
 const seg = (m, key) => m.segments.find((s) => s.key === key);
 const legend = (m, key) => m.legend.find((l) => l.key === key);
 
-test('圆周是今日摄入目标取整到百', () => {
-  assert.equal(trackScale(2168), 2200);
-  assert.equal(trackScale(1856), 1900);
+test('圆周精确等于今日摄入目标', () => {
+  assert.equal(trackScale(2168), 2168);
+  assert.equal(trackScale(1856), 1856);
   assert.equal(trackScale(50), 100);
   assert.equal(trackScale(null), 2000, '算不出目标时给中性兜底，不能让圆周变成 0');
 });
@@ -47,16 +47,16 @@ test('当天圆周锁死；只有计划本身变了才换尺子', () => {
     getItem() { return this.data; },
     setItem(_, v) { this.data = v; },
   };
-  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2200);
+  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2168);
   // 同一天、同一个目标：加一餐、同步消耗都不许让圆周变
-  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2200);
+  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2168);
   assert.equal(lockTrackScale('2026-09-02', 1800, mem), 1800);
-  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2200, '翻到昨天不能改掉今天的尺子');
+  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2168, '翻到昨天不能改掉今天的尺子');
 
   // 改了档案，目标变了 —— 从改的这一天起换新尺子
-  assert.equal(lockTrackScale('2026-09-03', 1740, mem), 1700);
+  assert.equal(lockTrackScale('2026-09-03', 1740, mem), 1740);
   // 改回去同理
-  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2200);
+  assert.equal(lockTrackScale('2026-09-03', 2168, mem), 2168);
 
   assert.equal(lockTrackScale('2026-09-04', 1800, mem), 1800);
 });
@@ -67,39 +67,33 @@ test('v1 存的圆周不认：那时候存的是按预计消耗算的，含义�
     getItem() { return this.data; },
     setItem(_, v) { this.data = v; },
   };
-  assert.equal(lockTrackScale('2026-09-03', 2168, old), 2200);
+  assert.equal(lockTrackScale('2026-09-03', 2168, old), 2168);
 });
 
-test('圈心只说还可摄入 / 超出目标 / 接近目标', () => {
-  const left = ring(1500, 1200);
-  assert.equal(left.center.label, '还可摄入');
-  assert.equal(left.center.kcal, TARGET - 1500);
-
-  const bulkLeft = ring(1500, 800, { dailyDelta: 300 });
-  assert.equal(bulkLeft.center.label, '还可摄入',
-    '增肌没吃满计划也不写还应吃：吃已经多于烧时体重趋势已经是增');
-
-  const over = ring(2400, 1200);
-  assert.equal(over.center.label, '超出目标');
-  assert.equal(over.center.kcal, 2400 - TARGET);
-
-  const overWhileCutting = ring(2400, 1200, { dailyDelta: -500 });
-  assert.equal(overWhileCutting.center.label, '超出目标', '吃超目标不是热量盈余');
-
-  const near = ring(TARGET - 20, 1200);
-  assert.equal(near.center.label, '接近目标');
-  assert.equal(near.center.kcal, null, '差得很少时不报数');
-
-  for (const m of [left, bulkLeft, over, near]) {
-    assert.doesNotMatch(m.center.label, /领先|平衡|缺口|盈余|还应吃|还能吃/,
-      '不写「摄入领先 / 热量盈余 / 还应吃 / 还能吃」');
+test('圈心只比较摄入与设备实际消耗，正负和零都保留', () => {
+  for (const [eaten, burned, expected] of [[1730, 2414, -684], [2000, 1680, 320], [100, 100, 0], [2410, 2400, 10], [15000, 7000, 8000]]) {
+    const m = ring(eaten, burned);
+    assert.equal(m.center.label, '当前收支');
+    assert.equal(m.center.kcal, expected);
   }
+  assert.equal(ring(800, null).center.kcal, null);
+  assert.equal(ring(800, 0).center.kcal, 800);
+  assert.equal(ring(1500, 300).center.kcal, 1200);
+  assert.equal(ring(1500, 3000).center.kcal, -1500);
 });
 
-test('圈心对着摄入目标算，和消耗无关', () => {
-  const a = ring(1500, 300);
-  const b = ring(1500, 3000);
-  assert.deepEqual(a.center, b.center, '消耗跑到哪儿都不该改圈心那句话');
+test('任意计划精确满圈；运动改变不改圆周和摄入弧', () => {
+  for (const target of [1856, 2168, 2400]) {
+    const a = energyRing({ eaten: target, burned: 1200, target });
+    const b = energyRing({ eaten: target, burned: 9000, target });
+    assert.equal(a.laps.eaten.firstPct, 100);
+    assert.equal(a.laps.eaten.wrapPct, 0);
+    assert.equal(a.scale, target);
+    assert.equal(b.scale, a.scale);
+    assert.deepEqual(a.segments.filter(s => s.track === 'intake'), b.segments.filter(s => s.track === 'intake'));
+    assert.equal(b.laps.burned.wrapPct, 100);
+    assert.equal(b.burned, 9000);
+  }
 });
 
 test('摄入第一圈浅绿，越过 12 点第二圈深绿', () => {
@@ -133,7 +127,7 @@ test('消耗跑得再远也碰不到绿弧', () => {
   const eaten = seg(m, 'eaten');
   assert.ok(eaten, '绿弧被擦掉了');
   assert.ok(Math.abs(eaten.toPct - (800 / SCALE) * 100) < 0.01, '绿弧只表示吃了多少');
-  assert.equal(m.center.label, '还可摄入', '消耗套了两圈也不改圈心那句话');
+  assert.equal(m.center.kcal, -4000, '视觉封顶，真实差值继续计算');
 });
 
 test('摄入越过 12 点是和目标比，不是和消耗比', () => {
@@ -161,7 +155,7 @@ test('环上不写字，也不再另出一份刻度', () => {
   const m = ring(895, 1191);
   assert.equal(m.ticks, undefined, '模型里还留着刻度');
   for (const s of m.segments) assert.equal(s.label, undefined, '弧段上挂了文字');
-  assert.deepEqual(m.legend.map((l) => [l.label, l.kcal]), [['摄入', 895], ['消耗', 1191]]);
+  assert.deepEqual(m.legend.map((l) => [l.label, l.kcal]), [['摄入', 895], ['当前消耗', 1191]]);
 });
 
 test('图例的深浅跟着轨道跑到第几圈走', () => {

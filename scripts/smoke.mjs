@@ -89,12 +89,12 @@ try {
   const liveUpdate = await page.evaluate(async (b) => {
     const store = await import(`${b}/js/lib/store.js`);
     const before = document.querySelectorAll('.plan-list .plan-row').length;
-    await store.saveTraining(new Date().toISOString().slice(0, 10), {
+    await store.saveTraining(store.state.day, {
       items: [{ id: 'bench_press_bb', sets: [], done: false }],
     });
     await new Promise((r) => setTimeout(r, 400));
     const after = document.querySelectorAll('.plan-list .plan-row').length;
-    await store.saveTraining(new Date().toISOString().slice(0, 10), { items: [] });
+    await store.saveTraining(store.state.day, { items: [] });
     await new Promise((r) => setTimeout(r, 300));
     return { before, after };
   }, BASE);
@@ -600,10 +600,9 @@ try {
     split && split.noteClipped && `结构说明被截断了：${split.text}`,
     // 比例说不出吃了多少，克数得跟着一起给
     split && !/碳水 \d+(\.\d+)?g/.test(split.text) && `合用那条没写克数：${split.text}`,
-    // 纤维、钠、游离糖、饮水四个方框。饮水只有一个数，不该长出分母
-    semantics.chips.length !== 4 && `门槛类指标应有四个方框，实际 ${semantics.chips.length}`,
-    !/饮水\s*\d+\s*次/.test(semantics.chipText) && `饮水那格不对：${semantics.chipText}`,
-    /饮水[^｜]*\//.test(semantics.chipText) && `饮水凭空长出了一个分母：${semantics.chipText}`,
+    // 三种营养同排，只有实际值，饮水仍保留在饮食页。
+    semantics.chips.length !== 3 && `应有三种营养，实际 ${semantics.chips.length}`,
+    /饮水|\//.test(semantics.chipText) && `今日营养仍有饮水或目标分母：${semantics.chipText}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
     !/多|超|高/.test(semantics.heroText) && `没吃超，圆环颜色这条没测到（${semantics.heroText}）`,

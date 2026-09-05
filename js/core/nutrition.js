@@ -605,10 +605,27 @@ export function dailyTargets(profile, dynamic = null) {
     carb: carbRounded,
     carbLower,
     carbUpper,
-    fiber: round(clamp((kcal / 1000) * 14, 25, 30)),
-    sodium: 2000,       // mg，约等于 5g 食盐
-    sugar: round((kcal * 0.1) / ATWATER.carb), // WHO 游离糖 < 10% 供能
+    fiber: 25,
+    fiberUpper: 30,
+    ...nutrientReferences(profile, kcal),
     waterMl: profile.sex === 'female' ? 1500 : 1700, // 温和气候、低身体活动成人饮水参考
+  };
+}
+
+/**
+ * 中国 DRIs 2023 成人纤维 AI 25–30g；钠 AI/PI 按年龄分组。
+ * AI 仅用于提前留意后续摄入，不是毒性或疾病危险线；PI 是本界面的最高建议量。
+ * 游离糖沿用 WHO 10%/5% 供能口径，并采用中国指南 50g/25g 的克数护栏。
+ * 运动、增肌不会把克数护栏向上推。来源见 docs/算法依据.md。
+ */
+export function nutrientReferences(profile = {}, kcal = 2000) {
+  const age = ageFrom(profile);
+  const energy = Number(kcal) > 0 ? Number(kcal) : 2000;
+  return {
+    sodium: age >= 75 ? 1800 : age >= 65 ? 1900 : 2000,
+    sodiumAttention: age >= 65 ? 1400 : 1500,
+    sugar: Math.min(50, energy * 0.1 / ATWATER.carb),
+    sugarAttention: Math.min(25, energy * 0.05 / ATWATER.carb),
   };
 }
 

@@ -42,10 +42,11 @@ test('红色只留给真正的上限', () => {
   const over = metricState({ kind: KIND.ceiling, eaten: 2814, target: 2000, unit: 'mg' });
   assert.equal(over.level, LEVEL.over, '钠超了 40% 必须是红的');
   assert.match(over.note, /已超 814mg/);
-  assert.equal(metricState({ kind: KIND.ceiling, eaten: 1700, target: 2000, unit: 'mg' }).level, LEVEL.near);
+  assert.equal(metricState({ kind: KIND.ceiling, eaten: 1700, target: 2000, attention: 1500, unit: 'mg' }).level, LEVEL.near);
   assert.equal(metricState({ kind: KIND.ceiling, eaten: 900, target: 2000, unit: 'mg' }).level, LEVEL.plain);
-  // 留 5% 余量给四舍五入，刚好吃满不该立刻变红
+  // 刚好到上限为橙色；超过上限立即红色。
   assert.equal(metricState({ kind: KIND.ceiling, eaten: 2000, target: 2000 }).level, LEVEL.near);
+  assert.equal(metricState({ kind: KIND.ceiling, eaten: 2001, target: 2000 }).level, LEVEL.over);
 });
 
 test('热量在计划区间内是绿的，出界只到橙，永远不红', () => {

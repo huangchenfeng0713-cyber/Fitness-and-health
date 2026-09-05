@@ -3,7 +3,7 @@
 import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
-import { dailyMetrics, macroSplit, KIND } from '../core/metrics.js';
+import { dailyMetrics, macroSplit, nutrientScale, KIND } from '../core/metrics.js';
 import { energyRing, lockTrackScale } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
@@ -40,7 +40,7 @@ const KIND_COLOR = {
   carb: 'var(--carb)', fiber: 'var(--accent)', sodium: 'var(--muted)',
   sugar: 'var(--muted)', water: 'var(--water)',
 };
-const CHIP_KEYS = ['fiber', 'sodium', 'sugar', 'water'];
+const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
   const { state: st } = m;
@@ -82,15 +82,19 @@ function splitRow(split) {
 }
 
 function metricChip(m) {
-  const { state: st } = m;
-  const value = m.display ?? (m.decimals ? num(m.eaten, m.decimals) : num(m.eaten));
-  const unit = m.unit.trim();
-  return h('div', { class: `micro-chip ${st.level}${m.kind === KIND.log ? ' log' : ''}` },
+  const scale = nutrientScale(m);
+  const value = m.display ?? num(m.eaten);
+  return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
-    h('span.micro-val', null, value),
-    m.kind === KIND.log
-      ? h('span.micro-unit', null, unit)
-      : h('span.micro-target', null, `/${num(m.target)}${unit}`));
+    h('span.micro-reading', null,
+      h('strong.micro-val', null, value), ' ', h('span.micro-unit', null, m.unit.trim())),
+    h('div.nutrient-scale', { 'aria-hidden': 'true' },
+      scale.zoneStart == null ? null : h('span.nutrient-zone', {
+        style: { left: scale.zoneStart + '%', width: (scale.zoneEnd - scale.zoneStart) + '%' },
+      }),
+      scale.limitPct == null ? null : h('span.nutrient-limit', { style: { left: scale.limitPct + '%' } }),
+      h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
+        style: { left: scale.markerPct + '%' } })));
 }
 
 function heroCard(advice, targets, derived) {
@@ -99,7 +103,7 @@ function heroCard(advice, targets, derived) {
   const by = Object.fromEntries(metrics.map((m) => [m.key, m]));
 
   /*
-   * 整圈 = 今天计划吃多少（摄入目标取整到百），12 点就是吃满计划。
+   * 整圈 = 今天计划吃多少（摄入目标精确值），12 点就是吃满计划。
    * 尺子当天锁死，只有计划本身变了才从那一天起换。
    *
    * 「当前消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
@@ -148,7 +152,7 @@ function heroCard(advice, targets, derived) {
 /*
  * 圈心三行，**中间那行（数字）落在环的正中**：
  *
- *     还可摄入        ← --fs-body 中灰
+ *     当前收支        ← --fs-body 中灰
  *       684          ← --fs-display 半粗，它的中心 = 环的中心
  *       kcal         ← --fs-footnote 更轻
  *
@@ -168,11 +172,12 @@ function heroCard(advice, targets, derived) {
 function ringCenter(model) {
   const c = model.center;
   if (!c) return null;
-  // 「接近目标」不报数，那一句就得自己撑住圈心：只剩它一个的时候提一档、加重
-  return h(`div.ring-center${c.kcal == null ? '.is-only' : ''}`, null,
+  const value = c.kcal == null ? '—' : c.kcal > 0 ? '+' + c.kcal
+    : c.kcal < 0 ? `−${Math.abs(c.kcal)}` : '0';
+  return h('div.ring-center', null,
     h('span.ring-caption', null, c.label),
-    c.kcal == null ? null : h('strong.ring-value', null, String(c.kcal)),
-    c.kcal == null ? null : h('span.ring-unit', null, 'kcal'));
+    h('strong.ring-value', null, value),
+    h('span.ring-unit', null, 'kcal'));
 }
 
 /*
@@ -188,7 +193,9 @@ function ringLegend(model) {
       'aria-hidden': 'true',
     }),
     h('span.ring-legend-k', null, item.label),
-    h('span.ring-legend-v', null, String(item.kcal)))));
+    h('span.ring-legend-v', null, item.track === 'intake'
+      ? `${item.kcal} / ${model.target ?? '—'}` : String(item.kcal)),
+    h('span.ring-legend-unit', null, 'kcal'))));
 }
 
 function heroInfo(derived, targets) {
@@ -205,9 +212,8 @@ function heroInfo(derived, targets) {
     ['蛋白质', targets.proteinBasis],
     ['脂肪', `参考上限 ${num(targets.fatUpper || targets.fat)}g，约占总热量 35%`],
     ['膳食纤维', '中国成人参考 25–30g'],
-    ['钠上限', '约等于 5g 食盐'],
-    ['游离糖上限', '含糖浆、蜂蜜和果汁中的糖；低于总热量 10%'],
-    ['饮水参考', '温和气候、低活动；运动或炎热天气需额外补充'],
+    ['钠上限', `${num(targets.sodium)}mg；按中国 DRIs 年龄分组。橙色从适宜摄入量起提醒留意后续用盐，并非危险线`],
+    ['游离糖上限', '保留食物库游离糖口径；低于供能 10% 且不超过 50g，5% 或 25g 起提醒留意'],
   ];
   let freshness = null;
   if (meta?.observedAt && derived.dynamic && !meta.stale) {

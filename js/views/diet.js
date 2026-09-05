@@ -89,6 +89,8 @@ function buildShell(root) {
     ariaLabel: '搜索食物，支持中文或拼音',
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
+      // 切页后旧 input 的防抖回调不得写回新一轮搜索。
+      if (!e.target.isConnected || e.target !== nodes.searchInput) return;
       ui.query = e.target.value;
       // 换了搜索词就收回「显示更多」，否则搜下一个词还是一次铺满
       ui.moreResults = false;
@@ -1460,6 +1462,9 @@ function refreshAdvice() {
 export function renderDiet(root) {
   // 外壳还挂在页面上就只做增量刷新，被别的页面清掉了才重建
   if (nodes.root?.parentNode !== root) {
+    ui.query = '';
+    ui.focus = null;
+    ui.moreResults = false;
     buildShell(root);
     refreshCustomForm();
     refreshResults();

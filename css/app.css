@@ -604,7 +604,7 @@ html, body { height: 100%; overflow: hidden; }
  */
 .hero-ring {
   display: flex; flex-direction: column; align-items: center;
-  gap: var(--space-2); overflow: visible;
+  gap: var(--space-1); overflow: visible;
 }
 /*
  * 圈心那两行叠在环中间。**是 HTML，不是 SVG 里的 <text>** ——
@@ -633,13 +633,8 @@ html, body { height: 100%; overflow: hidden; }
   align-self: end; margin-bottom: var(--space-1);
   font-size: var(--fs-body); line-height: 1; color: var(--muted);
 }
-/* 差 ≤ 40 kcal 时圈心不报数，那一句就是圈心的全部内容，得撑得住 */
-.ring-center.is-only { grid-template-rows: 1fr auto 1fr; }
-.ring-center.is-only .ring-caption {
-  grid-row: 2; align-self: center; margin-bottom: 0;
-  font-size: var(--fs-headline); font-weight: var(--w-semibold); color: var(--text);
-}
 .ring-value {
+  color: var(--text);
   font-size: var(--fs-display); font-weight: var(--w-semibold);
   line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
   /* 一位数变两位数时数字不该左右跳，尺子也没变 */
@@ -673,7 +668,7 @@ html, body { height: 100%; overflow: hidden; }
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
- * 它只是主卡的一部分，下面还有蛋白、碳水脂肪和四个方框要看。
+ * 它只是主卡的一部分，下面还有蛋白、碳水脂肪和三种营养刻度要看。
  */
 /*
  * 环占住卡片里那块地方。
@@ -681,17 +676,17 @@ html, body { height: 100%; overflow: hidden; }
  * 环两侧那两列文字删掉之后，宽度一直停在 168px —— 卡片内宽 329px，
  * 于是左右各空着 80px 什么都没有，而这是整张主卡最该看清的东西。
  */
-.energy-ring { display: block; width: min(232px, 62vw); height: auto; overflow: visible; }
+.energy-ring { display: block; width: min(213.44px, 57.04vw); height: auto; overflow: visible; }
 
 /*
  * 图例：一项对着环上一条弧。色块的颜色和深浅必须和环上完全一致 ——
  * 「颜色变深」在两处说的是同一件事：这条跑过一整圈了。
  */
 .ring-legend {
-  display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-1) var(--space-4);
+  display: grid; justify-items: start; gap: var(--space-1);
   font-size: var(--fs-caption); color: var(--muted);
 }
-.ring-legend-item { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
+.ring-legend-item { display: grid; grid-template-columns: 9px 4.5em auto auto; align-items: baseline; gap: var(--space-1); white-space: nowrap; }
 .ring-legend-k { color: var(--muted); }
 .ring-legend-v {
   font-size: var(--fs-body); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
@@ -777,50 +772,20 @@ html, body { height: 100%; overflow: hidden; }
 .metric-row.over .metric-row-note { color: var(--danger); font-weight: var(--w-semibold); }
 .metric-row.over .metric-row-value { color: var(--danger); }
 
-/*
- * 门槛类指标的方框：纤维（下限）、钠 / 游离糖（上限）。
- * 只关心够没够、超没超，不需要一整行的条。
- */
-/*
- * 四个方框一排。窄屏改 2×2，不改三列 —— 三列会让四项排成 3+1，
- * 最后那个吊在中间，怎么摆都是歪的（和健康数据那张卡是同一条道理）。
- *
- * 430px 这个断点是量出来的：390px 宽的机子上强行四列，每格只有 78px，
- * 而「2427 /2000mg」需要 90px —— 数字和分母被折成两行，四个格子一起长到 74px 高。
- */
-.hero-micros { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-1); margin-top: var(--space-3); }
-@media (max-width: 430px) {
-  .hero-micros { grid-template-columns: repeat(2, 1fr); }
-}
-.micro-chip {
-  display: grid; grid-template-columns: auto auto;
-  justify-content: center; align-items: baseline; column-gap: var(--space-1); row-gap: var(--space-0);
-  background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-sm);
-  padding: 7px 8px; font-size: var(--fs-caption); min-width: 0;
-}
-.micro-label { grid-column: 1 / -1; text-align: center; white-space: nowrap; color: var(--faint); }
-.micro-val { font-weight: var(--w-semibold); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
-.micro-target { color: var(--faint); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
-/* 记录类只有一个数，单位跟在后面——它没有分母，写成分数就等于凭空给了个目标 */
-.micro-unit { color: var(--faint); font-size: var(--fs-caption); }
-/*
- * 记录类（饮水）不染色 —— 保持中性。
- *
- * 这一排四个方框里，另外三个的颜色说的都是「到了 / 接近 / 超了」（语义层）。
- * 饮水没有门槛，也就没有这三种状态可说；给它涂上数据层的蓝，
- * 一排四个里三个说 A 语言、一个说 B 语言，读的人会以为那个蓝也是一种判断。
- * 数据色只在图表和营养条上用，这一条在那次改色时漏在了这儿。
- */
-.micro-chip.log .micro-val { color: var(--text); }
-.micro-chip.met { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-.micro-chip.met .micro-val { color: var(--accent); }
-.micro-chip.near { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
-.micro-chip.near .micro-val { color: var(--warn); }
-.micro-chip.over {
-  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
-  background: color-mix(in srgb, var(--danger) 8%, var(--card-2));
-}
-.micro-chip.over .micro-val { color: var(--danger); }
+/* 三个短刻度同排；钠的 mg 读数略多留空间，条长保持接近。 */
+.hero-micros { display: grid; grid-template-columns: 1fr 1.06fr 1fr; gap: var(--space-3); margin-top: var(--space-4); padding: 12px 2px 10px; border-top: 1px solid var(--hairline); }
+.micro-chip { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.micro-label { color: var(--muted); font-size: var(--fs-caption); white-space: nowrap; }
+.micro-reading { color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.micro-val { font-weight: var(--w-semibold); font-size: var(--fs-headline); }
+.micro-unit { font-size: var(--fs-caption); color: var(--muted); }
+.nutrient-scale { position: relative; height: 6px; border-radius: 999px; background: var(--track); margin: var(--space-2) var(--space-2) var(--space-1); }
+.nutrient-zone { position: absolute; top: 0; bottom: 0; border-radius: inherit; background: color-mix(in srgb, var(--accent) 38%, var(--track)); }
+.nutrient-limit { position: absolute; top: -4px; width: 1px; height: 14px; background: var(--muted); transform: translateX(-50%); }
+.nutrient-scale .nutrient-point { background: var(--text); }
+.nutrient-scale .nutrient-point.near { background: var(--warn); }
+.nutrient-scale .nutrient-point.over { background: var(--danger); }
+@media (max-width: 350px) { .hero-micros { gap: var(--space-2); } }
 
 /*
  * 区间条：底槽 + 建议区间的罩子 + 从左往右的填充。
@@ -1498,7 +1463,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   max-height: min(80vh, 660px);
   display: flex; flex-direction: column; overflow: hidden;
   overscroll-behavior: none;
-  padding: 8px 0 0;
+  padding: 0;
   background: color-mix(in srgb, var(--card) 82%, transparent);
   -webkit-backdrop-filter: saturate(180%) blur(24px);
   backdrop-filter: saturate(180%) blur(24px);
@@ -1506,19 +1471,10 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) backwards;
 }
-/*
- * `overscroll-behavior: none`，不是 `contain`。
- *
- * `contain` 只拦住「把背后的页面带着跑」，**橡皮筋还在**：滚到顶了继续往下拉，
- * 整块内容被拽下去，弹层顶上留一大片空白 —— 而且拽下去之后就停在那儿了。
- * 停住的原因是这一下被浏览器的合成器接管了：起拖阈值那 12px 里我们还没
- * preventDefault，合成器先动了手，之后再 preventDefault 也收不回来
- * （iOS 直接补一个 pointercancel），于是「往下滑关掉弹层」也一并失灵。
- * `none` 连橡皮筋一起关掉：到顶就是到顶，那一下原地留给拖拽手势。
- */
+/* CSS 禁止惯性越界；非 passive touchmove 在默认滚动前拦截边界拖动。 */
 .sheet-scroll {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  overscroll-behavior: none;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  overscroll-behavior: none; touch-action: pan-y;
   /* 没有固定底栏的普通弹层仍要避开 Home 指示条。 */
   padding: 0 16px calc(20px + var(--safe-bottom));
 }
@@ -1529,11 +1485,12 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   padding: 10px 16px calc(10px + var(--safe-bottom));
   background: var(--card); border-top: 1px solid var(--hairline);
 }
-/* 顶上那道小横杠：告诉人这层是能关掉的 */
-.sheet::before {
-  content: ''; display: block; width: 36px; height: 4px; margin: 0 auto var(--space-2);
-  border-radius: 999px; background: var(--border);
-}
+/* 横条仍是 36×4，整条透明 44px 热区独立承担 sheet 拖动。 */
+.sheet-handle { flex: none; height: 44px; display: grid; place-items: center; touch-action: none; user-select: none; cursor: grab; }
+.sheet-handle::before { content: ''; width: 36px; height: 4px; border-radius: 999px; background: var(--border); }
+.sheet-handle:active { cursor: grabbing; }
+.sheet-footer { overscroll-behavior: none; touch-action: none; }
+.sheet-scroll textarea { overscroll-behavior: none; }
 @keyframes sheet-rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
