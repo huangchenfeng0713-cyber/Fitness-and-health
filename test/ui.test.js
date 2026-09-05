@@ -124,7 +124,8 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   const sheet = read('js/lib/sheet.js');
   const css = read('css/app.css');
   assert.match(diet, /openSheet\(nodes\.portion/, '份量面板没有走公共弹层');
-  assert.match(diet, /if \(!food\) \{ closeSheet\(\); return; \}/, '取消选中时没有关掉弹层');
+  assert.match(diet, /if \(!food\) \{ closeSheet\(\{ force: true \}\); return; \}/,
+    '取消选中时没有关掉弹层，或者会被开场闸门挡下留一层空弹层');
   assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
   assert.match(sheet, /scrollArea = h\('div\.sheet-scroll'\)/, '弹层正文没有独立滚动区');
   assert.match(sheet, /footer = h\('div\.sheet-footer'/, '弹层没有独立底栏');
@@ -142,13 +143,27 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   assert.match(sheet, /window\.scrollTo\(0, lockedScrollY\)/, '关掉弹层后没有滚回原处');
   // 背景点一下、Esc 都要能关
   assert.match(sheet, /if \(sheetReady\(\)\) closeSheet\(\)/, '点背景关不掉弹层');
-  assert.match(sheet, /const OPEN_GUARD_MS = \d+/, '打开弹层后没有推迟可点');
+  /*
+   * 两道闸门分开：输入短、关闭长。合成一个 700ms 的时候，弹层已经稳稳停在那儿了，
+   * ＋、克数框、记录键还有半秒钟按不动。
+   */
+  assert.match(sheet, /const INPUT_GUARD_MS = \d+/, '打开弹层后没有推迟可点');
+  assert.match(sheet, /const DISMISS_GUARD_MS = \d+/, '打开弹层后没有推迟可关');
+  const inputGuard = Number(sheet.match(/const INPUT_GUARD_MS = (\d+)/)[1]);
+  const dismissGuard = Number(sheet.match(/const DISMISS_GUARD_MS = (\d+)/)[1]);
+  assert.ok(inputGuard < dismissGuard, '输入闸门不该比关闭闸门还长');
   assert.match(sheet, /if \(!force && !userCanDismiss\) return/,
     '打开手势没结束时 closeSheet 仍会把弹层关掉');
   assert.match(diet, /closeSheet\(\{ force: true \}\)/, '记完一笔后关不掉弹层');
-  assert.match(css, /\.sheet-wrap \{[^}]*pointer-events: none/, '弹层默认仍接事件，补派的点击会把它关掉');
-  assert.match(css, /\.sheet-wrap\.is-ready \{ pointer-events: auto; \}/,
-    '弹层就绪后点不了');
+  /*
+   * 「没就绪」只是弹层自己不接，wrap 必须把这几下吞掉。
+   * 让开的话点击会穿到背后那一页上（能点中被盖住的搜索结果），
+   * 浏览器还会把紧接着的那一下当成滚动接管，于是往下滑也关不掉弹层。
+   */
+  assert.doesNotMatch(css, /\.sheet-wrap \{[^}]*pointer-events: none/,
+    '未就绪时 wrap 让开了，补派的点击会穿到背后那一页上');
+  assert.match(css, /\.sheet-wrap:not\(\.is-ready\) \{ touch-action: none; \}/,
+    '被吞掉的那一段仍会被判成在滚页面');
   assert.match(css, /\.sheet-wrap:not\(\.is-ready\) \.sheet/,
     '未就绪时毛玻璃弹层自己还能接事件（iOS 上父级 none 挡不住 backdrop-filter）');
   assert.match(sheet, /setTimeout\(finish, EXIT_MS\)/, '退场动画没结束时没有把遮罩收掉，会卡死整页');
@@ -601,8 +616,15 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(training, /listRow, persistentInfoTip, searchField, weakTag,[\s\S]{0,80}from '\.\.\/lib\/ui\.js'/,
     '选择动作没有接入统一组件');
   assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
-  assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
-    '饮食推荐列表没有接入统一列表行');
+  /*
+   * 推荐行整行就是「打开份量」，和搜索结果（.search-item）、健身页的推荐行
+   * （.rec-pick）一样。原先只有右边那个小 ＋ 管用：三列食物长得一模一样，
+   * 点行有两处有反应、一处没有。
+   */
+  assert.match(mealAdvice, /listRow\(\{\s*as: 'button', className: 'rec-row'/,
+    '饮食推荐列表没有接入统一列表行，或者整行点不开份量面板');
+  assert.match(mealAdvice, /h\('span\.add-btn', \{ 'aria-hidden': 'true' \}/,
+    '推荐行的加号仍是独立控件：一行两个焦点点，读屏念两遍同一件事');
   /*
    * 弱标签要比它旁边的正文轻：不撑最小高度、内边距贴着字。
    * 原先 min-height 21px + padding 1px 6px + 一圈实描边，整块比食物名
@@ -1164,21 +1186,25 @@ test('7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切�
   assert.match(charts, /'text-anchor': anchor/);
 });
 
-test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
+test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', () => {
   const dash = strip(read('js/views/dashboard.js'));
   const css = read('css/app.css');
   assert.doesNotMatch(dash, /hero-ring-note/, '环下还在重复 摄入 / ≈尺子');
   assert.match(css, /--ring-eat:/, '圆环没有收进同一套配色');
   const chart = read('js/lib/energy-ring-chart.js');
-  assert.doesNotMatch(chart, /r: 2\.7/, '刻度不要再画圈圈');
   /*
-   * 刻度的颜色跟着它标的那条轨道走，跑过一圈一起换深色 —— 和弧段取自同一张
-   * TRACK 表，CSS 里不许再单独给刻度定颜色，否则刻度和弧会走散。
+   * 「走到哪儿了」由弧自己的**圆头端点**说，不再另刻一条线。
+   *
+   * 那条刻度和它标的弧同色、就压在弧的最前端，两端各出头 2.5px ——
+   * 画出来是弧上的一道划痕、一个豁口，不是记号。起点那枚白色小方块同理：
+   * 12 点本来就有一道缺口在说「这儿是起点」，方块是第二遍说同一件事，
+   * 而且浮在轨道上像渲染坏了。
    */
-  assert.match(chart, /const tone = tick\.laps >= 1 \? 'deep' : 'light'/, '刻度没有跟着圈数换深浅');
-  assert.match(chart, /stroke: t\[tone\]/, '刻度没有取自轨道自己的颜色');
-  assert.doesNotMatch(css, /\.ring-tick\.(?:eaten|burned)[^{]*\{[^}]*stroke:/,
-    'CSS 又给刻度单独定了颜色，会和 TRACK 表走散');
+  assert.doesNotMatch(chart, /ring-tick|ring-origin/, '环上还刻着线 / 还浮着起点方块');
+  assert.doesNotMatch(css, /\.ring-tick|\.ring-origin/, 'CSS 里还留着刻度 / 起点方块的样式');
+  assert.match(css, /\.ring-seg \{ stroke-linecap: round; \}/, '弧的端头仍是方切的');
+  assert.match(css, /\.ring-track, \.ring-burn-track \{ stroke-linecap: butt; \}/,
+    '灰轨也圆了头，两端各鼓出半个描边会把 12 点那道缺口糊上');
   assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
   /*
    * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处
@@ -1188,18 +1214,22 @@ test('今日圆环刻度写在环上，底下不再重复热量数字', () => {
   assert.match(dash, /function ringLegend/, '环下没有图例');
   assert.match(css, /\.ring-swatch-intake\.is-deep/, '图例色块没有跟着轨道跑第二圈加深');
   assert.doesNotMatch(chart, /当前摄入|当前消耗/, '环上不要再写当前摄入 / 当前消耗');
-  assert.match(chart, /'ring-caption'/, '圈心没有状态那一行');
-  assert.match(chart, /'ring-unit'/, '圈心没有单独的 kcal 一行');
-  assert.match(chart, /toSvg\(14\)/, '还可摄入应是 13–15px');
-  assert.match(chart, /toSvg\(42\)/, '数字应是 40–44px');
-  assert.match(chart, /toSvg\(15\)/, 'kcal 应是 14–16px');
-  assert.match(chart, /toSvg\(3\)/, '三行只轻微上移一丁点');
-  assert.match(chart, /line\(captionY, cap, 400/, '还可摄入应是常规字重');
-  assert.match(chart, /line\(valueY, val, 700/, '数字应是加粗');
-  assert.match(chart, /line\(unitY, unit, 400/, 'kcal 应比现在更轻');
-  assert.match(css, /\.ring-unit \{[^}]*opacity/, 'kcal 没有比标题更浅');
-  assert.match(chart, /captionY = cy - lift - block \/ 2 \+ cap \/ 2/, '三行没有作为整体居中后再上移');
-  assert.doesNotMatch(chart, /tspan/, 'kcal 应独立成行，不要和数字挤在同一行');
+  /*
+   * 圈心两行，而且是 HTML —— 和图例同一个理由：SVG 里的字跟着环缩放，
+   * 窄屏上会掉到 12px 可读下限以下，字号也接不上顶部那七档
+   * （数字曾经是 42px，比最大的一档还大 16px）。
+   */
+  assert.doesNotMatch(chart, /el\('text'/, '圈心的字还写在 SVG 里，会跟着环缩到可读下限以下');
+  assert.match(dash, /function ringCenter/, '圈心那两行没有交给 HTML');
+  assert.match(css, /\.ring-value \{[^}]*font-size: var\(--fs-display\)/,
+    '圈心的大数没有走 --fs-display —— 那一档的注释写的就是「圆环里的大数」');
+  assert.match(css, /\.ring-caption \{ font-size: var\(--fs-body\)/, '圈心第一行没有走字号阶梯');
+  assert.match(css, /\.ring-unit \{[^}]*font-size: var\(--fs-footnote\)/, 'kcal 没有走字号阶梯');
+  /*
+   * kcal 不独占第三行：它是这几行里信息量最小的一个，却拿到了和「还可摄入」
+   * 一样的分量，还把数字和它的单位拆到了两行上。空格由 core/units.js 定。
+   */
+  assert.match(dash, /unitGap\('kcal'\)/, 'kcal 没有贴着数字，或者空格是在这儿自己拍的');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
   assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,
@@ -1210,7 +1240,7 @@ test('短标签不会被从中间断成两截', () => {
   // 实测 393px 屏：「游离糖上限」被断成「游离糖上 / 限」，「1g 蛋白」被断成「蛋 / 白」。
   // 中文默认允许在任意两个字之间断行，短标签必须显式挡住。
   const css = read('css/app.css');
-  for (const cls of ['.metric-row-label', '.metric-row-value', '.metric-row-note', '.hero-ring-note']) {
+  for (const cls of ['.metric-row-label', '.metric-row-value', '.metric-row-note']) {
     assert.match(css, new RegExp(`\\${cls} \\{[^}]*white-space: nowrap`), `${cls} 会被从中间断开`);
   }
   assert.match(css, /\.card-tag \{[\s\S]*?word-break: keep-all;[\s\S]*?\}/, '卡片角标仍会在词内断行');
@@ -1577,9 +1607,15 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
     '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
 
-  // 结构偏移只用中性色：橙和红留给真正的上限
-  const barCss = read('css/app.css').slice(read('css/app.css').indexOf('.split-bar {'));
-  const barBlock = barCss.slice(0, barCss.indexOf('.hero-rate-note'));
+  /*
+   * 结构偏移只用中性色：橙和红留给真正的上限。
+   * 截到「推荐」那一节为止 —— 上一版拿 `.hero-rate-note` 当结尾，
+   * 而那是一段死样式（没有任何视图产出这个类）。它被删掉之后这一刀就切空了，
+   * 整段后半张样式表都被扫进来，`--warn` 自然到处都是。
+   */
+  const cssText = read('css/app.css');
+  const barBlock = cssText.slice(cssText.indexOf('.split-bar {'), cssText.indexOf('/* ============ 推荐'));
+  assert.ok(barBlock.length > 200 && barBlock.length < 2000, `结构条那一段没切对：${barBlock.length} 字`);
   assert.ok(!/--warn|--danger/.test(barBlock), '结构条用上了警告色');
 
   // 不能再各画各的：一旦回到两行，那 796 kcal 的自由度就又回来了

@@ -12,6 +12,9 @@
  * 每条轨道各自跑圈：第一圈浅色，越过 12 点进第二圈换深色盖在浅色上。
  * 深色退回去会露出下面的浅色；**浅色永远不会被擦回灰轨**。
  *
+ * 弧走到哪儿由**弧自己的圆头端点**说，模型里不再另出一份刻度：
+ * 那条刻度和它标的弧同色、就落在弧的最前端，画出来是弧上的一道划痕。
+ *
  * 尺子每天开始算一次，当天内不变 —— 加一餐、同步消耗都不许让弧跳。
  * 只有计划本身变了（改体重 / 目标 / 速率，或导入历史把近期基线挪了）
  * 才从改的那一天起换一把新尺子，改回去同理。
@@ -144,21 +147,6 @@ export function energyRing({
     push('burnedWrap', 'burn', burnLap.wrapPct, 'deep', Math.min(Math.max(burn - sc, 0), sc));
   }
 
-  /* 刻度不带文字：名字和数值都归下面那行图例，环上只留两条细线 */
-  const ticks = [];
-  if (ate > 0.5) {
-    ticks.push({
-      key: 'eaten', track: 'intake', pct: ((ate % sc) / sc) * 100,
-      kcal: Math.round(ate), laps: eatLap.laps,
-    });
-  }
-  if (hasBurn) {
-    ticks.push({
-      key: 'burned', track: 'burn', pct: ((burn % sc) / sc) * 100,
-      kcal: Math.round(burn), laps: burnLap.laps,
-    });
-  }
-
   /*
    * 图例就是环上那两条弧的说明：色块的深浅跟着轨道当前画到第几圈走，
    * 这样「颜色变深了」在环上和图例上说的是同一件事。
@@ -179,7 +167,6 @@ export function energyRing({
     target: goal != null ? Math.round(goal) : null,
     hasBurn,
     segments,
-    ticks,
     legend,
     laps: { eaten: eatLap, burned: burnLap },
     center: centerOf(ate, goal),

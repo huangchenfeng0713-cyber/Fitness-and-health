@@ -3,6 +3,11 @@
  *
  * 两条轨道各画各的：外圈粗的是摄入，内圈细的是消耗。
  * 每条轨道第一圈浅色、第二圈深色盖在浅色上，一条不去动另一条。
+ *
+ * **这里只画弧，一个字都不写。** 圈心那两行和下面的图例都是 HTML
+ * （见 views/dashboard.js 的 ringCenter / ringLegend）：SVG 里的字会跟着环缩放，
+ * 窄屏上环缩到 62vw，一行 14px 的说明就掉到 12px 可读下限以下，
+ * 而且它用的是自己算出来的字号，接不上 app.css 顶部那七档。
  */
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -33,21 +38,26 @@ function el(tag, attrs = {}) {
 }
 
 export function energyRingChart({ model, size = 152, stroke = 14, animateKey = null }) {
-  const pad = 16;
+  /*
+   * 留白只够描边的抗锯齿用。
+   *
+   * 原先是 16，因为刻度和起点方块要从轨道外面探出来 —— 那两样都没了，
+   * 于是 232px 的框里有 40px 是空的，环白白小了一圈，
+   * 到下面那行图例的距离也跟着被撑开。框还是 232px，环填得更满。
+   */
+  const pad = 6;
   const vb = size + pad * 2;
   const cx = vb / 2;
   const cy = vb / 2;
   const r = (size - stroke) / 2;
   const burnR = r - stroke / 2 - 7;
-  // 消耗环的粗细：画弧和画刻度共用一个数，否则刻度出头的长度会跟着漂
-  const BURN_STROKE = 3.5;
+  /*
+   * 消耗环的粗细。原先是 3.5，主环 14 —— 4:1 之下它细得像一根发丝，
+   * 和外面那条读不出是一套东西。5 仍然一眼分得出主次，又配得上。
+   */
+  const BURN_STROKE = 5;
   const span = 360 - RING_GAP_DEG;
   const start = -90 + RING_GAP_DEG / 2;
-  const angleOf = (p) => start + (Math.max(0, Math.min(100, p)) / 100) * span;
-  const point = (deg, radius) => [
-    cx + radius * Math.cos((deg * Math.PI) / 180),
-    cy + radius * Math.sin((deg * Math.PI) / 180),
-  ];
 
   const svg = el('svg', {
     viewBox: `0 0 ${vb} ${vb}`, class: 'ring energy-ring',
@@ -65,18 +75,38 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
   const canAnimate = animateKey != null && !reduceMotion() && typeof SVGElement !== 'undefined'
     && typeof SVGElement.prototype.animate === 'function';
 
-  const arc = (radius, width, cls, colour, fromPct, toPct, memoKey = null) => {
+  /*
+   * 弧画成圆头（`round`），灰轨仍是方头。
+   *
+   * 圆头是这次改观感的主要一条：方切的端头读作「被裁断」，圆头读作「走到这儿了」——
+   * 而「走到哪儿了」正是这只环唯一要说的事。原先端头另外刻一条同色的短线来说它，
+   * 两端各出头 2.5px，在真机上读出来是弧上的一道划痕、一个豁口，不是记号。
+   * 端头本身能说清楚，就不该再加一道线。
+   *
+   * 圆头会往两端各多画半个描边宽，所以画之前把这一截从长度里扣掉：
+   * 落笔范围和方头时一模一样，吃满计划那一下也不会顶进 12 点的缺口。
+   * 短到扣不出来的（刚记第一笔）留一个点 —— 圆头下的零长度就是个圆点。
+   *
+   * **起点靠 dashoffset 挪，不靠在 dasharray 前面塞一段 0。**
+   * 「0 起点 长度 …」在方头下画不出东西，换成圆头之后那个零长度的段
+   * 立刻变成一个整圆的点 —— 弧的起点上就鼓出一个比描边还宽的疙瘩，
+   * 和弧身之间还留着一道豁口。实测就是这么来的。
+   */
+  const arc = (radius, width, cls, colour, fromPct, toPct, memoKey = null, round = true) => {
     const circ = 2 * Math.PI * radius;
     const usable = (span / 360) * circ;
     const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
     const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
-    const dash = (l) => `0 ${from} ${Math.max(0, l)} ${circ}`;
+    const cap = round ? width / 2 : 0;
+    const insetOf = (l) => Math.min(cap, Math.max(0, l) / 2);
+    const dash = (l) => `${Math.max(0.01, Math.max(0, l) - insetOf(l) * 2)} ${circ}`;
     const memo = memoKey && { key: `${animateKey}|${model.scale}|${memoKey}`, len };
     if (memo) nextArc.set(memo.key, len);
     if (!(len > 0.3)) return;
     const node = el('circle', {
       cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width, stroke: colour,
       'stroke-dasharray': dash(len),
+      'stroke-dashoffset': -(from + insetOf(len)),
       transform: `rotate(${start} ${cx} ${cy})`,
     });
     svg.append(node);
@@ -94,9 +124,15 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     );
   };
 
-  // 灰轨先铺满，两条都有 —— 没画到的地方就是还没走到的部分
-  arc(r, stroke, 'ring-track', null, 0, 100);
-  arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100);
+  /*
+   * 灰轨先铺满 —— 没画到的地方就是还没走到的部分。方头：圆头会把 12 点那道缺口糊上。
+   *
+   * **消耗那条轨道只在真有设备数据时才铺。** 手表没连、今天没同步的时候，
+   * 里面那圈灰是画给一条永远不会出现的弧的：它说「这儿还有一样东西」，
+   * 然后一整天什么都不来。粗细从 3.5 提到 5 之后这一圈更显眼，更不能空着。
+   */
+  arc(r, stroke, 'ring-track', null, 0, 100, null, false);
+  if (model.hasBurn) arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100, null, false);
 
   /*
    * 先画完所有第一圈，再画所有第二圈。
@@ -113,76 +149,6 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     }
   }
 
-  const [sx, sy] = point(start, r);
-  svg.append(el('rect', {
-    x: sx - 2.4, y: sy - 2.4, width: 4.8, height: 4.8, rx: 1, class: 'ring-origin',
-  }));
-
-  /*
-   * 刻度线完整穿过它标的那条轨道，两端各出头一点点。
-   *
-   * 早先两条都只刻了一半：摄入那条浮在环的外侧、消耗那条从消耗环冲进主环
-   * 停在半路 —— 穿不透的刻度读作「划痕」，不是「记号」。
-   * 每条刻度只管自己那条轨道：摄入标主环，消耗标消耗环。
-   */
-  const OVERHANG = 2.5;
-  for (const tick of model.ticks || []) {
-    const t = TRACK[tick.track] || TRACK.intake;
-    const deg = angleOf(tick.pct);
-    const [x1, y1] = point(deg, t.radius - t.width / 2 - OVERHANG);
-    const [x2, y2] = point(deg, t.radius + t.width / 2 + OVERHANG);
-    /*
-     * 刻度跟着它标的那条轨道走色：摄入用绿、消耗用金，跑过一整圈换成对应的深色。
-     * 颜色和弧段取自同一张 TRACK 表 —— 刻度和它标的那条弧永远不会走散。
-     */
-    const tone = tick.laps >= 1 ? 'deep' : 'light';
-    svg.append(el('line', {
-      x1, y1, x2, y2, stroke: t[tone],
-      class: `ring-tick ring-tick-${tick.key} ring-tick-${tone}`,
-    }));
-  }
-
-  /*
-   * 圈心三行，整块略偏上：
-   *   还可摄入     ← 14px 常规 中灰
-   *     2184       ← 42px 加粗
-   *     kcal       ← 15px 常规 更浅，贴着数字
-   *
-   * 字号按环的显示宽 232px（见 .energy-ring）换成 viewBox 单位，
-   * 环跟着屏幕缩的时候这三行一起缩。
-   * 差得很少时没有数字，那一句自己占住中间。
-   */
-  if (model.center) {
-    const line = (y, sizePx, weight, cls, text) => {
-      const t = el('text', {
-        x: cx, y, 'text-anchor': 'middle',
-        'dominant-baseline': 'central', 'alignment-baseline': 'middle',
-        class: cls, 'font-size': sizePx, 'font-weight': weight,
-      });
-      t.textContent = text;
-      svg.append(t);
-    };
-    const hasNumber = model.center.kcal != null;
-    if (hasNumber) {
-      const DISPLAY = 232;
-      const toSvg = (px) => px * vb / DISPLAY;
-      const cap = toSvg(14);
-      const val = toSvg(42);
-      const unit = toSvg(15);
-      const gapTop = toSvg(5);
-      const gapBot = toSvg(2);
-      const lift = toSvg(3);
-      const block = cap + gapTop + val + gapBot + unit;
-      const captionY = cy - lift - block / 2 + cap / 2;
-      const valueY = captionY + cap / 2 + gapTop + val / 2;
-      const unitY = valueY + val / 2 + gapBot + unit / 2;
-      line(captionY, cap, 400, 'ring-caption', model.center.label);
-      line(valueY, val, 700, 'ring-value', String(model.center.kcal));
-      line(unitY, unit, 400, 'ring-unit', 'kcal');
-    } else {
-      line(cy, size / 8.5, 600, 'ring-caption', model.center.label);
-    }
-  }
   lastArc.clear();
   for (const [k, v] of nextArc) lastArc.set(k, v);
   return svg;

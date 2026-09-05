@@ -229,7 +229,7 @@ test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
 test('热量明显高于计划只做橙色提醒，不把计划误说成危险上限', () => {
   const a = advise({ kcal: targets.kcal + 400, protein: 140, fat: 70, carb: 200 });
   assert.equal(a.status.level, 'warn');
-  assert.match(a.status.headline, /热量偏高/);
+  assert.match(a.status.headline, /不必少吃补回来/);
   assert.match(a.status.detail, /单日偏差不能说明/);
   assert.match(a.status.detail, /7 天体重趋势/);
   assert.match(a.status.detail, /不必跳过下一餐/);
@@ -239,27 +239,47 @@ test('热量明显高于计划只做橙色提醒，不把计划误说成危险�
   }
 });
 
-test('主卡标题只说判断，不重复圈心里的热量数字', () => {
-  assert.equal(advise().status.headline, '按计划吃');
-  assert.equal(advise({ kcal: targets.kcal + 400 }).status.headline, '今日热量偏高');
-  assert.equal(advise({ kcal: targets.kcal + 80 }).status.headline, '略超计划');
-  assert.equal(advise({ kcal: targets.kcal - 10 }).status.headline, '今日热量到位');
-  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '今天吃得偏少');
+/*
+ * 标题写「接下来怎么办」，不复述判断。
+ *
+ * 判断这一屏上已经有两处在说了：左边那枚胶囊（节奏正常 / 需要注意）和环心
+ * （还可摄入 684 kcal / 超出目标 400 kcal）。标题原先是「按计划吃 /
+ * 今日热量偏高」这一路，夹在两者中间说同一件事，而「按计划吃」尤其空 ——
+ * 一笔都没记的人看到的也是它。
+ */
+test('主卡标题给的是下一步，不重复胶囊的判断和圈心的数字', () => {
+  // 记到一半、跟得上节奏
+  assert.equal(advise({ kcal: Math.round(targets.kcal * 0.45), protein: 60, fat: 30, carb: 120 })
+    .status.headline, '照现在的节奏继续');
+  assert.equal(advise({ kcal: targets.kcal + 400 }).status.headline, '不必少吃补回来');
+  assert.equal(advise({ kcal: targets.kcal + 80 }).status.headline, '下一餐回到正常预算');
+  assert.equal(advise({ kcal: targets.kcal - 10 }).status.headline, '今天不用再补热量');
+  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '下一餐可以多吃些');
+  // 一笔都没记：白天先照常吃这一餐，夜里不催人一次补完
+  assert.equal(advise({ kcal: 0, protein: 0, fat: 0, carb: 0 }, { now: at('09:00') }).status.headline,
+    '先照常吃这一餐');
+  assert.equal(advise({ kcal: 0, protein: 0, fat: 0, carb: 0 }, { now: at('22:00') }).status.headline,
+    '今晚不必一次补完');
+  // 判断只由胶囊说，标题里不许再出现「偏高 / 偏少 / 到位」这类复述
   for (const a of [
     advise(),
     advise({ kcal: targets.kcal + 400 }),
     advise({ kcal: targets.kcal + 80 }),
     advise({ kcal: targets.kcal - 10 }),
     advise({ kcal: 300 }, { now: at('15:30') }),
+    advise({ kcal: Math.round(targets.kcal * 0.45), protein: 60, fat: 30, carb: 120 }),
   ]) {
     assert.doesNotMatch(a.status.headline, /\d/, `标题还在报数：${a.status.headline}`);
+    // 判断只由胶囊说，标题里不许再复述一遍
+    assert.doesNotMatch(a.status.headline, /偏高|偏少|到位|超标/,
+      `标题又在复述判断：${a.status.headline}`);
   }
 });
 
 test('有饮食记录时也不再用“吃得快慢”描述记账进度', () => {
   const a = advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') });
   const copy = `${a.status.headline} ${a.status.detail}`;
-  assert.match(copy, /记录量低于当前时间参考|缺口偏大|偏少/);
+  assert.match(copy, /低于目标|多吃些|缺口偏大/);
   assert.doesNotMatch(copy, /吃得快|吃得慢/);
 });
 

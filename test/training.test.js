@@ -527,6 +527,40 @@ test('轮换不会把复合动作的槽位换成孤立动作', async () => {
   }
 });
 
+/*
+ * 轮换只在**这个模式的代表动作**之间转，不许扫到库尾去。
+ *
+ * 凑数那一段的 offset 原先是 `seed % rest.length` —— 没有上限，于是有些天
+ * 直接从库尾起扫：实测胸的推荐里出现过第 18 个动作（一共就 18 个），
+ * 背出现过第 25 个（共 26）。模式槽位那边由 ROTATE_POOL 封住了，
+ * 凑数这边漏了一道，同一份推荐里就有了两种标准。
+ *
+ * 「深」按**同一个模式内部**的排位算，不按整个部位的排位：库是按部位排的，
+ * 小腿提踵天然就排在腿的第 31 位，那不是边角变式，是它那个模式的头一个。
+ * 上界取不轮换那一天（seed 0）—— 轮换只该换人，不该换深度。
+ */
+test('每天换一批，但不会翻到库尾的边角变式', async () => {
+  const {
+    recommendFor, exercisesForGroup, exercisesForSplit, ROTATE_POOL,
+  } = await import('../js/core/training.js');
+  for (const [mode, key] of [['group', 'chest'], ['group', 'back'], ['group', 'core'], ['split', 'pull']]) {
+    const pool = mode === 'group' ? exercisesForGroup(key) : exercisesForSplit(key);
+    const deepest = (seed) => {
+      const rec = recommendFor({ mode, [mode === 'group' ? 'groupKey' : 'splitKey']: key, seed });
+      return Math.max(...rec.items.map((item) => {
+        const e = EXERCISE_BY_ID.get(item.id);
+        return pool.filter((x) => x.pattern === e.pattern).findIndex((x) => x.id === e.id);
+      }));
+    };
+    // 前 ROTATE_POOL 名之内本来就允许换；再深就是这次要拦的那件事
+    const baseline = Math.max(deepest(0), ROTATE_POOL - 1);
+    for (let seed = 1; seed < 40; seed += 1) {
+      assert.ok(deepest(seed) <= baseline,
+        `${key} seed ${seed} 在某个模式里挖到了第 ${deepest(seed) + 1} 个，比不轮换那天还深`);
+    }
+  }
+});
+
 test('器械档位也管着推荐，不然列表和推荐说的不是一件事', async () => {
   const { recommendFor } = await import('../js/core/training.js');
   for (const [equip, ok] of [['bodyweight', (e) => ['bodyweight', 'band'].includes(e.equipment)],

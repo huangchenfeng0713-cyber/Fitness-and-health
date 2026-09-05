@@ -147,20 +147,20 @@ test('没有设备消耗就不画消耗那条轨道', () => {
   const m = energyRing({ eaten: 800, target: TARGET, scale: SCALE });
   assert.equal(m.hasBurn, false);
   assert.equal(m.segments.some((s) => s.track === 'burn'), false);
-  assert.equal(m.ticks.some((t) => t.key === 'burned'), false);
   assert.equal(legend(m, 'burned'), undefined, '没有数据就不列这一项');
   assert.equal(legend(m, 'eaten').kcal, 800);
 });
 
-test('刻度只留位置，名字和值归图例', () => {
+/*
+ * 环上一个字都不写：名字和值全归下面那行图例。
+ *
+ * 「走到哪儿了」也不再另出一份刻度数据 —— 那条线和它标的弧同色、
+ * 就落在弧的最前端，画出来是弧上的一道划痕。现在由弧自己的圆头端点说。
+ */
+test('环上不写字，也不再另出一份刻度', () => {
   const m = ring(895, 1191);
-  const eat = m.ticks.find((t) => t.key === 'eaten');
-  const burn = m.ticks.find((t) => t.key === 'burned');
-  assert.equal(eat.track, 'intake');
-  assert.equal(burn.track, 'burn');
-  for (const t of m.ticks) {
-    assert.equal(t.label, undefined, '刻度上不再挂文字');
-  }
+  assert.equal(m.ticks, undefined, '模型里还留着刻度');
+  for (const s of m.segments) assert.equal(s.label, undefined, '弧段上挂了文字');
   assert.deepEqual(m.legend.map((l) => [l.label, l.kcal]), [['摄入', 895], ['消耗', 1191]]);
 });
 
@@ -179,12 +179,13 @@ test('图例的深浅跟着轨道跑到第几圈走', () => {
   assert.equal(legend(mixed, 'burned').deep, true);
 });
 
-test('刻度套圈后位置落回第二圈，值仍是总数', () => {
+test('套圈后第二圈从 12 点重新起，图例仍报总数', () => {
   const m = ring(2758, 1781);
-  const eat = m.ticks.find((t) => t.key === 'eaten');
-  assert.equal(eat.laps, 1);
-  assert.ok(eat.pct < 50, '第二圈应从 12 点重新起，不该还停在第一圈末尾');
-  assert.equal(eat.kcal, 2758);
+  assert.equal(m.laps.eaten.laps, 1);
+  const wrap = seg(m, 'eatenWrap');
+  assert.equal(wrap.tone, 'deep', '第二圈没有换深色盖在第一圈上');
+  assert.ok(wrap.toPct < 50, '第二圈应从 12 点重新起，不该还停在第一圈末尾');
+  assert.equal(legend(m, 'eaten').kcal, 2758, '图例报的该是总数，不是第二圈那一截');
 });
 
 test('异常输入不抛，弧不画出圈', () => {
@@ -201,7 +202,6 @@ test('异常输入不抛，弧不画出圈', () => {
       assert.ok(s.fromPct >= 0 && s.toPct <= 100, `${s.key} 跑出圆周了`);
       assert.ok(['intake', 'burn'].includes(s.track), `${s.key} 没说自己在哪条轨道`);
     }
-    for (const t of m.ticks) assert.ok(t.pct >= 0 && t.pct <= 100, `${t.key} 跑出圆周了`);
     assert.ok(m.center.label, '圈心总要有一句话');
   }
 });
