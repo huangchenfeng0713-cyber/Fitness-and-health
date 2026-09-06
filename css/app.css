@@ -1,3 +1,17 @@
+.intake-trend .trend-title { font-size: var(--fs-body); font-weight: var(--w-semibold); margin: 0 0 var(--space-2); }
+.trend-range { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); font-size: var(--fs-footnote); }
+.trend-range strong { font-variant-numeric: tabular-nums; color: var(--text); }
+.trend-basis, .coverage-note, .recommend-choice-note { color: var(--muted); font-size: var(--fs-footnote); line-height: 1.6; margin: var(--space-2) 0 0; }
+.trend-action, .recommend-direction, .coverage-tip { font-size: var(--fs-body); line-height: 1.65; }
+.trend-action, .coverage-tip { margin: var(--space-3) 0 0; }
+.trend-go { margin-top: var(--space-3); min-height: 44px; width: 100%; }
+.intake-trend[data-state="under"] .trend-title, .intake-trend[data-state="over"] .trend-title { color: var(--warn); }
+.recommend-direction { margin: 0 0 var(--space-3); }
+.coverage-row { display: grid; grid-template-columns: 0.7fr 1.5fr 0.8fr; gap: var(--space-2); align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-body); }
+.coverage-row > :last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.coverage-heading { color: var(--muted); font-size: var(--fs-footnote); }
+.coverage-row:last-child { border-bottom: 0; }
+
 /* ============ 设计基元 ============ */
 :root {
   --bg: #f2f5f4;

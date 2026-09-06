@@ -357,6 +357,7 @@ export function recompute(now = new Date()) {
     isToday,
     waterCount: health.waterCount,
     rhythmEntries: state.dietRhythm,
+    trendEnabled: !profileError && p.demoMode !== true && p.onboarded === true,
   });
 
   state.derived = {
