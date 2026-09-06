@@ -1677,7 +1677,8 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   // 比例说不出吃了多少，克数得一起给
   assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
   assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
-  assert.match(code, /split\.carbPct\}：\$\{split\.fatPct\}/, '比例应使用与标题一致的冒号');
+  assert.match(code, /'碳水:脂肪'/, '今日页标题应使用英文冒号');
+  assert.match(code, /split\.carbPct\}:\$\{split\.fatPct\}/, '今日页比例应使用与标题一致的英文冒号');
   assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
     '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
 
@@ -1824,6 +1825,7 @@ test('整条饮水卡复用节点，连续点击不重建循环动画', () => {
   assert.match(card, /button.water-pill/);
   assert.doesNotMatch(card, /water-add|document\.body\.append/);
   assert.match(card, /animation\.updatePlaybackRate/);
+  assert.match(card, /M0 18 Q90 0 180 18/, '饮水波面的波峰幅度不够明显');
   assert.match(card, /now - view\.lastTapAt > BURST_GAP_MS/);
   assert.match(card, /writeWater\(view, \(\) => back\)/);
   assert.match(card, /saveHealthDay\(view\.day/);

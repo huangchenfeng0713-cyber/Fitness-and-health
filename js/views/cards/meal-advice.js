@@ -107,7 +107,7 @@ function waterWaves() {
     wave.setAttribute('preserveAspectRatio', 'none');
     wave.setAttribute('class', 'water-flow');
     const path = document.createElementNS(wave.namespaceURI, 'path');
-    path.setAttribute('d', 'M0 12 Q90 0 180 12 T360 12 T540 12 T720 12 V48 H0Z');
+    path.setAttribute('d', 'M0 18 Q90 0 180 18 T360 18 T540 18 T720 18 V48 H0Z');
     wave.append(path);
     layer.append(wave);
   }

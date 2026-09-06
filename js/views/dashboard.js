@@ -68,8 +68,8 @@ function splitRow(split) {
   const known = split.carbPct != null;
   return h('div', { class: `metric-row split-row ${split.level}` },
     h('div.metric-row-top', null,
-      h('span.metric-row-label', null, '碳水：脂肪'),
-      h('strong.metric-row-value', null, known ? `${split.carbPct}：${split.fatPct}` : '—'),
+      h('span.metric-row-label', null, '碳水:脂肪'),
+      h('strong.metric-row-value', null, known ? `${split.carbPct}:${split.fatPct}` : '—'),
       h('span.metric-row-note', null, split.label)),
     splitBar({
       carbPct: split.carbPct,
