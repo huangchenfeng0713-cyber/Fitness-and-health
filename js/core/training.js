@@ -10,6 +10,7 @@
  */
 
 import { EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, EQUIPMENT } from '../data/exercises.js';
+import { dayOffset } from './day.js';
 
 const jaccard = (a = [], b = []) => {
   const sa = new Set(a);
@@ -622,6 +623,41 @@ export function normalizeSession(raw = {}) {
     clean.push({ id, sets, done: item.done === true });
   }
   return { date: typeof raw.date === 'string' ? raw.date : '', items: clean };
+}
+
+/** 复用记录语义：记有有效次数的组，或明确完成标记；空计划不计。 */
+export function trainingCoverage(sessions = [], endDate) {
+  const validDate = key => typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key)
+    && Number.isFinite(Date.parse(key + 'T00:00:00Z'))
+    && new Date(key + 'T00:00:00Z').toISOString().slice(0, 10) === key;
+  const dates = new Map(GROUPS.map(g => [g.key, new Set()]));
+  const trainingDays = new Set();
+  if (validDate(endDate)) for (const raw of sessions) {
+    if (!raw || !validDate(raw.date) || raw.date > endDate) continue;
+    const completed = normalizeSession(raw).items.filter(item => item.done || item.sets.some(set => set.reps > 0));
+    if (completed.length && dayOffset(endDate, raw.date) < 7) trainingDays.add(raw.date);
+    for (const item of completed) {
+      const primary = EXERCISE_BY_ID.get(item.id).primary;
+      for (const group of GROUPS) if (group.muscles.some(m => primary.includes(m))) dates.get(group.key).add(raw.date);
+    }
+  }
+  const groups = GROUPS.map(g => {
+    const all = [...dates.get(g.key)].sort().reverse();
+    const lastDate = all[0] || null;
+    const daysSince = lastDate ? dayOffset(endDate, lastDate) : null;
+    const count = all.filter(date => dayOffset(endDate, date) < 7).length;
+    return { key: g.key, label: g.label, lastDate, daysSince, count,
+      lastLabel: lastDate ? daysSince === 0 ? '今天' : daysSince + ' 天前' : '尚无完成记录' };
+  });
+  const tips = [];
+  const missing = groups.filter(g => g.count === 0);
+  // 新用户的一次训练不能说明遗漏；至少三个训练日才提示分布。
+  if (trainingDays.size >= 3 && missing.length) {
+    tips.push('最近 7 日尚未记录' + missing.map(g => g.label).join('、') + '部位训练。');
+    const concentrated = groups.filter(g => g.count >= 3 && g.count / trainingDays.size >= 0.75);
+    if (concentrated.length) tips.push('记录较集中于' + concentrated.map(g => g.label).join('、') + '，下次安排可留意尚未覆盖的部位。');
+  }
+  return { groups, trainingDays: trainingDays.size, tips };
 }
 
 /** 这次练了多少：总组数、完成组数、按部位的组数，以及能算出来的总容量 */

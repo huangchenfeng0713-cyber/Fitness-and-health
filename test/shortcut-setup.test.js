@@ -10,7 +10,7 @@ const [healthView, guide, edge] = await Promise.all([
 ]);
 
 test('快捷指令基础配置只包含低风险的三项累计指标', () => {
-  const configBlock = healthView.match(/function shortcutConfig[\s\S]+?\n}\n\nfunction setProgress/)?.[0] || '';
+  const configBlock = healthView.replace(/\r\n/g, '\n').match(/function shortcutConfig[\s\S]+?\n}\n\nfunction setProgress/)?.[0] || '';
   assert.match(configBlock, /protocolVersion:\s*1/);
   assert.match(configBlock, /steps:/);
   assert.match(configBlock, /activeEnergyKcal:/);

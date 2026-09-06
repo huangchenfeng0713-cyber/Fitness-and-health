@@ -12,6 +12,7 @@ import { formatDuration } from './duration.js';
 import { MEALS, paceNote, DEFAULT_RHYTHM_MODE } from './eating-rhythm.js';
 import { todayKey } from './day.js';
 import { BALANCE_WITHIN } from './energy-ring.js';
+import { intakeTrend, correctionPlan, TREND_POLICY } from './intake-trend.js';
 
 /*
  * 餐次定义搬去了 core/eating-rhythm.js —— 时间窗和供能比就是「进食节奏」本身，
@@ -191,9 +192,9 @@ function snapToServing(food, grams, maxGrams = Infinity) {
  * 把剩余热量按剩余餐次的份额权重分配，而不是平均分。
  */
 export function mealBudget({
-  kcalLeft, proteinLeft, dailyKcal = null, proteinTarget = null, now = new Date(),
+  kcalLeft, proteinLeft, dailyKcal = null, proteinTarget = null, now = new Date(), mealPlan = null,
 }) {
-  const rest = remainingMeals(now);
+  const rest = mealPlan?.length ? mealPlan : remainingMeals(now);
   const totalShare = rest.reduce((s, m) => s + m.share, 0) || 1;
   const cur = rest[0];
   const ratio = cur.share / totalShare;
@@ -228,7 +229,7 @@ export function mealBudget({
 function scoreFood(food, ctx) {
   const p = per100(food);
   const tags = tagsOf(food);
-  const { budget, gaps, goal, hour, isTrainingDay, recentIds, kcalLeft, proteinLeft } = ctx;
+  const { budget, gaps, goal, hour, isTrainingDay, recentIds, kcalLeft, proteinLeft, correction } = ctx;
 
   // 调味料和纯油糖不作为"吃什么"的推荐
   if (food.cat === 'other') return null;
@@ -239,6 +240,9 @@ function scoreFood(food, ctx) {
   // 这类条目仍保留在搜索与记账中，只从即时推荐里排除。
   const explicitRaw = food.state === 'raw' || /[（(]生[）)]/.test(food.name);
   if (explicitRaw) return null;
+
+  if (correction?.lean && (tags.has('high-fat') || tags.has('fried') || p.fat * 9 > p.kcal * 0.4)) return null;
+  if (correction?.optionalProtein && (!tags.has('high-protein') || p.kcal > 200 || p.protein * 4 < p.kcal * 0.3)) return null;
 
   // 建议份量：一餐由多样食物组成，单品只承担这一餐的一部分
   let grams;
@@ -265,6 +269,18 @@ function scoreFood(food, ctx) {
 
   let score = 0;
   const reasons = [];
+
+  if (correction?.lean && p.protein >= 8 && p.protein * 4 >= p.kcal * 0.3) {
+    score += 25; reasons.push('优先较瘦的蛋白来源');
+  }
+  if (correction?.active && correction.direction === 'under' && correction.carbLow && food.cat === 'staple' && p.fat <= 5) {
+    score += 55; reasons.unshift('补主食，少增加脂肪');
+  }
+  if (correction?.active && correction.fiber && tags.has('high-fiber')) {
+    score += 20; reasons.push('兼顾膳食纤维');
+  }
+  if (correction?.active && correction.carbHigh && nut.carb > 25) score -= 20;
+  if (correction?.energyOver && tags.has('high-density')) score -= 30;
 
   // 1) 补蛋白的贡献（蛋白缺口越大权重越高）
   const proteinNeed = Math.max(proteinLeft, 0);
@@ -409,6 +425,7 @@ export function buildAdvice(input) {
     waterCount = null,
     // 近三周的饮食记录，只有「按我平常」那套口径要用（判断这个钟点该吃到多少）
     rhythmEntries = [],
+    trendEnabled = true,
   } = input;
 
   const gaps = {};
@@ -427,9 +444,20 @@ export function buildAdvice(input) {
   const kcalLeft = gaps.kcal.remaining;
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
+  const trend = intakeTrend({ targets, intake, entries, rhythmEntries, now, isToday, enabled: trendEnabled });
+  const correction = correctionPlan({ trend, gaps, targets, hour });
+  const foodKcalLeft = correction.optionalProtein ? Math.min(200, targets.kcal * (hour >= 21 ? 0.06 : 0.10)) : kcalLeft;
   const budget = mealBudget({
-    kcalLeft, proteinLeft, dailyKcal: targets.kcal, proteinTarget: targets.protein, now,
+    kcalLeft: foodKcalLeft, proteinLeft, dailyKcal: targets.kcal, proteinTarget: targets.protein, now,
+    mealPlan: correction.active && trend.remainingMeals.length ? trend.remainingMeals : null,
   });
+  if (correction.optionalProtein) {
+    budget.optional = true;
+    budget.kcal = round(foodKcalLeft);
+    budget.protein = round(Math.min(proteinLeft, foodKcalLeft / ATWATER.protein, 25), 1);
+    budget.maxProteinByKcal = round(foodKcalLeft / ATWATER.protein, 1);
+    budget.proteinFeasible = false;
+  }
   // 活动能量已经被判为不可信时不能拿它推断训练日，
   // 否则会出现「凌晨躺床上却被告知今天是训练日、该补蛋白和碳水」这种事
   const isTrainingDay = (health.exerciseMinutes || 0) >= 30
@@ -443,8 +471,9 @@ export function buildAdvice(input) {
     hour,
     isTrainingDay,
     recentIds: new Set(entries.map((e) => e?.foodId).filter(Boolean)),
-    kcalLeft,
+    kcalLeft: foodKcalLeft,
     proteinLeft,
+    correction,
   };
 
   // ---- 推荐 ----
@@ -461,7 +490,14 @@ export function buildAdvice(input) {
   });
   const recommend = [];
   const catCount = {};
-  for (const item of scored) {
+  const priorityFoods = [];
+  if (correction.active) {
+    if (correction.direction === 'under' && correction.carbLow) priorityFoods.push(scored.find(r => r.food.cat === 'staple'));
+    if (correction.protein) priorityFoods.push(scored.find(r => r.tags.includes('high-protein')));
+    if (correction.fiber) priorityFoods.push(scored.find(r => r.tags.includes('high-fiber') && r.nutrients.fiber >= 2));
+  }
+  for (const item of [...priorityFoods.filter(Boolean), ...scored]) {
+    if (recommend.some(r => r.food.id === item.food.id)) continue;
     catCount[item.food.cat] = (catCount[item.food.cat] || 0) + 1;
     if (catCount[item.food.cat] > 2) continue;
     recommend.push(item);
@@ -475,12 +511,13 @@ export function buildAdvice(input) {
   const status = judgeStatus({
     gaps, kcalLeft, hour, targets, budget, hasIntake,
     rhythmMode: profile.rhythmMode, rhythmEntries, asOf: todayKey(now),
+    trend,
   });
 
   // ---- 洞察 ----
   const insights = buildInsights({
     gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
-    isToday, waterCount,
+    isToday, waterCount, correction,
   });
 
   return {
@@ -491,6 +528,8 @@ export function buildAdvice(input) {
     status,
     insights,
     recommend,
+    trend,
+    correction,
     proteinEquivalent: proteinEquivalent(proteinLeft),
   };
 }
@@ -514,8 +553,20 @@ export function buildAdvice(input) {
 export function judgeStatus({
   gaps, kcalLeft, hour, targets, budget, hasIntake = true,
   rhythmMode = DEFAULT_RHYTHM_MODE, rhythmEntries = [], asOf = null,
+  trend = null,
 }) {
   const kcalPct = gaps.kcal.pct;
+  if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录',
+    detail: '已记录 ' + gaps.kcal.eaten + ' kcal，当日计划 ' + gaps.kcal.target + ' kcal。历史日期不预测接下来的摄入。' };
+  if (trend?.active && trend.direction === 'under') return {
+    level: 'warn', headline: '下一餐可以多吃些',
+    detail: '按当前记录和剩余三餐安排，全天摄入可能明显低于今日计划。' + budget.meal.label
+      + '可在正常一餐内小幅调整，不必一次补齐差额。',
+  };
+  if (trend?.active && trend.range && trend.direction === 'over') return {
+    level: 'warn', headline: '后续餐次调整搭配即可',
+    detail: '如果后续主餐延续平常份量，全天摄入可能明显高于今日计划。不必跳餐或额外运动抵消。',
+  };
   /*
    * 这个钟点该吃到多少，由 core/eating-rhythm.js 说了算。
    *
@@ -526,8 +577,6 @@ export function judgeStatus({
   const pace = paceNote({
     mode: rhythmMode, hour, eatenPct: kcalPct, entries: rhythmEntries, asOf,
   });
-  const dayProgress = pace.share;
-  const expected = pace.should;
 
   /*
    * 标题只说下一步，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，
@@ -545,18 +594,18 @@ export function judgeStatus({
     };
   }
 
-  if (kcalLeft < -targets.kcal * 0.12) {
+  if (kcalLeft < -Math.max(TREND_POLICY.notableKcal, targets.kcal * TREND_POLICY.notableShare)) {
     return {
       // 热量目标是计划区间，不是安全上限。单日偏高用橙色提醒即可；
       // 红色只留给钠、游离糖等真正的上限，避免诱导跳餐或补偿性节食。
-      level: 'warn',
+      level: trend && !trend.active ? 'good' : 'warn',
       headline: '不必少吃补回来',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划为 ${gaps.kcal.target} kcal。单日偏差不能说明增减脂结果，不必跳过下一餐或明天补偿性少吃；如果一周内反复偏高，再结合 7 天体重趋势调整份量。`,
     };
   }
   if (kcalLeft < 0) {
     return {
-      level: 'warn',
+      level: 'good',
       headline: '下一餐回到正常预算',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。这个幅度对计划几乎没有影响，今天无需补偿性少吃，下一餐回到正常预算即可。`,
     };
@@ -584,14 +633,15 @@ export function judgeStatus({
         : `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
     };
   }
-  if (kcalPct < expected - 30 && dayProgress > 0.5) {
-    return {
-      level: 'warn',
-      headline: '下一餐可以多吃些',
-      detail: `若记录完整且长期大幅低于目标，可能增加恢复不足和瘦体重流失风险。接下来 ${budget.meal.label} 可先安排约 ${budget.kcal} kcal。`
-        + (budget.timeCapped ? '不建议因为前面吃得少，就在这个时段一次补完全天缺口。' : ''),
-    };
+  if (hour >= 21 && kcalLeft > BALANCE_WITHIN) {
+    return { level: 'good', headline: '今晚不必一次补完', detail: '已记录的摄入低于今日计划。夜里按饥饿感决定是否少量进食，明天回到正常三餐，不必追齐数字。' };
   }
+  if (trend && ['uncertain', 'watch', 'settled', 'historical'].includes(trend.state)) return {
+    level: 'good', label: trend.state === 'historical' ? '记录回顾' : '先观察',
+    headline: trend.state === 'historical' ? '回看这一天的记录' : '先照常安排下一餐', detail: trend.reason,
+  };
+  if (trend?.state === 'steady') return { level: 'good', headline: '照现在的节奏继续',
+    detail: '当前记录暂未显示明确的全天偏离，后续主餐照常安排，按饥饿感决定份量。' };
   return {
     level: 'good',
     headline: '照现在的节奏继续',
@@ -624,7 +674,7 @@ export const INSIGHT_PRIORITY = {
  */
 export function buildInsights({
   gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
-  isToday = true, waterCount = null,
+  isToday = true, waterCount = null, correction = null,
 }) {
   const list = [];
   const add = (type, priority, title, basis, action = '') => list.push({
@@ -687,17 +737,17 @@ export function buildInsights({
   const kcalLeft = gaps.kcal.remaining;
   if (proteinShort > 0 && proteinShort * ATWATER.protein > kcalLeft + 1) {
     const need = round(proteinShort * ATWATER.protein);
-    const minimumOver = Math.max(1, Math.ceil(need - kcalLeft));
     add('protein', INSIGHT_PRIORITY.energy, `剩下的热量补不齐这 ${round(proteinShort)}g 蛋白`,
       `蛋白质本身带热量：这些蛋白即使一点脂肪和碳水都不带也要 ${need} kcal，`
       + `而今天只剩 ${round(kcalLeft)} kcal。`,
-      `可以守住热量余量，也可以优先补蛋白并接受大约 ${minimumOver} kcal 的超出；`
-      + '不必为了凑数强行进食，明天把蛋白提前分到前几餐更省事。');
+      '后续餐次可用鱼虾、去皮禽肉或低脂奶豆类替换高油食物；不必为了凑数强行进食，明天把蛋白分到前几餐。');
   } else if (proteinShort > 10) {
     const eq = proteinEquivalent(proteinShort);
     add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,
       `${targets.proteinBasis}。`,
-      `蛋白量约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋；这只是蛋白换算，实际选择还要计入总热量、脂肪和个人饮食偏好，可分到后续餐次完成。`);
+      correction?.active ? '后续餐次优先选较瘦的蛋白来源，食物推荐已结合当前营养结构调整，不必一餐补完。' : hour >= 21
+        ? '今晚不用集中补完；若饿了可少量选择低脂奶豆类，明天把蛋白分到正常三餐。'
+        : `蛋白量约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋；这只是蛋白换算，实际选择还要计入总热量、脂肪和个人饮食偏好，可分到后续餐次完成。`);
   } else if (gaps.protein.pct >= 100) {
     add('good', INSIGHT_PRIORITY.energy, '蛋白已达标',
       `今日 ${gaps.protein.eaten}g / ${gaps.protein.target}g。`);

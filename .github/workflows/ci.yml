@@ -16,7 +16,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, 'claude/**']
+    branches: [main, 'claude/**', 'codex/**']
   # 手动补跑的口子：run 因为任何原因没起来时，不必靠推一个空提交去凑
   workflow_dispatch:
 
@@ -75,3 +75,4 @@ jobs:
         run: |
           node scripts/smoke.mjs http://127.0.0.1:8137
           node scripts/diet-today-smoke.mjs http://127.0.0.1:8137
+          node scripts/intake-training-smoke.mjs http://127.0.0.1:8137

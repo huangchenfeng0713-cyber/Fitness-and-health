@@ -47,7 +47,7 @@ function recRow(item, meal, onPick) {
     h('button.add-btn', {
       type: 'button',
       'aria-label': `选择 ${f.name} 的份量`,
-      onclick: () => onPick?.(f, { meal }),
+      onclick: () => onPick?.(f, { meal, grams: item.grams }),
     }, icon('plus')));
 }
 
@@ -62,10 +62,13 @@ export function recommendCard(rerender, onPick) {
       h('h3', null, '当前饮食推荐'),
       h('div.card-head-actions', null,
         estimateGroupInfoTip(all.map((item) => item.food), '查看推荐中的估算说明'))),
+    advice.correction?.action ? h('p.recommend-direction', null, advice.correction.action) : null,
+    advice.correction?.active || advice.budget.optional ? h('p.recommend-choice-note', null, advice.budget.optional
+      ? '以下按需任选一份，不要求补齐全天蛋白。' : '以下为可选食物，选合适的搭配，不需要全部吃。') : null,
     h('div.recommend-budget', { 'aria-label': '当前餐次预算' },
-      h('span', null, MEAL_LABEL[meal]),
+      h('span', null, advice.budget.optional ? '可选少量蛋白食物' : MEAL_LABEL[meal]),
       h('span', null, `${num(advice.budget.kcal)} kcal`),
-      h('span', null, advice.budget.proteinFeasible
+      h('span', null, advice.budget.optional ? '仍有热量，按需选择' : advice.budget.proteinFeasible
         ? `蛋白 ${num(advice.budget.protein, 0)}g`
         : `蛋白≤${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length
@@ -73,7 +76,7 @@ export function recommendCard(rerender, onPick) {
         h('div.rec-list', null, list.map((item) => recRow(item, meal, onPick))),
         moreToggle('recommend', all.length, 3, rerender),
       ]
-      : h('p.empty-hint', null, '今天的热量预算已经吃满了。剩下时间以水和无糖茶为主，明天回到正常预算即可。'),
+      : h('p.empty-hint', null, '暂无适合当前条件的推荐。后续餐次照常安排，按饥饿感决定份量；也可搜索记录实际吃的食物，不必为数字跳餐。'),
   );
 }
 

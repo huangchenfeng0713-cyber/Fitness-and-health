@@ -1456,7 +1456,16 @@ function refreshAdvice() {
   // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
   if (ui.query || ui.selected) return;
   // ＋ 走和搜索结果一样的路：先开份量面板，不直接落库
-  mount(nodes.advice, recommendCard(rerender, (food) => selectFood(food)));
+  mount(nodes.advice, recommendCard(rerender, (food, options) => {
+    selectFood(food);
+    if (options?.meal) ui.meal = options.meal;
+    if (options?.grams > 0) {
+      ui.unitIdx = food.s?.length || 0;
+      ui.grams = options.grams;
+      ui.qty = options.grams;
+    }
+    refreshPortion();
+  }));
 }
 
 export function renderDiet(root) {
@@ -1479,6 +1488,10 @@ export function renderDiet(root) {
    * 留着的话用户手动切走筛选之后又会被拽回来。
    */
   const intent = takeIntent();
+  if (intent?.correction) {
+    pickFocus(null);
+    nodes.advice?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
   if (intent?.focus && FOCUS_LABEL[intent.focus]) {
     pickFocus(intent.focus);
     nodes.searchCard?.scrollIntoView({ block: 'start', behavior: 'smooth' });

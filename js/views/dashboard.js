@@ -121,7 +121,7 @@ function heroCard(advice, targets, derived) {
   return h(`section.card.hero.${status.level}`, null,
     h('div.hero-head', null,
       h('div.hero-head-main', null,
-        h('span.status-pill', null, LEVEL_TEXT[status.level]),
+        h('span.status-pill', null, status.label || LEVEL_TEXT[status.level]),
         h('h2', null, status.headline)),
       heroInfo(derived, targets)),
     h('p.hero-detail', null, status.detail),
@@ -265,6 +265,25 @@ function energyFreshness(derived) {
 
 const INSIGHT_FOCUS = { protein: 'protein', fiber: 'fiber' };
 
+function trendCard(advice) {
+  const t = advice.trend;
+  if (!t || t.state === 'historical') return null;
+  const titles = { under: '全天摄入可能偏少', over: '留意后续餐次搭配', steady: '暂未见明确偏离', uncertain: '记录尚不足，先观察', watch: '先留出餐后观察时间', late: '今晚不必追齐数字', settled: '主餐已记录完，按饥饿感安排' };
+  return h('section.card.intake-trend', { 'data-state': t.state },
+    h('div.card-head', null, h('h3', null, '今日摄入趋势'),
+      persistentInfoTip('intake-trend-method', '查看摄入预测依据',
+        h('div', null, h('p', null, t.basis + '，映射到今日摄入目标。'),
+          h('p', null, '这是后续主餐延续典型份量的条件估计，不是确定结果或统计置信区间。餐次未记全、刚记完餐时先观察；范围整体明显偏离且仍可调整时才提醒。'),
+          h('p', null, '加餐照常计入已摄入，不固定生成夜宵阶段。提醒只在此处展示，不弹窗催促。')))),
+    h('p.trend-title', null, titles[t.state] || titles.uncertain),
+    t.range ? h('div.trend-range', null, h('span', null, '按后续主餐估计'), h('strong', null, t.range.low + '–' + t.range.high + ' kcal')) : null,
+    h('p.trend-basis', null, t.reason),
+    t.active ? [
+      h('p.trend-action', null, advice.correction.action),
+      h('button.secondary-btn.trend-go', { type: 'button', onclick: () => { setIntent({ correction: true }); location.hash = 'diet'; } }, '查看适合的食物'),
+    ] : null);
+}
+
 function insightsCard(advice, rerender) {
   const all = advice.insights;
   if (!all.length) return null;
@@ -286,12 +305,15 @@ function insightsCard(advice, rerender) {
       const main = [
         h('div.insight-title', null, i.title),
         i.action ? h('div.insight-action', null, i.action) : null,
-        focus ? h('div.insight-go', null, `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
+        focus ? h('div.insight-go', null, advice.correction?.active || advice.correction?.optionalProtein ? '查看适合当前情况的食物 ›' : `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
       ];
       const primary = focus
         ? h('button.insight-main.insight-actionable', {
           type: 'button',
-          onclick: () => { setIntent({ focus }); location.hash = 'diet'; },
+          onclick: () => {
+            setIntent(advice.correction?.active || advice.correction?.optionalProtein ? { correction: true } : { focus });
+            location.hash = 'diet';
+          },
         }, ...main)
         : h('div.insight-main', null, ...main);
       return h(`div.insight.${i.type}`, null, primary);
@@ -307,5 +329,6 @@ export function renderDashboard(root) {
   const { advice, targets } = d;
   mount(root,
     heroCard(advice, targets, d),
+    trendCard(advice),
     insightsCard(advice, rerender));
 }

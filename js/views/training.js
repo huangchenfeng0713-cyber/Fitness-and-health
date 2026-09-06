@@ -22,7 +22,7 @@ import { selectBar } from '../lib/select-bar.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
-  sessionVolume, recentTrainingRows,
+  sessionVolume, recentTrainingRows, trainingCoverage,
   overlapScore, overlapLevel,
 } from '../core/training.js';
 
@@ -826,6 +826,22 @@ function adviceCard(rerender) {
  */
 let expandedRow = null;
 
+function coverageCard() {
+  const model = trainingCoverage(state.trainingDays, trainingDay());
+  return h('section.card.training-coverage', null,
+    h('div.card-head', null, h('h3', null, '部位训练间隔'),
+      persistentInfoTip('training-coverage-method', '查看训练覆盖统计口径',
+        h('p', null, '按至少记录一组有效次数或标记完成的动作统计主要发力部位。肩与手臂沿用同一组；协同肌不另计。同部位同一天计 1 次，近 7 日含今天和此前 6 天。空计划和未来记录不计入，未记录不代表没有训练。'))),
+    h('div.coverage-table', { role: 'table', 'aria-label': '各部位训练间隔和近7日覆盖' },
+      h('div.coverage-row.coverage-heading', { role: 'row' },
+        h('span', { role: 'columnheader' }, '部位'), h('span', { role: 'columnheader' }, '最近训练'), h('span', { role: 'columnheader' }, '近 7 日')),
+      model.groups.map(g => h('div.coverage-row', { role: 'row', 'data-group': g.key },
+        h('strong', { role: 'cell' }, g.label), h('span', { role: 'cell', title: g.lastDate || '' }, g.lastLabel),
+        h('span', { role: 'cell' }, g.count + ' 次')))),
+    h('p.coverage-note', null, '有效组或完成标记 · 同部位同日计一次'),
+    model.tips.map(t => h('p.coverage-tip', null, t)));
+}
+
 function weeklyCard(rerender) {
   const rows = recentTrainingRows(state.trainingDays, trainingDay());
   if (!rows.length) {
@@ -961,6 +977,7 @@ export function renderTraining(root) {
    */
   mount(root,
     picked().length ? planCard() : null,
+    coverageCard(),
     pickerCard(rerender),
     adviceCard(rerender),
     weeklyCard(rerender),

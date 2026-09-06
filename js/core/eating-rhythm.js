@@ -91,7 +91,12 @@ export function personalMealReference(entries = [], { asOf = null } = {}) {
     startHour: Math.max(i ? (meals[i - 1].center + m.center) / 2 : 0, m.center - m.width / 2),
     endHour: Math.min(i < 2 ? (m.center + meals[i + 1].center) / 2 : 24, m.center + m.width / 2),
   }));
-  return { ...info, meals: windows };
+  const dailyShares = valid.map(day => {
+    const total = [...day.meals.values()].reduce((s, m) => s + m.kcal, 0);
+    return Object.fromEntries([...day.meals].filter(([, m]) => m.kcal >= 100)
+      .map(([key, m]) => [key, m.kcal / total]));
+  });
+  return { ...info, meals: windows, dailyShares };
 }
 
 /** 窗口内 smoothstep 平滑推进；窗口外贡献恒定，无全天线性插值。 */

@@ -250,11 +250,11 @@ test('热量明显高于计划只做橙色提醒，不把计划误说成危险�
 test('主卡标题给的是下一步，不重复胶囊的判断和圈心的数字', () => {
   // 记到一半、跟得上节奏
   assert.equal(advise({ kcal: Math.round(targets.kcal * 0.45), protein: 60, fat: 30, carb: 120 })
-    .status.headline, '照现在的节奏继续');
+    .status.headline, '先照常安排下一餐');
   assert.equal(advise({ kcal: targets.kcal + 400 }).status.headline, '不必少吃补回来');
   assert.equal(advise({ kcal: targets.kcal + 80 }).status.headline, '下一餐回到正常预算');
   assert.equal(advise({ kcal: targets.kcal - 10 }).status.headline, '今天不用再补热量');
-  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '下一餐可以多吃些');
+  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '先照常安排下一餐');
   // 一笔都没记：白天先照常吃这一餐，夜里不催人一次补完
   assert.equal(advise({ kcal: 0, protein: 0, fat: 0, carb: 0 }, { now: at('09:00') }).status.headline,
     '先照常吃这一餐');
@@ -279,7 +279,8 @@ test('主卡标题给的是下一步，不重复胶囊的判断和圈心的数�
 test('有饮食记录时也不再用“吃得快慢”描述记账进度', () => {
   const a = advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') });
   const copy = `${a.status.headline} ${a.status.detail}`;
-  assert.match(copy, /低于目标|多吃些|缺口偏大/);
+  assert.match(copy, /记录还不足|照常安排/);
+  assert.doesNotMatch(copy, /多吃些/, '只有总热量而无完整餐次证据时不能催补');
   assert.doesNotMatch(copy, /吃得快|吃得慢/);
 });
 
