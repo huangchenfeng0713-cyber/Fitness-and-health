@@ -271,7 +271,7 @@ const INSIGHT_FOCUS = { protein: 'protein', fiber: 'fiber' };
 function trendCard(advice) {
   const t = advice.trend;
   if (!t || t.state === 'historical') return null;
-  const titles = { under: '全天摄入可能偏少', over: '留意后续餐次搭配', steady: '暂未见明确偏离', uncertain: '记录尚不足，先观察', watch: '先留出餐后观察时间', late: '今晚不必追齐数字', settled: '主餐已记录完，按饥饿感安排' };
+  const titles = { under: '全天摄入可能偏少', over: '留意后续餐次搭配', steady: '暂未见明确偏离', uncertain: '记录尚不足，先观察', watch: '先留出餐后观察时间', late: '今晚不必追齐数字', settled: '今天不必追齐计划差额', covered: '当前不必额外加餐' };
   return h('section.card.intake-trend', { 'data-state': t.state },
     h('div.card-head', null, h('h3', null, '今日摄入趋势'),
       persistentInfoTip('intake-trend-method', '查看摄入预测依据',
@@ -279,7 +279,7 @@ function trendCard(advice) {
           h('p', null, '这是后续主餐延续典型份量的条件估计，不是确定结果或统计置信区间。餐次未记全、刚记完餐时先观察；范围整体明显偏离且仍可调整时才提醒。'),
           h('p', null, '加餐照常计入已摄入，不固定生成夜宵阶段。提醒只在此处展示，不弹窗催促。')))),
     h('p.trend-title', null, titles[t.state] || titles.uncertain),
-    t.range ? h('div.trend-range', null, h('span', null, '按后续主餐估计'), h('strong', null, t.range.low + '–' + t.range.high + ' kcal')) : null,
+    t.range && !t.dayComplete ? h('div.trend-range', null, h('span', null, '按后续主餐估计'), h('strong', null, t.range.low + '–' + t.range.high + ' kcal')) : null,
     h('p.trend-basis', null, t.reason),
     t.active ? [
       h('p.trend-action', null, advice.correction.action),

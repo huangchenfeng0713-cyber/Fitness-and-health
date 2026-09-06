@@ -52,6 +52,10 @@ try {
     window.waterBottom = getComputedStyle(document.querySelector('.water-surface')).bottom;
   });
   await page.locator('.water-pill').tap({ position: { x: 15, y: 15 } });
+  await page.waitForTimeout(100);
+  check('单次点击产生清晰的波面起伏与加速，不需要连点才能看见', await page.locator('.water-surface').evaluate(el =>
+    new DOMMatrixReadOnly(getComputedStyle(el).transform).m42 < -9
+    && el.getAnimations({ subtree: true }).every(a => a.playbackRate > 3)));
   await waitCount(1);
   await page.evaluate(() => { for (let i = 0; i < 10; i++) document.querySelector('.water-pill').click(); });
   await waitCount(11);

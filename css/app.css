@@ -1585,10 +1585,10 @@ body.sheet-open {
 .water-surface { position: absolute; inset: auto 0 -12px; height: 36px; pointer-events: none; transform-origin: bottom; }
 .water-flow {
   position: absolute; inset: 0 auto auto 0; width: 200%; height: 100%;
-  fill: color-mix(in srgb, var(--muted) 7%, transparent);
-  animation: water-drift 12s linear infinite;
+  fill: color-mix(in srgb, var(--muted) var(--water-wave-strength, 14%), transparent);
+  animation: water-drift 9s linear infinite;
 }
-.water-flow:nth-child(2) { animation-duration: 17s; animation-direction: reverse; bottom: -4px; top: auto; opacity: .7; }
+.water-flow:nth-child(2) { animation-duration: 13s; animation-direction: reverse; bottom: -4px; top: auto; opacity: .7; }
 @keyframes water-drift { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) {
   .water-flow { animation: none; }

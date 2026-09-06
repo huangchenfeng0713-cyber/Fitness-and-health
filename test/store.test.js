@@ -28,6 +28,38 @@ test('设备当日活动更新只改变实际消耗与收支，不增加计划�
   } finally { Object.assign(state, saved); }
 });
 
+test('建议只使用完整且新鲜可信的当前消耗，过期或缺字段时不判已吃够', () => {
+  const saved = { ...state };
+  try {
+    const now = new Date(2026, 8, 6, 23);
+    const date = '2026-09-06';
+    const fresh = { date, restingEnergy: 1450, activeEnergy: 200, energyObservedAt: now.toISOString() };
+    const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 70,
+      activity: 'light', goal: 'maintain', useAppleEnergy: true, onboarded: true, demoMode: false };
+    Object.assign(state, { day: date, profile, dietEntries: [{ date, time: now.toISOString(), meal: 'dinner', kcal: 1900 }],
+      dietDaily: [], dietRhythm: [], trainingDays: [], lastImport: null });
+    const run = (health, patch = {}) => {
+      state.healthDays = [health]; state.healthByDate = new Map([[date, health]]);
+      state.profile = { ...profile, ...patch };
+      return recompute(now);
+    };
+    const valid = run(fresh);
+    assert.equal(valid.advice.trend.burnedNow, valid.liveEnergy.burnedNow);
+    assert.equal(valid.advice.trend.currentCovered, true);
+    assert.equal(run({ ...fresh, activeEnergy: 0 }).advice.trend.currentCovered, true);
+    for (const health of [
+      { ...fresh, energyObservedAt: new Date(2026, 8, 6, 20).toISOString() },
+      { ...fresh, energyObservedAt: null },
+      { ...fresh, energyObservedAt: new Date(2026, 8, 6, 23, 30).toISOString() },
+      { ...fresh, restingEnergy: null }, { ...fresh, activeEnergy: null },
+      { ...fresh, activeEnergy: -10 }, { ...fresh, activeEnergy: 10000 },
+    ]) assert.equal(run(health).advice.trend.currentCovered, false, JSON.stringify(health));
+    for (const patch of [{ demoMode: true }, { onboarded: false }, { useAppleEnergy: false }]) {
+      assert.equal(run(fresh, patch).advice.trend.currentCovered, false, JSON.stringify(patch));
+    }
+  } finally { Object.assign(state, saved); }
+});
+
 test('食物库去重后旧 id 仍能读取到保留项', () => {
   const expected = {
     flatbread: 'shouzhuabing',

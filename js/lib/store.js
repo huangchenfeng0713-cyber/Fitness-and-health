@@ -361,6 +361,12 @@ export function recompute(now = new Date()) {
     waterCount: health.waterCount,
     rhythmEntries: state.dietRhythm,
     trendEnabled: !profileError && p.demoMode !== true && p.onboarded === true,
+    // 与圆环共用当下累计；过期、缺失或异常快照不能支撑“已覆盖当前消耗”。
+    burnedNow: liveEnergy && !energyData.stale && !energyData.missingObservationTime
+      && !dynamic.activeCapped && Number(health.restingEnergy) > 0
+      && health.activeEnergy != null && Number.isFinite(Number(health.activeEnergy))
+      && Number(health.activeEnergy) >= 0 && new Date(energyData.observedAt) <= now
+      ? liveEnergy.burnedNow : null,
   });
 
   state.derived = {

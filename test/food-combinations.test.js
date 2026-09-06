@@ -8,8 +8,9 @@ import {
 
 test('高优先级固定菜与组合菜都能按用户输入首条命中', () => {
   const expected = new Map([
-    ['胡萝卜炒鸡蛋', 'combo_carrot_egg_stir'], ['青椒炒鸡蛋', 'combo_pepper_egg_stir'],
-    ['青椒炒蛋', 'combo_pepper_egg_stir'],
+    ['胡萝卜炒鸡蛋', 'combo_carrot_egg_stir'], ['青椒炒鸡蛋', 'chili_scrambled_egg'],
+    ['青椒炒蛋', 'chili_scrambled_egg'], ['火腿肠炒鸡蛋', 'combo_ham_egg_stir'],
+    ['火腿炒鸡蛋', 'combo_ham_egg_stir'],
     ['土豆炒肉', 'combo_potato_pork_stir'], ['木耳炒肉', 'combo_wood_ear_pork_stir'],
     ['西兰花炒肉', 'combo_broccoli_pork_stir'], ['菜花炒肉', 'combo_cauliflower_pork_stir'],
     ['丝瓜炒鸡蛋', 'combo_luffa_egg_stir'], ['白菜炒肉', 'combo_cabbage_pork_stir'],
@@ -44,7 +45,7 @@ test('高优先级固定菜与组合菜都能按用户输入首条命中', () =>
 });
 
 test('组合菜营养来自基础食材，默认配方可逐项调整', () => {
-  for (const query of ['胡萝卜炒鸡蛋', '土豆炒肉', '青椒炒鸡蛋']) {
+  for (const query of ['胡萝卜炒鸡蛋', '土豆炒肉', '火腿肠炒鸡蛋']) {
     const food = parseFoodCombination(query);
     assert.ok(food, `没有解析 ${query}`);
     assert.ok(hasFoodMix(food));
@@ -75,6 +76,40 @@ test('组合菜 id 可稳定恢复，历史记录仍能按克数重算', () => {
   const restored = generatedFoodById(first.id);
   assert.equal(restored, first);
   assert.deepEqual(nutrientsFor(restored, 136.5), nutrientsFor(first, 136.5));
+});
+
+test('辣椒青椒尖椒炒蛋及倒序叫法统一命中固定菜，不再生成重复菜', () => {
+  for (const query of ['青椒炒鸡蛋', '青椒炒蛋', '辣椒炒鸡蛋', '辣椒炒蛋', '尖椒炒鸡蛋', '尖椒炒蛋', '鸡蛋炒青椒', '青椒 炒 鸡蛋']) {
+    const results = searchFoods(query);
+    assert.equal(results[0]?.id, 'chili_scrambled_egg', query);
+    assert.ok(results.every(f => f.id !== 'combo_pepper_egg_stir'), query);
+    assert.equal(parseFoodCombination(query), null, query);
+  }
+});
+
+test('火腿炒蛋同义和倒序输入使用同一配方，额外食材不能被忽略', () => {
+  for (const query of ['火腿肠炒鸡蛋', '火腿炒鸡蛋', '火腿炒蛋', '火腿肠炒蛋', '鸡蛋炒火腿肠', '鸡蛋炒火腿']) {
+    const food = searchFoods(query)[0];
+    assert.equal(food.id, 'combo_ham_egg_stir', query);
+    const mix = foodMixNutrition(food);
+    assert.deepEqual(mix.components.map(c => c.foodId), ['ham_sausage', 'egg_whole', 'oil', 'soy_sauce']);
+    const withoutOil = foodMixNutrition(food, { ham_sausage: 100, egg_whole: 110, soy_sauce: 5 });
+    assert.ok(mix.nutrients.kcal > withoutOil.nutrients.kcal + 60);
+    assert.ok(mix.nutrients.sodium > 900, '加工肉和酱油的钠不能漏算');
+  }
+  for (const query of ['火腿鸡蛋', '火腿炒鸡蛋牛肉', '青椒炒鸡蛋火腿', '青椒煮鸡蛋', '火腿片炒鸡蛋']) {
+    assert.equal(parseFoodCombination(query), null, query);
+    assert.ok(searchFoods(query).every(f => !f.generated), query);
+  }
+});
+
+test('旧青椒组合 id 保留原配料与营养，搜索去重不改写历史记录', () => {
+  const legacy = generatedFoodById('combo_pepper_egg_stir');
+  assert.equal(legacy.id, 'combo_pepper_egg_stir');
+  assert.equal(legacy.mix.components[0].foodId, 'pepper_green');
+  assert.deepEqual(legacy.mix.components.map(c => c.defaultGrams), [150, 110, 8, 5]);
+  assert.notDeepEqual(nutrientsFor(legacy, 100), nutrientsFor(FOOD_BY_ID.get('chili_scrambled_egg'), 100));
+  assert.equal(generatedFoodById(legacy.id), legacy);
 });
 
 test('已确认的液体与冲调粉单位不再混用', () => {

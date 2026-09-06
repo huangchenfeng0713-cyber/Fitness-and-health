@@ -120,8 +120,9 @@ test('数据未改变时重复计算不改变趋势和食物顺序', () => {
 });
 
 test('未来条目即使总量超计划也不能当作已吃过报警', () => {
-  const t = predict({ intake: { ...intake, kcal: 3200 }, entries: [...entries, entry('dinner', '19:00', 2400)] });
+  const t = predict({ burnedNow: 1000, intake: { ...intake, kcal: 3200 }, entries: [...entries, entry('dinner', '19:00', 2400)] });
   assert.equal(t.active, false);
+  assert.equal(t.currentCovered, false);
   assert.match(t.reason, /未来时间/);
 });
 
@@ -132,4 +133,64 @@ test('轻微超过目标保持中性；全天预测确实偏高时主卡与趋�
     entries: [entry('breakfast', '08:00', 700), entry('lunch', '13:00', 1680)] });
   assert.equal(a.trend.direction, 'over');
   assert.equal(a.status.level, 'warn');
+});
+
+test('2359/2162 晚间不再假设下一餐，也不声称差额几乎没有影响', () => {
+  for (const now of [at('20:30'), at('21:00'), at('23:59')]) {
+    const a = buildAdvice({ ...input, now, burnedNow: 1674,
+      targets: { ...targets, kcal: 2162 }, intake: { ...intake, kcal: 2359 } });
+    assert.equal(a.status.headline, '明天照常安排三餐');
+    assert.match(a.status.detail, /2359 kcal.*2162 kcal.*197 kcal/);
+    assert.doesNotMatch(a.status.detail, /几乎没有影响|下一餐|后续餐/);
+    assert.equal(a.correction.active, false);
+    assert.doesNotMatch([a.correction.action, a.trend.reason, ...a.insights.map(i => i.action)].join(''), /下一餐|后续餐|余下餐/);
+  }
+  const daytime = buildAdvice({ ...input, now: at('12:00'), entries: [],
+    targets: { ...targets, kcal: 2162 }, intake: { ...intake, kcal: 2359 } });
+  assert.equal(daytime.status.headline, '下一餐回到正常预算');
+});
+
+test('低于全天计划但已覆盖当前消耗，不激活补热量纠偏且不宣称全天已吃够', () => {
+  const a = buildAdvice({ ...input, burnedNow: 700 });
+  assert.ok(a.gaps.kcal.remaining > 1000);
+  assert.equal(a.trend.state, 'covered');
+  assert.equal(a.trend.active, false);
+  assert.equal(a.correction.active, false);
+  assert.equal(a.status.headline, '暂不必为目标额外加餐');
+  assert.match(a.status.detail, /当前.*700 kcal.*随消耗继续变化.*正餐照常安排/);
+  assert.doesNotMatch(a.correction.action, /增加一小份|补热量/);
+  assert.equal(a.gaps.kcal.target, targets.kcal, '当前收支不应改写全天计划');
+  assert.equal(buildAdvice({ ...input, burnedNow: 800 }).trend.currentCovered, true);
+  assert.equal(buildAdvice({ ...input, burnedNow: 801 }).trend.active, true);
+  for (const burnedNow of [null, 0, -10, NaN, Infinity]) {
+    assert.equal(buildAdvice({ ...input, burnedNow }).trend.active, true, String(burnedNow));
+  }
+});
+
+test('深夜未达目标但已有当前盈余，不催补摄入，缺少消耗不假造收支', () => {
+  const args = { ...input, now: at('23:00'), intake: { ...intake, kcal: 1900 } };
+  const a = buildAdvice({ ...args, burnedNow: 1674 });
+  assert.equal(a.status.headline, '今天不必再追齐数字');
+  assert.match(a.status.detail, /已覆盖这部分消耗/);
+  assert.equal(a.budget.optional, true);
+  assert.ok(a.budget.kcal <= 200);
+  const unknown = buildAdvice(args);
+  assert.doesNotMatch(unknown.status.detail, /已覆盖/);
+  assert.match(unknown.status.detail, /计划余量不等于必须补吃/);
+  assert.equal(buildAdvice({ ...args, burnedNow: 1674, isToday: false }).status.headline, '回看这一天的记录');
+});
+
+test('晚餐提前记完后不再重复安排一顿正餐，蛋白缺口也不触发补吃', () => {
+  for (const kcal of [1700, 2350, 2800]) {
+    const a = buildAdvice({ ...input, now: at('18:30'), intake: { ...intake, kcal },
+      entries: [...entries, entry('dinner', '17:00', kcal - 800)] });
+    assert.equal(a.trend.dayComplete, true);
+    assert.equal(a.trend.active, false);
+    assert.equal(a.correction.active, false);
+    assert.equal(a.budget.optional, true);
+    assert.ok(a.budget.kcal <= 200);
+    const copy = [a.status.headline, a.status.detail, a.correction.action, a.trend.reason, ...a.insights.map(i => i.action)].join('');
+    assert.doesNotMatch(copy, /下一餐|后续餐|余下餐/);
+    assert.match(copy, /明天/);
+  }
 });

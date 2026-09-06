@@ -78,3 +78,4 @@ jobs:
           node scripts/diet-today-smoke.mjs http://127.0.0.1:8137
           node scripts/intake-training-smoke.mjs http://127.0.0.1:8137
           node scripts/diet-interactions-smoke.mjs http://127.0.0.1:8137
+          node scripts/meal-advice-food-smoke.mjs http://127.0.0.1:8137
