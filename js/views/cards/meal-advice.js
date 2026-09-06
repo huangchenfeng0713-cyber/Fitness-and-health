@@ -117,7 +117,7 @@ function waterWaves() {
 // 点击只增加一个短暂脉冲；循环动画的节点、currentTime 和水位基线始终不变。
 function stirWater(view) {
   if (reducedMotion()) return;
-  view.impulse = Math.min(1, view.impulse + .65);
+  view.impulse = Math.min(1, view.impulse + .9);
   if (view.frame) return;
   let previous = performance.now();
   const tick = (now) => {
@@ -125,14 +125,14 @@ function stirWater(view) {
     previous = now;
     const target = view.impulse;
     view.lift += (target - view.lift) * (1 - Math.exp(-dt / 110));
-    view.impulse *= Math.exp(-dt / 420);
+    view.impulse *= Math.exp(-dt / 520);
     if (!view.card.isConnected || reducedMotion() || (view.lift < .002 && view.impulse < .002)) {
       view.lift = 0;
       view.impulse = 0;
     }
-    view.surface.style.transform = `translateY(${-view.lift * 5}px) scaleY(${1 + view.lift * .16})`;
+    view.surface.style.transform = `translateY(${-view.lift * 9}px) scaleY(${1 + view.lift * .28})`;
     for (const animation of view.surface.getAnimations({ subtree: true })) {
-      animation.updatePlaybackRate(1 + view.lift * 1.6);
+      animation.updatePlaybackRate(1 + view.lift * 2.4);
     }
     view.frame = view.lift || view.impulse ? requestAnimationFrame(tick) : 0;
   };

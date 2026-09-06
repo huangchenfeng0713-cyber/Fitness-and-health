@@ -1,0 +1,88 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  FOODS, FOOD_BY_ID, searchFoods, parseFoodCombination, generatedFoodById,
+  hasFoodMix, foodMixNutrition, nutrientsFor,
+} from '../js/data/foods.js';
+
+test('高优先级固定菜与组合菜都能按用户输入首条命中', () => {
+  const expected = new Map([
+    ['胡萝卜炒鸡蛋', 'combo_carrot_egg_stir'], ['青椒炒鸡蛋', 'combo_pepper_egg_stir'],
+    ['青椒炒蛋', 'combo_pepper_egg_stir'],
+    ['土豆炒肉', 'combo_potato_pork_stir'], ['木耳炒肉', 'combo_wood_ear_pork_stir'],
+    ['西兰花炒肉', 'combo_broccoli_pork_stir'], ['菜花炒肉', 'combo_cauliflower_pork_stir'],
+    ['丝瓜炒鸡蛋', 'combo_luffa_egg_stir'], ['白菜炒肉', 'combo_cabbage_pork_stir'],
+    ['红烧排骨', 'braised_ribs_red'], ['土豆烧鸡', 'combo_potato_chicken_braise'],
+    ['土豆烧肉', 'combo_potato_pork_braise'], ['烤肉拌饭', 'combo_bbq_rice'],
+    ['麻辣拌', 'combo_spicy_mix'], ['鸡公煲', 'chicken_claypot'],
+    ['鱼香肉丝盖饭', 'combo_yuxiang_pork_rice'], ['宫保鸡丁盖饭', 'combo_gongbao_rice'],
+    ['回锅肉盖饭', 'combo_twice_pork_rice'], ['梅菜扣肉饭', 'combo_meigan_pork_rice'],
+    ['中式快餐盒饭（两荤一素）', 'combo_two_meat_one_veg_box'],
+    ['青菜瘦肉粥', 'combo_greens_pork_congee'], ['黑米粥', 'black_rice_congee'],
+    ['葱油拌面', 'scallion_oil_noodle'], ['肉馅饼', 'meat_pie'], ['橘子', 'mandarin'],
+    ['果冻', 'jelly_sweet'], ['青椒土豆丝', 'combo_pepper_potato_stir'],
+    ['苦瓜炒肉', 'combo_bitter_pork_stir'], ['西葫芦炒肉', 'combo_zucchini_pork_stir'],
+    ['蒜苔炒鸡蛋', 'combo_garlic_scape_egg_stir'], ['芹菜炒鸡蛋', 'combo_celery_egg_stir'],
+    ['豆芽炒肉', 'combo_sprout_pork_stir'], ['白菜炖豆腐', 'combo_cabbage_tofu_stew'],
+    ['木耳炒山药', 'combo_wood_ear_yam_stir'], ['青椒炒豆干', 'combo_pepper_dried_tofu_stir'],
+    ['芹菜炒香干', 'combo_celery_dried_tofu_stir'], ['红烧鸡腿', 'braised_chicken_leg_red'],
+    ['卤鸡腿', 'marinated_chicken_leg'], ['土豆炖排骨', 'combo_potato_rib_stew'],
+    ['白萝卜炖排骨', 'combo_radish_rib_stew'], ['虾仁蒸蛋', 'combo_shrimp_steamed_egg'],
+    ['小葱拌豆腐', 'combo_scallion_tofu_mix'], ['牛肉包子', 'baozi_beef'],
+    ['韭菜鸡蛋包子', 'combo_chive_egg_bun'], ['油饼', 'oil_flatbread'],
+    ['家常烙饼', 'home_flatbread'], ['杂粮粥', 'combo_mixed_grain_congee'],
+    ['小米南瓜粥', 'combo_millet_pumpkin_congee'], ['火腿炒饭', 'combo_ham_fried_rice'],
+    ['腊肠炒饭', 'combo_sausage_fried_rice'], ['牛肉炒饭', 'combo_beef_fried_rice'],
+    ['担担面', 'dandan_noodle'], ['新疆拌面', 'xinjiang_lagman'],
+    ['脆皮鸡饭', 'combo_crispy_chicken_rice'], ['泡椒凤爪', 'pickled_chicken_feet'],
+    ['蛋黄派', 'egg_yolk_pie'],
+  ]);
+  for (const [query, id] of expected) {
+    assert.equal(searchFoods(query, FOODS, 5)[0]?.id, id, `“${query}”首条没有命中 ${id}`);
+  }
+});
+
+test('组合菜营养来自基础食材，默认配方可逐项调整', () => {
+  for (const query of ['胡萝卜炒鸡蛋', '土豆炒肉', '青椒炒鸡蛋']) {
+    const food = parseFoodCombination(query);
+    assert.ok(food, `没有解析 ${query}`);
+    assert.ok(hasFoodMix(food));
+    const mixed = foodMixNutrition(food);
+    const saved = nutrientsFor(food, food.s[0][1]);
+    assert.ok(mixed.components.some((item) => item.foodId === 'oil'), `${query} 没有计算烹调油`);
+    assert.ok(Math.abs(saved.kcal - mixed.nutrients.kcal) <= 2, `${query} 的每份热量没有来自配料求和`);
+    assert.ok(Math.abs(saved.protein - mixed.nutrients.protein) <= 0.2);
+  }
+});
+
+test('已有独立配方优先，不合理排列不生成', () => {
+  for (const [query, id] of [
+    ['宫保鸡丁', 'gongbao'], ['麻婆豆腐', 'mapo_tofu'], ['红烧肉', 'braised_pork'],
+    ['沙茶面', 'minnan_shacha_noodle'], ['福鼎肉片', 'fuding_pork_slices'],
+  ]) {
+    assert.equal(searchFoods(query, FOODS, 5)[0]?.id, id);
+    assert.equal(parseFoodCombination(query), null);
+  }
+  for (const query of ['西瓜炒鸡蛋', '牛奶炒土豆', '胡萝卜炒可乐', '土豆炒牛肉']) {
+    assert.equal(parseFoodCombination(query), null, `${query} 不应自动生成`);
+    assert.ok(searchFoods(query, FOODS, 10).every((food) => !food.generated));
+  }
+});
+
+test('组合菜 id 可稳定恢复，历史记录仍能按克数重算', () => {
+  const first = parseFoodCombination('胡萝卜炒鸡蛋');
+  const restored = generatedFoodById(first.id);
+  assert.equal(restored, first);
+  assert.deepEqual(nutrientsFor(restored, 136.5), nutrientsFor(first, 136.5));
+});
+
+test('已确认的液体与冲调粉单位不再混用', () => {
+  for (const id of ['americano_milk', 'oat_latte', 'tea_boba', 'milk_whole', 'soymilk']) {
+    assert.equal(FOOD_BY_ID.get(id)?.basis, '100ml', `${id} 应按 ml 记录`);
+  }
+  const powder = FOOD_BY_ID.get('meal_replacement_shake');
+  assert.equal(powder.basis, '100g');
+  assert.equal(powder.state, 'dry');
+  assert.match(powder.s[0][0], /干粉/);
+});

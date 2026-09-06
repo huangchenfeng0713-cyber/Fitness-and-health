@@ -19,7 +19,9 @@ import {
 import {
   isCompleteAppleSnapshot, mergeApplePartialRows, replaceAppleSnapshotRows, stampManualPatch,
 } from '../core/health-merge.js';
-import { FOODS, FOOD_BY_ID, nutrientsFor, hasFoodMix, foodMixNutrition } from '../data/foods.js';
+import {
+  FOODS, FOOD_BY_ID, nutrientsFor, hasFoodMix, foodMixNutrition, generatedFoodById,
+} from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
   sex: 'male',
@@ -110,6 +112,7 @@ export function findFood(id) {
   if (custom) return custom;
   return FOOD_BY_ID.get(id)
     || FOOD_BY_ID.get(LEGACY_FOOD_ID_REDIRECTS[id])
+    || generatedFoodById(id)
     || null;
 }
 

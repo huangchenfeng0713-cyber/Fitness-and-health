@@ -814,7 +814,7 @@ function refreshPortion() {
     sugarRow && h('div.field-label', null, '糖度'),
     sugarRow,
 
-    h('div.field-label', null, food.cat === 'drink' ? '喝了多少' : '吃了多少'),
+    h('div.field-label', null, isLiquid ? '喝了多少' : '吃了多少'),
     unitRow,
 
     h('div.qty-stepper', null,
@@ -1056,7 +1056,8 @@ function refreshCustomForm() {
     // 食物库自己的契约：纤维和糖都不能超过碳水，否则营养汇总会算出负的可用碳水
     if (fiber > carb) { toast('膳食纤维不能超过碳水', 'warn'); return; }
     if (sugar > carb) { toast('糖不能超过碳水', 'warn'); return; }
-    const grams = Math.round(Number(inputs.portionGrams.value) || 100);
+    if (inputs.portionGrams.value.trim() === '') { toast('请填写每份克重或体积', 'warn'); return; }
+    const grams = Math.round(Number(inputs.portionGrams.value));
     if (!(grams > 0 && grams <= 1000)) { toast('常用份量要在 1~1000 之间', 'warn'); return; }
     const liquid = customDraft.portionUnit === 'ml';
 
