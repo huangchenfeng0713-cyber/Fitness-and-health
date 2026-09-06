@@ -1012,6 +1012,8 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));
+  assert.ok(app.includes("event.data?.type !== 'health-diet-update-ready'"));
+  assert.ok(app.includes("type: 'health-diet-update-notice-ready'"));
   assert.ok(app.includes('function applyPendingUpdate'), '立即更新不能只 reload，iOS 会继续用旧页');
   assert.ok(app.includes('location.replace'), '立即更新要用换地址导航，不能 reload');
   // 目标线画的是现在这套设置算出来的目标，历史那几天当时未必是这个数
@@ -1171,6 +1173,10 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
   assert.ok(worker.includes('if (cached) return cached'), '当前控制器必须固定读取同一版应用外壳');
   assert.ok(worker.includes("cache: 'reload'"), '新外壳不能沿用 GitHub Pages 的十分钟 HTTP 缓存');
   assert.ok(worker.includes('cache.put(req'), '新缓存必须在激活前一次性取得全部应用外壳');
+  assert.ok(worker.includes("self.clients.matchAll({ type: 'window', includeUncontrolled: true })"),
+    '升级时必须找到仍停留在旧外壳的页面');
+  assert.ok(worker.includes('client.navigate(url.href)'),
+    '不支持新版更新通知的旧页面必须能自动重新导航一次');
   assert.ok(app.indexOf('void registerServiceWorker({ waitForControl: false })')
     < app.indexOf('const cloudInitialization = initCloud()'),
   '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
@@ -1678,7 +1684,8 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
   assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
   assert.match(code, /'碳水:脂肪'/, '今日页标题应使用英文冒号');
-  assert.match(code, /split\.carbPct\}:\$\{split\.fatPct\}/, '今日页比例应使用与标题一致的英文冒号');
+  assert.match(code, /`\$\{split\.carbPct\}:\$\{split\.fatPct\}`/,
+    '今日页比例数字应使用英文冒号');
   assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
     '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
 

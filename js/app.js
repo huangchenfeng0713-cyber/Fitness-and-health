@@ -463,6 +463,11 @@ async function applyPendingUpdate() {
 
 async function registerServiceWorker({ waitForControl = false } = {}) {
   if (!('serviceWorker' in navigator) || !location.protocol.startsWith('http')) return;
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (event.data?.type !== 'health-diet-update-ready') return;
+    showUpdateNotice();
+    navigator.serviceWorker.controller?.postMessage({ type: 'health-diet-update-notice-ready' });
+  });
   const hadController = !!navigator.serviceWorker.controller;
   if (hadController) {
     navigator.serviceWorker.addEventListener('controllerchange', showUpdateNotice, { once: true });
