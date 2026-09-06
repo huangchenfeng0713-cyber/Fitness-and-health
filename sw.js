@@ -2,9 +2,12 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v3.14.1';
+const CACHE = 'health-diet-v3.14.2';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
+const UPDATE_READY = 'health-diet-update-ready';
+const UPDATE_NOTICE_READY = 'health-diet-update-notice-ready';
+const updateAwareClients = new Set();
 // 根模块及其固定版本依赖只在账号功能首次成功加载后按需缓存；不为本地模式访客预下载。
 const SUPABASE_SDK = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/+esm';
 const JSDELIVR_ORIGIN = 'https://cdn.jsdelivr.net';
@@ -97,13 +100,32 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys
-        .filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE && k !== SDK_CACHE)
-        .map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
-  );
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    const oldShells = keys.filter((k) => k.startsWith(CACHE_PREFIX)
+      && k !== CACHE && k !== SDK_CACHE);
+    await Promise.all(oldShells.map((k) => caches.delete(k)));
+    await self.clients.claim();
+    if (!oldShells.length) return;
+
+    /*
+     * 浏览器可能在旧页面挂上 controllerchange 监听之前就完成接管。先通知已经支持
+     * 新协议的页面显示更新横幅；旧页面不会回应，短暂等待后只替它重新导航一次。
+     */
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    windows.forEach((client) => client.postMessage({ type: UPDATE_READY, cache: CACHE }));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    windows.filter((client) => !updateAwareClients.has(client.id)).forEach((client) => {
+      const url = new URL(client.url);
+      url.searchParams.set('_up', CACHE.slice(CACHE_PREFIX.length));
+      // navigate 会等激活完成；这里不能 await，否则激活与导航会互相等待。
+      client.navigate(url.href).catch(() => {});
+    });
+  })());
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data?.type === UPDATE_NOTICE_READY && e.source?.id) updateAwareClients.add(e.source.id);
 });
 
 self.addEventListener('fetch', (e) => {

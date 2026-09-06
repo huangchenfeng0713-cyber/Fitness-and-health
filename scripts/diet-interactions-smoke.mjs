@@ -183,7 +183,7 @@ try {
   check('历史日期仅展示当日回顾，不出现行动入口', await page.locator('#view').textContent().then(t => /当日回顾/.test(t) && !/今日提示|下一餐|后续餐次|晚餐建议|接下来|蛋白还差/.test(t))
     && await page.locator('.insight-actionable,.intake-trend,.insight-go').count() === 0);
   check('碳水比例统一冒号，移除进度条下参考文字，保留克数与条', await page.locator('.split-row').evaluate(el =>
-    el.querySelector('.metric-row-label').textContent === '碳水：脂肪' && /^\d+：\d+$/.test(el.querySelector('.metric-row-value').textContent)
+    el.querySelector('.metric-row-label').textContent === '碳水:脂肪' && /^\d+:\d+$/.test(el.querySelector('.metric-row-value').textContent)
     && !el.querySelector('.split-grams-plan') && !el.textContent.includes('碳水参考') && el.querySelectorAll('.split-end').length === 2 && !!el.querySelector('.split-bar-point')));
   const review = await page.locator('.insight-list').textContent();
   await page.clock.setFixedTime(new Date('2026-09-06T23:00:00+08:00'));

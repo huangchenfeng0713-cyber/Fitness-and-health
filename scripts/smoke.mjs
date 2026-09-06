@@ -529,7 +529,7 @@ try {
     const pointEl = splitEl?.querySelector('.split-bar-point');
     const barBox = barEl?.getBoundingClientRect();
     const ratioText = splitEl?.querySelector('.metric-row-value')?.textContent || '';
-    const ratio = /(\d+)：(\d+)/.exec(ratioText);
+    const ratio = /(\d+):(\d+)/.exec(ratioText);
     const ends = [...(splitEl?.querySelectorAll('.split-end') || [])]
       .map((el) => el.textContent.trim());
     const proteinRow = [...document.querySelectorAll('.metric-row')]
