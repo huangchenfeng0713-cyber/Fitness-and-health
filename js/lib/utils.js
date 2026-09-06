@@ -161,8 +161,11 @@ function placeInfoTip(details) {
   const viewport = infoTipViewport();
   const margin = 12;
   const gap = 8;
-  const viewportRight = viewport.left + viewport.width;
-  const viewportBottom = viewport.top + viewport.height;
+  const sheet = details.closest('.sheet')?.getBoundingClientRect();
+  const leftEdge = Math.max(viewport.left, sheet?.left ?? viewport.left) + margin;
+  const topEdge = Math.max(viewport.top, sheet?.top ?? viewport.top) + margin;
+  const rightEdge = Math.min(viewport.left + viewport.width, sheet?.right ?? Infinity) - margin;
+  const bottomEdge = Math.min(viewport.top + viewport.height, sheet?.bottom ?? Infinity) - margin;
   const anchor = summary.getBoundingClientRect();
 
   /*
@@ -171,28 +174,32 @@ function placeInfoTip(details) {
    * 夹在可视视口内。iOS 键盘出现时 visualViewport 会缩小，这里也会跟着避让。
    */
   panel.dataset.positioned = 'false';
-  panel.style.left = `${viewport.left + margin}px`;
-  panel.style.top = `${viewport.top + margin}px`;
+  panel.style.left = '0px';
+  panel.style.top = '0px';
+  panel.style.transform = 'none';
+  panel.style.maxWidth = `${Math.max(0, rightEdge - leftEdge)}px`;
   panel.style.maxHeight = '';
+  // 毛玻璃 / transform 会让 fixed 相对弹窗定位。测量实际原点，避免重复加上弹窗偏移。
+  const origin = panel.getBoundingClientRect();
 
-  const below = Math.max(0, viewportBottom - anchor.bottom - gap - margin);
-  const above = Math.max(0, anchor.top - viewport.top - gap - margin);
+  const below = Math.max(0, bottomEdge - anchor.bottom - gap);
+  const above = Math.max(0, anchor.top - topEdge - gap);
   const naturalHeight = Math.min(panel.scrollHeight, 420);
   const placeBelow = below >= Math.min(naturalHeight, 180) || below >= above;
-  const available = Math.max(96, placeBelow ? below : above);
+  const available = Math.max(0, placeBelow ? below : above);
   panel.style.maxHeight = `${Math.floor(available)}px`;
 
   const measured = panel.getBoundingClientRect();
   const left = Math.min(
-    Math.max(anchor.left + (anchor.width - measured.width) / 2, viewport.left + margin),
-    Math.max(viewport.left + margin, viewportRight - measured.width - margin),
+    Math.max(anchor.right - measured.width, leftEdge),
+    Math.max(leftEdge, rightEdge - measured.width),
   );
   const top = placeBelow
-    ? Math.min(anchor.bottom + gap, viewportBottom - measured.height - margin)
-    : Math.max(viewport.top + margin, anchor.top - gap - measured.height);
+    ? Math.min(anchor.bottom + gap, bottomEdge - measured.height)
+    : Math.max(topEdge, anchor.top - gap - measured.height);
 
-  panel.style.left = `${Math.round(left)}px`;
-  panel.style.top = `${Math.round(top)}px`;
+  panel.style.left = `${Math.round(left - origin.left)}px`;
+  panel.style.top = `${Math.round(top - origin.top)}px`;
   panel.dataset.positioned = 'true';
 }
 

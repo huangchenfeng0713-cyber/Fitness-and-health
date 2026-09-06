@@ -124,7 +124,7 @@ test('份量面板正文独立滚动，记录按钮固定在不留假占位的�
   const sheet = read('js/lib/sheet.js');
   const css = read('css/app.css');
   assert.match(diet, /openSheet\(nodes\.portion/, '份量面板没有走公共弹层');
-  assert.match(diet, /if \(!food\) \{ closeSheet\(\{ force: true \}\); return; \}/,
+  assert.match(diet, /if \(!food\) \{ if \(!ui\.showCustomForm\) closeSheet\(\{ force: true \}\); return; \}/,
     '取消选中时没有关掉弹层，或者会被开场闸门挡下留一层空弹层');
   assert.match(css, /\.sheet \{[\s\S]*?position: absolute[\s\S]*?bottom: 0/, '弹层没有贴在底部');
   assert.match(sheet, /scrollArea = h\('div\.sheet-scroll'\)/, '弹层正文没有独立滚动区');
@@ -216,8 +216,8 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
    * 现在只回答一个能诚实回答的问题：今天主动喝了几次水。
    */
   const card = read('js/views/cards/meal-advice.js');
-  assert.match(card, /const waterTaps = \(\) =>/, '没有按次数计的饮水');
-  assert.match(card, /waterCount: target/, '次数没有落到 waterCount 字段上');
+  assert.match(card, /const savedWater = \(day\) =>/, '没有按次数计的饮水');
+  assert.match(card, /waterCount: next/, '次数没有落到 waterCount 字段上');
   assert.ok(!/MAX_ONE_TIME_ML|waterMl: Math\.max/.test(card), '还留着按毫升记录的老路');
   // 误触之后总得有办法改回来
   /*
@@ -226,7 +226,7 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
    */
   assert.match(card, /'撤销'/, '点错了没法退回去');
   assert.match(card, /UNDO_WINDOW_MS/, '撤销没有时间窗，等于常驻');
-  assert.match(card, /const justLogged = Date\.now\(\) < undoUntil/, '撤销的显示条件没有跟着时间窗走');
+  assert.match(card, /view\.undo\.hidden = view\.undoBaseline == null/, '撤销的显示条件没有跟着时间窗走');
   // 次数写在那条状态里，标题右边不能再挂一个同样的数
   assert.ok(!/card-tag[^\n]*已记录/.test(card), '同一个数在一张卡上写了两遍');
   assert.match(card, /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
@@ -1288,8 +1288,8 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
     'kcal 到数字的距离不是标题那一档的一半');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
-  assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr auto 1fr/,
-    '碳水 / 脂肪克数没有左右对齐、说明居中');
+  assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr 1fr/,
+    '碳水：脂肪克数没有左右对齐');
 });
 
 test('短标签不会被从中间断成两截', () => {
@@ -1672,12 +1672,12 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   assert.match(code, /carbPct: split\.carbPct/, '当前比例没有画成指针');
   assert.match(code, /carbBandLo: split\.bandLo[\s\S]*carbBandHi: split\.bandHi/, '没有画出参考区间');
   assert.ok(!/markPct|planCarbPct/.test(code), '又退回「一个计划点」了');
-  assert.match(code, /split-grams-plan.*split\.note/, '参考区间得有文字说明');
+  assert.doesNotMatch(code, /split-grams-plan/, '不再显示参考区间说明');
 
   // 比例说不出吃了多少，克数得一起给
   assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
   assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
-  assert.match(code, /split\.carbPct\}% \/ \$\{split\.fatPct\}%/, '比例应使用与标题一致的斜杠');
+  assert.match(code, /split\.carbPct\}：\$\{split\.fatPct\}/, '比例应使用与标题一致的冒号');
   assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
     '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
 
@@ -1819,37 +1819,15 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
  * 动画挂在第一个节点上而它马上被第二个换掉 —— 表现就是「只有第一次能看到」。
  * 撤销：快速点两下要能整串退回去，不是只减一下。
  */
-test('喝水的动画不挂在会被重绘换掉的节点上，撤销退整串', () => {
+test('整条饮水卡复用节点，连续点击不重建循环动画', () => {
   const card = read('js/views/cards/meal-advice.js');
-  assert.match(card, /document\.body\.append\(fly\)/,
-    '飞行的水滴还挂在卡片里，重绘一次就没了');
-  assert.match(card, /flyDrop\(document\.querySelector\('\.water-row \.water-pill'\)\)/,
-    '重绘之后没有重新查节点，ev.currentTarget 那时已经离开文档了');
-  assert.match(card, /typeof drop\.animate !== 'function'/, '没有给不支持 WAAPI 的环境兜底');
-  /*
-   * 涟漪要被横幅裁住才像「水在这个容器里回荡」，所以裁剪层要拿到
-   * 横幅的实际尺寸和圆角；波心落在数字上，半径取到最远那个角。
-   */
-  assert.match(card, /borderRadius: getComputedStyle\(pill\)\.borderRadius/,
-    '涟漪没有跟着横幅的圆角裁，会露出方角');
-  assert.match(card, /Math\.hypot\(/, '涟漪半径没有取到最远的角，铺不满整条');
-  // 飞的是那滴水本身，不是凭空多出来一个副本
-  assert.match(card, /drop\.animate\(\[\s*\{ opacity: 1 \}/,
-    '原地那滴没有让开，看着像复制了一个');
-  // 位移用 JS 算成像素传进去，不往关键帧里塞 calc(var(...))
-  assert.doesNotMatch(read('css/app.css'), /@keyframes water-flow/,
-    '又把位移写回 CSS 关键帧了');
-  assert.match(card, /querySelector\('\.water-label'\)/, '点饮水后文字没有跟着水波荡');
-  assert.match(card, /skewX/, '文字没有水波那种左右荡');
-  assert.doesNotMatch(card, /water-sheen|scale\(\.05, \.12\)/,
-    '数字周围不要再套扁椭圆');
-  assert.doesNotMatch(read('css/app.css'), /\.water-ripple[^}]*border:/, '涟漪不要描边圈');
-
-  assert.match(card, /const BURST_GAP_MS/, '没有「一串连点」的判断');
-  assert.match(card, /now - lastTapAt > BURST_GAP_MS/,
-    '同一串按间隔算，不能按撤销窗口算 —— 慢慢点十下会被当成一串');
-  assert.match(card, /back == null \? bumpWater\(-1\) : setWater\(back\)/,
-    '撤销只退了一下，没有回到这串连点之前');
+  assert.match(card, /button.water-pill/);
+  assert.doesNotMatch(card, /water-add|document\.body\.append/);
+  assert.match(card, /animation\.updatePlaybackRate/);
+  assert.match(card, /now - view\.lastTapAt > BURST_GAP_MS/);
+  assert.match(card, /writeWater\(view, \(\) => back\)/);
+  assert.match(card, /saveHealthDay\(view\.day/);
+  assert.match(read('js/views/diet.js'), /water\.parentNode !== nodes\.water/);
 });
 
 test('「补蛋白」这类跳转进来的列表给得出退出', () => {
@@ -2373,7 +2351,7 @@ test('同一个选择器不许把同一个属性写两遍', () => {
   // 把 @media / @supports 整段跳过
   let rest = '';
   for (let i = 0; i < noComment.length;) {
-    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i)) {
+    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i) || noComment.startsWith('@keyframes', i)) {
       let depth = 0;
       let j = i;
       for (; j < noComment.length; j += 1) {

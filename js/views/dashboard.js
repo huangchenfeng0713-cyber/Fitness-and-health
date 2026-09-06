@@ -44,12 +44,14 @@ const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
   const { state: st } = m;
+  const note = !state.derived.isToday && m.kind === KIND.floor && m.eaten < m.target
+    ? `低于目标 ${num(m.target - m.eaten)}${m.unit}` : st.note;
   const value = m.display ?? (m.decimals ? num(m.eaten, m.decimals) : num(m.eaten));
   return h('div', { class: `metric-row ${st.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, m.label),
       h('strong.metric-row-value', null, `${value}${m.unit}`),
-      h('span.metric-row-note', null, st.range ? `${st.note} · ${st.range}` : st.note)),
+      h('span.metric-row-note', null, st.range ? `${note} · ${st.range}` : note)),
     m.kind === KIND.log ? null
       : st.zoneStart != null
         ? rangeBar({
@@ -66,8 +68,8 @@ function splitRow(split) {
   const known = split.carbPct != null;
   return h('div', { class: `metric-row split-row ${split.level}` },
     h('div.metric-row-top', null,
-      h('span.metric-row-label', null, '碳水 / 脂肪'),
-      h('strong.metric-row-value', null, known ? `${split.carbPct}% / ${split.fatPct}%` : '—'),
+      h('span.metric-row-label', null, '碳水：脂肪'),
+      h('strong.metric-row-value', null, known ? `${split.carbPct}：${split.fatPct}` : '—'),
       h('span.metric-row-note', null, split.label)),
     splitBar({
       carbPct: split.carbPct,
@@ -77,7 +79,6 @@ function splitRow(split) {
     }),
     h('div.split-grams', null,
       h('span.split-end', null, `碳水 ${num(split.carbG)}g`),
-      h('span.split-grams-plan', null, split.note),
       h('span.split-end', null, `脂肪 ${num(split.fatG)}g`)));
 }
 
@@ -175,7 +176,7 @@ function ringCenter(model) {
   const value = c.kcal == null ? '—' : c.kcal > 0 ? '+' + c.kcal
     : c.kcal < 0 ? `−${Math.abs(c.kcal)}` : '0';
   return h('div.ring-center', null,
-    h('span.ring-caption', null, c.label),
+    h('span.ring-caption', null, state.derived.isToday ? c.label : '当日收支'),
     h('strong.ring-value', null, value),
     h('span.ring-unit', null, 'kcal'));
 }
@@ -212,7 +213,7 @@ function heroInfo(derived, targets) {
     ['蛋白质', targets.proteinBasis],
     ['脂肪', `参考上限 ${num(targets.fatUpper || targets.fat)}g，约占总热量 35%`],
     ['膳食纤维', '中国成人参考 25–30g'],
-    ['钠上限', `${num(targets.sodium)}mg；按中国 DRIs 年龄分组。橙色从适宜摄入量起提醒留意后续用盐，并非危险线`],
+    ['钠上限', `${num(targets.sodium)}mg；按中国 DRIs 年龄分组。橙色从适宜摄入量起标记，并非危险线`],
     ['游离糖上限', '保留食物库游离糖口径；低于供能 10% 且不超过 50g，5% 或 25g 起提醒留意'],
   ];
   let freshness = null;
@@ -236,7 +237,9 @@ function heroInfo(derived, targets) {
           + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'
         : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
-    h('p', null, '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'),
+    h('p', null, derived.isToday
+      ? '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'
+      : '根据所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
     targets.clampedByFloor && h('p', null,
@@ -285,6 +288,7 @@ function trendCard(advice) {
 }
 
 function insightsCard(advice, rerender) {
+  const isToday = state.derived.isToday;
   const all = advice.insights;
   if (!all.length) return null;
   const list = expanded.insights ? all : all.slice(0, 3);
@@ -298,13 +302,14 @@ function insightsCard(advice, rerender) {
   evidence?.classList.add('insight-evidence-tip');
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '今日提示'),
+      h('h3', null, isToday ? '今日提示' : '当日回顾'),
       evidence),
     h('div.insight-list', null, list.map((i) => {
-      const focus = INSIGHT_FOCUS[i.type];
+      const focus = isToday ? INSIGHT_FOCUS[i.type] : null;
       const main = [
         h('div.insight-title', null, i.title),
-        i.action ? h('div.insight-action', null, i.action) : null,
+        isToday && i.action ? h('div.insight-action', null, i.action) : null,
+        !isToday && i.basis ? h('div.insight-action', null, i.basis) : null,
         focus ? h('div.insight-go', null, advice.correction?.active || advice.correction?.optionalProtein ? '查看适合当前情况的食物 ›' : `去看${FOCUS_LABEL[focus]}的食物 ›`) : null,
       ];
       const primary = focus

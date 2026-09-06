@@ -557,7 +557,7 @@ export function judgeStatus({
 }) {
   const kcalPct = gaps.kcal.pct;
   if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录',
-    detail: '已记录 ' + gaps.kcal.eaten + ' kcal，当日计划 ' + gaps.kcal.target + ' kcal。历史日期不预测接下来的摄入。' };
+    detail: '已记录 ' + gaps.kcal.eaten + ' kcal，对照目标 ' + gaps.kcal.target + ' kcal。回顾基于已保存记录，可能不完整。' };
   if (trend?.active && trend.direction === 'under') return {
     level: 'warn', headline: '下一餐可以多吃些',
     detail: '按当前记录和剩余三餐安排，全天摄入可能明显低于今日计划。' + budget.meal.label
@@ -686,6 +686,34 @@ export function buildInsights({
     // text 是三段拼起来的整句，给只需要一段文字的地方用
     text: [basis, action].filter(Boolean).join(''),
   });
+  // 已结束的日期只评价记录结果，不读取时钟、不生成下一餐动作或食物跳转。
+  if (!isToday) {
+    if (!entries.length && gaps.kcal.eaten <= 0) {
+      add('info', INSIGHT_PRIORITY.data, '当天没有饮食记录',
+        '没有记录不等于没有进食，无法据此判断当天摄入是否充足。');
+      return list;
+    }
+    add('info', INSIGHT_PRIORITY.energy, `当天记录摄入 ${round(gaps.kcal.eaten)} kcal`,
+      `对照目标为 ${round(gaps.kcal.target)} kcal；目标按现有设置和当天数据计算，不代表当时保存的计划。`);
+    add('info', INSIGHT_PRIORITY.energy,
+      `蛋白质${gaps.protein.pct >= 100 ? '达到' : '未达到'}对照目标`,
+      `当天记录 ${gaps.protein.eaten}g，对照目标 ${gaps.protein.target}g。`);
+    add('info', INSIGHT_PRIORITY.threshold,
+      `膳食纤维${gaps.fiber.pct >= 100 ? '达到' : '未达到'}对照目标`,
+      `当天记录 ${gaps.fiber.eaten}g，对照目标 ${gaps.fiber.target}g。`);
+    for (const key of ['sodium', 'sugar']) {
+      const g = gaps[key];
+      if (g.pct > 100) add('warn', INSIGHT_PRIORITY.threshold,
+        `${key === 'sodium' ? '钠' : '游离糖'}超出参考上限`,
+        `当天记录 ${g.eaten}${key === 'sodium' ? 'mg' : 'g'}，参考上限 ${g.target}${key === 'sodium' ? 'mg' : 'g'}。`);
+    }
+    const split = macroSplit(targets, gaps);
+    if (split.carbPct != null) add('info', INSIGHT_PRIORITY.split, `碳水：脂肪 ${split.carbPct}：${split.fatPct}`,
+      `按两者提供的热量计算，${split.label}。`);
+    if (Number(health.exerciseMinutes) > 0) add('info', INSIGHT_PRIORITY.habit,
+      `当天记录锻炼 ${round(health.exerciseMinutes)} 分钟`, '');
+    return list;
+  }
   const hour = now.getHours();
 
   /* ---------------- 1 数据本身有没有问题 ---------------- */
@@ -810,7 +838,7 @@ export function buildInsights({
       const heavy = split.structure === 'carb' ? '碳水' : '脂肪';
       const light = split.structure === 'carb' ? '脂肪' : '碳水';
       add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
-        `碳水和脂肪按热量算是 ${split.carbPct}% / ${split.fatPct}%，`
+        `碳水：脂肪按热量算是 ${split.carbPct}：${split.fatPct}，`
         + `碳水参考区间是 ${split.bandLo}–${split.bandHi}%。`,
         `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
     }

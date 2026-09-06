@@ -6,7 +6,7 @@
  * 隔着一次切页反而多余。抽成卡片模块挂到饮食页，搬家只改一行 import。
  */
 
-import { h, num, toast, runLocalAction } from '../../lib/utils.js';
+import { h, num, toast } from '../../lib/utils.js';
 import { icon } from '../../lib/icons.js';
 import { infoTip, listRow } from '../../lib/ui.js';
 import { state, saveHealthDay } from '../../lib/store.js';
@@ -91,290 +91,144 @@ export function recommendCard(rerender, onPick) {
  * 改成刚点完那几秒钟内出现，过了就收起来。
  */
 const MAX_WATER_TAPS = 40;
-/** 刚记完那几秒钟里把「撤销」露出来。再长就成了常驻控件 */
 const UNDO_WINDOW_MS = 5000;
-
-/** 今天点了几次。旧记录没有这个字段时按 0 起算 */
-const waterTaps = () => Math.max(0, Math.round(Number(state.derived?.health?.waterCount) || 0));
-
-let undoUntil = 0;
-let undoTimer = null;
-/*
- * 撤销要退回**这一串连点之前**，不是只退一下。
- *
- * 快速点两下之后按撤销，原先只减 1 —— 人看到的是「我点了两下，撤销一下，
- * 还多出一次」。这里记住这一串开始前的次数，撤销直接回到那个值。
- * 撤销窗口关掉（五秒没动）之后再点，就是新的一串。
- */
-let undoBaseline = null;
-let lastTapAt = 0;
-/* 间隔超过这么久就算新的一串，撤销只退最近这一串 */
 const BURST_GAP_MS = 1500;
+const clampWater = (n) => Math.max(0, Math.min(MAX_WATER_TAPS, Math.round(n)));
+const savedWater = (day) => clampWater(Number(state.healthByDate.get(day)?.waterCount) || 0);
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+let waterView = null;
+const pendingWaterViews = new Map();
 
-async function setWater(next) {
-  const target = Math.max(0, Math.min(MAX_WATER_TAPS, Math.round(next)));
-  if (target === waterTaps()) return;
-  await saveHealthDay(state.day, { waterCount: target, source: 'manual' });
-}
-
-const bumpWater = (delta) => setWater(waterTaps() + delta);
-
-/*
- * 提示窗口挂在模块上，不挂在节点上：这张卡每次落库都会整个重建，
- * 挂在节点上的状态会跟着一起没。
- */
-function openUndoWindow(rerender, before = null) {
-  /*
-   * 一串连点只记第一下之前的次数。
-   * 「同一串」按**两下之间的间隔**算，不按撤销窗口算 —— 撤销窗口是从
-   * 最后一下起五秒，隔四秒点一下也会把它续上，那样慢慢点十下会被当成一串。
-   */
-  const now = Date.now();
-  if (before != null && now - lastTapAt > BURST_GAP_MS) undoBaseline = before;
-  lastTapAt = now;
-  undoUntil = Date.now() + UNDO_WINDOW_MS;
-  clearTimeout(undoTimer);
-  undoTimer = setTimeout(() => {
-    undoUntil = 0;
-    undoBaseline = null;
-    rerender();
-  }, UNDO_WINDOW_MS);
-}
-
-function closeUndoWindow() {
-  undoUntil = 0;
-  undoBaseline = null;
-  clearTimeout(undoTimer);
-}
-
-/**
- * 水滴甩到数字上。
- *
- * **整段动画跑在 body 上，不挂在这张卡的任何节点上。**
- * 卡片每次落库都会重建，挂在卡里的动画会连节点一起被换掉 ——
- * 前两版都栽在这儿：一次点击引发两次渲染，动画挂在第一个节点上，
- * 而它马上就被第二个换掉了，于是「只有第一次能看到」。
- *
- * 用 Web Animations 而不是 CSS 关键帧：位移是算出来的像素，
- * 直接以数值传进去，不必往关键帧里塞 calc(var(--x) * n)
- * （Safari 对那个支持不稳，整条关键帧一失效就只剩第一帧）。
- */
-/*
- * 水滴飞行的时长，以及它落进数字的那一刻 —— 涟漪和数字都对着这个时刻起。
- *
- * LAND_MS 必须落在飞行的**尾段**：原先是 620 里的 380（61%），那时水滴才走了
- * 一半路程，水花比水滴先炸开，两个动作叠在一起，整体就成了「闪一下」。
- * 现在按 0.86 取，水滴摊平进数字的同一拍再起波。
- *
- * 速度也整体放慢：水比界面元素重，620ms 走完全程读起来像图标在滑轨上弹了一下。
- */
-const FLY_MS = 880;
-const LAND_MS = Math.round(FLY_MS * 0.86);
-
-function flyDrop(pill) {
-  if (!pill?.isConnected) return;
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
-  const drop = pill.querySelector('.water-drop');
-  const count = pill.querySelector('.water-count');
-  if (!drop || !count || typeof drop.animate !== 'function') return;
-
-  const a = drop.getBoundingClientRect();
-  const b = count.getBoundingClientRect();
-  const dx = (b.left + b.width / 2) - (a.left + a.width / 2);
-  const dy = (b.top + b.height / 2) - (a.top + a.height / 2);
-  // 量不到就不放动画，不猜一个距离 —— 猜错了水滴会停在半路或飞出卡片
-  if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) < 6) return;
-
-  const fly = drop.cloneNode(true);
-  fly.classList.add('water-fly');
-  Object.assign(fly.style, {
-    left: `${a.left}px`, top: `${a.top}px`,
-    width: `${a.width}px`, height: `${a.height}px`,
-  });
-  document.body.append(fly);
-  /*
-   * 原地那滴让开：飞的是它自己，不是凭空多出来一个副本。
-   * 落定之后再淡回来 —— 横幅上不能空着一格。
-   * fill 用默认的 none，动画一结束样式自动还原，不会在节点上留残值。
-   */
-  drop.animate([
-    { opacity: 1 }, { opacity: 0, offset: 0.06 },
-    { opacity: 0, offset: 0.62 }, { opacity: 1 },
-  ], { duration: FLY_MS + 620, easing: 'ease-out' });
-  /*
-   * 像水而不是像图标在滑轨上走，靠的是形变：起手下沉蓄势，
-   * 飞行段沿运动方向拉长，从文字上方划过，落点摊开压扁。
-   */
-  const at = (t, ax, ay, sx, sy, o) => ({
-    offset: t,
-    transform: `translate(${Math.round(dx * ax)}px, ${Math.round(dy * ay)}px) scale(${sx}, ${sy})`,
-    opacity: o,
-  });
-  /*
-   * 起飞那一下由灰转绿：这滴水是「我按下去的那一下」，
-   * 染色让它和右边那个绿色按钮对上，落进数字里也就有了来处。
-   */
-  const anim = fly.animate([
-    { ...at(0, 0, 0, 1, 1, 1), color: 'var(--muted)' },
-    { ...at(0.14, 0.08, 0.14, 0.8, 1.22, 1), color: 'var(--accent)', transform: `translate(${Math.round(dx * 0.08)}px, ${Math.round(dy * 0.14 + 4)}px) scale(.8, 1.22)` },
-    { ...at(0.52, 0.52, 0.52, 1.55, 0.66, 0.95), transform: `translate(${Math.round(dx * 0.52)}px, ${Math.round(dy * 0.52 - 10)}px) scale(1.55, .66)` },
-    { ...at(0.84, 0.93, 0.84, 1.15, 0.8, 0.75), transform: `translate(${Math.round(dx * 0.93)}px, ${Math.round(dy * 0.84 - 2)}px) scale(1.15, .8)` },
-    { ...at(1, 1, 1, 0.4, 0.34, 0), color: 'var(--accent)' },
-  ], { duration: FLY_MS, easing: 'cubic-bezier(.55, .02, .3, 1)', fill: 'both' });
-  anim.finished.then(() => fly.remove(), () => fly.remove());
-
-  /*
-   * 落点从数字那儿荡开几圈圆波，被横幅圆角裁住。
-   * 不要扁椭圆、不要描边圈 —— 那会在数字上套一个黑框。
-   * 这一层挂在 body 上：横幅本身随时会被重绘换掉。
-   */
-  const wave = document.createElement('span');
-  wave.className = 'water-wave';
-  const pillBox = pill.getBoundingClientRect();
-  Object.assign(wave.style, {
-    left: `${pillBox.left}px`, top: `${pillBox.top}px`,
-    width: `${pillBox.width}px`, height: `${pillBox.height}px`,
-    borderRadius: getComputedStyle(pill).borderRadius,
-  });
-  const originX = b.left + b.width / 2 - pillBox.left;
-  const originY = b.top + b.height / 2 - pillBox.top;
-  const reach = Math.ceil(Math.hypot(
-    Math.max(originX, pillBox.width - originX),
-    Math.max(originY, pillBox.height - originY),
-  ));
-  /*
-   * 四圈波，间隔拉到 170ms：原先 80ms 四圈几乎同时到边，糊成一次闪光。
-   * 拉开之后才看得出「一圈推着一圈往外走」。
-   */
-  const rings = [0, 170, 340, 510].map((delay, i) => {
-    const ring = document.createElement('i');
-    ring.className = 'water-ripple';
-    Object.assign(ring.style, {
-      left: `${originX}px`, top: `${originY}px`,
-      width: `${reach * 2}px`, height: `${reach * 2}px`,
-    });
-    wave.append(ring);
-    /*
-     * 波前要「先冲出去、再慢慢摊平」：中间那一帧把亮度留住，
-     * 让人看见它走到一半时还在，而不是一出生就淡掉。
-     */
-    const peak = 0.46 - i * 0.07;
-    return ring.animate(
-      [{ transform: 'translate(-50%, -50%) scale(0)', opacity: peak },
-        { transform: 'translate(-50%, -50%) scale(.55)', opacity: peak * 0.92, offset: 0.34 },
-        { transform: 'translate(-50%, -50%) scale(1)', opacity: 0 }],
-      {
-        duration: 1150 + i * 110, delay: LAND_MS + delay,
-        easing: 'cubic-bezier(.16,.84,.3,1)', fill: 'both',
-      },
-    );
-  });
-  const wash = wave.animate(
-    [{ backgroundColor: 'transparent' },
-      { backgroundColor: 'var(--accent-soft)', offset: 0.18 },
-      { backgroundColor: 'var(--accent-soft)', offset: 0.34 },
-      { backgroundColor: 'transparent' }],
-    { duration: 1400, delay: LAND_MS, easing: 'ease-out', fill: 'both' },
-  );
-  document.body.append(wave);
-  Promise.allSettled([...rings, wash].map((x) => x.finished)).then(() => wave.remove());
-
-  /*
-   * 文字跟着水面走：整句先抬再沉，数字稍晚一拍，像波从数字那儿穿过字面。
-   * 节点是重绘之后新查到的，这段动画能跑完；下一次点才会再换节点。
-   */
-  const label = pill.querySelector('.water-label');
-  if (label && typeof label.animate === 'function') {
-    label.animate(
-      [{ transform: 'translateY(0) skewX(0deg)' },
-        { transform: 'translateY(-3.5px) skewX(-8deg)', offset: 0.18 },
-        { transform: 'translateY(2.6px) skewX(6deg)', offset: 0.38 },
-        { transform: 'translateY(-1.6px) skewX(-3.5deg)', offset: 0.58 },
-        { transform: 'translateY(1px) skewX(2deg)', offset: 0.78 },
-        { transform: 'translateY(0) skewX(0deg)' }],
-      { duration: 1020, delay: LAND_MS - 40, easing: 'ease-out' },
-    );
+function waterWaves() {
+  const layer = h('span.water-surface', { 'aria-hidden': 'true' });
+  for (let i = 0; i < 2; i++) {
+    const wave = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    wave.setAttribute('viewBox', '0 0 720 48');
+    wave.setAttribute('preserveAspectRatio', 'none');
+    wave.setAttribute('class', 'water-flow');
+    const path = document.createElementNS(wave.namespaceURI, 'path');
+    path.setAttribute('d', 'M0 12 Q90 0 180 12 T360 12 T540 12 T720 12 V48 H0Z');
+    wave.append(path);
+    layer.append(wave);
   }
-  count.animate(
-    [{ transform: 'scale(1) translateY(0)' },
-      { transform: 'scale(1.3) translateY(-4px)', offset: 0.3 },
-      { transform: 'scale(.94) translateY(2px)', offset: 0.55 },
-      { transform: 'scale(1.08) translateY(-1px)', offset: 0.76 },
-      { transform: 'scale(1) translateY(0)' }],
-    { duration: 860, delay: LAND_MS - 20, easing: 'ease-out' },
-  );
+  return layer;
 }
 
-const dropletIcon = () => icon('waterMl', 'water-drop');
+// 点击只增加一个短暂脉冲；循环动画的节点、currentTime 和水位基线始终不变。
+function stirWater(view) {
+  if (reducedMotion()) return;
+  view.impulse = Math.min(1, view.impulse + .65);
+  if (view.frame) return;
+  let previous = performance.now();
+  const tick = (now) => {
+    const dt = Math.min(64, now - previous);
+    previous = now;
+    const target = view.impulse;
+    view.lift += (target - view.lift) * (1 - Math.exp(-dt / 110));
+    view.impulse *= Math.exp(-dt / 420);
+    if (!view.card.isConnected || reducedMotion() || (view.lift < .002 && view.impulse < .002)) {
+      view.lift = 0;
+      view.impulse = 0;
+    }
+    view.surface.style.transform = `translateY(${-view.lift * 5}px) scaleY(${1 + view.lift * .16})`;
+    for (const animation of view.surface.getAnimations({ subtree: true })) {
+      animation.updatePlaybackRate(1 + view.lift * 1.6);
+    }
+    view.frame = view.lift || view.impulse ? requestAnimationFrame(tick) : 0;
+  };
+  view.frame = requestAnimationFrame(tick);
+}
 
-export function waterCard(rerender) {
-  const d = state.derived;
-  if (!d) return null;
-  const taps = waterTaps();
-  const goal = Number(d.targets?.waterMl) || 0;
-  const deviceMl = Number(d.health?.waterMl) || 0;
-  const justLogged = Date.now() < undoUntil;
+function updateWater(view) {
+  const text = String(view.value);
+  if (view.count.textContent !== text) {
+    const from = getComputedStyle(view.count).transform;
+    view.count.getAnimations?.().forEach((animation) => animation.cancel());
+    view.count.textContent = text;
+    if (!reducedMotion() && view.count.animate) {
+      view.count.animate([{ transform: from }, { transform: 'translateY(-2px) scale(1.04)', offset: .35 },
+        { transform: 'none' }], { duration: 260, easing: 'ease-out' });
+    }
+  }
+  view.button.setAttribute('aria-label', `记录一次饮水，当前 ${view.value} 次`);
+  view.undo.hidden = view.undoBaseline == null;
+}
 
-  return h('section.card', null,
+// 串行落库，连续点击立即反馈。队列固定日期，切日不会把未完成的写入记到另一日。
+async function writeWater(view, change) {
+  view.queue.push(change);
+  view.value = clampWater(change(view.value));
+  updateWater(view);
+  if (view.saving) return;
+  view.saving = true;
+  pendingWaterViews.set(view.day, view);
+  while (view.queue.length) {
+    try {
+      const next = clampWater(view.queue[0](savedWater(view.day)));
+      await saveHealthDay(view.day, { waterCount: next, source: 'manual' });
+    } catch {
+      toast('饮水记录未保存，请重试', 'warn');
+      view.undoBaseline = null;
+    }
+    view.queue.shift();
+    view.value = view.queue.reduce((value, apply) => clampWater(apply(value)), savedWater(view.day));
+    updateWater(view);
+  }
+  view.saving = false;
+  pendingWaterViews.delete(view.day);
+}
+
+function createWaterCard(day) {
+  const view = { day, value: savedWater(day), queue: [], saving: false,
+    undoBaseline: null, lastTapAt: 0, timer: 0, impulse: 0, lift: 0, frame: 0 };
+  view.count = h('b.water-count', null, String(view.value));
+  view.surface = waterWaves();
+  view.undo = h('button.water-undo', {
+    type: 'button', hidden: true,
+    onclick: () => {
+      const back = view.undoBaseline;
+      if (back == null) return;
+      view.undoBaseline = null;
+      clearTimeout(view.timer);
+      void writeWater(view, () => back);
+    },
+  }, '撤销');
+  view.button = h('button.water-pill', {
+    type: 'button',
+    onclick: () => {
+      if (view.value >= MAX_WATER_TAPS) { toast('当天已记录 40 次饮水'); return; }
+      const now = Date.now();
+      if (view.undoBaseline == null || now - view.lastTapAt > BURST_GAP_MS) view.undoBaseline = view.value;
+      view.lastTapAt = now;
+      clearTimeout(view.timer);
+      view.timer = setTimeout(() => { view.undoBaseline = null; updateWater(view); }, UNDO_WINDOW_MS);
+      stirWater(view);
+      void writeWater(view, (value) => value + 1);
+    },
+  }, view.surface, icon('waterMl', 'water-drop'),
+  h('span.water-label', { 'aria-live': 'polite', 'aria-atomic': 'true' }, '已记录 ', view.count, ' 次饮水'),
+  icon('plus', 'water-plus'));
+  view.deviceNote = h('p');
+  view.card = h('section.card.water-card', null,
     h('div.card-head', null,
       h('h3', null, '喝水'),
-      // 次数已经写在下面那条里了，标题右边再挂一个「已记录 5 次」是同一个数写两遍
-      infoTip('查看饮水说明',
-        h('p', null, '这里只数「主动喝了几次水」，不记毫升 —— 汤、粥、水果和饭菜里的'
-          + '水分同样算数，光算白水说明不了全天够不够。'),
-        h('p', null, `一般成人每天直接饮水约 ${goal || 1700} ml，`
-          + '但更好用的判断是口渴感和尿色，不是有没有恰好喝满某个数字。'),
-        deviceMl > 0
-          ? h('p', null, `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。`)
-          : null)),
-    h('div.water-row', null,
-      waterPill(taps, justLogged, rerender),
-      h('button.water-add', {
-        type: 'button', 'aria-label': `记录一次饮水，当前 ${taps} 次`,
-        onclick: async (ev) => {
-          const before = waterTaps();
-          const r = await runLocalAction(ev.currentTarget, () => bumpWater(1), '记录饮水');
-          if (!r.ok) return;
-          openUndoWindow(rerender, before);
-          rerender();
-          /*
-           * 重绘之后从文档里重新查一次，别用 ev.currentTarget 往上找 ——
-           * 那时候整张卡已经被换掉了，事件目标挂在一棵离开文档的树上，
-           * 量出来的位置全是 0，动画直接被跳过。
-           */
-          flyDrop(document.querySelector('.water-row .water-pill'));
-        },
-      }, icon('plus'), '饮水')));
+      h('div.water-tools', null, view.undo,
+        infoTip('查看饮水说明',
+          h('p', null, '这里只数「主动喝了几次水」，不记毫升。汤、粥、水果和饭菜里的水分同样算数，次数不代表全天水分是否充足。'),
+          view.deviceNote))),
+    view.button);
+  return view;
 }
 
-/*
- * 左边那条状态。
- *
- * 次数一直写在这儿（原先记完那几秒会换成「已记录一次饮水」，数字消失，
- * 而那正是人最想看到它加一的时刻）。撤销仍然只在那几秒里挂在后面。
- *
- * 记完的动画是水滴往数字上流：位移距离要量出来才知道，所以挂进 DOM 之后
- * 用一帧的时间量一次，写进 --flow-x。量不到就不放动画，不猜一个距离 ——
- * 猜错的话水滴会停在半路上或者飞出卡片。
- */
-function waterPill(taps, justLogged, rerender) {
-  const count = h('b.water-count', null, String(taps));
-  return h('div.water-pill', { role: 'status', 'aria-live': 'polite' },
-    dropletIcon(),
-    h('span.water-label', null, '已记录 ', count, ' 次饮水'),
-    justLogged
-      ? [
-        h('span.water-sep', { 'aria-hidden': 'true' }, '·'),
-        h('button.water-undo', {
-          type: 'button',
-          onclick: async (ev) => {
-            // 退回这一串连点之前，不是只减一下
-            const back = undoBaseline;
-            const r = await runLocalAction(ev.currentTarget,
-              () => (back == null ? bumpWater(-1) : setWater(back)), '撤销');
-            if (r.ok) { closeUndoWindow(); rerender(); }
-          },
-        }, '撤销'),
-      ]
-      : null);
+export function waterCard() {
+  if (!waterView || waterView.day !== state.day) {
+    waterView = pendingWaterViews.get(state.day) || createWaterCard(state.day);
+  }
+  if (!waterView.saving) waterView.value = savedWater(state.day);
+  const deviceMl = Number(state.derived?.health?.waterMl) || 0;
+  waterView.deviceNote.hidden = deviceMl <= 0;
+  waterView.deviceNote.textContent = deviceMl > 0
+    ? `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。` : '';
+  updateWater(waterView);
+  return waterView.card;
 }

@@ -397,9 +397,9 @@ try {
       const rect = el?.getBoundingClientRect();
       return rect ? rect.top + rect.height / 2 : null;
     };
-    const water = document.querySelector('.water-add');
+    const water = document.querySelector('.water-plus');
     const probe = document.createElement('span');
-    probe.style.color = 'var(--accent)';
+    probe.style.color = 'var(--text)';
     document.body.append(probe);
     const accentColor = getComputedStyle(probe).color;
     probe.remove();
@@ -422,7 +422,7 @@ try {
     dietLayout.headCenterGap == null && '找不到添加食物标题或自定义按钮',
     dietLayout.headCenterGap > 2 && `标题与按钮垂直错开 ${dietLayout.headCenterGap.toFixed(1)}px`,
     dietLayout.waterColor !== dietLayout.accentColor
-      && `饮水色 ${dietLayout.waterColor} 没有统一成主绿色 ${dietLayout.accentColor}`,
+      && `饮水色 ${dietLayout.waterColor} 没有使用正文深灰色 ${dietLayout.accentColor}`,
     dietLayout.budgetCells !== 3 && `推荐预算应为三栏，实际 ${dietLayout.budgetCells} 栏`,
     dietLayout.budgetWrapped && '推荐预算文字在手机宽度下折行或溢出',
     dietLayout.hasCategoryBrowser && '搜索框下面仍在显示分类标签',
@@ -529,7 +529,7 @@ try {
     const pointEl = splitEl?.querySelector('.split-bar-point');
     const barBox = barEl?.getBoundingClientRect();
     const ratioText = splitEl?.querySelector('.metric-row-value')?.textContent || '';
-    const ratio = /(\d+)%\s*\/\s*(\d+)%/.exec(ratioText);
+    const ratio = /(\d+)：(\d+)/.exec(ratioText);
     const ends = [...(splitEl?.querySelectorAll('.split-end') || [])]
       .map((el) => el.textContent.trim());
     const proteinRow = [...document.querySelectorAll('.metric-row')]
@@ -587,7 +587,7 @@ try {
     split && Math.abs(split.barHeight - split.proteinBarHeight) > 0.5
       && `蛋白条与结构条粗细不一致：${split.proteinBarHeight}px / ${split.barHeight}px`,
     split && (split.carbPct == null || split.fatPct == null)
-      && `比例没有使用斜杠：${split.ratioText}`,
+      && `比例没有使用冒号：${split.ratioText}`,
     split && split.carbPct + split.fatPct !== 100
       && `碳水 / 脂肪比例没有合计 100%：${split.ratioText}`,
     split && (split.ends[0]?.startsWith('碳水') !== true || split.ends[1]?.startsWith('脂肪') !== true)

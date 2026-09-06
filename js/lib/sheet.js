@@ -332,11 +332,20 @@ const MIN_FLICK = 32;
 // 在浏览器执行滚动前拦截越界触摸；不通过 scroll 事件纠正已发生的位移。
 // CSS overscroll-behavior 负责惯性边界，这层兼容 Safari 的触摸边界。
 function containContentScroll() {
+  // 支持原生边界控制时完全交给合成线程：不让非 passive touchmove 逐帧打断惯性。
+  // 旧 WebView 才需要下方触摸兜底，正文从不驱动弹窗位移。
+  if (CSS.supports('overscroll-behavior-y', 'none')) return;
   let lastY = null;
   let target = null;
   scrollArea.addEventListener('touchstart', (ev) => {
     lastY = ev.touches.length === 1 ? ev.touches[0].clientY : null;
     target = ev.target;
+    // 每次触摸只找一次最近的滚动容器，避免 move 中反复计算祖先样式。
+    while (target instanceof Element && target !== scrollArea) {
+      if (/(auto|scroll)/.test(getComputedStyle(target).overflowY)
+        && target.scrollHeight > target.clientHeight) break;
+      target = target.parentElement;
+    }
   }, { passive: true });
   scrollArea.addEventListener('touchmove', (ev) => {
     if (lastY == null || ev.touches.length !== 1) return;
@@ -345,18 +354,9 @@ function containContentScroll() {
     lastY = y;
     if (!dy) return;
     // 支持正文里的 textarea 等嵌套滚动区，手势绝不转交给 sheet。
-    let node = target instanceof Element ? target : scrollArea;
-    let canScroll = false;
-    while (node && scrollArea.contains(node)) {
-      const style = getComputedStyle(node);
-      const max = node.scrollHeight - node.clientHeight;
-      if (/(auto|scroll)/.test(style.overflowY) && max > 1) {
-        canScroll = dy > 0 ? node.scrollTop > 0 : node.scrollTop < max - 1;
-        break; // 内部滚动容器到边界也不产生滚动链。
-      }
-      if (node === scrollArea) break;
-      node = node.parentElement;
-    }
+    const node = target instanceof Element ? target : scrollArea;
+    const max = node.scrollHeight - node.clientHeight;
+    const canScroll = max > 0 && (dy > 0 ? node.scrollTop > 0 : node.scrollTop < max);
     if (!canScroll && ev.cancelable) ev.preventDefault();
   }, { passive: false });
   const end = () => { lastY = null; target = null; };
