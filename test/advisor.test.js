@@ -15,6 +15,30 @@ const advise = (intake = {}, opts = {}) => buildAdvice({
   targets, profile, intake: { ...zero, ...intake }, entries: [], now: at('12:30'), ...opts,
 });
 
+test('历史回顾不受查看时间影响，也不生成后续进食动作', () => {
+  const intake = { kcal: 2200, protein: 35, carb: 150, fat: 100, fiber: 5, sugar: 90, sodium: 3500 };
+  const options = { isToday: false, health: { exerciseMinutes: 60, sleepMinutes: 300 },
+    entries: [{ meal: 'lunch', at: at('12:00').toISOString(), kcal: 2200 }] };
+  const morning = advise(intake, { ...options, now: at('07:00') });
+  const evening = advise(intake, { ...options, now: at('22:00') });
+  assert.deepEqual(morning.insights, evening.insights);
+  assert.ok(morning.insights.length >= 5);
+  assert.ok(morning.insights.every(i => !i.action && !['protein', 'fiber'].includes(i.type)));
+  assert.doesNotMatch(JSON.stringify(morning.insights), /下一餐|晚餐建议|后续|接下来|今晚|明天|还差|剩下/);
+  assert.match(JSON.stringify(morning.insights), /当天记录摄入 2200/);
+  assert.equal(morning.trend.state, 'historical');
+  assert.equal(morning.correction.active, false);
+  const current = advise(intake, { ...options, isToday: true, now: at('18:00') });
+  assert.ok(current.insights.some(i => i.action));
+});
+
+test('历史空记录只说明无法判断，不能把空白当摄入不足', () => {
+  const a = advise({}, { isToday: false, now: at('23:00') });
+  assert.equal(a.insights.length, 1);
+  assert.equal(a.insights[0].title, '当天没有饮食记录');
+  assert.equal(a.insights[0].action, '');
+});
+
 test('餐次按时间划分', () => {
   assert.equal(currentMeal(at('07:30')).key, 'breakfast');
   assert.equal(currentMeal(at('12:30')).key, 'lunch');
@@ -190,7 +214,7 @@ test('今日提示按优先级排：数据问题在前，结构和习惯在后',
   assert.equal(by(/睡了/).priority, 5);
 
   const split = by(/结构偏/);
-  assert.match(split.basis, /\d+% \/ \d+%/, '碳水 / 脂肪比例仍使用冒号');
+  assert.match(split.basis, /\d+：\d+/, '碳水：脂肪比例未使用冒号');
   assert.match(split.basis, /碳水参考区间是 \d+–\d+%/,
     '结构建议应说明宽泛区间，不能引用不存在的单一计划点');
   assert.doesNotMatch(split.basis, /undefined|计划里是/,

@@ -24,7 +24,7 @@ try {
   await page.evaluate(() => document.querySelector('.onboard .text-btn, .onboard button:last-child')?.click());
   await page.waitForFunction(() => !document.querySelector('.account-data-lock'));
   await tab('diet');
-  const results = () => page.locator('.search-card > .slot').nth(1).textContent();
+  const results = () => page.locator('.search-card > .slot').first().textContent();
   const defaultResults = await results();
   await page.locator('.ui-search-input').fill('米饭');
   await page.waitForTimeout(220);
@@ -151,7 +151,7 @@ try {
       };
       event('touchstart', 100); return event('touchmove', 110);
     });
-    check('边界touchmove在默认滚动前被取消', prevented);
+    check('原生边界控制不拦截惯性触摸', !prevented && await page.locator('.sheet-scroll').evaluate(el => getComputedStyle(el).overscrollBehaviorY === 'none'));
     if (long && cdp) {
       await drag(box.x + box.width / 2, box.y + 230, -180);
       check('溢出内容仍能正常向上浏览', await page.locator('.sheet-scroll').evaluate(el => el.scrollTop) > 60);

@@ -845,16 +845,15 @@ html, body { height: 100%; overflow: hidden; }
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent);
 }
 
-/* 标题写碳水 / 脂肪，克数和横轴也必须按相同的左右顺序。 */
+/* 标题写碳水：脂肪，克数和横轴也必须按相同的左右顺序。 */
 .split-grams {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: baseline; gap: var(--space-2);
+  display: grid; grid-template-columns: 1fr 1fr; align-items: baseline; gap: var(--space-2);
   margin-top: var(--space-2); font-size: var(--fs-caption); color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
 .split-grams span { white-space: nowrap; }
 .split-end:first-child { text-align: left; }
 .split-end:last-child { text-align: right; }
-.split-grams-plan { color: color-mix(in srgb, var(--faint) 70%, transparent); text-align: center; }
 
 
 /* ============ 推荐 ============ */
@@ -1485,10 +1484,11 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
   animation: sheet-rise .24s cubic-bezier(.32, .72, 0, 1) backwards;
 }
-/* CSS 禁止惯性越界；非 passive touchmove 在默认滚动前拦截边界拖动。 */
+/* 原生滚动保留惯性；只关闭边界回弹和滚动链，旧 WebView 由触摸兜底。 */
 .sheet-scroll {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   overscroll-behavior: none; touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
   /* 没有固定底栏的普通弹层仍要避开 Home 指示条。 */
   padding: 0 16px calc(20px + var(--safe-bottom));
 }
@@ -1565,86 +1565,37 @@ body.sheet-open {
 }
 .insight-go { margin-top: var(--space-1); font-size: var(--fs-caption); color: var(--accent); font-weight: var(--w-semibold); }
 
-/* 喝水：一个大点击区 + 次数。不画完成条 —— 它没有「该喝几次」这回事 */
-/*
- * 喝水一行：左边一条浅绿的状态条，右边一个「＋饮水」。
- * 状态条不是按钮 —— 点击区只有一个，免得点哪儿都能加一次。
- */
-/* 两块并排等高，所以是 stretch 不是 center —— 高度在下面那条里和按钮一起给 */
-.water-row { display: flex; align-items: stretch; gap: var(--space-2); }
-/*
- * 状态条走中性灰，只有右边那个按钮染色。
- *
- * 两块并排的浅绿在手机上就是一整块色斑 —— 这一排踩过一次了，
- * 而且左边写的是「已经喝了几次」，是个事实，不是可点的东西，
- * 染成主色会让人以为它也能按。强调色一屏只用在一个地方。
- */
+/* 整条记录区是一个按钮，波面固定在底部，不把次数画成完成水位。 */
 .water-pill {
-  flex: 1; min-width: 0; gap: var(--space-2);
-  padding: 10px 12px; border-radius: var(--r-md);
-  background: var(--card-2);
-  color: var(--muted); font-size: var(--fs-footnote); font-weight: var(--w-semibold);
+  position: relative; display: flex; align-items: center; width: 100%;
+  min-height: var(--control-lg); gap: var(--space-2); overflow: hidden; isolation: isolate;
+  padding: 12px; border: 0; border-radius: var(--r-md); background: var(--card-2);
+  color: var(--muted); font: inherit; font-size: var(--fs-footnote);
+  font-weight: var(--w-semibold); text-align: left; cursor: pointer;
+  transition: transform .16s ease;
 }
-/*
- * 这一行里唯一该有颜色的是右边那个「＋饮水」。
- * 水滴涂成数据蓝之后，一条横幅上同时有蓝有绿 —— 而它既不是图表也不是营养条，
- * 数据色本来就不该出现在这儿（水滴在弹层里那个环上才是图，那儿保留蓝）。
- */
-.water-pill .water-drop { color: var(--muted); }
-.water-drop { width: 17px; height: 17px; flex: none; fill: currentColor; stroke: none; }
-.water-sep { opacity: .5; }
-.water-count {
-  display: inline-block; font-variant-numeric: tabular-nums; color: var(--text);
+.water-pill:active { transform: scale(.992); }
+.water-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.water-drop { position: relative; width: 17px; height: 17px; flex: none; }
+.water-label { position: relative; flex: 1; }
+.water-count { display: inline-block; font-variant-numeric: tabular-nums; color: var(--text); }
+.water-plus { position: relative; width: 20px; height: 20px; flex: none; color: var(--text); }
+.water-tools { display: flex; align-items: center; gap: var(--space-3); }
+.water-undo { border: 0; background: none; padding: 0; cursor: pointer; color: var(--muted); font: inherit; font-size: var(--fs-caption); }
+.water-surface { position: absolute; inset: auto 0 -12px; height: 36px; pointer-events: none; transform-origin: bottom; }
+.water-flow {
+  position: absolute; inset: 0 auto auto 0; width: 200%; height: 100%;
+  fill: color-mix(in srgb, var(--muted) 7%, transparent);
+  animation: water-drift 12s linear infinite;
 }
-.water-label {
-  display: inline-block; transform-origin: 28% 60%;
-}
-/*
- * 飞行中的那滴水和落点的涟漪都挂在 body 上，不挂在卡片里 ——
- * 这张卡每次落库都会重建，挂在卡里的动画会连节点一起被换掉，
- * 于是「只有第一次能看到」。位移和关键帧由 JS 用 Web Animations 给，
- * 这里只管样式。
- */
-.water-fly {
-  position: fixed; z-index: 60; pointer-events: none;
-  color: var(--muted); fill: currentColor; stroke: none;
-}
-/*
- * 涟漪在整条横幅里回荡：一层和横幅同样大小、同样圆角的裁剪层，
- * 两圈波从数字那儿扩出去，撞到边就没了 —— 这样才像水在这个容器里荡，
- * 而不是凭空冒出来一个圆。
- */
-.water-wave {
-  position: fixed; z-index: 59; pointer-events: none; overflow: hidden;
-}
-.water-wave > i {
-  position: absolute; border-radius: 50%;
-  border: 0;
-  background: transparent;
-  box-shadow: 0 0 0 2px var(--accent);
+.water-flow:nth-child(2) { animation-duration: 17s; animation-direction: reverse; bottom: -4px; top: auto; opacity: .7; }
+@keyframes water-drift { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .water-flow { animation: none; }
+  .water-pill { transition: none; }
+  .water-pill:active { transform: none; }
 }
 
-/* 撤销只在刚点完那几秒出现：一天里最多用上一次，常驻就是白占一个控件 */
-.water-undo {
-  border: 0; background: none; padding: 0; cursor: pointer;
-  color: inherit; font: inherit; text-decoration: underline;
-}
-/* 饮水动作与全应用的主绿色一致，靠浅底控制视觉重量。 */
-/*
- * 描边，不填充。
- *
- * 左边的状态条已经是中性灰了，右边再来一块浅绿填充，两块加起来还是一条色带。
- * 描边 + 绿字既留下「这里能点」的暗示，又不会在一张以灰为底的卡上砸一块颜色。
- */
-/* 按钮是「做这件事」，属于语义层，仍然是主绿；水滴和计数才是数据色 */
-.water-add {
-  flex: none; white-space: nowrap; cursor: pointer;
-  padding: 10px 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: var(--r-md);
-  background: transparent;
-  color: var(--accent); font-weight: var(--w-semibold);
-}
-.water-add:active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 
 /* 只读态：位置和编辑态一样宽，切换时行不会跳 */
 .entry-actions.readonly { justify-content: flex-end; }
@@ -1886,9 +1837,9 @@ body.sheet-open {
 .mix-unit { width: 17px; color: var(--faint); font-size: var(--fs-caption); text-align: left; }
 
 .custom-form {
-  margin: var(--space-2) 0; padding: 12px; background: var(--card-2);
-  border: 1px solid var(--border); border-radius: var(--r-md);
+  padding: 0;
 }
+.custom-form .form-grid { margin-top: var(--space-3); }
 .custom-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .custom-chip {
   font-size: var(--fs-caption); background: var(--card); border: 1px solid var(--border);
@@ -1919,7 +1870,9 @@ body.sheet-open {
 .energy-unit-btn:active { background: var(--accent-soft); }
 .checkbox-field { flex-direction: row; align-items: center; gap: var(--space-2); }
 .checkbox-field input { width: auto; flex: none; }
-.custom-form-actions { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.custom-form-actions { display: flex; gap: var(--space-2); }
+.custom-form-actions .primary-btn { flex: 1; }
+.custom-form .form-field input, .custom-form .form-field select { border-color: var(--border); background: var(--card); }
 .custom-form-actions .primary-btn, .custom-form-actions .secondary-btn { margin-top: 0; }
 
 /* 记录指向的食物已经不在库里时，那一行要说出来 —— 但这不是错误，用中性灰 */
@@ -3039,13 +2992,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 .impact-split-grams {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-2);
   margin-top: var(--space-1);
   color: var(--muted);
   font-size: var(--fs-caption);
 }
-.impact-split-grams span:nth-child(2) { color: var(--faint); text-align: center; }
 .impact-split-grams span:last-child { text-align: right; }
 
 /* 设置里的辅助说明更紧凑，不影响警告和账号冲突。 */
@@ -3134,13 +3086,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .chip-btn { min-height: var(--control-sm); }
 .search-input { min-height: var(--control-lg); }
 
-/* 左右两块等高，文字基线一致。 */
-.water-pill { display: flex; align-items: center; }
-/* .water-add 的 display 由下面「图标 + 文字的按钮」那条给（inline-flex），这里只管高度 */
-.water-pill,
-.water-add { min-height: var(--control-lg); }
-.water-add { justify-content: center; min-width: 88px; font-size: var(--fs-body); }
-
 /* 推荐预算独占一行，避免卡片标题右边的长句断成两行。 */
 .recommend-card-head { align-items: center; margin-bottom: var(--space-2); }
 .recommend-budget {
@@ -3169,12 +3114,11 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 加号原先是打出来的 ＋，跟着字重变粗、在三个平台上宽度还不一样。
  */
 .text-btn .icon-slot svg,
-.water-add .icon-slot svg,
 .tip-action .icon-slot svg,
 .chip-btn .icon-slot svg {
   width: 1.05em; height: 1.05em; vertical-align: -.15em; display: inline-block;
 }
-.text-btn, .water-add { display: inline-flex; align-items: center; gap: var(--space-1); }
+.text-btn { display: inline-flex; align-items: center; gap: var(--space-1); }
 
 /*
  * 数字输入框不要原生的上下微调箭头。

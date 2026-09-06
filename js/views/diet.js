@@ -105,8 +105,8 @@ function buildShell(root) {
 
   nodes.customToggle = h('button.text-btn', {
     onclick: () => {
-      ui.showCustomForm = !ui.showCustomForm;
-      setCustomToggleLabel();
+      ui.showCustomForm = true;
+      resetCustomDraft();
       refreshCustomForm();
     },
   }, icon('plus'), '自定义');
@@ -137,7 +137,6 @@ function buildShell(root) {
       h('div.card-head-actions', null,
         nodes.customToggle)),
     nodes.searchField,
-    nodes.customBox,
     nodes.results,
     nodes.basketBar.el);
 
@@ -241,7 +240,7 @@ async function recordBasket() {
 function setCustomToggleLabel() {
   if (!nodes.customToggle) return;
   clearEl(nodes.customToggle);
-  mount(nodes.customToggle, ui.showCustomForm ? '收起' : [icon('plus'), '自定义']);
+  mount(nodes.customToggle, icon('plus'), '自定义');
 }
 
 /** 份量已经确认后，清掉弹层状态并回到搜索入口。 */
@@ -614,7 +613,7 @@ function refreshPortion() {
    */
   // 程序自己收场（切页重建外壳时选中态是空的），不是用户在关它 —— 这一下必须落地：
   // nodes.portion 上面刚 clearEl 过，被开场闸门挡下来就会留一层空弹层钉在屏幕上
-  if (!food) { closeSheet({ force: true }); return; }
+  if (!food) { if (!ui.showCustomForm) closeSheet({ force: true }); return; }
   if (!sheetIsOpen()) {
     openSheet(nodes.portion, {
       label: '选择份量',
@@ -905,8 +904,8 @@ function impactSplitRow(n) {
   });
   return h('div.impact-split-row', null,
     h('div.impact-split-head', null,
-      h('span', null, '碳水 / 脂肪'),
-      h('strong', null, split.carbPct == null ? '—' : `${split.carbPct}% / ${split.fatPct}%`),
+      h('span', null, '碳水：脂肪'),
+      h('strong', null, split.carbPct == null ? '—' : `${split.carbPct}：${split.fatPct}`),
       h('span', null, split.label)),
     splitBar({
       carbPct: split.carbPct,
@@ -916,7 +915,6 @@ function impactSplitRow(n) {
     }),
     h('div.impact-split-grams', null,
       h('span', null, `碳水 ${num(split.carbG)}g`),
-      h('span', null, split.note),
       h('span', null, `脂肪 ${num(split.fatG)}g`)));
 }
 
@@ -944,7 +942,7 @@ function refreshPreview(pending = false, nutrientOverride = null) {
  * 保存时沿用同一个 id —— 否则「改一个数」会变成「多出一条重名食物」，
  * 而旧记录还指着旧 id。
  */
-const customDraft = { id: null, energyUnit: 'kcal' };
+const customDraft = { id: null, energyUnit: 'kcal', portionUnit: 'g' };
 
 /* 标签上写 kJ 的比写 kcal 的多。1 kcal = 4.184 kJ（GB 28050 用的就是这个数）。 */
 const KJ_PER_KCAL = 4.184;
@@ -952,6 +950,7 @@ const KJ_PER_KCAL = 4.184;
 function resetCustomDraft() {
   customDraft.id = null;
   customDraft.energyUnit = 'kcal';
+  customDraft.portionUnit = 'g';
 }
 
 const CUSTOM_NUM_FIELDS = [
@@ -976,7 +975,7 @@ function refreshCustomForm() {
   const inputs = {};
   const numInput = (key, label, value) => {
     const input = h('input', {
-      type: 'number', placeholder: label, step: '0.1', inputmode: 'decimal',
+      type: 'number', step: '0.1', inputmode: 'decimal',
       value: value == null ? '' : String(value),
     });
     inputs[key] = input;
@@ -984,7 +983,7 @@ function refreshCustomForm() {
   };
 
   inputs.name = h('input', {
-    type: 'text', placeholder: '名称', value: editing?.name || '',
+    type: 'text', value: editing?.name || '',
   });
 
   /*
@@ -993,12 +992,13 @@ function refreshCustomForm() {
    * 再让人自己按计算器除 4.184 是没道理的。
    */
   const energyValue = () => {
+    if (inputs.energy.value.trim() === '') return null;
     const raw = Number(inputs.energy.value);
-    if (!Number.isFinite(raw)) return null;
+    if (!Number.isFinite(raw) || raw < 0) return null;
     return customDraft.energyUnit === 'kj' ? raw / KJ_PER_KCAL : raw;
   };
   inputs.energy = h('input', {
-    type: 'number', placeholder: '能量', step: '0.1', inputmode: 'decimal',
+    type: 'number', step: '0.1', inputmode: 'decimal',
     value: n[0] == null ? '' : String(n[0]),
   });
   const unitBtn = h('button.energy-unit-btn', {
@@ -1016,25 +1016,39 @@ function refreshCustomForm() {
     inputs.energy.focus();
   };
 
-  inputs.cat = h('select', null, Object.entries(CATEGORIES).map(([key, label]) =>
+  inputs.cat = h('select', null, h('option', { value: '' }, ''), Object.entries(CATEGORIES).map(([key, label]) =>
     h('option', { value: key }, label)));
   // 挂进 select 之后再设 value：给还没插入的 option 设 selected 会被打回第一项
-  inputs.cat.value = editing?.cat || 'other';
+  inputs.cat.value = editing?.cat || '';
 
-  inputs.liquid = h('input', { type: 'checkbox', checked: editing?.basis === '100ml' });
   inputs.portionName = h('input', {
-    type: 'text', placeholder: '一份',
+    type: 'text',
     value: editing?.s?.[0]?.[0] || '',
   });
   inputs.portionGrams = h('input', {
-    type: 'number', placeholder: '100', step: '1', inputmode: 'numeric',
+    type: 'number', step: '1', inputmode: 'numeric',
     value: editing?.s?.[0]?.[1] == null ? '' : String(editing.s[0][1]),
   });
+  const basisHint = h('p.form-hint', null);
+  const updateBasisHint = () => {
+    basisHint.textContent = `按包装上的「营养成分表（每 100 ${customDraft.portionUnit}）」填写。`;
+  };
+  updateBasisHint();
+  const portionUnitBtn = h('button.energy-unit-btn', {
+    type: 'button', 'aria-label': '切换克重或体积单位',
+    onclick: () => {
+      customDraft.portionUnit = customDraft.portionUnit === 'g' ? 'ml' : 'g';
+      portionUnitBtn.textContent = customDraft.portionUnit;
+      updateBasisHint();
+      // 质量与体积不是等价单位，不在缺少密度时编造换算。
+      inputs.portionGrams.focus();
+    },
+  }, customDraft.portionUnit);
 
   const save = async () => {
     const name = inputs.name.value.trim();
     const kcal = energyValue();
-    if (!name || kcal == null) { toast('至少填写名称和每 100g 能量', 'warn'); return; }
+    if (!name || kcal == null) { toast(`请填写食物名称和每 100 ${customDraft.portionUnit} 能量`, 'warn'); return; }
     const val = (key) => Math.max(0, Number(inputs[key].value) || 0);
     const carb = val('carb');
     const fiber = val('fiber');
@@ -1044,11 +1058,11 @@ function refreshCustomForm() {
     if (sugar > carb) { toast('糖不能超过碳水', 'warn'); return; }
     const grams = Math.round(Number(inputs.portionGrams.value) || 100);
     if (!(grams > 0 && grams <= 1000)) { toast('常用份量要在 1~1000 之间', 'warn'); return; }
-    const liquid = inputs.liquid.checked;
+    const liquid = customDraft.portionUnit === 'ml';
 
     const food = await addCustomFood({
       ...(customDraft.id ? { id: customDraft.id } : {}),
-      name, alias: '', cat: inputs.cat.value, custom: true,
+      name, alias: '', cat: inputs.cat.value || 'other', custom: true,
       n: [Math.round(kcal * 10) / 10, val('protein'), val('fat'), carb, fiber, sugar, val('sodium')],
       s: [[inputs.portionName.value.trim() || '一份', grams]],
       ...(liquid ? { basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total' } : {}),
@@ -1056,36 +1070,32 @@ function refreshCustomForm() {
     });
     toast(customDraft.id ? `已保存「${name}」` : `已添加「${name}」`, 'ok');
     const wasEditing = Boolean(customDraft.id);
+    closeSheet({ force: true });
     resetCustomDraft();
     ui.showCustomForm = false;
     setCustomToggleLabel();
-    refreshCustomForm();
     refreshResults();
     refreshEntries();
     if (!wasEditing) selectFood(food);
   };
 
   mount(nodes.customBox, h('div.custom-form', null,
-    h('p.form-hint', null, editing
-      ? `正在修改「${editing.name}」。改完之后，之前记过的那几笔仍然保留当时的数值。`
-      : '按包装上的「营养成分表（每 100 克）」填写。能量那一格可以点右边的单位在 kcal 和 kJ 之间切。'),
+    h('div.portion-head', null,
+      h('div.portion-head-main', null,
+        h('div.portion-title-line', null, h('strong', null, editing ? '修改自定义食物' : '自定义食物')),
+        basisHint),
+      h('div.portion-head-actions', null,
+        h('button.icon-btn', { type: 'button', 'aria-label': '关闭自定义食物', onclick: () => closeSheet() }, icon('close')))),
+    editing ? h('p.form-hint', null, `正在修改「${editing.name}」。之前记过的数值保持不变。`) : null,
     h('div.form-grid', null,
-      h('label.form-field.span-all', null, h('span', null, '名称'), inputs.name),
+      h('label.form-field.span-all', null, h('span', null, '食物名称'), inputs.name),
       h('label.form-field', null, h('span', null, '分类'), inputs.cat),
       h('label.form-field', null, h('span', null, '能量'),
         h('div.energy-field', null, inputs.energy, unitBtn)),
       CUSTOM_NUM_FIELDS.map(([key, label, idx]) => numInput(key, label, n[idx + 1])),
-      h('label.form-field', null, h('span', null, '常用份量'), inputs.portionName),
-      h('label.form-field', null, h('span', null, '这一份多少克'), inputs.portionGrams),
-      h('label.form-field.span-all.checkbox-field', null, inputs.liquid,
-        h('span', null, '这是饮品，按毫升记'))),
-    h('div.custom-form-actions', null,
-      editing ? h('button.secondary-btn', {
-        type: 'button',
-        onclick: () => { resetCustomDraft(); refreshCustomForm(); },
-      }, '取消修改') : null,
-      h('button.primary-btn', { onclick: save },
-        editing ? '保存修改' : '保存到我的食物库')),
+      h('label.form-field', null, h('span', null, '常用分量单位'), inputs.portionName),
+      h('label.form-field', null, h('span', null, '每份克重/体积'),
+        h('div.energy-field', null, inputs.portionGrams, portionUnitBtn))),
     state.customFoods.length ? h('div.custom-list', null,
       state.customFoods.map((f) => h('span.custom-chip', { class: f.id === customDraft.id ? 'active' : '' },
         /*
@@ -1098,6 +1108,7 @@ function refreshCustomForm() {
           onclick: () => {
             customDraft.id = f.id;
             customDraft.energyUnit = 'kcal';
+            customDraft.portionUnit = f.basis === '100ml' ? 'ml' : 'g';
             refreshCustomForm();
           },
         }, f.name),
@@ -1121,6 +1132,17 @@ function refreshCustomForm() {
           },
         }, icon('close'))))) : null,
   ));
+  if (!sheetIsOpen() || !nodes.customBox.closest('.sheet')) {
+    openSheet(nodes.customBox, {
+      label: '自定义食物',
+      onClose: () => { ui.showCustomForm = false; resetCustomDraft(); },
+    });
+  }
+  setSheetFooter(h('div.custom-form-actions', null,
+    h('button.secondary-btn', { type: 'button', onclick: () => closeSheet() }, '取消'),
+    h('button.primary-btn', {
+      type: 'button', onclick: (ev) => runLocalAction(ev.currentTarget, save, '保存食物'),
+    }, editing ? '保存修改' : '保存到我的食物库')));
 }
 
 
@@ -1449,10 +1471,13 @@ function copyRow() {
  * 和这一页要回答的「该吃什么」是反过来的，而且一次列五条几乎每天都一样。）
  */
 function refreshAdvice() {
-  clearEl(nodes.water);
   clearEl(nodes.advice);
   const rerender = () => refreshAdvice();
-  mount(nodes.water, waterCard(rerender));
+  const water = waterCard();
+  if (water.parentNode !== nodes.water) {
+    clearEl(nodes.water);
+    mount(nodes.water, water);
+  }
   // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
   if (ui.query || ui.selected) return;
   // ＋ 走和搜索结果一样的路：先开份量面板，不直接落库
