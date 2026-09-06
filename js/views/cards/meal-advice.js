@@ -64,9 +64,10 @@ export function recommendCard(rerender, onPick) {
         estimateGroupInfoTip(all.map((item) => item.food), '查看推荐中的估算说明'))),
     advice.correction?.action ? h('p.recommend-direction', null, advice.correction.action) : null,
     advice.correction?.active || advice.budget.optional ? h('p.recommend-choice-note', null, advice.budget.optional
-      ? '以下按需任选一份，不要求补齐全天蛋白。' : '以下为可选食物，选合适的搭配，不需要全部吃。') : null,
+      ? advice.budget.optionalKind === 'snack' ? '以下仅供饿了时按需少量选择，不要求补齐计划。' : '以下按需任选一份，不要求补齐全天蛋白。'
+      : '以下为可选食物，选合适的搭配，不需要全部吃。') : null,
     h('div.recommend-budget', { 'aria-label': '当前餐次预算' },
-      h('span', null, advice.budget.optional ? '可选少量蛋白食物' : MEAL_LABEL[meal]),
+      h('span', null, advice.budget.optional ? advice.budget.optionalKind === 'snack' ? '饿了时可选少量食物' : '可选少量蛋白食物' : MEAL_LABEL[meal]),
       h('span', null, `${num(advice.budget.kcal)} kcal`),
       h('span', null, advice.budget.optional ? '仍有热量，按需选择' : advice.budget.proteinFeasible
         ? `蛋白 ${num(advice.budget.protein, 0)}g`
@@ -76,7 +77,9 @@ export function recommendCard(rerender, onPick) {
         h('div.rec-list', null, list.map((item) => recRow(item, meal, onPick))),
         moreToggle('recommend', all.length, 3, rerender),
       ]
-      : h('p.empty-hint', null, '暂无适合当前条件的推荐。后续餐次照常安排，按饥饿感决定份量；也可搜索记录实际吃的食物，不必为数字跳餐。'),
+      : h('p.empty-hint', null, advice.trend?.dayComplete
+        ? '今天不必再追齐计划数字；也可搜索记录实际吃的食物，明天照常安排三餐。'
+        : '暂无适合当前条件的推荐。后续餐次照常安排，按饥饿感决定份量；也可搜索记录实际吃的食物，不必为数字跳餐。'),
   );
 }
 
@@ -117,22 +120,24 @@ function waterWaves() {
 // 点击只增加一个短暂脉冲；循环动画的节点、currentTime 和水位基线始终不变。
 function stirWater(view) {
   if (reducedMotion()) return;
-  view.impulse = Math.min(1, view.impulse + .9);
+  view.impulse = Math.min(1.8, view.impulse + 1.2);
+  view.lift = Math.min(1.25, view.lift + .35);
   if (view.frame) return;
   let previous = performance.now();
   const tick = (now) => {
     const dt = Math.min(64, now - previous);
     previous = now;
     const target = view.impulse;
-    view.lift += (target - view.lift) * (1 - Math.exp(-dt / 110));
+    view.lift += (target - view.lift) * (1 - Math.exp(-dt / 65));
     view.impulse *= Math.exp(-dt / 520);
     if (!view.card.isConnected || reducedMotion() || (view.lift < .002 && view.impulse < .002)) {
       view.lift = 0;
       view.impulse = 0;
     }
-    view.surface.style.transform = `translateY(${-view.lift * 9}px) scaleY(${1 + view.lift * .28})`;
+    view.surface.style.transform = `translateY(${-view.lift * 18}px) scaleY(${1 + view.lift * .65})`;
+    view.surface.style.setProperty('--water-wave-strength', `${14 + view.lift * 12}%`);
     for (const animation of view.surface.getAnimations({ subtree: true })) {
-      animation.updatePlaybackRate(1 + view.lift * 2.4);
+      animation.updatePlaybackRate(1 + view.lift * 5);
     }
     view.frame = view.lift || view.impulse ? requestAnimationFrame(tick) : 0;
   };

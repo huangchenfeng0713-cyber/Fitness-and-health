@@ -426,6 +426,7 @@ export function buildAdvice(input) {
     // 近三周的饮食记录，只有「按我平常」那套口径要用（判断这个钟点该吃到多少）
     rhythmEntries = [],
     trendEnabled = true,
+    burnedNow = null,
   } = input;
 
   const gaps = {};
@@ -444,9 +445,10 @@ export function buildAdvice(input) {
   const kcalLeft = gaps.kcal.remaining;
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
-  const trend = intakeTrend({ targets, intake, entries, rhythmEntries, now, isToday, enabled: trendEnabled });
+  const trend = intakeTrend({ targets, intake, entries, rhythmEntries, now, isToday, enabled: trendEnabled, burnedNow });
   const correction = correctionPlan({ trend, gaps, targets, hour });
-  const foodKcalLeft = correction.optionalProtein ? Math.min(200, targets.kcal * (hour >= 21 ? 0.06 : 0.10)) : kcalLeft;
+  const foodKcalLeft = correction.optionalProtein ? Math.min(200, targets.kcal * (hour >= 21 ? 0.06 : 0.10))
+    : trend.dayComplete ? Math.max(0, Math.min(kcalLeft, 200, targets.kcal * 0.10)) : kcalLeft;
   const budget = mealBudget({
     kcalLeft: foodKcalLeft, proteinLeft, dailyKcal: targets.kcal, proteinTarget: targets.protein, now,
     mealPlan: correction.active && trend.remainingMeals.length ? trend.remainingMeals : null,
@@ -457,6 +459,10 @@ export function buildAdvice(input) {
     budget.protein = round(Math.min(proteinLeft, foodKcalLeft / ATWATER.protein, 25), 1);
     budget.maxProteinByKcal = round(foodKcalLeft / ATWATER.protein, 1);
     budget.proteinFeasible = false;
+  }
+  if (trend.dayComplete) {
+    budget.optional = true;
+    budget.optionalKind = correction.optionalProtein ? 'protein' : 'snack';
   }
   // 活动能量已经被判为不可信时不能拿它推断训练日，
   // 否则会出现「凌晨躺床上却被告知今天是训练日、该补蛋白和碳水」这种事
@@ -558,6 +564,25 @@ export function judgeStatus({
   const kcalPct = gaps.kcal.pct;
   if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录',
     detail: '已记录 ' + gaps.kcal.eaten + ' kcal，对照目标 ' + gaps.kcal.target + ' kcal。回顾基于已保存记录，可能不完整。' };
+  // 时间和已完成餐次优先于目标偏差，不能把夜宵默认为今天还应吃的一餐。
+  const dayComplete = hour >= TREND_POLICY.lateHour || trend?.dayComplete === true;
+  const recorded = `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`;
+  if (dayComplete) {
+    if (!hasIntake) return { level: 'warn', headline: '今晚不必一次补完',
+      detail: '夜里不建议一次补完全天计划差额；按饥饿感决定是否少量进食，明天回到正常三餐。' };
+    if (kcalLeft < -BALANCE_WITHIN) return { level: 'good', headline: '明天照常安排三餐',
+      detail: recorded + `比计划多 ${round(-kcalLeft)} kcal。今天无需补偿性少吃，明天照常安排三餐；单日偏差不能说明增减脂结果。` };
+    if (trend?.currentCovered && kcalLeft > BALANCE_WITHIN) return { level: 'good', headline: '今天不必再追齐数字',
+      detail: recorded + `当前设备记录消耗 ${round(trend.burnedNow)} kcal，摄入已覆盖这部分消耗。无需为了达到计划强行补吃；若饿了可少量进食，明天照常安排三餐。` };
+    if (Math.abs(kcalLeft) <= BALANCE_WITHIN) return { level: 'good', headline: '今天不用再补热量',
+      detail: recorded + '已接近今日计划，明天照常安排三餐。' };
+    return { level: 'good', headline: hour >= TREND_POLICY.lateHour ? '今晚不必一次补完' : '不必为目标额外加餐',
+      detail: recorded + '计划余量不等于必须补吃的量。按饥饿感决定是否少量进食，明天回到正常三餐，不必追齐数字。' };
+  }
+  if (trend?.currentCovered && kcalLeft > BALANCE_WITHIN && trend.direction !== 'over') return {
+    level: 'good', headline: '暂不必为目标额外加餐',
+    detail: recorded + `当前设备记录消耗 ${round(trend.burnedNow)} kcal，摄入已覆盖这部分消耗。当前收支会随消耗继续变化，后续正餐照常安排，不必为了计划余量额外补吃。`,
+  };
   if (trend?.active && trend.direction === 'under') return {
     level: 'warn', headline: '下一餐可以多吃些',
     detail: '按当前记录和剩余三餐安排，全天摄入可能明显低于今日计划。' + budget.meal.label
@@ -589,7 +614,7 @@ export function judgeStatus({
       headline: '今天不用再补热量',
       detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`
         + (kcalLeft < 0
-          ? '这个幅度对计划几乎没有影响，今天无需补偿性少吃。'
+          ? '已接近今日计划，今天无需补偿性少吃。'
           : ''),
     };
   }
@@ -607,7 +632,7 @@ export function judgeStatus({
     return {
       level: 'good',
       headline: '下一餐回到正常预算',
-      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。这个幅度对计划几乎没有影响，今天无需补偿性少吃，下一餐回到正常预算即可。`,
+      detail: recorded + `比计划多 ${round(-kcalLeft)} kcal。单日记录略高于计划，无需补偿性少吃；后续正餐照常安排，按饥饿感决定份量。`,
     };
   }
   /*
@@ -616,7 +641,6 @@ export function judgeStatus({
    * 「吃得慢一些」——既像在评价进食速度，也没有指出更可能的漏记。
    */
   if (!hasIntake) {
-    const late = hour >= 21;
     // 没吃早餐时，剩余预算算法会把缺口按后续餐次重新分配，午餐数字因此可能接近
     // 全天的一半。那适合内部排预算，却不适合直接叫人一餐补回；空记录时只展示
     // 当前餐原本的日占比，避免出现「13:30 午餐建议 975 kcal」这种过量暗示。
@@ -626,15 +650,10 @@ export function judgeStatus({
      * 在这儿再说一遍就是同一屏里写两次。
      */
     return {
-      level: late ? 'warn' : 'good',
-      headline: late ? '今晚不必一次补完' : '先照常吃这一餐',
-      detail: late
-        ? `按计划今天要吃到 ${gaps.kcal.target} kcal。夜里不建议一次补完全天缺口，明天回到正常节奏即可。`
-        : `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
+      level: 'good',
+      headline: '先照常吃这一餐',
+      detail: `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
     };
-  }
-  if (hour >= 21 && kcalLeft > BALANCE_WITHIN) {
-    return { level: 'good', headline: '今晚不必一次补完', detail: '已记录的摄入低于今日计划。夜里按饥饿感决定是否少量进食，明天回到正常三餐，不必追齐数字。' };
   }
   if (trend && ['uncertain', 'watch', 'settled', 'historical'].includes(trend.state)) return {
     level: 'good', label: trend.state === 'historical' ? '记录回顾' : '先观察',
@@ -715,6 +734,7 @@ export function buildInsights({
     return list;
   }
   const hour = now.getHours();
+  const dayComplete = hour >= TREND_POLICY.lateHour || correction?.dayComplete === true;
 
   /* ---------------- 1 数据本身有没有问题 ---------------- */
 
@@ -725,7 +745,8 @@ export function buildInsights({
   if (!entries.length && gaps.kcal.eaten <= 0 && hour >= 12) {
     add('warn', INSIGHT_PRIORITY.data, '今天尚无饮食记录',
       '下面所有的完成度都是从 0 算起的，漏记会让每一条建议都失真。',
-      '若只是漏记，请先补记；若确实还没进食，下一餐按正常份量安排，不必一次补齐全天缺口。');
+      dayComplete ? '若只是漏记，请先补记；若饿了可少量进食，不必一次补齐全天缺口。'
+        : '若只是漏记，请先补记；若确实还没进食，下一餐按正常份量安排，不必一次补齐全天缺口。');
   }
 
   /*
@@ -768,13 +789,15 @@ export function buildInsights({
     add('protein', INSIGHT_PRIORITY.energy, `剩下的热量补不齐这 ${round(proteinShort)}g 蛋白`,
       `蛋白质本身带热量：这些蛋白即使一点脂肪和碳水都不带也要 ${need} kcal，`
       + `而今天只剩 ${round(kcalLeft)} kcal。`,
-      '后续餐次可用鱼虾、去皮禽肉或低脂奶豆类替换高油食物；不必为了凑数强行进食，明天把蛋白分到前几餐。');
+      dayComplete ? '今天不必为凑数强行进食；若饿了可少量选择奶豆类，明天把蛋白分到正常三餐。'
+        : '后续餐次可用鱼虾、去皮禽肉或低脂奶豆类替换高油食物；不必为了凑数强行进食，明天把蛋白分到前几餐。');
   } else if (proteinShort > 10) {
     const eq = proteinEquivalent(proteinShort);
     add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,
       `${targets.proteinBasis}。`,
-      correction?.active ? '后续餐次优先选较瘦的蛋白来源，食物推荐已结合当前营养结构调整，不必一餐补完。' : hour >= 21
-        ? '今晚不用集中补完；若饿了可少量选择低脂奶豆类，明天把蛋白分到正常三餐。'
+      dayComplete ? '今天不用集中补完；若饿了可少量选择低脂奶豆类，明天把蛋白分到正常三餐。'
+        : correction?.currentCovered ? '不必为凑数额外加餐；在正常餐内搭配蛋白来源即可，实际选择仍要计入总热量。'
+        : correction?.active ? '后续餐次优先选较瘦的蛋白来源，食物推荐已结合当前营养结构调整，不必一餐补完。'
         : `蛋白量约等于 ${eq.chickenGrams}g 鸡胸肉，或 ${eq.eggs} 个鸡蛋；这只是蛋白换算，实际选择还要计入总热量、脂肪和个人饮食偏好，可分到后续餐次完成。`);
   } else if (gaps.protein.pct >= 100) {
     add('good', INSIGHT_PRIORITY.energy, '蛋白已达标',
@@ -809,7 +832,7 @@ export function buildInsights({
     add('warn', INSIGHT_PRIORITY.threshold,
       `钠已超出建议上限（${gaps.sodium.eaten}mg / ${gaps.sodium.target}mg）`,
       'WHO 成人钠摄入建议低于 2000 mg/天，约合 5g 食盐。',
-      '余下餐次少选腌制品、加工肉和重口味汤汁。');
+      dayComplete ? '明天安排三餐时少选腌制品、加工肉和重口味汤汁。' : '余下餐次少选腌制品、加工肉和重口味汤汁。');
   }
   if (gaps.sugar.pct > 100) {
     add('warn', INSIGHT_PRIORITY.threshold,
@@ -821,7 +844,7 @@ export function buildInsights({
     add('fiber', INSIGHT_PRIORITY.threshold,
       `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`,
       '中国成人参考 25–30g，现在过了大半天还不到一半。',
-      '加一份蔬菜、完整水果或全谷物。');
+      dayComplete ? '明天在正常三餐里安排蔬菜、完整水果或全谷物，不必今晚集中补齐。' : '加一份蔬菜、完整水果或全谷物。');
   }
 
   /* ---------------- 4 碳水脂肪的结构 ---------------- */
@@ -840,7 +863,8 @@ export function buildInsights({
       add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
         `碳水：脂肪按热量算是 ${split.carbPct}：${split.fatPct}，`
         + `碳水参考区间是 ${split.bandLo}–${split.bandHi}%。`,
-        `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
+        dayComplete ? `两者怎么分有很宽的合理区间；明天可在正常三餐里调整搭配，不必今天额外补吃。`
+          : `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
     }
   }
 

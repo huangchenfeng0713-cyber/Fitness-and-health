@@ -1698,7 +1698,7 @@ export const FOODS = [
   { id: 'stir_fried_intestine', name: '溜肥肠', alias: 'liufeichang 熘肥肠 炒肥肠 stir fried pork intestine', cat: 'dish', n: [260, 12.0, 22.0, 6.0, 0.5, 1.0, 900], s: [['一份', 250]], ...META_RECIPE_READY, note: '按熟肥肠、配菜和芡汁估算；预煮去油程度会显著影响脂肪', f: ['est'] },
   { id: 'casserole_tofu', name: '砂锅豆腐煲', alias: 'shaguo doufubao 豆腐砂锅 tofu casserole', cat: 'dish', n: [105, 7.0, 6.5, 5.0, 1.2, 1.5, 650], s: [['一份', 350]], ...META_RECIPE_READY, note: '按豆腐、菌菇蔬菜和整份汤汁估算；加入五花肉或油炸豆腐时热量会更高', f: ['est'] },
   { id: 'pickled_cabbage_pork', name: '酸菜白肉', alias: 'suancai bairou 东北酸菜汆白肉 pickled cabbage pork', cat: 'dish', n: [145, 8.0, 11.0, 4.0, 1.2, 1.0, 950], s: [['一份', 350]], ...META_RECIPE_READY, note: '按五花肉、酸菜和整碗汤计；酸菜用量、漂洗和喝汤多少会显著影响钠', f: ['est'] },
-  { id: 'chili_scrambled_egg', name: '辣椒炒鸡蛋', alias: 'lajiao chao jidan 尖椒炒蛋 chili scrambled egg', cat: 'dish', n: [150, 8.0, 11.5, 4.0, 1.3, 2.0, 560], s: [['一份', 250]], ...META_RECIPE_READY, note: '按鸡蛋和鲜辣椒同炒估算；主要差异来自鸡蛋数量与用油量', f: ['est'] },
+  { id: 'chili_scrambled_egg', name: '辣椒炒鸡蛋', alias: 'lajiao chao jidan qingjiao chao jidan 青椒炒鸡蛋 青椒炒蛋 尖椒炒鸡蛋 尖椒炒蛋 辣椒炒蛋 chili scrambled egg', cat: 'dish', n: [150, 8.0, 11.5, 4.0, 1.3, 2.0, 560], s: [['一份', 250]], ...META_RECIPE_READY, note: '按鸡蛋和鲜辣椒同炒估算；主要差异来自鸡蛋数量与用油量', f: ['est'] },
 
   // ---------- 搜不到的常见食物补充：粤潮点心、地方粉面、卤味、西点、食材 ----------
   // 这一批是拿一份日常点单清单逐条搜库、把搜出来完全对不上的补进来的：
@@ -2059,6 +2059,8 @@ const braiseSeasoning = () => [
 
 const HOME_COMBINATION_RECIPES = [
   { key: 'carrot_egg_stir', name: '胡萝卜炒鸡蛋', aliases: ['胡萝卜炒蛋'], method: '炒', terms: [['胡萝卜'], ['鸡蛋', '蛋']], parts: [comboPart('carrot', '胡萝卜', 150, 10), comboPart('egg_whole', '鸡蛋', 110, 5), ...stirSeasoning()] },
+  { key: 'ham_egg_stir', name: '火腿肠炒鸡蛋', aliases: ['火腿炒鸡蛋', '火腿炒蛋', '火腿肠炒蛋'], method: '炒', terms: [['火腿肠', '火腿'], ['鸡蛋', '蛋']], parts: [comboPart('ham_sausage', '火腿肠', 100, 5), comboPart('egg_whole', '鸡蛋', 110, 5), ...stirSeasoning()] },
+  // 旧配方只用于按 id 恢复历史记录；搜索统一落到已有的辣椒炒鸡蛋。
   { key: 'pepper_egg_stir', name: '青椒炒鸡蛋', aliases: ['青椒炒蛋'], method: '炒', terms: [['青椒'], ['鸡蛋', '蛋']], parts: [comboPart('pepper_green', '青椒', 150, 10), comboPart('egg_whole', '鸡蛋', 110, 5), ...stirSeasoning()] },
   { key: 'potato_pork_stir', name: '土豆炒肉', aliases: ['土豆炒肉片', '土豆肉片', '土豆肉丝'], method: '炒', terms: [['土豆', '马铃薯'], ['猪肉', '瘦肉', '肉片', '肉丝', '肉']], parts: [comboPart('potato', '土豆', 180, 10), comboPart('pork_lean', '猪瘦肉', 80, 10), ...stirSeasoning()] },
   { key: 'wood_ear_pork_stir', name: '木耳炒肉', aliases: ['木耳炒肉片'], method: '炒', terms: [['木耳'], ['猪肉', '瘦肉', '肉片', '肉']], parts: [comboPart('wood_ear', '水发木耳', 100, 10), comboPart('pork_lean', '猪瘦肉', 100, 10), ...stirSeasoning()] },
@@ -2104,6 +2106,18 @@ const HOME_COMBINATION_BY_ID = new Map(HOME_COMBINATION_RECIPES.map((recipe) => 
 const HOME_COMBINATION_CACHE = new Map();
 const normalizeCombinationQuery = (value) => String(value || '').normalize('NFKC').toLowerCase()
   .replace(/[\s·/、,，:：()（）\-]/g, '');
+// 仅合并明确等价的菜名，不按字符相似度合并不同食材或做法。
+const dishIdentity = (value) => normalizeCombinationQuery(value)
+  .replace(/(?:青椒|尖椒)炒(鸡蛋|蛋)/g, '辣椒炒$1').replace(/鸡蛋/g, '蛋');
+const FIXED_DISH_BY_NAME = new Map();
+for (const food of FOODS.filter((food) => food.cat === 'dish')) {
+  for (const name of [food.name, ...(food.alias || '').split(/\s+/)]) {
+    const key = dishIdentity(name);
+    if (key && !FIXED_DISH_BY_NAME.has(key)) FIXED_DISH_BY_NAME.set(key, food);
+  }
+}
+const fixedFoodForRecipe = (recipe) => recipe && [recipe.name, ...(recipe.aliases || [])]
+  .map((name) => FIXED_DISH_BY_NAME.get(dishIdentity(name))).find(Boolean);
 
 function buildCombinationFood(recipe) {
   const id = `combo_${recipe.key}`;
@@ -2145,13 +2159,13 @@ export function generatedFoodById(id) {
   return recipe ? buildCombinationFood(recipe) : null;
 }
 
-/** 只解析白名单里的合理组合；无法完整解释查询串时返回 null。 */
-export function parseFoodCombination(query) {
+/** 完整匹配白名单配方；不允许遗漏输入中的额外食材。 */
+function matchCombinationRecipe(query) {
   const q = normalizeCombinationQuery(query);
   if (!q) return null;
   for (const recipe of HOME_COMBINATION_RECIPES) {
     const names = [recipe.name, ...(recipe.aliases || [])].map(normalizeCombinationQuery);
-    if (names.includes(q)) return buildCombinationFood(recipe);
+    if (names.includes(q)) return recipe;
   }
   for (const recipe of HOME_COMBINATION_RECIPES.filter((item) => item.method && item.terms)) {
     let rest = q;
@@ -2163,9 +2177,16 @@ export function parseFoodCombination(query) {
       if (!hit) { complete = false; break; }
       rest = rest.replace(hit, '');
     }
-    if (complete && !rest) return buildCombinationFood(recipe);
+    if (complete && !rest) return recipe;
   }
   return null;
+}
+
+/** 已有固定菜名或等价配方时不再生成；旧 id 仍由 generatedFoodById 原样恢复。 */
+export function parseFoodCombination(query) {
+  if (FIXED_DISH_BY_NAME.has(dishIdentity(query))) return null;
+  const recipe = matchCombinationRecipe(query);
+  return recipe && !fixedFoodForRecipe(recipe) ? buildCombinationFood(recipe) : null;
 }
 
 /** 复合食物是否支持逐项选择原料；目前用于清补凉，结构可复用于沙拉、麻辣烫等。 */
@@ -2346,6 +2367,7 @@ function charSimilarity(a, b) {
 export function searchFoods(query, list = FOODS, limit = 30) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return list.slice(0, limit);
+  const canonical = FIXED_DISH_BY_NAME.get(dishIdentity(q)) || fixedFoodForRecipe(matchCombinationRecipe(q));
   const scored = [];
   let index = 0;
   for (const f of list) {
@@ -2376,6 +2398,7 @@ export function searchFoods(query, list = FOODS, limit = 30) {
       }
       if (sim >= 0.5) score = Math.round(45 * sim);
     }
+    if (f.id === canonical?.id) score = Math.max(score, 90);
     if (score > 0) scored.push({ f, score, order });
   }
   // 固定条目的精确名称或完整别名永远优先；只有没有这种命中时，才尝试把查询
