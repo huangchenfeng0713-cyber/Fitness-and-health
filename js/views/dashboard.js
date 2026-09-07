@@ -2,6 +2,7 @@
 
 import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip } from '../lib/ui.js';
+import { pointValueTrack } from '../lib/point-value-tip.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, nutrientScale, KIND } from '../core/metrics.js';
 import { energyRing, lockTrackScale } from '../core/energy-ring.js';
@@ -69,17 +70,17 @@ function splitRow(split) {
   return h('div', { class: `metric-row split-row ${split.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, '碳水:脂肪'),
-      h('strong.metric-row-value', null, known ? `${split.carbPct}:${split.fatPct}` : '—'),
       h('span.metric-row-note', null, split.label)),
-    splitBar({
-      carbPct: split.carbPct,
-      carbBandLo: split.bandLo,
-      carbBandHi: split.bandHi,
-      level: split.level,
-    }),
-    h('div.split-grams', null,
-      h('span.split-end', null, `碳水 ${num(split.carbG)}g`),
-      h('span.split-end', null, `脂肪 ${num(split.fatG)}g`)));
+    pointValueTrack({
+      key: `${state.day}:macro-split`, label: '碳水/脂肪',
+      value: known ? `碳水 ${split.carbPct}% / 脂肪 ${split.fatPct}%` : null,
+      track: splitBar({
+        carbPct: split.carbPct,
+        carbBandLo: split.bandLo,
+        carbBandHi: split.bandHi,
+        level: split.level,
+      }),
+    }));
 }
 
 function metricChip(m) {
@@ -87,15 +88,16 @@ function metricChip(m) {
   const value = m.display ?? num(m.eaten);
   return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
-    h('span.micro-reading', null,
-      h('strong.micro-val', null, value), ' ', h('span.micro-unit', null, m.unit.trim())),
-    h('div.nutrient-scale', { 'aria-hidden': 'true' },
-      scale.zoneStart == null ? null : h('span.nutrient-zone', {
-        style: { left: scale.zoneStart + '%', width: (scale.zoneEnd - scale.zoneStart) + '%' },
-      }),
-      scale.limitPct == null ? null : h('span.nutrient-limit', { style: { left: scale.limitPct + '%' } }),
-      h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
-        style: { left: scale.markerPct + '%' } })));
+    pointValueTrack({
+      key: `${state.day}:${m.key}`, label: m.label, value: `${value} ${m.unit.trim()}`,
+      track: h('div.nutrient-scale', null,
+        scale.zoneStart == null ? null : h('span.nutrient-zone', {
+          style: { left: scale.zoneStart + '%', width: (scale.zoneEnd - scale.zoneStart) + '%' },
+        }),
+        scale.limitPct == null ? null : h('span.nutrient-limit', { style: { left: scale.limitPct + '%' } }),
+        h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
+          style: { left: scale.markerPct + '%' } })),
+    }));
 }
 
 function heroCard(advice, targets, derived) {

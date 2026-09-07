@@ -528,10 +528,12 @@ try {
     const bandEl = splitEl?.querySelector('.split-bar-band');
     const pointEl = splitEl?.querySelector('.split-bar-point');
     const barBox = barEl?.getBoundingClientRect();
-    const ratioText = splitEl?.querySelector('.metric-row-value')?.textContent || '';
-    const ratio = /(\d+):(\d+)/.exec(ratioText);
-    const ends = [...(splitEl?.querySelectorAll('.split-end') || [])]
-      .map((el) => el.textContent.trim());
+    const trigger = splitEl?.querySelector('.point-value-trigger');
+    const numbersHidden = !/\d/.test(splitEl?.textContent || '');
+    trigger?.click();
+    const ratioText = document.querySelector('.point-value-tip')?.textContent || '';
+    const ratio = /碳水 (\d+)% \/ 脂肪 (\d+)%/.exec(ratioText);
+    trigger?.click();
     const proteinRow = [...document.querySelectorAll('.metric-row')]
       .find((row) => row.querySelector('.metric-row-label')?.textContent === '蛋白质');
     const proteinBar = proteinRow?.querySelector('.macro-bar');
@@ -547,7 +549,7 @@ try {
       carbPct: ratio ? Number(ratio[1]) : null,
       fatPct: ratio ? Number(ratio[2]) : null,
       ratioText,
-      ends,
+      numbersHidden,
       // 指针必须落在条子里：left 是百分比，写错了会跑到卡片外面
       pointInside: pointEl && barBox
         ? pointEl.getBoundingClientRect().left >= barBox.left - 8
@@ -587,22 +589,20 @@ try {
     split && Math.abs(split.barHeight - split.proteinBarHeight) > 0.5
       && `蛋白条与结构条粗细不一致：${split.proteinBarHeight}px / ${split.barHeight}px`,
     split && (split.carbPct == null || split.fatPct == null)
-      && `比例没有使用冒号：${split.ratioText}`,
+      && `点击后没有显示比例：${split.ratioText}`,
     split && split.carbPct + split.fatPct !== 100
       && `碳水 / 脂肪比例没有合计 100%：${split.ratioText}`,
-    split && (split.ends[0]?.startsWith('碳水') !== true || split.ends[1]?.startsWith('脂肪') !== true)
-      && `左右端点和标题顺序不一致：${split.ends.join(' / ')}`,
+    split && !split.numbersHidden && '碳水脂肪精确值仍然常驻',
     split && Math.abs(split.pointLeftPct - (100 - split.carbPct)) > 0.5
       && `圆点方向没有镜像：碳水 ${split.carbPct}%，位置却是 ${split.pointLeftPct}%`,
     split && (!(split.bandLeftPct >= 0) || !(split.bandWidthPct > 0)
       || split.bandLeftPct + split.bandWidthPct > 100.5)
       && `参考区间坐标无效：${split.bandLeftPct}% + ${split.bandWidthPct}%`,
     split && split.noteClipped && `结构说明被截断了：${split.text}`,
-    // 比例说不出吃了多少，克数得跟着一起给
-    split && !/碳水 \d+(\.\d+)?g/.test(split.text) && `合用那条没写克数：${split.text}`,
-    // 三种营养同排，只有实际值，饮水仍保留在饮食页。
+    // 三种营养同排，实际值按需查看，饮水仍保留在饮食页。
     semantics.chips.length !== 3 && `应有三种营养，实际 ${semantics.chips.length}`,
     /饮水|\//.test(semantics.chipText) && `今日营养仍有饮水或目标分母：${semantics.chipText}`,
+    /\d/.test(semantics.chipText) && `微量营养精确值仍然常驻：${semantics.chipText}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
     !/多|超|高/.test(semantics.heroText) && `没吃超，圆环颜色这条没测到（${semantics.heroText}）`,
