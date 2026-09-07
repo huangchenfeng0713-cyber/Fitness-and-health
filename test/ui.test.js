@@ -1294,8 +1294,6 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
     'kcal 到数字的距离不是标题那一档的一半');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
   assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
-  assert.match(css, /\.split-grams \{[^}]*grid-template-columns: 1fr 1fr/,
-    '碳水：脂肪克数没有左右对齐');
 });
 
 test('短标签不会被从中间断成两截', () => {
@@ -1663,7 +1661,7 @@ test('饮食记录默认只读，按「编辑」才能改克数或删除', () =>
  * （2660 kcal 的计划上是 30%）—— 各自说自己没问题，合起来对不上账；
  * 照计划吃的人还会读到「碳水低于建议 74g」。
  */
-test('碳水脂肪合成一条，比例和克数都要在上面', () => {
+test('碳水脂肪合成一条，精确比例按需查看', () => {
   const dashboard = page('dashboard');
   const code = strip(dashboard);
 
@@ -1680,14 +1678,11 @@ test('碳水脂肪合成一条，比例和克数都要在上面', () => {
   assert.ok(!/markPct|planCarbPct/.test(code), '又退回「一个计划点」了');
   assert.doesNotMatch(code, /split-grams-plan/, '不再显示参考区间说明');
 
-  // 比例说不出吃了多少，克数得一起给
-  assert.match(code, /碳水 \$\{num\(split\.carbG\)\}g/, '缺少碳水克数');
-  assert.match(code, /脂肪 \$\{num\(split\.fatG\)\}g/, '缺少脂肪克数');
+  // 精确值改为按需查看；常驻克数与比例会破坏默认的轻量展示。
   assert.match(code, /'碳水:脂肪'/, '今日页标题应使用英文冒号');
-  assert.match(code, /`\$\{split\.carbPct\}:\$\{split\.fatPct\}`/,
-    '今日页比例数字应使用英文冒号');
-  assert.match(code, /split-grams[\s\S]*碳水 \$\{num\(split\.carbG\)\}g[\s\S]*脂肪 \$\{num\(split\.fatG\)\}g/,
-    '标题写碳水 / 脂肪，左右端点却没有按同一顺序');
+  assert.match(code, /value: known \? `碳水 \$\{split\.carbPct\}% \/ 脂肪 \$\{split\.fatPct\}%`/,
+    '点击后应按碳水、脂肪顺序显示百分比');
+  assert.doesNotMatch(code, /split-grams|micro-reading/, '精确值不再常驻');
 
   /*
    * 结构偏移只用中性色：橙和红留给真正的上限。
