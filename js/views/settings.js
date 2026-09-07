@@ -18,7 +18,6 @@ import { dataManagerCard, collapseManagerSections } from './cards/data-manager.j
 import { state, saveProfile } from '../lib/store.js';
 import { takeIntent } from '../lib/nav.js';
 import { GOALS } from '../core/nutrition.js';
-import { RHYTHM_MODES, rhythmMode, expectedShare } from '../core/eating-rhythm.js';
 import {
   getAccountState, subscribeAccount, signUp, signInWithPassword, signInWithGoogle,
   resetPassword, setPassword, linkGoogle, signOutSafely, signOutPreservingLocal,
@@ -28,59 +27,16 @@ import {
   APP_VERSION, FEEDBACK_KINDS, feedbackKind, buildDiagnostics, buildFeedbackBody, feedbackIssueUrl,
 } from '../core/feedback.js';
 
-/*
- * 「这个钟点该吃到多少」按哪套口径算。
- *
- * 用下拉而不是分段控件：分段把两个选项一直摊在屏幕上，而这是个设完就
- * 很少再动的偏好，摊开只是占地方。形式和饮食记录里改餐次那个下拉一致 ——
- * 同一个应用里「从几个里挑一个」就该长一个样。
- *
- * 两套口径都不是匀速直线，见 core/eating-rhythm.js。默认走膳食指南：
- * 新用户没有记录，「按我平常」也无从算起。
- */
-function rhythmPicker(rerender) {
-  const current = rhythmMode(state.profile.rhythmMode).key;
-  const chosen = rhythmMode(current);
-  const sample = expectedShare({
-    mode: current, hour: 12, entries: state.dietRhythm, asOf: todayKey(),
-  });
-  const select = h('select.setting-select', {
-    'aria-label': '进食节奏参照',
-    onchange: async (ev) => {
-      const node = ev.currentTarget;
-      const before = current;
-      const result = await runLocalAction(node,
-        () => saveProfile({ rhythmMode: node.value }), '切换进食节奏参照');
-      if (!result.ok) { node.value = before; return; }
-      rerender();
-    },
-  }, RHYTHM_MODES.map((m) => h('option', { value: m.key }, m.label)));
-  // 选项要先挂进 select 再设 value：插入时浏览器会按 selectedIndex 重算
-  select.value = current;
-
-  /*
-   * 标题下面只留一句。
-   *
-   * 原先是两段：「主卡上『热量完成 45%』拿来和什么比」加上当前口径的说明，
-   * 前一句在讲这个开关是干嘛的、后一句在讲选中的那档是怎么回事 ——
-   * 读的人得把两句拼起来才知道现在到底按什么算。合成一句就完了。
-   */
+/** 固定参照只读展示，避免只有一个选项还保留可切换控件。 */
+function rhythmReference() {
   return h('div.setting-choice', null,
     h('div.setting-choice-row', null,
-      h('div.setting-choice-head', null,
-        h('strong', null, '进食节奏参照')),
-      select),
-    h('p.setting-choice-desc', null, chosen.desc),
-    // 退回这件事必须说出来：否则用户以为看的是自己的节奏，其实是指南的
-    sample.fellBack
-      ? h('p.setting-choice-desc.warn', null,
-        sample.days > 0
-          ? `目前只有 ${sample.days} 个有效记录日，还算不出你自己的三餐分布，暂时按膳食指南比对。`
-          : '还没有符合条件的有效记录日，算不出你自己的三餐分布，暂时按膳食指南比对。')
-      : null);
+      h('div.setting-choice-head', null, h('strong', null, '进食节奏参照')),
+      h('span', null, '参照膳食')),
+    h('p.setting-choice-desc', null, '按固定三餐窗口与早 30%、午 40%、晚 30% 参照，两餐之间保持。'));
 }
 
-function toggleCard(rerender) {
+function toggleCard() {
   const p = state.profile;
   const toggle = (key, label, desc) => h('label.toggle-row', null,
     h('div', null, h('strong', null, label), h('p', null, desc)),
@@ -94,10 +50,10 @@ function toggleCard(rerender) {
         h('h3', null, '计算方式'),
         h('p.card-desc', null, '每日目标怎么算、进度和什么比。')),
       infoTip('查看计算方式说明',
-        h('p', null, '这两项只改之后显示的目标和参照，不会动到已经记下的饮食。'))),
+        h('p', null, '消耗来源只影响之后显示的目标，进食节奏采用固定三餐参照，已记录的饮食保持原样。'))),
     toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
       '有设备记录时自动采用，没有时使用估算。'),
-    rhythmPicker(rerender),
+    rhythmReference(),
   );
 }
 
@@ -639,7 +595,7 @@ export function renderSettings(root) {
       body: () => profileCard(rerender),
       account: () => slot,
       data: () => dataManagerCard(rerender),
-      calc: () => toggleCard(rerender),
+      calc: () => toggleCard(),
       about: () => feedbackCard({
         about: h('div.about-block', null,
           h('p', null, `版本 v${APP_VERSION}`),

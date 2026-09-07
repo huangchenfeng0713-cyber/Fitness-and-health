@@ -15,7 +15,7 @@ test('设备当日活动更新只改变实际消耗与收支，不增加计划�
     Object.assign(state, { day: date, profile: { sex: 'male', age: 30, heightCm: 175, weightKg: 70,
       activity: 'light', goal: 'maintain', useAppleEnergy: true, onboarded: true },
       healthDays: [health], healthByDate: new Map([[date, health]]),
-      dietEntries: [], dietDaily: [], dietRhythm: [], trainingDays: [], lastImport: null });
+      dietEntries: [], dietDaily: [], trainingDays: [], lastImport: null });
     const a = recompute(now);
     assert.equal(a.liveEnergy.burnedNow, 1200);
     health.activeEnergy = 1500;
@@ -37,7 +37,7 @@ test('建议只使用完整且新鲜可信的当前消耗，过期或缺字段�
     const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 70,
       activity: 'light', goal: 'maintain', useAppleEnergy: true, onboarded: true, demoMode: false };
     Object.assign(state, { day: date, profile, dietEntries: [{ date, time: now.toISOString(), meal: 'dinner', kcal: 1900 }],
-      dietDaily: [], dietRhythm: [], trainingDays: [], lastImport: null });
+      dietDaily: [], trainingDays: [], lastImport: null });
     const run = (health, patch = {}) => {
       state.healthDays = [health]; state.healthByDate = new Map([[date, health]]);
       state.profile = { ...profile, ...patch };
@@ -258,4 +258,14 @@ test('身体信息算不出目标时退回默认档案，并把原因交给界�
   recompute();
   assert.ok(state.derived.profileError, '没有把失败原因记进 derived，界面就无话可说');
   assert.ok(state.derived.targets.kcal > 0, '仍要给出一份能显示的默认目标');
+});
+
+test('升级旧个人参照偏好时仅清理过期设置，不改身体资料或原对象', () => {
+  const source = { rhythmMode: 'personal', goal: 'maintain', weightKg: 72, heightCm: 175, onboarded: true };
+  const next = migrateStoredProfile(source);
+  assert.equal(Object.hasOwn(next, 'rhythmMode'), false);
+  assert.equal(next.weightKg, 72);
+  assert.equal(next.heightCm, 175);
+  assert.equal(next.onboarded, true);
+  assert.equal(source.rhythmMode, 'personal');
 });

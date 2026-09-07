@@ -1,29 +1,22 @@
 /** 今日摄入趋势：沿用三餐参照和当天目标，只输出有条件的范围，不输出概率分。 */
-import { personalMealReference, GUIDELINE_MEALS } from './eating-rhythm.js';
+import { GUIDELINE_MEALS } from './eating-rhythm.js';
 import { todayKey } from './day.js';
 import { macroSplit } from './metrics.js';
 
 // 产品提醒护栏，非生理阈值或经过校准的统计置信区间。
 export const TREND_POLICY = Object.freeze({ graceHours: 0.75, notableShare: 0.12, notableKcal: 250, lateHour: 21 });
 const positive = n => Number.isFinite(Number(n)) ? Math.max(0, Number(n)) : 0;
-const quantile = (values, p) => {
-  const a = [...values].sort((x, y) => x - y);
-  if (!a.length) return 0;
-  const pos = (a.length - 1) * p, i = Math.floor(pos);
-  return a[i] + ((a[i + 1] ?? a[i]) - a[i]) * (pos - i);
-};
 const label = key => ({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐' })[key];
 
-export function intakeTrend({ targets = {}, intake = {}, entries = [], rhythmEntries = [], now = new Date(), isToday = true, enabled = true, burnedNow = null } = {}) {
+export function intakeTrend({ targets = {}, intake = {}, entries = [], now = new Date(), isToday = true, enabled = true, burnedNow = null } = {}) {
   const target = positive(targets.kcal), eaten = positive(intake.kcal);
   const date = todayKey(now), hour = now.getHours() + now.getMinutes() / 60;
-  const personal = personalMealReference(rhythmEntries, { asOf: date });
-  const meals = personal.meals || GUIDELINE_MEALS;
-  const source = personal.meals ? 'personal' : 'guideline';
-  const basis = source === 'personal' ? `最近 ${personal.days} 个有效记录日的三餐节奏` : '固定三餐参照（个人有效记录不足 7 天）';
+  const meals = GUIDELINE_MEALS;
+  const source = 'guideline';
+  const basis = '固定三餐参照';
   // burnedNow 由调用方排除过期、缺字段和不可信的设备快照；不能用全天外推值代替。
   const burn = isToday && enabled && Number.isFinite(burnedNow) && burnedNow > 0 ? burnedNow : null;
-  const base = { state: 'uncertain', active: false, direction: null, range: null, source, days: personal.days, basis, remainingMeals: [], target, eaten,
+  const base = { state: 'uncertain', active: false, direction: null, range: null, source, basis, remainingMeals: [], target, eaten,
     burnedNow: burn, currentCovered: burn != null && eaten >= burn, dayComplete: isToday && hour >= TREND_POLICY.lateHour };
   if (!isToday) return { ...base, state: 'historical', reason: '历史日期只展示记录，不预测接下来的摄入。' };
   if (!enabled || !target) return { ...base, reason: '先完善身体资料，再判断今日摄入趋势。' };
@@ -66,15 +59,11 @@ export function intakeTrend({ targets = {}, intake = {}, entries = [], rhythmEnt
     || meals.some(m => hour >= m.endHour + grace && !(byMeal.get(m.key) >= 100))) {
     return { ...info, state: info.dayComplete ? 'settled' : 'watch', reason: '餐次可能仍在进行或尚未记全，暂不提醒调整。' };
   }
-  const remainingKeys = new Set(remainingMeals.map(m => m.key));
   const plannedShare = remainingMeals.reduce((s, m) => s + m.share, 0);
-  const samples = (personal.dailyShares || []).filter(d => [...remainingKeys].every(k => d[k] != null))
-    .map(d => [...remainingKeys].reduce((s, k) => s + d[k], 0));
-  const typical = samples.length >= 7 ? quantile(samples, 0.5) : plannedShare;
-  // 范围包含个人日间结构变化和额外误差空间。无个人样本时留更宽余地。
-  const slack = samples.length >= 7 ? 0.10 : 0.18;
-  const lowShare = Math.max(0, Math.min(typical, samples.length >= 7 ? quantile(samples, 0.15) : typical) - slack);
-  const highShare = Math.min(1, Math.max(typical, samples.length >= 7 ? quantile(samples, 0.85) : typical) + slack);
+  // 保留原固定参照的误差空间，不再从历史餐量学习份额或范围。
+  const slack = 0.18;
+  const lowShare = Math.max(0, plannedShare - slack);
+  const highShare = remainingMeals.length ? Math.min(1, plannedShare + slack) : 0;
   const low = eaten + target * lowShare, high = eaten + target * highShare;
   const range = { low: Math.max(Math.round(eaten), Math.floor(low / 50) * 50), high: Math.ceil(high / 50) * 50 };
   const direction = high < target - margin ? 'under' : low > target + margin ? 'over' : null;

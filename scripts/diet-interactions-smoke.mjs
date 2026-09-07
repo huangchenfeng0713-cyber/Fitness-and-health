@@ -40,6 +40,11 @@ try {
     await s.saveProfile({ goal: 'maintain', birthDate: '1996-01-01', weightKg: 72, heightCm: 175, sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false });
   });
   await tab('饮食');
+  const waterTipBox = () => page.locator('.water-tools summary').evaluate(el => {
+    const box = el.getBoundingClientRect(), card = el.closest('.water-card').getBoundingClientRect();
+    return { x: box.x - card.x, y: box.y - card.y, height: card.height };
+  });
+  const beforeWater = await waterTipBox();
   check('整条记录区是单个完整宽度按钮，Plus无独立按钮', await page.locator('.water-card').evaluate(el => {
     const b = el.querySelector('.water-pill');
     return b.tagName === 'BUTTON' && !el.querySelector('.water-add') && !b.querySelector('button')
@@ -57,6 +62,7 @@ try {
     new DOMMatrixReadOnly(getComputedStyle(el).transform).m42 < -9
     && el.getAnimations({ subtree: true }).every(a => a.playbackRate > 3)));
   await waitCount(1);
+  check('记录后撤销按钮出现，提示图标与卡片高度均不移动', JSON.stringify(await waterTipBox()) === JSON.stringify(beforeWater));
   await page.evaluate(() => { for (let i = 0; i < 10; i++) document.querySelector('.water-pill').click(); });
   await waitCount(11);
   check('连点十次全部保存且立即显示次数', await page.locator('.water-count').textContent() === '11');
@@ -70,6 +76,7 @@ try {
   await page.locator('.water-undo').click();
   await waitCount(0);
   check('撤销整串连点并恢复记录', await page.locator('.water-count').textContent() === '0');
+  check('撤销按钮隐藏后提示图标保持原位', JSON.stringify(await waterTipBox()) === JSON.stringify(beforeWater));
   await page.evaluate(async () => {
     document.querySelector('.water-pill').click(); document.querySelector('.water-pill').click();
     await (await import('/js/lib/store.js')).setDay('2026-09-05');

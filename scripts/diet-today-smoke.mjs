@@ -51,10 +51,14 @@ try {
       }
     }
     await db.bulkPut(db.STORES.diet, entries);
+    await db.setSetting('profile', { ...store.state.profile, rhythmMode: 'personal' });
     await store.reloadStoreFromDB();
-    return { retained: store.state.dietRhythm.length, result: rhythm.personalMealReference(store.state.dietRhythm, { asOf: store.state.day }) };
+    return { retained: (await db.getAll(db.STORES.diet)).length,
+      preferenceRemoved: !Object.hasOwn(await db.getSetting('profile'), 'rhythmMode'),
+      samplesRemoved: !Object.hasOwn(store.state, 'dietRhythm'),
+      source: store.state.derived.advice.trend.source, share: rhythm.expectedShare({ hour: 10 }).share };
   });
-  check('IndexedDB到参照保留餐次标签与超过28个自然日的历史', history.retained === 140 && history.result.days === 28 && history.result.meals.length === 3);
+  check('旧个人偏好迁移为固定参照，保留所有原始饮食记录且不再收集历史样本', history.retained === 140 && history.preferenceRemoved && history.samplesRemoved && history.source === 'guideline' && history.share === .3);
 
   await tab('today');
   const render = async (eaten, burned, nutrients = [18, 1636, 4]) => page.evaluate(async ({ eaten, burned, nutrients }) => {
@@ -180,6 +184,15 @@ try {
     Math.abs((await page.locator('.sheet').boundingBox()).y - foodSheet.y) < .5
     && await page.locator('.sheet-footer button').count() > 0);
   if (process.env.ARTIFACT_DIR) await page.locator('.sheet').screenshot({ path: `${process.env.ARTIFACT_DIR}/food-sheet-${engine}.png` });
+  await page.evaluate(async () => (await import('/js/lib/sheet.js')).closeSheet({ force: true }));
+  await page.waitForTimeout(300);
+  await page.locator('.topbar-settings-btn').click();
+  await page.locator('.settings-row').filter({ hasText: '计算与显示' }).click();
+  check('设置只读显示固定三餐参照，没有个人模式切换或样本不足提示',
+    await page.locator('.settings-drawer .setting-choice').textContent().then(text =>
+      text.includes('参照膳食') && text.includes('30%') && !/参照平常|有效记录|暂时/.test(text))
+    && await page.locator('.settings-drawer .setting-choice select').count() === 0);
+  if (process.env.ARTIFACT_DIR) await page.locator('.settings-drawer').screenshot({ path: `${process.env.ARTIFACT_DIR}/fixed-rhythm-${engine}.png` });
   check('无浏览器脚本异常', errors.length === 0);
   console.log(`${checks}/${checks} passed`);
 } finally { await browser.close(); }

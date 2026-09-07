@@ -16,24 +16,31 @@ const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, bodyFatPct:
 const targets = { ...dailyTargets(profile), kcal: 2400, protein: 130, carb: 300, fat: 60, fatUpper: 90, fiber: 25 };
 const intake = { kcal: 800, protein: 25, fat: 65, carb: 55, fiber: 5, sodium: 600, sugar: 5 };
 const entries = [entry('breakfast', '08:00', 300), entry('lunch', '13:00', 500)];
-const input = { targets, intake, entries, rhythmEntries: history, now: at('15:30'), profile };
+const input = { targets, intake, entries, now: at('15:30'), profile };
 const predict = patch => intakeTrend({ ...input, ...patch });
 
-test('午餐后持续偏少：复用个人三餐，范围整体偏离才提醒', () => {
+test('午餐后持续偏少：采用固定三餐，范围整体偏离才提醒', () => {
   const t = predict();
   assert.equal(t.state, 'under');
-  assert.equal(t.source, 'personal');
-  assert.equal(t.days, 28);
+  assert.equal(t.source, 'guideline');
+  assert.equal(t.basis, '固定三餐参照');
+  assert.deepEqual(t.range, { low: 1050, high: 2000 });
   assert.equal(t.remainingMeals[0].key, 'dinner');
   assert.ok(t.range.high < targets.kcal * 0.88);
   assert.equal(t.range.high % 50, 0);
 });
-test('历史不足使用更宽的三餐范围，不编造个人习惯', () => {
-  const fallback = predict({ rhythmEntries: history.slice(0, 18) });
-  assert.equal(fallback.source, 'guideline');
-  assert.equal(fallback.days, 6);
-  assert.ok(fallback.range.high - fallback.range.low > predict().range.high - predict().range.low);
+test('任意历史样本和旧个人偏好都不再影响趋势与推荐', () => {
+  const baseline = buildAdvice(input);
+  for (const rhythmEntries of [[], history.slice(0, 18), history,
+    history.map(e => ({ ...e, meal: 'dinner', kcal: e.kcal * 5 }))]) {
+    assert.deepEqual(predict({ rhythmEntries }), predict());
+    const advice = buildAdvice({ ...input, rhythmEntries, profile: { ...profile, rhythmMode: 'personal' } });
+    assert.deepEqual(advice.trend, baseline.trend);
+    assert.deepEqual(advice.status, baseline.status);
+    assert.deepEqual(advice.recommend, baseline.recommend);
+  }
 });
+
 test('正在午餐、刚记完餐和不足45分钟的阶段差先观察', () => {
   for (const time of ['13:10', '13:35', '14:15']) assert.equal(predict({ now: at(time) }).active, false, time);
   const recent = [entries[0], entry('lunch', '15:10', 500)];
@@ -55,11 +62,11 @@ test('延迟吃晚饭不报警，提前吃的晚饭不再加一次到预测里',
   const t = predict({ entries: earlyDinner, intake: { ...intake, kcal: 1700 }, now: at('17:10') });
   assert.equal(t.remainingMeals.length, 0);
   assert.equal(t.active, false);
-  assert.ok(t.range.high < 2100, '提前吃的晚餐不能被重复预测');
+  assert.deepEqual(t.range, { low: 1700, high: 1700 }, '没有后续主餐就不再叠加餐量或误差');
 });
 test('同样的早餐午餐，较多摄入可预测全天偏高，正常摄入不报警', () => {
   const make = kcal => predict({ intake: { ...intake, kcal }, entries: [entry('breakfast', '08:00', 700), entry('lunch', '13:00', kcal - 700)] });
-  assert.equal(make(2200).state, 'over');
+  assert.equal(make(2500).state, 'over');
   assert.equal(make(1600).state, 'steady');
 });
 test('记录已明显超出是事实；深夜、历史日、无效资料不出纠偏催促', () => {
@@ -129,8 +136,8 @@ test('未来条目即使总量超计划也不能当作已吃过报警', () => {
 test('轻微超过目标保持中性；全天预测确实偏高时主卡与趋势一致', () => {
   const slight = buildAdvice({ ...input, intake: { ...intake, kcal: 2480 }, entries: [] });
   assert.equal(slight.status.level, 'good');
-  const a = buildAdvice({ ...input, intake: { ...intake, kcal: 2380 },
-    entries: [entry('breakfast', '08:00', 700), entry('lunch', '13:00', 1680)] });
+  const a = buildAdvice({ ...input, intake: { ...intake, kcal: 2450 },
+    entries: [entry('breakfast', '08:00', 700), entry('lunch', '13:00', 1750)] });
   assert.equal(a.trend.direction, 'over');
   assert.equal(a.status.level, 'warn');
 });

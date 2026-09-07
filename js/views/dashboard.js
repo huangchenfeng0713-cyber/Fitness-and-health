@@ -73,7 +73,7 @@ function splitRow(split) {
       h('span.metric-row-note', null, split.label)),
     pointValueTrack({
       key: `${state.day}:macro-split`, label: '碳水/脂肪',
-      value: known ? `碳水 ${split.carbPct}% / 脂肪 ${split.fatPct}%` : null,
+      value: known ? `碳水 ${split.carbPct}% / 脂肪 ${split.fatPct}%\n碳水 ${num(split.carbG, 1).replace(/\.0$/, '')} g / 脂肪 ${num(split.fatG, 1).replace(/\.0$/, '')} g` : null,
       track: splitBar({
         carbPct: split.carbPct,
         carbBandLo: split.bandLo,
@@ -278,7 +278,7 @@ function trendCard(advice) {
     h('div.card-head', null, h('h3', null, '今日摄入趋势'),
       persistentInfoTip('intake-trend-method', '查看摄入预测依据',
         h('div', null, h('p', null, t.basis + '，映射到今日摄入目标。'),
-          h('p', null, '这是后续主餐延续典型份量的条件估计，不是确定结果或统计置信区间。餐次未记全、刚记完餐时先观察；范围整体明显偏离且仍可调整时才提醒。'),
+          h('p', null, '这是后续主餐按固定三餐份额安排的条件估计，不是确定结果或统计置信区间。餐次未记全、刚记完餐时先观察；范围整体明显偏离且仍可调整时才提醒。'),
           h('p', null, '加餐照常计入已摄入，不固定生成夜宵阶段。提醒只在此处展示，不弹窗催促。')))),
     h('p.trend-title', null, titles[t.state] || titles.uncertain),
     t.range && !t.dayComplete ? h('div.trend-range', null, h('span', null, '按后续主餐估计'), h('strong', null, t.range.low + '–' + t.range.high + ' kcal')) : null,
