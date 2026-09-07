@@ -57,7 +57,13 @@ try {
     check(`${width}px 默认四项隐藏数字，保留蛋白质数值`, await page.locator('.split-row,.hero-micros').evaluateAll(els =>
       els.every(el => !/\d/.test(el.textContent))) && await panel().count() === 0
       && /\d+g/.test(await page.locator('.metric-row:not(.split-row) .metric-row-value').textContent()));
-    for (const [key, expected] of [['split', '碳水 73% / 脂肪 27%'], ['fiber', '11 g'], ['sodium', '2039 mg'], ['sugar', '58 g']]) {
+    check(`${width}px 轨道周围留白紧凑且保留44px点击区`, await page.locator('.split-row,.micro-chip').evaluateAll(els =>
+      els.every(el => {
+        const label = el.querySelector('.metric-row-top,.micro-label').getBoundingClientRect();
+        const track = el.querySelector('.split-bar,.nutrient-scale').getBoundingClientRect();
+        return track.top - label.bottom <= 20 && el.getBoundingClientRect().bottom - track.bottom <= 14;
+      })));
+    for (const [key, expected] of [['split', '碳水 73% / 脂肪 27%\n碳水 182.5 g / 脂肪 30 g'], ['fiber', '11 g'], ['sodium', '2039 mg'], ['sugar', '58 g']]) {
       // 第一项直接点圆点，其他项点远离圆点的轨道热区。
       if (key === 'split') await trigger(key).locator('.split-bar-point').tap();
       else await trigger(key).tap({ position: { x: 3, y: 22 } });
@@ -65,6 +71,10 @@ try {
       const g = await geometry(key);
       check(`${width}px ${key} 单层、白底、箭头对点、卡内避让与高亮`,
         g.fits && g.arrow && g.above && g.white && g.single && g.expanded && g.dotSize > 13 && g.triggerHeight >= 44);
+      if (key === 'split' && process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/macro-values-${engine}-${width}.png` });
+      }
     }
     if (process.env.ARTIFACT_DIR) {
       await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });

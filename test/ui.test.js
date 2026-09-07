@@ -1680,7 +1680,7 @@ test('碳水脂肪合成一条，精确比例按需查看', () => {
 
   // 精确值改为按需查看；常驻克数与比例会破坏默认的轻量展示。
   assert.match(code, /'碳水:脂肪'/, '今日页标题应使用英文冒号');
-  assert.match(code, /value: known \? `碳水 \$\{split\.carbPct\}% \/ 脂肪 \$\{split\.fatPct\}%`/,
+  assert.match(code, /value: known \? `碳水 \$\{split\.carbPct\}% \/ 脂肪 \$\{split\.fatPct\}%/,
     '点击后应按碳水、脂肪顺序显示百分比');
   assert.doesNotMatch(code, /split-grams|micro-reading/, '精确值不再常驻');
 

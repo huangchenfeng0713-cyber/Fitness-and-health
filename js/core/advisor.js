@@ -9,7 +9,7 @@ import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
 import { clamp, round, ATWATER } from './nutrition.js';
 import { macroSplit } from './metrics.js';
 import { formatDuration } from './duration.js';
-import { MEALS, paceNote, DEFAULT_RHYTHM_MODE } from './eating-rhythm.js';
+import { MEALS, paceNote } from './eating-rhythm.js';
 import { todayKey } from './day.js';
 import { BALANCE_WITHIN } from './energy-ring.js';
 import { intakeTrend, correctionPlan, TREND_POLICY } from './intake-trend.js';
@@ -423,8 +423,6 @@ export function buildAdvice(input) {
     // 看历史日期时「今天还没同步」「今天还没记饮水」这类提醒都不该出现
     isToday = true,
     waterCount = null,
-    // 近三周的饮食记录，只有「按我平常」那套口径要用（判断这个钟点该吃到多少）
-    rhythmEntries = [],
     trendEnabled = true,
     burnedNow = null,
   } = input;
@@ -445,7 +443,7 @@ export function buildAdvice(input) {
   const kcalLeft = gaps.kcal.remaining;
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
-  const trend = intakeTrend({ targets, intake, entries, rhythmEntries, now, isToday, enabled: trendEnabled, burnedNow });
+  const trend = intakeTrend({ targets, intake, entries, now, isToday, enabled: trendEnabled, burnedNow });
   const correction = correctionPlan({ trend, gaps, targets, hour });
   const foodKcalLeft = correction.optionalProtein ? Math.min(200, targets.kcal * (hour >= 21 ? 0.06 : 0.10))
     : trend.dayComplete ? Math.max(0, Math.min(kcalLeft, 200, targets.kcal * 0.10)) : kcalLeft;
@@ -516,7 +514,6 @@ export function buildAdvice(input) {
     || ['kcal', 'protein', 'fat', 'carb'].some((key) => Number(gaps[key]?.eaten) > 0);
   const status = judgeStatus({
     gaps, kcalLeft, hour, targets, budget, hasIntake,
-    rhythmMode: profile.rhythmMode, rhythmEntries, asOf: todayKey(now),
     trend,
   });
 
@@ -558,7 +555,6 @@ export function buildAdvice(input) {
  */
 export function judgeStatus({
   gaps, kcalLeft, hour, targets, budget, hasIntake = true,
-  rhythmMode = DEFAULT_RHYTHM_MODE, rhythmEntries = [], asOf = null,
   trend = null,
 }) {
   const kcalPct = gaps.kcal.pct;
@@ -590,7 +586,7 @@ export function judgeStatus({
   };
   if (trend?.active && trend.range && trend.direction === 'over') return {
     level: 'warn', headline: '后续餐次调整搭配即可',
-    detail: '如果后续主餐延续平常份量，全天摄入可能明显高于今日计划。不必跳餐或额外运动抵消。',
+    detail: '如果后续主餐按固定三餐参照安排，全天摄入可能明显高于今日计划。不必跳餐或额外运动抵消。',
   };
   /*
    * 这个钟点该吃到多少，由 core/eating-rhythm.js 说了算。
@@ -599,9 +595,7 @@ export function judgeStatus({
    * 没有一个人是这样的：按它算，中午 12 点该吃到 37.5%，而三餐比例下
    * 一顿午饭吃完就该到 60%，同一个人会被这条直线判成「吃得快了」。
    */
-  const pace = paceNote({
-    mode: rhythmMode, hour, eatenPct: kcalPct, entries: rhythmEntries, asOf,
-  });
+  const pace = paceNote({ hour, eatenPct: kcalPct });
 
   /*
    * 标题只说下一步，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，

@@ -9,7 +9,6 @@ import {
   dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
-import { DEFAULT_RHYTHM_MODE } from '../core/eating-rhythm.js';
 import { normalizeSession } from '../core/training.js';
 import { nextPortionMemory } from '../core/portion.js';
 import {
@@ -35,7 +34,6 @@ export const DEFAULT_PROFILE = {
   goal: 'maintain',
   rateKgPerWeek: null,
   proteinPerKg: null,
-  rhythmMode: DEFAULT_RHYTHM_MODE, // 「这个钟点该吃到多少」按哪套口径算
   useAppleEnergy: true,   // 用 Apple 设备记录动态估算热量预算
   syncWeightFromApple: true,
   appleSourcePriority: [], // 可选：export.xml sourceName 的统一优先顺序
@@ -53,7 +51,6 @@ export const state = {
   healthByDate: new Map(),
   dietEntries: [],       // 当前日期的饮食条目
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
-  dietRhythm: [],        // 历史精简样本 { date, kcal, time, meal }，只给进食节奏曲线用
   customFoods: [],
   trainingDays: [],      // 每日训练记录，按日期
   portionMemory: {},     // { foodId: { grams, sugarLevel, meal } } —— 用户自己的选择
@@ -69,6 +66,8 @@ export const state = {
 export function migrateStoredProfile(stored = null) {
   const source = stored && typeof stored === 'object' ? stored : {};
   const next = { ...DEFAULT_PROFILE, ...source };
+  // 旧档案和备份中的个人进食参照已停用；保留饮食记录，只清理过期偏好。
+  delete next.rhythmMode;
   const rate = Number(next.rateKgPerWeek);
   if (Number.isFinite(rate)) {
     if (next.goal === 'cut' && rate > 0) next.rateKgPerWeek = -rate;
@@ -189,11 +188,6 @@ function rebuildDietDaily(entries) {
   state.dietDaily = [...byDate.entries()]
     .map(([date, list]) => ({ date, ...sumNutrients(list), count: list.length }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
-  // 保留全部历史精简字段，参照层再向前选最多 28 个有效日。
-  // 不能先按自然日截断；餐次使用记录时明确选择的标签。
-  state.dietRhythm = entries
-    .filter(e => Number(e.kcal) > 0)
-    .map(e => ({ date: e.date, kcal: Number(e.kcal), time: e.time, meal: e.meal }));
 }
 
 
@@ -359,7 +353,6 @@ export function recompute(now = new Date()) {
     now: isToday ? now : pinnedNow(state.day, now),
     isToday,
     waterCount: health.waterCount,
-    rhythmEntries: state.dietRhythm,
     trendEnabled: !profileError && p.demoMode !== true && p.onboarded === true,
     // 与圆环共用当下累计；过期、缺失或异常快照不能支撑“已覆盖当前消耗”。
     burnedNow: liveEnergy && !energyData.stale && !energyData.missingObservationTime
@@ -438,7 +431,7 @@ function countProteinHitDays(target, windowDays = 7) {
 export async function setDay(dayKey) {
   state.day = dayKey;
   state.dietEntries = cleanEntries(await db.getDietByDate(dayKey));
-  // 节奏窗口的起点跟着所选日期走，翻到上个月不能拿本月的记录去比
+  // 近期汇总与基线仍按所选日期计算。
   await refreshDietDaily();
   recompute();
   emit();
@@ -448,6 +441,7 @@ export async function saveProfile(patch) {
   // 是否完成首次引导由调用方明确写入。只改同步开关或来源优先级，不能把默认身体数据
   // 悄悄当成用户已经确认过的真实档案。
   const next = { ...state.profile, ...patch };
+  delete next.rhythmMode;
   const checked = validateProfile(next);
   if (!checked.valid) throw new RangeError(checked.errors.join('；'));
   await db.setSetting('profile', next);
@@ -759,7 +753,6 @@ export async function clearAllData() {
   state.healthByDate = new Map();
   state.dietEntries = [];
   state.dietDaily = [];
-  state.dietRhythm = [];
   state.customFoods = [];
   state.portionMemory = {};
   state.lastImport = null;
