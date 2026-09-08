@@ -129,203 +129,16 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('健身'))?.click());
   await page.waitForTimeout(400);
-  const allState = await page.evaluate(() => {
-    const rows = [...document.querySelectorAll('.ex-row .exercise-meta')];
-    const row = document.querySelector('.ex-row:not([aria-pressed="true"])')
-      || document.querySelector('.ex-row');
-    const name = row?.querySelector('.ex-name');
-    const action = row?.querySelector('.exercise-choice-action');
-    const card = document.querySelector('.exercise-picker-card');
-    const head = document.querySelector('.exercise-picker-card .picker-card-head');
-    const search = document.querySelector('.exercise-picker-card .exercise-search-row');
-    const controls = document.querySelector('.picker-controls');
-    const controlRows = [...document.querySelectorAll('.picker-controls > .range-switch')];
-    const rect = (el) => {
-      const r = el?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    };
-    return {
-      tagCounts: rows.map((meta) => meta.querySelectorAll('.exercise-meta-tag').length),
-      commonRow: !!row?.classList.contains('exercise-choice-row'),
-      row: rect(row), name: rect(name), action: rect(action),
-      font: name ? getComputedStyle(name).fontSize : '',
-      symbol: action?.textContent || '',
-      card: rect(card), head: rect(head), search: rect(search), controls: rect(controls),
-      controlRows: controlRows.map(rect),
-      viewSwitch: rect(document.querySelector('.picker-list-head .picker-view-switch')),
-      scopeRow: rect(document.querySelector('.picker-scope-row')),
-      equipInRow: rect(document.querySelector('.picker-scope-row .equip-filter-btn')),
-      modeField: rect(document.querySelector('.picker-mode-field')),
-      modeIsSelect: document.querySelector('.picker-mode-select')?.tagName === 'SELECT',
-      searchRow: rect(document.querySelector('.exercise-picker-card .exercise-search-row')),
-      listHead: rect(document.querySelector('.picker-list-head')),
-      equipBordered: (() => {
-        const btn = document.querySelector('.picker-scope-row .equip-filter-btn');
-        return btn ? getComputedStyle(btn).borderTopWidth !== '0px' : false;
-      })(),
-    };
-  });
-  await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.trim() === '推荐')?.click());
-  await page.waitForTimeout(300);
-  const recommendState = await page.evaluate(() => ({
-    tagCounts: [...document.querySelectorAll('.rec-pick .exercise-meta')]
-      .map((row) => row.querySelectorAll('.exercise-meta-tag').length),
-    hasOldTags: !!document.querySelector('.rec-tag, .rec-pick-tags'),
-    hasTip: !!document.querySelector('.exercise-picker-card .info-tip > summary'),
-    head: (() => {
-      const r = document.querySelector('.exercise-picker-card .picker-card-head')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    search: (() => {
-      const r = document.querySelector('.exercise-picker-card .exercise-search-row')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    controls: (() => {
-      const r = document.querySelector('.exercise-picker-card .picker-controls')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    tip: (() => {
-      const r = document.querySelector('.exercise-picker-card .info-tip > summary')?.getBoundingClientRect();
-      return r ? { width: r.width, height: r.height } : null;
-    })(),
-    commonRow: !!document.querySelector('.rec-pick.exercise-choice-row'),
-    row: (() => {
-      const r = document.querySelector('.rec-pick')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    name: (() => {
-      const r = document.querySelector('.rec-pick .ex-name')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    action: (() => {
-      const r = document.querySelector('.rec-pick .exercise-choice-action')?.getBoundingClientRect();
-      return r ? { left: r.left, top: r.top, width: r.width, height: r.height } : null;
-    })(),
-    font: document.querySelector('.rec-pick .ex-name')
-      ? getComputedStyle(document.querySelector('.rec-pick .ex-name')).fontSize : '',
-    symbol: document.querySelector('.rec-pick .exercise-choice-action')?.textContent || '',
-  }));
-  await page.evaluate(() => document.querySelector('.exercise-picker-card .info-tip > summary')?.click());
-  await page.waitForTimeout(100);
-  const openBeforeRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
-  await page.evaluate(async () => {
-    const { renderTraining } = await import('./js/views/training.js');
-    renderTraining(document.querySelector('#view'));
-  });
-  await page.waitForTimeout(100);
-  const openAfterRender = await page.$eval('.exercise-picker-card .info-tip', (tip) => tip.open);
-  const trainingProblems = [
-    !allState.tagCounts.length && '全部动作没有渲染',
-    /*
-     * 标签数按范围走：按部位挑时省掉「主练 XX」（那句就是筛选条件本身，
-     * 筛到「胸」时五行会一模一样），所以是 2；按模式挑范围太宽，仍是 3。
-     * 真正要卡住的是**两个视图必须一致** —— 见下面那条。
-     */
-    allState.tagCounts.some((n) => n !== 2) && `按部位挑时标签数不是 2：${allState.tagCounts.join('/')}`,
-    !recommendState.tagCounts.length && '推荐组合没有渲染',
-    recommendState.tagCounts.some((n) => n !== 2)
-      && `推荐组合标签数不是 2：${recommendState.tagCounts.join('/')}`,
-    // 两个视图看的是同一批动作，标签数不一样会让人以为它们说的不是一回事
-    allState.tagCounts[0] !== recommendState.tagCounts[0]
-      && `两个视图的标签数不一致：${allState.tagCounts[0]} / ${recommendState.tagCounts[0]}`,
-    recommendState.hasOldTags && '推荐组合仍在使用旧标签样式',
-    !allState.commonRow && '全部动作没有使用共用动作行',
-    !recommendState.commonRow && '推荐组合没有使用共用动作行',
-    allState.row && recommendState.row && Math.abs(allState.row.left - recommendState.row.left) > 1
-      && `两种动作行左边错开：${allState.row.left.toFixed(1)} / ${recommendState.row.left.toFixed(1)}`,
-    allState.name && recommendState.name && Math.abs(allState.name.left - recommendState.name.left) > 1
-      && `两种动作名起点错开：${allState.name.left.toFixed(1)} / ${recommendState.name.left.toFixed(1)}`,
-    allState.action && recommendState.action
-      && (Math.abs(allState.action.width - recommendState.action.width) > 1
-        || Math.abs(allState.action.height - recommendState.action.height) > 1)
-      && `两种加号大小不同：${allState.action.width.toFixed(1)}×${allState.action.height.toFixed(1)} / ${recommendState.action.width.toFixed(1)}×${recommendState.action.height.toFixed(1)}`,
-    allState.font !== recommendState.font
-      && `两种动作名字号不同：${allState.font} / ${recommendState.font}`,
-    allState.symbol !== recommendState.symbol
-      && `两种加号字符不同：${allState.symbol} / ${recommendState.symbol}`,
-    ...['head', 'search', 'controls'].map((key) => (
-      allState[key] && recommendState[key] && Math.abs(allState[key].top - recommendState[key].top) > 1
-        ? `两种视图的 ${key} 高度错开：${allState[key].top.toFixed(1)} / ${recommendState[key].top.toFixed(1)}`
-        : null
-    )),
-    /*
-     * 筛选区里只剩一排分段控件（范围）；挑法是它上面那个下拉。
-     * 三样东西三种形态，不再是三排一样的灰槽比谁在上面。
-     */
-    allState.controlRows.length !== 1 && `筛选区里的分段控件不是一排：${allState.controlRows.length}`,
-    !allState.modeIsSelect && '挑法不是下拉',
-    !allState.listHead && '缺少「这张列表是什么」那一行',
-    allState.listHead && allState.controls
-      && allState.listHead.top < allState.controls.top + allState.controls.height
-      && '列表头没有排在筛选区下面',
-    // 器械筛选要看得出能点：有边框才算
-    !allState.equipBordered && '器械筛选又变回了一行裸文字，看不出能点',
-    allState.controlRows.some((row) => row.height > 41)
-      && `筛选控件仍然过厚：${allState.controlRows.map((row) => row.height.toFixed(1)).join('/')}`,
-    /*
-     * 层级靠形态 + 疏密，不靠缩进。
-     *
-     * 1. 范围那排要和搜索框、列表头一样宽、一样起点 —— 缩一道 12px 的话
-     *    读出来是「谁没对齐」，不是「谁是谁的下一级」（踩过一次）。
-     * 2. 挑法下拉到范围之间要比范围到列表头之间**更紧**，父子关系才读得出来。
-     * 3. 挑法下拉靠左站，不铺满一整行 —— 铺满就又变回一排灰槽了。
-     */
-    (() => {
-      const scope = allState.controlRows[0];
-      const { searchRow, listHead } = allState;
-      if (!scope || !searchRow || !listHead) return '量不到筛选区的几个块';
-      const spread = Math.max(scope.width, searchRow.width, listHead.width)
-        - Math.min(scope.width, searchRow.width, listHead.width);
-      const offset = Math.max(scope.left, searchRow.left, listHead.left)
-        - Math.min(scope.left, searchRow.left, listHead.left);
-      return (spread > 1 || offset > 1)
-        && `范围那排和搜索框、列表头没对齐：宽 ${[scope, searchRow, listHead].map((r) => r.width.toFixed(1)).join('/')}，`
-          + `左 ${[scope, searchRow, listHead].map((r) => r.left.toFixed(1)).join('/')}`;
-    })(),
-    (() => {
-      const row = allState.scopeRow;
-      const scope = allState.controlRows[0];
-      const { listHead } = allState;
-      if (!row || !scope || !listHead) return null;
-      const inner = scope.top - (row.top + row.height);
-      const outer = listHead.top - (scope.top + scope.height);
-      return inner >= outer
-        && `口径行和范围之间（${inner.toFixed(1)}px）不比范围到列表头（${outer.toFixed(1)}px）更紧，看不出是父子`;
-    })(),
-    allState.modeField && allState.controlRows[0]
-      && allState.modeField.width > allState.controlRows[0].width - 40
-      && `挑法下拉几乎铺满一整行（${allState.modeField.width.toFixed(1)}），又变回一排灰槽了`,
-    /*
-     * 每一行要么满宽，要么两端都有东西。
-     * 只有一侧有控件、另一侧空着一大片，夹在两个满宽的块中间就是一道豁口。
-     */
-    (() => {
-      const row = allState.scopeRow;
-      const mode = allState.modeField;
-      const equip = allState.equipInRow;
-      if (!row || !mode || !equip) return '口径行里少了挑法或器械档位';
-      const leftGap = mode.left - row.left;
-      const rightGap = (row.left + row.width) - (equip.left + equip.width);
-      return (leftGap > 1 || rightGap > 1)
-        && `口径行没有把两端撑住：左 ${leftGap.toFixed(1)}px、右 ${rightGap.toFixed(1)}px`;
-    })(),
-    allState.viewSwitch && allState.listHead
-      && (allState.viewSwitch.top < allState.listHead.top - 1
-        || allState.viewSwitch.top > allState.listHead.top + allState.listHead.height + 1)
-      && '视图切换没有挂在列表头那一行上',
-    !recommendState.hasTip && '推荐说明入口缺失',
-    recommendState.tip && (Math.abs(recommendState.tip.width - 14) > 1
-      || Math.abs(recommendState.tip.height - 14) > 1)
-      && `信息符号没有减半为 14px：${recommendState.tip.width.toFixed(1)}×${recommendState.tip.height.toFixed(1)}`,
-    !openBeforeRender && '推荐说明点击后没有展开',
-    !openAfterRender && '推荐说明被一次无关重绘自动收起',
-  ].filter(Boolean);
-  check('动作标签统一，推荐说明展开态稳定', trainingProblems.length === 0, trainingProblems.join('；'));
-  // 后续用例会在动作列表里选择 `.ex-row`；显式复位视图，避免测试间共享模块状态。
-  await page.evaluate(() => [...document.querySelectorAll('.picker-view-switch .chip-btn')]
-    .find((x) => x.textContent.trim() === '列表')?.click());
-  await page.waitForTimeout(200);
+  // 结构 B 将挑选器移入共享弹层；完整推荐生命周期在 training-design-smoke。
+  await page.locator('.training-add').click();
+  await page.waitForTimeout(750);
+  await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '推荐' }).click();
+  const tags = await page.locator('.rec-picks .exercise-meta').evaluateAll(rows => rows.map(row => row.children.length));
+  await page.locator('.exercise-picker-card .info-tip > summary').click();
+  await page.evaluate(async () => (await import('./js/views/training.js')).renderTraining(document.querySelector('#view')));
+  check('推荐使用共用标签，主页面重绘不关闭选择器说明', tags.length > 0 && tags.every(n => n === 2)
+    && await page.locator('.exercise-picker-card .info-tip').evaluate(el => el.open));
+  await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '列表' }).click();
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
   await page.fill('.exercise-search-input', 'yingla');
@@ -389,6 +202,9 @@ try {
   check('搜索框在清空和失焦时都不被重建', searchProblems.length === 0,
     searchProblems.join('；') || JSON.stringify(searchAlive));
   await page.waitForTimeout(100);
+
+  await page.evaluate(async () => (await import('./js/lib/sheet.js')).closeSheet({ force: true }));
+  await page.waitForTimeout(300);
 
   // ---- 饮食页标题、饮水色和推荐预算在手机宽度下保持同一套对齐规则 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
@@ -814,79 +630,10 @@ try {
   await page.evaluate(() => { const el = document.querySelector('.search-input'); if (el) { el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true })); } });
   await page.waitForTimeout(300);
 
-  // ---- 健身选择栏始终在 .view 与 tab 栏之间；空状态也要看得见 ----
-  await page.evaluate(() => [...document.querySelectorAll('.tab')]
-    .find((x) => x.textContent.includes('健身'))?.click());
-  await page.waitForTimeout(500);
-  const emptyPicker = await page.evaluate(() => {
-    const slot = document.querySelector('#actionbar');
-    const bar = slot?.querySelector('.training-select-bar:not([hidden])');
-    const button = bar?.querySelector('.select-bar-go');
-    return {
-      slotVisible: !!slot && !slot.hidden,
-      barVisible: !!bar,
-      disabled: !!button?.disabled,
-      summary: bar?.querySelector('.select-bar-summary')?.textContent.trim() || '',
-    };
-  });
-  /*
-   * 一个动作都没选时整条横幅不出现，槽位也跟着收 ——
-   * 「尚未选择动作 / 可连续选择多个动作」加一个点不动的按钮，三样都没有信息量，
-   * 却一直压着列表。留着槽位的话还会剩一道凭空的空白横在列表和底栏之间。
-   */
-  check('没选动作时横幅和槽位一起收起',
-    !emptyPicker.barVisible && !emptyPicker.slotVisible,
-    JSON.stringify(emptyPicker));
-
-  /*
-   * **点行本身不算选中，只有右边那个 ＋ 算。**
-   * 整行可点的时候，滑动一列 76px 高的动作时手指蹭一下就多出一个动作。
-   */
-  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked)')?.click());
+  // 健身选择器确认栏的边界与空态在 training-design-smoke 实测。
+  await page.evaluate(async () => (await import('./js/lib/sheet.js')).closeSheet({ force: true }));
   await page.waitForTimeout(300);
-  const rowClickSelected = await page.evaluate(() => !!document.querySelector('.ex-row.marked, .ex-row.chosen'));
-  check('点动作行本身不会把它加进来，只有加号算', !rowClickSelected,
-    rowClickSelected ? '点了一下行就被选中了' : '');
-
-  await page.evaluate(() => document.querySelector('.ex-row:not(.chosen):not(.marked) .ex-pick')?.click());
-  await page.waitForTimeout(300);
-  const pickerEdge = await page.evaluate(() => {
-    const view = document.querySelector('main.view');
-    const slot = document.querySelector('#actionbar');
-    const bar = slot?.querySelector('.training-select-bar:not([hidden])');
-    const tabs = document.querySelector('.tabbar');
-    if (!view || !slot || !bar || !tabs) return null;
-    const vr = view.getBoundingClientRect();
-    const sr = slot.getBoundingClientRect();
-    const br = bar.getBoundingClientRect();
-    const tr = tabs.getBoundingClientRect();
-    return {
-      viewGap: Math.round((sr.top - vr.bottom) * 10) / 10,
-      tabGap: Math.round((tr.top - sr.bottom) * 10) / 10,
-      leftGap: Math.round(br.left * 10) / 10,
-      rightGap: Math.round((window.innerWidth - br.right) * 10) / 10,
-      horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
-      visible: br.top >= vr.bottom - 2 && br.bottom <= tr.top + 2,
-      enabled: !bar.querySelector('.select-bar-go')?.disabled,
-      summary: bar.querySelector('.select-bar-summary')?.textContent.trim() || '',
-    };
-  });
-  const pickerProblems = [
-    !pickerEdge && '选中动作后没有多选条',
-    pickerEdge && !pickerEdge.visible && '多选条没在可见区',
-    pickerEdge && !pickerEdge.enabled && '选中动作后提交按钮仍不可用',
-    pickerEdge && !pickerEdge.summary.includes('已选 1 个动作') && `选择摘要不对：${pickerEdge.summary}`,
-    pickerEdge && Math.abs(pickerEdge.viewGap) > 2
-      && `固定栏与内容区之间有 ${pickerEdge.viewGap}px 缝隙`,
-    pickerEdge && Math.abs(pickerEdge.tabGap) > 2
-      && `固定栏与 tab 栏之间有 ${pickerEdge.tabGap}px 缝隙`,
-    pickerEdge && Math.abs(pickerEdge.leftGap) > 2
-      && `多选条左边没有铺满屏幕：${pickerEdge.leftGap}px`,
-    pickerEdge && Math.abs(pickerEdge.rightGap) > 2
-      && `多选条右边没有铺满屏幕：${pickerEdge.rightGap}px`,
-    pickerEdge && pickerEdge.horizontalOverflow && '全宽多选条造成了横向滚动',
-  ].filter(Boolean);
-  check('健身选择栏横跨屏幕并固定在底部', pickerProblems.length === 0, pickerProblems.join('；'));
+  await page.locator('.tab').filter({ hasText: '健身' }).click();
 
   // ---- 设置抽屉 ----
   await page.evaluate(() => document.querySelector('.topbar-settings-btn')?.click());

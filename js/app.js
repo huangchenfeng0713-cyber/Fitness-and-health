@@ -19,6 +19,7 @@ import {
 import { pullAccountHealth, resetHealthCloudState } from './lib/health-cloud-sync.js';
 import { inspectCloudConfig } from './config/cloud.js';
 import { iconSvg } from './lib/icons.js';
+import { containModalFocus } from './lib/modal-focus.js';
 
 const TABS = [
   // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
@@ -35,6 +36,7 @@ let settingsRoot = null;
 let settingsOpen = false;
 let settingsOpener = null;
 let settingsCloseTimer = null;
+let releaseSettingsFocus = null;
 let accountBootstrapPending = false;
 
 /** 设置是全局偏好，不占一个主栏目；从右侧抽屉随时打开。 */
@@ -73,13 +75,16 @@ function ensureSettingsDrawer() {
 }
 
 function openSettings() {
+  if (settingsOpen) return;
   ensureSettingsDrawer();
   clearTimeout(settingsCloseTimer);
   settingsOpener = document.activeElement;
   renderSettings(settingsRoot);
   settingsOverlay.hidden = false;
   settingsOverlay.setAttribute('aria-hidden', 'false');
-  $('#app').inert = true;
+  releaseSettingsFocus = containModalFocus(settingsOverlay.querySelector('.settings-drawer'), {
+    background: [$('#app')], onEscape: () => closeSettings(), returnFocus: settingsOpener,
+  });
   settingsOpen = true;
   syncOnboarding();
   requestAnimationFrame(() => {
@@ -92,7 +97,8 @@ function closeSettings({ restoreHash = true } = {}) {
   if (!settingsOverlay || !settingsOpen) return;
   settingsOverlay.classList.remove('open');
   settingsOverlay.setAttribute('aria-hidden', 'true');
-  $('#app').inert = false;
+  releaseSettingsFocus?.();
+  releaseSettingsFocus = null;
   settingsOpen = false;
   resetSettingsExpand();
   syncOnboarding();
@@ -103,33 +109,6 @@ function closeSettings({ restoreHash = true } = {}) {
   settingsOpener?.focus?.({ preventScroll: true });
 }
 
-document.addEventListener('keydown', (event) => {
-  if (!settingsOpen) return;
-  if (event.key === 'Escape') {
-    closeSettings();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-
-  /*
-   * inert 会挡住背景，却不会自动把 Tab 留在对话框里。键盘用户如果一路按 Tab，
-   * 焦点仍可能跑到浏览器地址栏；把首尾接起来，抽屉才是完整的模态对话框。
-   */
-  const focusable = [...settingsOverlay.querySelectorAll(
-    'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), '
-    + 'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )].filter((el) => !el.hidden && el.getClientRects().length);
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-});
 
 function trainingContextNote() {
   const row = state.trainingDays?.find((day) => day.date === todayKey());
@@ -419,7 +398,7 @@ function syncOnboarding() {
   if (!slot) return;
   const existing = slot.querySelector('.onboard');
   // 人已经在设置抽屉填表了，横幅只会碍事
-  if (state.profile.onboarded || settingsOpen || accountDataLocked()) {
+  if (state.profile.onboarded || settingsOpen || current === 'training' || accountDataLocked()) {
     existing?.remove();
     return;
   }

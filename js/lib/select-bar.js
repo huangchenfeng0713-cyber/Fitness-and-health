@@ -9,11 +9,10 @@
  *
  * 所以选中只改页面内存，不写库、不重绘；攒够了按一次确认。
  *
- * 饮食页把它钉在滚动卡片底部；健身页则把同一组件挂进应用壳的
- * `#actionbar`，固定在内容区与 tab 栏之间。
+ * 饮食页使用页面选择栏；健身选择器使用同一组件作为 sheet 底栏。
  */
 
-import { h, mount, clearEl } from './utils.js';
+import { h, mount, clearEl, runLocalAction } from './utils.js';
 import { icon } from './icons.js';
 
 /**
@@ -37,6 +36,7 @@ export function selectBar({
 }) {
   const el = h('div.select-bar', { hidden: true });
   let open = false;
+  let busy = false;
 
   const api = { onVisibility: null };
 
@@ -44,9 +44,9 @@ export function selectBar({
     const list = items();
     clearEl(el);
     const empty = list.length === 0;
-    // 饮食清单没内容时收起；健身固定栏则保留，并把提交按钮置灰。
+    // 无待选项时收起；调用方可为其他场景显式保留空栏。
     el.hidden = empty && !alwaysVisible;
-    // 调用方可能还要跟着收起外面那层槽位（健身页把横幅挂在应用壳里）
+    // 外部槽位和内容同步显隐，避免留下空白底栏。
     api.onVisibility?.(!el.hidden);
     /*
      * 一个都没选时把横幅收薄。
@@ -67,17 +67,17 @@ export function selectBar({
               it.tag || null),
             it.note ? h('span.select-bar-item-note', null, it.note) : null),
           h('button.icon-btn', {
-            type: 'button', 'aria-label': `去掉 ${it.label}`,
+            type: 'button', 'aria-label': `去掉 ${it.label}`, disabled: busy,
             onclick: () => { onRemove(it.key); render(); },
           }, icon('close')))),
         // 「清空」收在展开区里：收起时那一行只该有摘要和主操作，挤三个东西会换行
         h('button.text-btn.select-bar-clear', {
-          type: 'button', onclick: () => { onClear(); open = false; render(); },
+          type: 'button', disabled: busy, onclick: () => { onClear(); open = false; render(); },
         }, '清空全部')) : null,
       h('div.select-bar-main', null,
         // 摘要本身是展开开关：多选之后最想确认的就是「我到底选了什么」
         h('button.select-bar-summary', {
-          type: 'button', 'aria-expanded': String(open), disabled: empty,
+          type: 'button', 'aria-expanded': String(open), disabled: empty || busy,
           onclick: () => { open = !open; render(); },
         },
         h('span.select-bar-summary-text', null,
@@ -88,11 +88,17 @@ export function selectBar({
         }, icon('chevron'))),
         h('button.primary-btn.select-bar-go', {
           type: 'button',
-          disabled: empty,
+          disabled: empty || busy,
+          'aria-busy': String(busy),
           // 按钮上只有一个符号时，读屏软件念不出它是干什么的
           'aria-label': actionAriaLabel ? actionAriaLabel() : null,
-          onclick: () => { if (empty) return; open = false; onConfirm(); },
-        }, actionLabel())));
+          onclick: async () => {
+            if (empty || busy) return;
+            busy = true; open = false; render();
+            try { await runLocalAction(null, onConfirm, '保存选择'); }
+            finally { busy = false; render(); }
+          },
+        }, busy ? '正在保存…' : actionLabel())));
   }
 
   api.el = el;

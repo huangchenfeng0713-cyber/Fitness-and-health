@@ -82,7 +82,6 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '说明层内容没有跟随当前显示的提示');
   assert.match(css, /\.insight-evidence-tip \.info-tip-panel\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/s,
     '集中后的提示依据在手机上可能长出屏幕');
-  assert.match(training, /h\('h3', null, '选择动作'\)/);
   assert.doesNotMatch(training, /h\('h3', null, '挑动作'\)/);
   /*
    * 标签仍由 exerciseTags 统一给；只是把「主练 XX」在它等于筛选条件本身时省掉 ——
@@ -92,8 +91,6 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '全部动作没有使用主要动作模式、主要肌肉、动作类型标签');
   assert.match(training, /const scopeMuscles = byGroup \? group\.muscles : null;/,
     '没有把当前范围传给标签渲染');
-  assert.match(training, /exerciseMeta\(item\.tags\)/,
-    '推荐组合没有使用同一个标签渲染器');
 
   assert.match(diet, /section\.card\.search-card/, '食物搜索卡缺少控制输入态样式的锚点');
   const searchHead = diet.slice(diet.indexOf("h('div.card-head.search-card-head"), diet.indexOf("h('div.search-row.search-row-full"));
@@ -175,12 +172,6 @@ test('估算菜品统一使用弱标签，误差来源集中到信息面板', ()
     '信息面板的黑体说明仍会擅自放大字号');
   assert.doesNotMatch(css, /\.estimate-disclosure-list\s*\{[^}]*overflow-y:\s*auto/s,
     '估算列表和外层面板形成了双重滚动');
-});
-
-test('筛选菜单不会在切换栏目后把旧健身页画回来', () => {
-  const training = text('js/views/training.js');
-  assert.match(training,
-    /if \(document\.querySelector\('#view \.exercise-picker-card'\)\) rerenderTraining\(\);/);
 });
 
 test('健康同步入口不重复出现', () => {

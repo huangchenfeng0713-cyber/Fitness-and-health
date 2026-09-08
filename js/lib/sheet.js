@@ -14,6 +14,7 @@
 
 import { h, clearEl, mount, scrimDismiss } from './utils.js';
 import { dragGesture } from './gesture.js';
+import { containModalFocus } from './modal-focus.js';
 
 let wrap = null;
 let panel = null;
@@ -21,6 +22,7 @@ let scrollArea = null;
 let footer = null;
 let handle = null;
 let onClose = null;
+let releaseFocus = null;
 let lockedScrollY = 0;
 /*
  * 正在往下退场。
@@ -177,7 +179,7 @@ function restoreScroll() {
  *  - label   无障碍名称
  *  - onClose 关闭时回调（点背景、按 Esc、或调用 closeSheet 都会触发）
  */
-export function openSheet(content, { label = '', onClose: close = null } = {}) {
+export function openSheet(content, { label = '', onClose: close = null, returnFocus } = {}) {
   build();
   onClose = close;
   panel.setAttribute('aria-label', label);
@@ -199,6 +201,11 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
    */
   setInputReady(false);
   wrap.hidden = false;
+  if (!releaseFocus) releaseFocus = containModalFocus(panel, {
+    background: [document.getElementById('app'), document.querySelector('.settings-overlay.open')],
+      onEscape: () => { if (sheetReady()) closeSheet(); },
+      returnFocus,
+  });
   restartRise();
   armOpenGuards();
   scrollArea.scrollTop = 0;
@@ -247,6 +254,8 @@ export function closeSheet({ fromY = 0, force = false } = {}) {
   const fn = onClose;
   onClose = null;
   if (fn) fn();
+  releaseFocus?.();
+  releaseFocus = null;
   restoreScroll();
   playExit(fromY);
 }
