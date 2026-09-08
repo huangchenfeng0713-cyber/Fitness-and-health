@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dailyTargets, nutrientReferences } from '../js/core/nutrition.js';
 import { dailyMetrics, nutrientScale } from '../js/core/metrics.js';
-test('钠AI/PI按年龄，不随活动放宽；糖供能标准有克数封顶',()=>{
-  for(const [age,attention,max] of [[18,1500,2000],[64,1500,2000],[65,1400,1900],[74,1400,1900],[75,1400,1800],[90,1400,1800]]){
+test('未核实年龄表不用于钠阈值；糖供能标准有克数封顶',()=>{
+  for(const [age,attention,max] of [[18,null,2000],[64,null,2000],[65,null,2000],[74,null,2000],[75,null,2000],[90,null,2000]]){
     const r=nutrientReferences({age},4000);
     assert.equal(r.sodium,max); assert.equal(r.sodiumAttention,attention);
     assert.equal(r.sugar,50); assert.equal(r.sugarAttention,25);
@@ -32,7 +32,7 @@ test('每日指标复用同一份目标和提醒门槛，保留食物统计输�
   const gaps=Object.fromEntries(['kcal','protein','fat','carb','fiber','sodium','sugar'].map(k=>[k,{eaten:0}]));
   gaps.sugar.eaten=26.2;
   const m=dailyMetrics(t,gaps);
-  assert.equal(m.find(m=>m.key==='sodium').target,1900);
-  assert.equal(m.find(m=>m.key==='sodium').attention,1400);
+  assert.equal(m.find(m=>m.key==='sodium').target,2000);
+  assert.equal(m.find(m=>m.key==='sodium').attention,2000);
   assert.equal(m.find(m=>m.key==='sugar').eaten,26.2);
 });

@@ -1,3 +1,4 @@
+import { energyObservation } from '../core/energy-observation.js';
 /**
  * 应用状态中心
  * 负责：读写本地数据库、按当前日期汇总、驱动目标与建议的重新计算、通知视图刷新。
@@ -6,7 +7,7 @@
 import * as db from './db.js';
 import { todayKey, dayFraction, shiftDay } from './utils.js';
 import {
-  dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile,
+  dailyTargets, dynamicTDEE, basalMetabolicRate, sumNutrients, staticTDEE, validateProfile, nutrientIssues, normalizeDietEntry, isNutrientNumber,
 } from '../core/nutrition.js';
 import { buildAdvice } from '../core/advisor.js';
 import { normalizeSession } from '../core/training.js';
@@ -19,16 +20,16 @@ import {
   isCompleteAppleSnapshot, mergeApplePartialRows, replaceAppleSnapshotRows, stampManualPatch,
 } from '../core/health-merge.js';
 import {
-  FOODS, FOOD_BY_ID, nutrientsFor, hasFoodMix, foodMixNutrition, generatedFoodById,
+  FOODS, FOOD_BY_ID, nutrientsFor, hasFoodMix, foodMixNutrition, generatedFoodById, validateFood,
 } from '../data/foods.js';
 
 export const DEFAULT_PROFILE = {
   sex: 'male',
   birthday: '',
-  age: 30,
+  age: null,
   ageEstimated: true,
-  heightCm: 172,
-  weightKg: 65,
+  heightCm: null,
+  weightKg: null,
   bodyFatPct: null,
   activity: 'light',
   goal: 'maintain',
@@ -151,7 +152,7 @@ async function hydrateStore({ notify = false } = {}) {
   }
   state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
-  state.customFoods = customFoods || [];
+  state.customFoods = (customFoods || []).map(f => ({ ...f, carbBasis: f.carbBasis || 'unknown' }));
   state.trainingDays = (training || []).map(normalizeSession).filter((s) => s.date);
   setHealthDays(healthDays || []);
   rebuildDietDaily(cleanEntries(dietAll));
@@ -205,7 +206,7 @@ function rebuildDietDaily(entries) {
  * 是在 boot 里跑的：抛出去用户连设置抽屉都打不开，没法回去删那条数据。
  */
 const cleanEntries = (rows) => (Array.isArray(rows) ? rows : [])
-  .filter((e) => e && typeof e === 'object');
+  .filter((e) => e && typeof e === 'object').map(normalizeDietEntry);
 
 /*
  * 看历史日期时把 now 钉在当天 20:00，否则会按此刻的钟点给出「该吃午饭了」这种建议。
@@ -220,7 +221,7 @@ function pinnedNow(day, now) {
 }
 
 export function recompute(now = new Date()) {
-  const p = state.profile;
+  const p = state.profile || {};
   const health = state.healthByDate.get(state.day) || {};
   const isToday = state.day === todayKey(now);
 
@@ -240,10 +241,11 @@ export function recompute(now = new Date()) {
     const hit = latestHealthEntry(key, state.day);
     bodySource[key] = hit;
     if (hit) effectiveProfile[key] = hit.value;
+    if (key === 'bodyFatPct') effectiveProfile.bodyFatFresh = hit ? Date.parse(state.day) - Date.parse(hit.date) <= 30 * 86400000 : false;
   }
 
   /*
-   * 身体信息算不出目标时，退回默认档案继续跑，绝不把异常抛出去。
+   * 身体信息算不出目标时返回不可生成状态；页面和档案修复入口仍可用。
    *
    * recompute() 在 boot 的 hydrateStore() 里就会执行一次。之前这里让
    * RangeError 直接冒泡：恢复了一份含 16 岁生日的备份之后，整个应用起不来，
@@ -252,93 +254,22 @@ export function recompute(now = new Date()) {
    *
    * 现在把原因记进 derived.profileError，界面照常渲染并提示去哪儿修。
    */
-  const profileCheck = validateProfile(effectiveProfile);
-  const profileError = profileCheck.valid ? null : profileCheck.errors.join('；');
-  const calcProfile = profileCheck.valid
-    ? effectiveProfile
-    : { ...DEFAULT_PROFILE, sex: effectiveProfile.sex || DEFAULT_PROFILE.sex };
-
   const baseline = computeBaseline(state.healthDays, state.dietDaily, state.day);
-  const { kcal: bmr } = basalMetabolicRate(calcProfile);
-  const stat = staticTDEE(calcProfile);
-
   const intake = sumNutrients(state.dietEntries);
-
+  const energyData = energyObservation(health, state.day, now);
+  const targets = planForProfile(effectiveProfile, state.day, now);
+  const profileError = targets.status === 'unavailable' ? targets.reason : null;
+  const bmr = targets.bmr;
+  const stat = { tdee: targets.staticTdee ?? null };
   let dynamic = null;
-  let energyData = {
-    observedAt: null, ageMinutes: null, stale: false, missingObservationTime: false,
-  };
-  const hasEnergyData = Number(health.activeEnergy) > 0 || Number(health.restingEnergy) > 0;
-  if (p.useAppleEnergy && hasEnergyData) {
-    energyData = resolveEnergyObservation(health, state.lastImport, state.day, now);
-    // 历史完整日不需要时间戳；今天若不知道累计值覆盖到几点，宁可回退到静态估算，
-    // 也不能拿同一份旧快照跟着当前时钟反复外推。
-    const canProject = !isToday || energyData.observedAt != null;
-    if (canProject) {
-      dynamic = dynamicTDEE({
-        bmr,
-        // 缺字段和明确记录为 0 不是一回事：缺失时应由近期基线或静态公式补足。
-        activeSoFar: health.activeEnergy != null ? Number(health.activeEnergy) : null,
-        basalSoFar: Number(health.restingEnergy) || null,
-        // 近 14 天 Apple 设备记录的静息能量日均，优先于单次公式估算
-        baselineResting: baseline.restingEnergy,
-        observationFraction: isToday ? energyData.dayFraction : 1,
-        baselineActive: baseline.activeEnergy,
-        fallbackTDEE: stat.tdee,
-      });
-    }
-  }
+  if (!profileError && isToday && energyData.valid) dynamic = dynamicTDEE({ bmr,
+    activeSoFar: health.activeEnergy, basalSoFar: health.restingEnergy,
+    baselineResting: baseline.restingEnergy, baselineActive: baseline.activeEnergy,
+    observationFraction: energyData.dayFraction, fallbackTDEE: stat.tdee });
+  const liveEnergy = { tdee: dynamic?.tdee ?? null, burnedNow: energyData.burnedNow,
+    surplus: energyData.valid ? intake.kcal - energyData.burnedNow : null,
+    plannedSurplus: targets.dailyDelta, vsPlanned: dynamic ? dynamic.tdee - targets.tdee : null };
 
-  /*
-   * 目标用「近期节奏」算，当天固定；实时那份只用来说今天实际收支。
-   *
-   * 原先目标直接跟着今天的 Apple 累计走：白天按 2076 kcal 吃，晚上手表把活动
-   * 能量同步上来，目标当场变成 1399，同一顿饭从「刚好」变成「超标 180」——
-   * 用户什么都没做错，是脚下的尺子在动。
-   *
-   * 现在目标那把尺子用近 14 天设备记录的日均（完整天的记录，不含外推），
-   * 一天之内不会变；今天动得多还是少，交给下面这个实时收支去说。
-   * 两个数字各回答各的问题，不再互相打架。
-   */
-  const planned = p.useAppleEnergy && (baseline.restingEnergy > 0 || baseline.activeEnergy > 0)
-    ? dynamicTDEE({
-      bmr,
-      baselineResting: baseline.restingEnergy,
-      baselineActive: baseline.activeEnergy,
-      observationFraction: 1,
-      fallbackTDEE: stat.tdee,
-    })
-    : null;
-
-  const targets = dailyTargets(calcProfile, planned);
-
-  /*
-   * 今日实际能量收支：吃进去的 减 今天真的消耗掉的。
-   * 这个数一天之内会随手表更新而变，本来就该变——它说的是「今天」，
-   * 不是「今天该吃多少」。
-   */
-  const liveTdee = dynamic ? Math.round(dynamic.tdee) : null;
-  /*
-   * 「当前消耗」= 设备到此刻的静息 + 活动，直接相加。
-   *
-   * 不能拿 dynamic.tdee 当这个数：那份是**按已过时长外推出来的全天值**
-   * （静息 basalNow / f，再夹在近 14 天基线的 0.8~1.4 倍之间）。
-   * 早上八点它就已经报出一千七，主卡上那条弧看着像「今天已经烧掉八成」，
-   * 而实际累计只有几百。外推那个数有它的用处 —— 它是「预计全天消耗」，
-   * 归 targets.tdee；这里要的是「到现在为止真的烧了多少」。
-   */
-  const burnedParts = [health.restingEnergy, health.activeEnergy]
-    .map((v) => Number(v))
-    .filter((v) => Number.isFinite(v) && v >= 0);
-  const burnedNow = burnedParts.length ? Math.round(burnedParts.reduce((a, b) => a + b, 0)) : null;
-  const liveEnergy = liveTdee != null ? {
-    tdee: liveTdee,
-    burnedNow,
-    surplus: Math.round((Number(intake.kcal) || 0) - liveTdee),
-    plannedSurplus: targets.dailyDelta,
-    // 目标算的是近期节奏，实时这份是今天：差多少就是「今天比平时多动/少动了多少」
-    vsPlanned: Math.round(liveTdee - targets.tdee),
-  } : null;
   const advice = buildAdvice({
     targets,
     intake,
@@ -354,54 +285,46 @@ export function recompute(now = new Date()) {
     isToday,
     waterCount: health.waterCount,
     trendEnabled: !profileError && p.demoMode !== true && p.onboarded === true,
-    // 与圆环共用当下累计；过期、缺失或异常快照不能支撑“已覆盖当前消耗”。
-    burnedNow: liveEnergy && !energyData.stale && !energyData.missingObservationTime
-      && !dynamic.activeCapped && Number(health.restingEnergy) > 0
-      && health.activeEnergy != null && Number.isFinite(Number(health.activeEnergy))
-      && Number(health.activeEnergy) >= 0 && new Date(energyData.observedAt) <= now
-      ? liveEnergy.burnedNow : null,
+    burnedNow: energyData.burnedNow,
+    observation: energyData, deviceBudgetEnabled: p.useAppleEnergy,
   });
 
   state.derived = {
     effectiveProfile, health, baseline, dynamic, targets, intake, advice, isToday, bmr,
     staticTdee: stat.tdee, energyData, profileError, bodySource, liveEnergy,
+    dateMode: energyData.dateMode, planningSource: targets.tdeeSource,
     demoMode: p.demoMode === true || p.onboarded !== true || profileError != null,
   };
   return state.derived;
 }
 
-/**
- * 找到这份累计能量真正覆盖到的时刻。今天的目标只按该时刻外推并保持不变，
- * 当前钟表继续前进不会再让同一份健康快照改变热量预算。
- */
+/** 兼容入口；统一读取字段截止时间，导入时间不能替代观测时间。 */
 export function resolveEnergyObservation(health, lastImport, day, now = new Date()) {
-  const isToday = day === todayKey(now);
-  if (!isToday) {
-    return { observedAt: null, dayFraction: 1, ageMinutes: null, stale: false, missingObservationTime: false };
-  }
+  return energyObservation(health, day, now);
+}
 
-  let observed = new Date(health?.energyObservedAt || '');
-  if (Number.isNaN(observed.getTime()) || todayKey(observed) !== day) {
-    const imported = new Date(lastImport?.at || '');
-    const range = lastImport?.range;
-    const coversDay = Array.isArray(range) ? day >= range[0] && day <= range[1] : lastImport?.days > 0;
-    observed = !Number.isNaN(imported.getTime()) && todayKey(imported) === day && coversDay
-      ? imported : new Date(NaN);
+/** Preview and saved plans share this solver and explicit reference date. */
+export function planForProfile(profile, day = todayKey(), now = new Date()) {
+  const reference = new Date(`${day}T12:00:00`);
+  // 历史快照保留原计划；今天及未来必须先通过当前档案和目标方向校验。
+  if (day >= todayKey(now)) {
+    const current = dailyTargets(profile, null, reference);
+    if (current.status === 'unavailable') return { ...current, referenceDate: day, context: '按当前设置对照' };
   }
-  if (Number.isNaN(observed.getTime())) {
-    return {
-      observedAt: null, dayFraction: null, ageMinutes: null, stale: false,
-      missingObservationTime: true,
-    };
+  const selected = [...(Array.isArray(profile?.targetVersions) ? profile.targetVersions : [])].filter(v => v && /^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate) && v.effectiveDate <= day && v.targets)
+    .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || String(a.savedAt || a.id).localeCompare(String(b.savedAt || b.id))).at(-1);
+  if (selected && (selected.targets.status === 'unavailable' || (selected.targets.status === 'ready' && ['kcal','protein','fat','carb','tdee','bmr'].every(k => Number.isFinite(selected.targets[k]) && selected.targets[k] > 0)))) return { ...selected.targets, versionId: selected.id, referenceDate: day, context: '当时计划' };
+  const check = validateProfile(profile, reference);
+  let planned = null;
+  if (check.valid) {
+    const stat = staticTDEE(profile, reference);
+    const baseline = computeBaseline(state.healthDays, state.dietDaily, day);
+    if (profile.useAppleEnergy && baseline.restingEnergy > 0 && baseline.activeEnergy != null) {
+      planned = dynamicTDEE({ bmr: stat.bmr, baselineResting: baseline.restingEnergy,
+        baselineActive: baseline.activeEnergy, observationFraction: 1, fallbackTDEE: stat.tdee });
+    }
   }
-  const ageMinutes = Math.max(0, Math.round((now.getTime() - observed.getTime()) / 60000));
-  return {
-    observedAt: observed.toISOString(),
-    dayFraction: dayFraction(observed),
-    ageMinutes,
-    stale: ageMinutes >= 120,
-    missingObservationTime: false,
-  };
+  return { ...dailyTargets(profile, planned, reference), referenceDate: day, context: '按当前设置对照' };
 }
 
 /** 取指定日期当天或之前最近一次的健康指标 */
@@ -423,7 +346,7 @@ function countProteinHitDays(target, windowDays = 7) {
   const start = shiftDay(state.day, -Math.max(1, Math.floor(windowDays)));
   const recent = state.dietDaily.filter((d) => d.date >= start && d.date < state.day);
   if (!recent.length) return null;
-  return recent.filter((d) => d.protein >= target * 0.9).length;
+  return recent.filter((d) => d.coverage?.protein?.complete !== false && d.protein >= target).length;
 }
 
 // ---------------------------------------------------------------- 变更操作
@@ -443,7 +366,17 @@ export async function saveProfile(patch) {
   const next = { ...state.profile, ...patch };
   delete next.rhythmMode;
   const checked = validateProfile(next);
-  if (!checked.valid) throw new RangeError(checked.errors.join('；'));
+  if (!checked.valid && Object.keys(patch).some(k => !['useAppleEnergy', 'appleSourcePriority', 'syncWeightFromApple'].includes(k))) throw new RangeError(checked.errors.join('；'));
+  const planProfile = { ...next, targetVersions: [] };
+  for (const key of ['weightKg', 'heightCm', 'bodyFatPct']) {
+    const hit = latestHealthEntry(key, todayKey());
+    if (hit) planProfile[key] = hit.value;
+  }
+  const targets = planForProfile(planProfile, todayKey());
+  const savedAt = new Date().toISOString();
+  next.targetVersions = [...(state.profile.targetVersions || []), {
+    id: savedAt, savedAt, effectiveDate: todayKey(), targets,
+  }];
   await db.setSetting('profile', next);
   state.profile = next;
   recompute();
@@ -490,6 +423,11 @@ export async function addEntry({
 }) {
   const food = custom || findFood(foodId);
   if (!food) throw new Error('找不到这个食物');
+  if (!isNutrientNumber(grams)) throw new RangeError('份量需为非负有限数');
+  if (!suppliedNutrients && !custom?.nutrients) {
+    const checked = validateFood(food);
+    if (!checked.valid) throw new RangeError(checked.errors.join('；'));
+  }
   const nutrients = suppliedNutrients || custom?.nutrients || nutrientsFor(food, grams, sugarLevel);
   const savedComposition = Array.isArray(composition) ? composition : null;
   const entry = {
@@ -498,7 +436,7 @@ export async function addEntry({
     meal: meal || 'snack',
     foodId: food.id || null,
     name: name || food.name,
-    grams: Number(grams) || 0,
+    grams: Number(grams), nutritionSchema: 2, carbBasis: 'available',
     // 字段名不能叫 sugar：下面展开的 nutrients 里 sugar 是糖的克数，会把档位覆盖掉
     sugarLevel,
     /*
@@ -525,10 +463,13 @@ export async function addEntry({
 }
 
 export async function updateEntry(id, patch) {
+  if (Object.hasOwn(patch, 'grams') && (patch.grams == null || patch.grams === '' || !Number.isFinite(Number(patch.grams)) || Number(patch.grams) < 0)) throw new RangeError('份量需为非负有限数');
   const idx = state.dietEntries.findIndex((e) => e.id === id);
   if (idx === -1) return null;
   const current = state.dietEntries[idx];
-  let next = { ...current, ...patch };
+  const rawCurrent = await db.get(db.STORES.diet, id);
+  let next = { ...(rawCurrent || current), ...patch };
+  if (patch.nutritionSchema >= 2 && current.nutritionReview) next.legacyNutrition = current.legacyNutrition;
   if (patch.grams != null && current.foodId) {
     const food = findFood(current.foodId);
     if (food && hasFoodMix(food) && Array.isArray(current.composition) && current.composition.length) {
@@ -551,7 +492,7 @@ export async function updateEntry(id, patch) {
     }
   }
   await db.put(db.STORES.diet, next);
-  state.dietEntries = state.dietEntries.map((e) => (e.id === id ? next : e));
+  state.dietEntries = state.dietEntries.map((e) => (e.id === id ? normalizeDietEntry(next) : e));
   await refreshDietDaily();
   recompute();
   emit();
@@ -577,7 +518,7 @@ export async function restoreEntry(entry) {
   const restored = { ...entry };
   await db.put(db.STORES.diet, restored);
   if (restored.date === state.day && !state.dietEntries.some((e) => e.id === restored.id)) {
-    state.dietEntries = [...state.dietEntries, restored];
+    state.dietEntries = [...state.dietEntries, normalizeDietEntry(restored)];
   }
   await refreshDietDaily();
   recompute();
@@ -611,7 +552,7 @@ export async function copyDay(fromDate, meals = null) {
     const { id: _oldId, ...rest } = row;
     const entry = { ...rest, date: state.day, time: new Date().toISOString() };
     const newId = await db.put(db.STORES.diet, entry);
-    state.dietEntries.push({ ...entry, id: newId });
+    state.dietEntries.push(normalizeDietEntry({ ...entry, id: newId }));
   }
   await refreshDietDaily();
   recompute();
@@ -620,7 +561,7 @@ export async function copyDay(fromDate, meals = null) {
 }
 
 async function refreshDietDaily() {
-  rebuildDietDaily(await db.getAll(db.STORES.diet));
+  rebuildDietDaily(cleanEntries(await db.getAll(db.STORES.diet)));
 }
 
 // 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
@@ -636,6 +577,8 @@ async function rememberPortion(food, grams, choice = {}) {
 }
 
 export async function addCustomFood(food) {
+  const checked = validateFood(food);
+  if (!checked.valid) throw new RangeError(checked.errors.join('；'));
   const row = { ...food, id: food.id || `custom_${Date.now().toString(36)}`, custom: true };
   await db.put(db.STORES.customFoods, row);
   state.customFoods = [row, ...state.customFoods.filter((f) => f.id !== row.id)];
@@ -655,17 +598,8 @@ export async function mergeHealthDays(days, meta = {}) {
   if (!days?.length && !isCompleteSnapshot) return 0;
   const importedAt = new Date();
   const today = todayKey(importedAt);
-  const incomingDays = (days || []).map((day) => {
-    const hasEnergy = Number(day.activeEnergy) > 0 || Number(day.restingEnergy) > 0;
-    if (!hasEnergy || day.date !== today) return day;
-    const observed = new Date(day.energyObservedAt || '');
-    // 只有日期而没有钟点的 JSON/CSV 会被解析成 00:00。对“今天累计值”来说，
-    // 导入时刻比午夜更接近真实覆盖终点；有明确钟点的快捷指令则原样保留。
-    const looksLikeDateOnly = !Number.isNaN(observed.getTime()) && dayFraction(observed) < 1 / 1440;
-    return (!day.energyObservedAt || looksLikeDateOnly)
-      ? { ...day, energyObservedAt: importedAt.toISOString() }
-      : day;
-  });
+  const incomingDays = days || [];
+
   const existing = await db.getAll(db.STORES.health);
   const importId = `health-${Date.now().toString(36)}`;
   if (isCompleteSnapshot) {
@@ -696,27 +630,52 @@ export function countMisscaledDays() {
 }
 
 /** 一键把受影响日子的能量数值乘回正确量级 */
-export async function repairHealthEnergy() {
-  const fixed = repairMisscaledEnergy(state.healthDays);
+export async function repairHealthEnergy(preview = previewEnergyRepairs()) {
+  const current = await db.getAll(db.STORES.health);
+  const fixed = repairMisscaledEnergy(current);
+  const actual = fixed.map(row => ({ date: row.date, fields: Object.entries(row._energyRepair.original).map(([key,before]) => ({ key,before,after:row[key] })) }));
+  if (JSON.stringify(preview) !== JSON.stringify(actual)) throw new Error('记录已更新，请重新核对修复预览');
+  if (fixed.some(d => implausibleFields(d).some(k => d._energyRepair.original[k] !== d[k]))) throw new Error('修复后数值未通过校验');
   if (!fixed.length) return 0;
   await db.bulkPut(db.STORES.health, fixed, { merge: true });
-  setHealthDays(await db.getAll(db.STORES.health));
+  const stored = await db.getAll(db.STORES.health);
+  if (fixed.some(d => Object.keys(d._energyRepair.original).some(k => stored.find(r => r.date === d.date)?.[k] !== d[k]))) throw new Error('修复结果校验失败，请保留备份并重试');
+  setHealthDays(stored);
   recompute();
   emit();
   return fixed.length;
 }
 
-/** 哪几天存进来的数值在生理上不可能（多半是导入时日期范围选错，把多天累加成一天） */
+export function previewEnergyRepairs() {
+  return repairMisscaledEnergy(state.healthDays).map(row => ({ date: row.date,
+    fields: Object.entries(row._energyRepair.original).map(([key, before]) => ({ key, before, after: row[key] })) }));
+}
+export async function undoEnergyRepairs() {
+  const current = await db.getAll(db.STORES.health);
+  const rows = current.filter(d => d._energyRepair).map(d => {
+    const row = { ...d };
+    for (const [key, original] of Object.entries(d._energyRepair.original)) {
+      const repaired = d._energyRepair.repaired?.[key] ?? original * 1000;
+      if (original === repaired) continue;
+      if (d[key] !== repaired) throw new Error('修复后的能量记录已有新改动，请先核对再撤销');
+      row[key] = original;
+    }
+    delete row._energyRepair; return row;
+  });
+  if (!rows.length) return 0;
+  await db.bulkPut(db.STORES.health, rows);
+  const stored = await db.getAll(db.STORES.health);
+  if (rows.some(row => Object.keys(current.find(d => d.date === row.date)._energyRepair.original).some(k => stored.find(d => d.date === row.date)?.[k] !== row[k]))) throw new Error('撤销结果校验失败，请重新核对记录');
+  setHealthDays(stored); recompute(); emit(); return rows.length;
+}
+
+/** 列出超过产品检查上限的字段，保留原值供核对。 */
 export function listImplausibleDays() {
   return findImplausibleDays(state.healthDays)
     .map((d) => ({ date: d.date, fields: implausibleFields(d) }));
 }
 
-/**
- * 抹掉这些天不可能的数值，其余字段保留。
- * 这里必须整条覆写而不是 merge —— merge 会把旧记录里的字段原样带回来，
- * 想删掉的那几个反而删不掉。
- */
+/** 标记可疑字段暂不参与建议，保留原始数据。 */
 export async function clearImplausibleHealth() {
   const fixed = clearImplausibleValues(state.healthDays);
   if (!fixed.length) return 0;

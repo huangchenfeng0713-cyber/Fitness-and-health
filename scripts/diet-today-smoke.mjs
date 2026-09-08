@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 const pw = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const engine = process.env.BROWSER || 'chromium';
 const base = process.argv[2] || 'http://127.0.0.1:8137';
-const browser = await pw[engine].launch();
+const browser = await pw[engine].launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
 const page = await context.newPage();
 const errors = [];
@@ -21,7 +21,7 @@ const tab = async key => {
 try {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.tab');
-  await page.evaluate(() => document.querySelector('.onboard .text-btn, .onboard button:last-child')?.click());
+  await page.evaluate(async () => { const s=await import('/js/lib/store.js'); await s.saveProfile({sex:'male',birthday:'1996-01-01',weightKg:72,heightCm:175,goal:'maintain',activity:'light',onboarded:true,demoMode:false}); });
   await page.waitForFunction(() => !document.querySelector('.account-data-lock'));
   await tab('diet');
   const results = () => page.locator('.search-card > .slot').first().textContent();
@@ -188,10 +188,7 @@ try {
   await page.waitForTimeout(300);
   await page.locator('.topbar-settings-btn').click();
   await page.locator('.settings-row').filter({ hasText: '计算与显示' }).click();
-  check('设置只读显示固定三餐参照，没有个人模式切换或样本不足提示',
-    await page.locator('.settings-drawer .setting-choice').textContent().then(text =>
-      text.includes('参照膳食') && text.includes('30%') && !/参照平常|有效记录|暂时/.test(text))
-    && await page.locator('.settings-drawer .setting-choice select').count() === 0);
+  check('设置移除重复的固定三餐选项', await page.locator('.settings-drawer .setting-choice').count() === 0 && await page.locator('.settings-drawer').textContent().then(t=>t.includes('近期至少 3 个有效完整日')));
   if (process.env.ARTIFACT_DIR) await page.locator('.settings-drawer').screenshot({ path: `${process.env.ARTIFACT_DIR}/fixed-rhythm-${engine}.png` });
   check('无浏览器脚本异常', errors.length === 0);
   console.log(`${checks}/${checks} passed`);

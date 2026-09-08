@@ -1,3 +1,4 @@
+import { completeRow, oldCalEvidence } from './fixtures/review-samples.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -13,7 +14,12 @@ test('粘贴健康 JSON 自动兼容智能引号和 Markdown 代码框', () => {
     + '“sleepMinutes”:352,“restingHR”:70}';
   const { days } = parseHealthJsonText(smartQuotes);
   assert.equal(days.length, 1);
-  assert.deepEqual(days[0], {
+  const { _fieldProvenance, ...values } = days[0];
+  for (const key of ['activeEnergy', 'restingEnergy']) {
+    assert.equal(_fieldProvenance[key].observedAt, '2026-08-24T04:18:58.000Z');
+    assert.equal(_fieldProvenance[key].coverage.status, 'unknown');
+  }
+  assert.deepEqual(values, {
     date: '2026-08-24', source: 'apple', steps: 1594, activeEnergy: 103.21,
     restingEnergy: 791.67, exerciseMinutes: 3, standMinutes: 36,
     distanceKm: 1.11, sleepMinutes: 352, restingHR: 70,
@@ -54,7 +60,7 @@ test('单位换算覆盖 HealthKit 其它常见单位', () => {
 });
 
 test('体脂率：HealthKit 存的是 0~1 的比例，第三方常存百分数', () => {
-  assert.ok(Math.abs(normalizeValue('percent', 0.181, '%') - 18.1) < 1e-9);
+  assert.ok(Math.abs(normalizeValue('percent', 0.181, '%', { percentFormat: 'ratio' }) - 18.1) < 1e-9);
   assert.equal(normalizeValue('percent', 18.1, '%'), 18.1, '已是百分数就不再乘 100');
 });
 
@@ -139,7 +145,7 @@ test('XML 精确重复去重，多设备累计量不再静默相加', () => {
   assert.equal(result.quality.multiSourceDays, 1);
 });
 
-test('多来源累计量按 5 分钟区间保留互补时段，只在重叠桶按优先级选源', () => {
+test('多来源按实际区间保留互补时段并处理重叠', () => {
   const row = (source, value, start, end) => `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${source}" unit="count" startDate="${start}" endDate="${end}" value="${value}"/>`;
   const agg = createAggregator();
   feedXmlChunk([
@@ -151,7 +157,7 @@ test('多来源累计量按 5 分钟区间保留互补时段，只在重叠桶�
   assert.equal(result.days[0].steps, 1600, '重叠段取 Watch，iPhone 的互补时段仍应保留');
   assert.equal(result.quality.overlapBuckets, 1);
   assert.equal(result.quality.droppedOverlapByMetric.steps, 800);
-  assert.equal(result.quality.resolutionMinutes, 5);
+  assert.equal(result.quality.resolution, 'interval-boundaries');
   assert.equal(result.quality.sourceCoverage.length, 2);
 });
 
@@ -489,7 +495,7 @@ test('基线：体重趋势用最小二乘拟合，抗单日波动', () => {
   }
   const b = computeBaseline(health, [], '2026-08-20');
   assert.ok(Math.abs(b.weightTrend - -0.35) < 0.12, `趋势 ${b.weightTrend} 应接近 -0.35 kg/周`);
-  assert.ok(b.activeEnergy > 400 && b.activeEnergy < 450);
+  assert.equal(b.activeEnergy, null, '未确认完整日的活动记录不能构成能量基线');
 });
 
 test('基线：没有历史饮食记录时返回 null 而不是 0', () => {
@@ -564,7 +570,7 @@ test('CSV 表头也走同一套归一化', () => {
   assert.deepEqual(ignoredKeys, ['心情']);
 });
 
-test('识别被单位缺陷缩小一千倍的日子', async () => {
+test('低值本身不能证明千倍单位错误', async () => {
   const { findMisscaledEnergyDays } = await import('../js/core/health.js');
   const days = [
     { date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 },  // 受影响
@@ -573,13 +579,13 @@ test('识别被单位缺陷缩小一千倍的日子', async () => {
     { date: '2026-08-04', steps: 300, activeEnergy: 12 },                          // 步数太少，不下结论
     { date: '2026-08-05', steps: 6000, activeEnergy: 8 },                          // 受影响
   ];
-  assert.deepEqual(findMisscaledEnergyDays(days).map((d) => d.date), ['2026-08-01', '2026-08-05']);
+  assert.deepEqual(findMisscaledEnergyDays(days).map((d) => d.date), []);
 });
 
 test('修正只动能量字段，其余原样保留', async () => {
   const { repairMisscaledEnergy } = await import('../js/core/health.js');
   const fixed = repairMisscaledEnergy([
-    { date: '2026-08-01', steps: 8000, weightKg: 71.2, sleepMinutes: 430, activeEnergy: 0.55, restingEnergy: 1.48, hkKcal: 1.9 },
+    oldCalEvidence({ date: '2026-08-01', steps: 8000, weightKg: 71.2, sleepMinutes: 430, activeEnergy: 0.55, restingEnergy: 1.48, hkKcal: 1.9 }),
   ]);
   assert.equal(fixed.length, 1);
   assert.equal(fixed[0].activeEnergy, 550);
@@ -593,7 +599,7 @@ test('修正只动能量字段，其余原样保留', async () => {
 test('历史能量修复逐字段处理，且不会碰当天未同步完的静息能量', async () => {
   const { repairMisscaledEnergy } = await import('../js/core/health.js');
   const fixed = repairMisscaledEnergy([
-    { date: '2026-08-01', steps: 8000, restingEnergy: 1.48, activeEnergy: 550, hkKcal: 1900 },
+    oldCalEvidence({ date: '2026-08-01', steps: 8000, restingEnergy: 1.48, activeEnergy: 550, hkKcal: 1900 }, ['restingEnergy']),
     { date: '2026-08-20', steps: 100, restingEnergy: 40, activeEnergy: 5 },
   ], '2026-08-20');
   assert.equal(fixed.length, 1);
@@ -618,7 +624,7 @@ test('基线先排序并截断当前日，不能偷看未来体重', () => {
 
 test('修正是幂等的：再跑一次不会把正确数据放大一千倍', async () => {
   const { repairMisscaledEnergy, findMisscaledEnergyDays } = await import('../js/core/health.js');
-  const once = repairMisscaledEnergy([{ date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 }]);
+  const once = repairMisscaledEnergy([oldCalEvidence({ date: '2026-08-01', steps: 8000, activeEnergy: 0.55, restingEnergy: 1.48 })]);
   assert.equal(findMisscaledEnergyDays(once).length, 0, '修好后不该再被判定为需要修复');
   assert.equal(repairMisscaledEnergy(once).length, 0);
 });
@@ -707,24 +713,20 @@ test('大运动量不会被当成异常', () => {
   assert.deepEqual(implausibleFields({ date: '2026-08-01', activeEnergy: 6500, steps: 40000, restingEnergy: 2100 }), []);
 });
 
-test('清掉异常值时只删该删的那几项', () => {
+test('排除可疑字段时保留原值和其他字段', () => {
   const days = [{ date: '2026-08-23', restingEnergy: 23520, activeEnergy: 2010, weightKg: 59, steps: 0 }];
   const [fixed] = clearImplausibleValues(days);
-  assert.equal(fixed.restingEnergy, undefined, '不可能的静息能量被抹掉');
+  assert.equal(fixed.restingEnergy, 23520, '保留原值');
+  assert.ok(fixed._excludedFields.includes('restingEnergy'));
   assert.equal(fixed.activeEnergy, 2010, '2010 没超过上限，不该被牵连');
   assert.equal(fixed.weightKg, 59, '体重原样保留');
   assert.equal(fixed.date, '2026-08-23');
 });
 
-test('基线平均值把不可能的数挡在外面', () => {
-  // 否则一天坏数据会顺着基线污染之后 14 天的热量预算
-  const days = [
-    { date: '2026-08-20', restingEnergy: 1600, activeEnergy: 300 },
-    { date: '2026-08-21', restingEnergy: 1600, activeEnergy: 300 },
-    { date: '2026-08-22', restingEnergy: 23520, activeEnergy: 300 },
-  ];
+test('基线排除超过产品检查上限的记录', () => {
+  const days = ['19','20','21','22'].map(d => completeRow({ date: '2026-08-'+d, restingEnergy: d === '22' ? 23520 : 1600, activeEnergy: 300 }));
   const b = computeBaseline(days, [], '2026-08-23');
-  assert.equal(Math.round(b.restingEnergy), 1600, '异常那天不参与平均');
+  assert.equal(b.energyPairedDays,3); assert.equal(b.restingEnergy,1600);
 });
 
 

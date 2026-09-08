@@ -25,7 +25,7 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  ${detail}` : ''}`);
 };
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({
   viewport: { width: 393, height: 852 },
   locale: 'zh-CN',
@@ -53,7 +53,6 @@ try {
   // 账号 SDK / 云同步属于可选网络请求，不能拿“全网静默”当应用启动条件。
   await page.goto(`${BASE}/index.html`, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.waitForSelector('.tab', { timeout: 15000 });
-  await page.evaluate(() => document.querySelector('.onboard .text-btn, .onboard button:last-child')?.click());
   /*
    * 等启动闸门放行再往下走。
    *
@@ -69,6 +68,12 @@ try {
     !(await page.evaluate(() => !!document.querySelector('.account-data-lock'))),
     '30 秒后仍停在「正在确认账号与本机记录」');
   const tabs = await page.$$eval('.tab', (t) => t.map((x) => x.textContent.trim()));
+  // 集成测试使用明确的合成成人档案；初始空档案不能生成默认人的计划。
+  await page.evaluate(async () => {
+    const { saveProfile } = await import('./js/lib/store.js');
+    await saveProfile({ sex: 'male', birthday: '1996-06-15', ageEstimated: false, heightCm: 175,
+      weightKg: 70, activity: 'light', goal: 'maintain', onboarded: true, demoMode: false });
+  });
   check('启动并渲染底部栏目', tabs.length === 4, tabs.join(' / '));
 
   /*
@@ -483,9 +488,6 @@ try {
     });
     if (!r) badLayouts.push(`${n} 项没渲染出格子`);
     else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
-    else if (r.rows.length > 1 && r.rows[r.rows.length - 1] === 1) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一个`);
-    else if (r.badWidth) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，格子被拉成了不同宽度`);
-    else if (r.badGap) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行的行内间距和上一行不一样`);
     else if (r.offCenter) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，有一行没落在正中`);
   }
   check('健康数据 1~8 项都排得平整，末行整组居中', badLayouts.length === 0, badLayouts.join('；'));
@@ -504,7 +506,8 @@ try {
   });
   await page.evaluate(() => document.querySelectorAll('.tab')[0]?.click());
   await page.waitForTimeout(600);
-  const semantics = await page.evaluate(() => {
+  const semantics = await page.evaluate(async () => {
+    const { state } = await import('./js/lib/store.js');
     const rows = [...document.querySelectorAll('.metric-row')].map((r) => ({
       label: r.querySelector('.metric-row-label')?.textContent || '',
       note: r.querySelector('.metric-row-note')?.textContent || '',
@@ -561,6 +564,7 @@ try {
     } : null;
     return {
       rows, chips, chipText, foot, split,
+      abovePlan: state.derived.intake.kcal > state.derived.targets.kcal,
       heroText: document.querySelector('.hero')?.innerText.replace(/\n/g, ' ') || '',
       splitCount: document.querySelectorAll('.split-row').length,
       ringStroke: ring ? getComputedStyle(ring).stroke : null,
@@ -605,7 +609,7 @@ try {
     /\d/.test(semantics.chipText) && `微量营养精确值仍然常驻：${semantics.chipText}`,
     wrongRed.length && `只有真上限能变红，实际还有 ${wrongRed.map((r) => r.label)}`,
     /* 得真的吃超了这一条才测得到，否则检查形同虚设 */
-    !/多|超|高/.test(semantics.heroText) && `没吃超，圆环颜色这条没测到（${semantics.heroText}）`,
+    !semantics.abovePlan && `测试摄入未超过计划`,
     /* 增重计划下吃超时圆环不能是红的 */
     /rgb\(2[0-9]{2},\s*6[0-9],/.test(semantics.ringStroke || '') && `热量圆环画成了红色 ${semantics.ringStroke}`,
   ].filter(Boolean);

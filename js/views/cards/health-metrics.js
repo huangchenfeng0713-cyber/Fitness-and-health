@@ -146,12 +146,12 @@ export function healthMetricsCard() {
               cell.value != null && cell.unit
                 ? h('span.metric-unit', { class: unitGap(cell.unit) ? 'gap' : '' }, cell.unit)
                 : null),
-            h('div.metric-label', null, cell.label)))))
+            h('div.metric-label', null, cell.label, cell.recent ? h('span.metric-date', null, '最近 · ' + cell.observedDate) : null)))))
       // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
       : h('p.empty-hint', null,
         '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'),
     needsImport && dataCenterBtn(),
     needsImport && info.hasAny && h('p.form-hint', { style: { marginTop: '6px' } },
-      '缺「活动能量」，热量预算暂时按公式估算。导入后会按 Apple 设备记录重新估算。'),
+      '缺活动能量，本日记录收支待补齐。每日计划来源见计算说明。'),
   );
 }

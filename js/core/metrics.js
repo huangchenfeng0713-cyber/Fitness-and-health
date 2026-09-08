@@ -13,7 +13,7 @@ import { ATWATER } from './nutrition.js';
 
 /** 指标性质 */
 export const KIND = {
-  /** 下限：够了就行，再多没有额外好处（蛋白、纤维） */
+  /** 计划或参考目标（蛋白、纤维）；达到不代表存在统一收益上限 */
   floor: 'floor',
   /** 上限：别超（钠、游离糖） */
   ceiling: 'ceiling',
@@ -22,7 +22,7 @@ export const KIND = {
   /**
    * 余数：由其它项算出来的结果，本来就不是目标。
    * 碳水曾经归在这里，措辞是「按剩余热量分配，不必吃满」—— 说的是对的，
-   * 但那是开发者视角的解释，用户看不懂。现在碳水改用 AMDR 区间（45~65% 供能），
+   * 但那是开发者视角的解释，用户看不懂。现在碳水采用每日计划联立求解的区间，
    * 有出处、能对照。这一档留着，别的指标要是也变成纯余数还用得上。
    */
   remainder: 'remainder',
@@ -80,14 +80,15 @@ export function metricState({
   kind, eaten = 0, target = 0, lo = null, hi = null, unit = 'g', decimals = 0, roundUp = false,
   attention = target,
   // 区间是谁定的：热量那条是「你的计划」（目标 ±10%），
-  // 脂肪碳水那两条是「文献建议」（IOM AMDR）。措辞不能混。
-  rangeWord = '建议',
+  // 脂肪是成人 AMDR 参考，碳水是计划范围。
+  rangeWord = '计划', complete = true,
 }) {
   /*
    * 先把进来的数收干净再用。目标一旦是 NaN 或负数，措辞里就会直接印出
    * 「还差 NaNg」「上限 -100g」—— 用户看到的是乱码，而不是「这项没数据」。
    * dailyTargets 自己不会产出这种值，但恢复备份和云端同步能把它写进来。
    */
+  if (!complete || target == null) return { level: LEVEL.plain, note: '已知部分合计 · 数据未齐', fillPct: 0, markerPct: null };
   const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
   eaten = num(eaten);
   target = num(target);
@@ -234,6 +235,10 @@ export function macroSplit(targets = {}, gaps = {}) {
   const kcal = Math.round(carbKcal + fatKcal);
 
   const band = referenceBand(targets);
+  if (gaps.carb?.complete === false || gaps.fat?.complete === false) return {
+    carbG, fatG, kcal: null, carbPct: null, fatPct: null, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null,
+    structure: 'none', label: '碳水或脂肪数据未齐', level: LEVEL.plain, note: '仅有已知部分合计',
+  };
   const note = band ? `碳水参考 ${band.lo}–${band.hi}%` : '';
   const base = {
     carbG, fatG, kcal, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null, note,
@@ -268,7 +273,7 @@ export function macroSplit(targets = {}, gaps = {}) {
     carbPct,
     fatPct,
     structure,
-    label: structure === 'balanced' ? '结构适中' : structure === 'carb' ? '偏碳水' : '偏脂肪',
+    label: structure === 'balanced' ? '接近计划比例' : structure === 'carb' ? '偏碳水' : '偏脂肪',
     /*
      * 只有绿和灰，没有橙和红。三大营养素怎么分本来就有很宽的合理区间，
      * 把「今天多吃了米饭」画成警告色，是把偏好问题说成健康问题。
@@ -327,7 +332,7 @@ export function dailyMetrics(targets, gaps, water = null) {
     {
       key: 'fat', label: '脂肪', unit: 'g', kind: KIND.range,
       eaten: gaps.fat.eaten, target: targets.fat,
-      lo: targets.fatLower ?? targets.fat, hi: targets.fatUpper ?? targets.fat,
+      lo: targets.fatLower ?? targets.fat, hi: targets.fatUpper ?? targets.fat, rangeWord: '成人参考',
     },
     {
       key: 'carb', label: '碳水', unit: 'g', kind: KIND.range,
@@ -342,19 +347,13 @@ export function dailyMetrics(targets, gaps, water = null) {
     {
       key: 'sodium', label: '钠', unit: 'mg', kind: KIND.ceiling,
       eaten: gaps.sodium.eaten, target: targets.sodium,
-      attention: targets.sodiumAttention ?? 1500,
+      attention: targets.sodium,
     },
     {
-      /*
-       * 游离糖跟纤维、钠、饮水并排在主卡的四个方框里，那一排必须是同一种精度。
-       * 原先只有它带一位小数，四个格子里三个写 `0` 一个写 `0.0`。
-       *
-       * 取整用**向上**，不用四舍五入：这是个上限，18.4g 报成 18g 是把
-       * 已经吃进去的糖说少了。宁可显示得比实际严一点，也不该反过来。
-       */
+      // 游离糖展示保留一位小数；分类比较原值，5% 参考不作为疾病危险线。
       key: 'sugar', label: '游离糖', unit: 'g', kind: KIND.ceiling,
-      eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 0, roundUp: true,
-      attention: targets.sugarAttention ?? Math.min(25, targets.sugar / 2),
+      eaten: gaps.sugar.eaten, target: targets.sugar, decimals: 1,
+      attention: targets.sugar,
     },
     {
       /*
@@ -367,7 +366,8 @@ export function dailyMetrics(targets, gaps, water = null) {
     },
   ].map((m) => ({
     ...m,
-    state: metricState(m),
+    complete: gaps[m.key]?.complete !== false,
+    state: metricState({ ...m, complete: gaps[m.key]?.complete !== false }),
     /*
      * 显示值由这里给，视图别再各自 round 一遍。
      * 上限类（游离糖）向上取整 —— 把已经吃进去的量说少了比说多了糟糕；
@@ -381,6 +381,7 @@ export function dailyMetrics(targets, gaps, water = null) {
 
 /** 三个短刻度只映射读数，不缩放真实数据。最高建议量在 78% 处。 */
 export function nutrientScale(m) {
+  if (m.complete === false) return { markerPct: 0, zoneStart: null, zoneEnd: null, limitPct: null, level: LEVEL.plain };
   const value = Math.max(0, Number(m.eaten) || 0);
   const fiber = m.key === 'fiber';
   const axisMax = fiber ? 50 : m.target / 0.78;

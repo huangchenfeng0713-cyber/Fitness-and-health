@@ -45,7 +45,7 @@ const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
   const { state: st } = m;
-  const note = !state.derived.isToday && m.kind === KIND.floor && m.eaten < m.target
+  const note = m.complete !== false && !state.derived.isToday && m.kind === KIND.floor && m.eaten < m.target
     ? `低于目标 ${num(m.target - m.eaten)}${m.unit}` : st.note;
   const value = m.display ?? (m.decimals ? num(m.eaten, m.decimals) : num(m.eaten));
   return h('div', { class: `metric-row ${st.level}` },
@@ -85,11 +85,11 @@ function splitRow(split) {
 
 function metricChip(m) {
   const scale = nutrientScale(m);
-  const value = m.display ?? num(m.eaten);
+  const value = m.display ?? num(m.eaten, m.decimals || 0);
   return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
     pointValueTrack({
-      key: `${state.day}:${m.key}`, label: m.label, value: `${value} ${m.unit.trim()}`,
+      key: `${state.day}:${m.key}`, label: m.label, value: `${value} ${m.unit.trim()}${m.complete === false ? ' · 已知部分，数据未齐' : ''}`,
       track: h('div.nutrient-scale', null,
         scale.zoneStart == null ? null : h('span.nutrient-zone', {
           style: { left: scale.zoneStart + '%', width: (scale.zoneEnd - scale.zoneStart) + '%' },
@@ -109,7 +109,7 @@ function heroCard(advice, targets, derived) {
    * 整圈 = 今天计划吃多少（摄入目标精确值），12 点就是吃满计划。
    * 尺子当天锁死，只有计划本身变了才从那一天起换。
    *
-   * 「当前消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
+   * 「设备记录消耗」用设备到此刻的静息 + 活动（liveEnergy.burnedNow），
    * 不用 liveEnergy.tdee —— 后者是按已过时长外推出来的全天值，
    * 早上八点就报出一千七，环上那条弧看着像「今天已经烧掉八成」。
    */
@@ -148,6 +148,7 @@ function heroCard(advice, targets, derived) {
       metricRow(by.protein),
       splitRow(macroSplit(targets, gaps))),
     h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
+    derived.energyData?.observedAt ? h('p.form-hint', null, '截至 ' + new Date(derived.energyData.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })) : null,
     energyFreshness(derived),
   );
 }
@@ -155,7 +156,7 @@ function heroCard(advice, targets, derived) {
 /*
  * 圈心三行，**中间那行（数字）落在环的正中**：
  *
- *     当前收支        ← --fs-body 中灰
+ *     记录收支        ← --fs-body 中灰
  *       684          ← --fs-display 半粗，它的中心 = 环的中心
  *       kcal         ← --fs-footnote 更轻
  *
@@ -205,18 +206,12 @@ function heroInfo(derived, targets) {
   const meta = derived.energyData;
   const basis = [
     ['基础代谢', `${num(targets.bmr)} kcal，仅作为能量计算基础，不是需要“吃满”的目标`],
-    ['热量', targets.tdeeSource !== 'apple'
-      ? '按活动系数估算'
-      : targets.activeSource === 'formula-fallback'
-        ? '静息采用设备记录，缺失活动按活动系数补足'
-        : targets.activeSource === 'device-baseline'
-          ? '活动采用近期设备记录基线估算'
-          : '按今日 Apple 能量记录动态估算'],
+    ['每日计划', targets.tdeeSource === 'apple' ? '采用近期完整日设备基线' : '采用身体资料与活动系数估算'],
     ['蛋白质', targets.proteinBasis],
     ['脂肪', `参考上限 ${num(targets.fatUpper || targets.fat)}g，约占总热量 35%`],
     ['膳食纤维', '中国成人参考 25–30g'],
-    ['钠上限', `${num(targets.sodium)}mg；按中国 DRIs 年龄分组。橙色从适宜摄入量起标记，并非危险线`],
-    ['游离糖上限', '保留食物库游离糖口径；低于供能 10% 且不超过 50g，5% 或 25g 起提醒留意'],
+    ['钠上限', `${num(targets.sodium)}mg；WHO 一般成人参考，非疾病危险线`],
+    ['游离糖上限', '保留食物库游离糖口径；低于供能 10% 且不超过 50g，5% 或 25g 为进一步益处参考，非危险线'],
   ];
   let freshness = null;
   if (meta?.observedAt && derived.dynamic && !meta.stale) {
@@ -231,14 +226,15 @@ function heroInfo(derived, targets) {
     h('p', null, h('strong', null, `${GOALS[targets.goal].label}`),
       targets.rateKgPerWeek === 0
         ? ' · 计划体重维持不变'
-        : ` · 计划体重 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`),
-    // 维持目标时「相当于每天多吃 0 kcal」是句废话，只留后半句
+        : ` · 初始预算对应 ${targets.rateKgPerWeek > 0 ? '+' : ''}${targets.rateKgPerWeek} kg/周`),
+    // 维持目标时「初始预算每天多吃 0 kcal」是句废话，只留后半句
     h('p', null,
       Number(targets.dailyDelta) !== 0
         ? `相当于每天${targets.dailyDelta > 0 ? '多' : '少'}吃 ${num(Math.abs(targets.dailyDelta))} kcal。`
-          + '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'
+          + '7700 kcal/kg 仅作初始预算近似，不能预测实际体重、肌肉或脂肪变化。'
         : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
+    h('p', null, (targets.context || '按当前设置对照') + ' · ' + targets.referenceDate),
     h('p', null, derived.isToday
       ? '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'
       : '根据所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
@@ -250,21 +246,9 @@ function heroInfo(derived, targets) {
 }
 
 function energyFreshness(derived) {
+  if (derived.demoMode) return h('p.data-freshness.warn', null, '演示档案：请确认身体信息后再使用个人计划。');
   const meta = derived.energyData;
-  if (derived.profileError) {
-    return h('p.data-freshness.warn', null,
-      `身体信息暂时算不出目标（${derived.profileError}），下面的数字来自默认档案。`
-      + '请到右上角“设置 → 身体信息”修正后保存。');
-  }
-  if (derived.demoMode) {
-    return h('p.data-freshness.warn', null, '当前使用演示身体数据，热量与营养目标不是你的个性化结果。请到“设置”填写真实信息。');
-  }
-  if (meta?.missingObservationTime) {
-    return h('p.data-freshness.warn', null, '这份能量数据缺少覆盖时间，已停止动态外推并改用公式估算。重新导入即可修复。');
-  }
-  if (meta?.stale && derived.dynamic) {
-    return h('p.data-freshness.warn', null, 'Apple 能量数据已经有一段时间没更新了，热量目标暂时保持不变。重新同步一次即可。');
-  }
+  if (!meta?.valid) return h('p.data-freshness', null, meta?.reason || '能量数据待同步');
   return null;
 }
 
@@ -272,14 +256,12 @@ const INSIGHT_FOCUS = { protein: 'protein', fiber: 'fiber' };
 
 function trendCard(advice) {
   const t = advice.trend;
-  if (!t || t.state === 'historical') return null;
+  if (!t || !t.active || ['historical', 'future', 'unavailable'].includes(t.state)) return null;
   const titles = { under: '全天摄入可能偏少', over: '留意后续餐次搭配', steady: '暂未见明确偏离', uncertain: '记录尚不足，先观察', watch: '先留出餐后观察时间', late: '今晚不必追齐数字', settled: '今天不必追齐计划差额', covered: '当前不必额外加餐' };
   return h('section.card.intake-trend', { 'data-state': t.state },
     h('div.card-head', null, h('h3', null, '今日摄入趋势'),
       persistentInfoTip('intake-trend-method', '查看摄入预测依据',
-        h('div', null, h('p', null, t.basis + '，映射到今日摄入目标。'),
-          h('p', null, '这是后续主餐按固定三餐份额安排的条件估计，不是确定结果或统计置信区间。餐次未记全、刚记完餐时先观察；范围整体明显偏离且仍可调整时才提醒。'),
-          h('p', null, '加餐照常计入已摄入，不固定生成夜宵阶段。提醒只在此处展示，不弹窗催促。')))),
+        h('div', null, h('p', null, '餐次有记录不代表吃完。未确认全天记录完整时，不外推确定的摄入不足；晚间仍可照常吃尚未吃的正餐。')))),
     h('p.trend-title', null, titles[t.state] || titles.uncertain),
     t.range && !t.dayComplete ? h('div.trend-range', null, h('span', null, '按后续主餐估计'), h('strong', null, t.range.low + '–' + t.range.high + ' kcal')) : null,
     h('p.trend-basis', null, t.reason),
@@ -335,7 +317,9 @@ export function renderDashboard(root) {
   if (!d) return;
   const { advice, targets } = d;
   mount(root,
-    heroCard(advice, targets, d),
+    targets.status === 'unavailable' ? h('section.card', null, h('h2', null, '暂不能生成个人计划'),
+      h('p', null, targets.reason), h('p', null, '已知记录摄入 ' + num(d.intake.kcal) + ' kcal'),
+      h('a.secondary-btn', { href: '#settings' }, '完善身体信息')) : heroCard(advice, targets, d),
     trendCard(advice),
     insightsCard(advice, rerender));
 }

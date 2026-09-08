@@ -22,21 +22,21 @@ test('历史回顾不受查看时间影响，也不生成后续进食动作', ()
   const morning = advise(intake, { ...options, now: at('07:00') });
   const evening = advise(intake, { ...options, now: at('22:00') });
   assert.deepEqual(morning.insights, evening.insights);
-  assert.ok(morning.insights.length >= 5);
+  assert.deepEqual(morning.recommend, []);
   assert.ok(morning.insights.every(i => !i.action && !['protein', 'fiber'].includes(i.type)));
   assert.doesNotMatch(JSON.stringify(morning.insights), /下一餐|晚餐建议|后续|接下来|今晚|明天|还差|剩下/);
-  assert.match(JSON.stringify(morning.insights), /当天记录摄入 2200/);
+  assert.match(morning.status.detail, /2200/);
   assert.equal(morning.trend.state, 'historical');
-  assert.equal(morning.correction.active, false);
+  assert.equal(morning.correction, null);
   const current = advise(intake, { ...options, isToday: true, now: at('18:00') });
   assert.ok(current.insights.some(i => i.action));
 });
 
 test('历史空记录只说明无法判断，不能把空白当摄入不足', () => {
   const a = advise({}, { isToday: false, now: at('23:00') });
-  assert.equal(a.insights.length, 1);
-  assert.equal(a.insights[0].title, '当天没有饮食记录');
-  assert.equal(a.insights[0].action, '');
+  assert.deepEqual(a.recommend, []);
+  assert.equal(a.budget, null);
+  assert.doesNotMatch(JSON.stringify(a), /不足|立即补|今晚/);
 });
 
 test('餐次按时间划分', () => {
@@ -157,9 +157,8 @@ test('半天没有饮食记录时不评价“吃得慢”，也不把重分配�
   const a = advise({}, { now: at('13:30') });
   const normalLunch = Math.round(targets.kcal * 0.35);
   assert.equal(a.status.level, 'good');
-  assert.match(a.status.detail, /午餐/);
-  assert.match(a.status.detail, new RegExp(`约 ${normalLunch} kcal`));
-  assert.match(a.status.detail, /不必在这一餐补完当天缺口/);
+  assert.equal(a.trend.active, false);
+  assert.equal(a.trend.dayComplete, false);
   assert.ok(a.budget.kcal > normalLunch, '这个用例必须覆盖剩余预算被重分配的情况');
   assert.doesNotMatch(a.status.detail, new RegExp(`约 ${a.budget.kcal} kcal`),
     '空腹午餐不应直接展示重新分配后的大额预算');
@@ -182,9 +181,9 @@ test('半天没有饮食记录时不评价“吃得慢”，也不把重分配�
 
 test('深夜仍无记录时不鼓励一次补完全天缺口', () => {
   const a = advise({}, { now: at('22:30') });
-  assert.equal(a.status.level, 'warn');
-  assert.match(a.status.detail, /不建议.*一次补完/);
-  assert.ok(a.insights.some((i) => /尚无饮食记录/.test(i.title)));
+  assert.equal(a.trend.dayComplete, false);
+  assert.match(a.trend.reason, /正餐.*照常/);
+  assert.doesNotMatch(a.status.detail, /全部补齐|明天再吃/);
 });
 
 /*
@@ -194,7 +193,7 @@ test('深夜仍无记录时不鼓励一次补完全天缺口', () => {
  */
 test('今日提示按优先级排：数据问题在前，结构和习惯在后', () => {
   const a = buildAdvice({
-    targets: { ...targets, activeCapped: true, activeReported: 2010, ageEstimated: true },
+    targets, observation: { valid: false, reason: '活动能量数值不可信', fields: { activeEnergy: { status: 'suspect' } } },
     profile,
     intake: { ...zero, kcal: 1800, protein: 40, fat: 95, carb: 120, sodium: 3400, sugar: 90 },
     entries: [{ foodId: 'x' }],
@@ -250,17 +249,11 @@ test('蛋白缺口大时优先推荐高蛋白密度食物', () => {
   assert.ok(a.insights.some((i) => /蛋白还差/.test(i.title)), '蛋白缺口大时要有一条提示');
 });
 
-test('热量明显高于计划只做橙色提醒，不把计划误说成危险上限', () => {
+test('超计划仍保留正常餐次而不触发危险状态', () => {
   const a = advise({ kcal: targets.kcal + 400, protein: 140, fat: 70, carb: 200 });
-  assert.equal(a.status.level, 'warn');
-  assert.match(a.status.headline, /不必少吃补回来/);
-  assert.match(a.status.detail, /单日偏差不能说明/);
-  assert.match(a.status.detail, /7 天体重趋势/);
-  assert.match(a.status.detail, /不必跳过下一餐/);
-  assert.doesNotMatch(a.status.detail, /只.*水|无糖茶|蔬菜为主/);
-  for (const r of a.recommend) {
-    assert.ok(r.nutrients.kcal <= 5, `预算吃光后仍推荐了 ${r.food.name}（${r.nutrients.kcal} kcal）`);
-  }
+  assert.notEqual(a.status.level, 'over');
+  assert.match(a.status.detail, /不需要跳餐/);
+  assert.equal(a.trend.dayComplete, false);
 });
 
 /*
@@ -271,39 +264,18 @@ test('热量明显高于计划只做橙色提醒，不把计划误说成危险�
  * 今日热量偏高」这一路，夹在两者中间说同一件事，而「按计划吃」尤其空 ——
  * 一笔都没记的人看到的也是它。
  */
-test('主卡标题给的是下一步，不重复胶囊的判断和圈心的数字', () => {
-  // 记到一半、跟得上节奏
-  assert.equal(advise({ kcal: Math.round(targets.kcal * 0.45), protein: 60, fat: 30, carb: 120 })
-    .status.headline, '先照常安排下一餐');
-  assert.equal(advise({ kcal: targets.kcal + 400 }).status.headline, '不必少吃补回来');
-  assert.equal(advise({ kcal: targets.kcal + 80 }).status.headline, '下一餐回到正常预算');
-  assert.equal(advise({ kcal: targets.kcal - 10 }).status.headline, '今天不用再补热量');
-  assert.equal(advise({ kcal: 300 }, { now: at('15:30') }).status.headline, '先照常安排下一餐');
-  // 一笔都没记：白天先照常吃这一餐，夜里不催人一次补完
-  assert.equal(advise({ kcal: 0, protein: 0, fat: 0, carb: 0 }, { now: at('09:00') }).status.headline,
-    '先照常吃这一餐');
-  assert.equal(advise({ kcal: 0, protein: 0, fat: 0, carb: 0 }, { now: at('22:00') }).status.headline,
-    '今晚不必一次补完');
-  // 判断只由胶囊说，标题里不许再出现「偏高 / 偏少 / 到位」这类复述
-  for (const a of [
-    advise(),
-    advise({ kcal: targets.kcal + 400 }),
-    advise({ kcal: targets.kcal + 80 }),
-    advise({ kcal: targets.kcal - 10 }),
-    advise({ kcal: 300 }, { now: at('15:30') }),
-    advise({ kcal: Math.round(targets.kcal * 0.45), protein: 60, fat: 30, carb: 120 }),
-  ]) {
-    assert.doesNotMatch(a.status.headline, /\d/, `标题还在报数：${a.status.headline}`);
-    // 判断只由胶囊说，标题里不许再复述一遍
-    assert.doesNotMatch(a.status.headline, /偏高|偏少|到位|超标/,
-      `标题又在复述判断：${a.status.headline}`);
+test('累计摄入接近计划不能判定餐次或全天结束', () => {
+  for (const kcal of [0,300,targets.kcal - 10, targets.kcal + 80]) {
+    const a = advise({ kcal });
+    assert.equal(a.trend.dayComplete, false);
+    assert.doesNotMatch(a.status.headline, /已够|不用再吃|明天/);
   }
 });
 
 test('有饮食记录时也不再用“吃得快慢”描述记账进度', () => {
   const a = advise({ kcal: 300, protein: 20, fat: 10, carb: 35 }, { now: at('15:30') });
   const copy = `${a.status.headline} ${a.status.detail}`;
-  assert.match(copy, /记录还不足|照常安排/);
+  assert.match(copy, /正常餐次|照常安排/);
   assert.doesNotMatch(copy, /多吃些/, '只有总热量而无完整餐次证据时不能催补');
   assert.doesNotMatch(copy, /吃得快|吃得慢/);
 });
@@ -384,7 +356,7 @@ test('夜间不会把全天缺口一次补完，只给轻量候选', () => {
 test('训练日会被识别并给出补给建议', () => {
   const a = advise({ kcal: 900, protein: 50 }, { health: { exerciseMinutes: 55, activeEnergy: 700 } });
   assert.equal(a.isTrainingDay, true);
-  assert.ok(a.insights.some((i) => i.title.includes('训练日')));
+  assert.ok(a.insights.some((i) => i.title.includes('活动较多')));
 });
 
 test('蛋白缺口换算成具体食物份量', () => {
@@ -488,13 +460,11 @@ test('多日趋势归数据页的图，今日提示不再重复一遍', () => {
   assert.ok(titles.length > 0, '今日提示不该被清空');
 });
 
-test('没填生日时会说明年龄是估算的', () => {
-  const noAge = { sex: 'male', heightCm: 175, weightKg: 72, activity: 'light', goal: 'cut' };
-  const a = buildAdvice({
-    targets: dailyTargets(noAge), profile: noAge, intake: zero, entries: [], now: at('12:30'),
-  });
-  assert.ok(a.insights.some((i) => /年龄按 30 岁估算/.test(i.title)),
-    '兜底年龄不能悄悄用掉');
+test('缺失年龄时不生成默认人的建议', () => {
+  const t = dailyTargets({ ...profile, age: undefined });
+  const a = buildAdvice({ targets:t, intake:zero, profile:{...profile,age:undefined}, now:at('12:00') });
+  assert.equal(t.kcal,null);
+  assert.deepEqual(a.recommend,[]);
 });
 
 test('推荐份量始终是整数克，热量上限那一侧不会漏出浮点数', () => {

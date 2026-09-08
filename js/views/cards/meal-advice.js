@@ -53,7 +53,7 @@ function recRow(item, meal, onPick) {
 
 export function recommendCard(rerender, onPick) {
   const advice = state.derived?.advice;
-  if (!advice) return null;
+  if (!state.derived?.isToday || !advice?.budget) return null;
   const meal = advice.budget.meal.key;
   const all = advice.recommend;
   const list = expanded.recommend ? all : all.slice(0, 3);
@@ -63,13 +63,11 @@ export function recommendCard(rerender, onPick) {
       h('div.card-head-actions', null,
         estimateGroupInfoTip(all.map((item) => item.food), '查看推荐中的估算说明'))),
     advice.correction?.action ? h('p.recommend-direction', null, advice.correction.action) : null,
-    advice.correction?.active || advice.budget.optional ? h('p.recommend-choice-note', null, advice.budget.optional
-      ? advice.budget.optionalKind === 'snack' ? '以下仅供饿了时按需少量选择，不要求补齐计划。' : '以下按需任选一份，不要求补齐全天蛋白。'
-      : '以下为可选食物，选合适的搭配，不需要全部吃。') : null,
+    advice.budget.optional ? h('p.recommend-choice-note', null, '饿了时按需选择，不必补齐计划。') : null,
     h('div.recommend-budget', { 'aria-label': '当前餐次预算' },
-      h('span', null, advice.budget.optional ? advice.budget.optionalKind === 'snack' ? '饿了时可选少量食物' : '可选少量蛋白食物' : MEAL_LABEL[meal]),
+      h('span', null, advice.budget.optional ? '可选加餐' : MEAL_LABEL[meal]),
       h('span', null, `${num(advice.budget.kcal)} kcal`),
-      h('span', null, advice.budget.optional ? '仍有热量，按需选择' : advice.budget.proteinFeasible
+      h('span', null, advice.budget.proteinFeasible
         ? `蛋白 ${num(advice.budget.protein, 0)}g`
         : `蛋白≤${num(advice.budget.maxProteinByKcal, 1)}g`)),
     all.length

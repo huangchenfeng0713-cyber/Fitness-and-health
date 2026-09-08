@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const pw = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const engine = process.env.BROWSER || 'chromium';
-const browser = await pw[engine].launch();
+const browser = await pw[engine].launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, timezoneId: 'Asia/Shanghai', locale: 'zh-CN' });
 const page = await context.newPage();
 await page.clock.install({ time: new Date('2026-09-06T15:30:00+08:00') });
@@ -20,7 +20,7 @@ try {
   await page.evaluate(async () => {
     const store = await import('/js/lib/store.js');
     const db = await import('/js/lib/db.js');
-    await store.saveProfile({ goal: 'maintain', birthDate: '1996-01-01', age: 30, weightKg: 72, heightCm: 175, sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false });
+    await store.saveProfile({ goal: 'maintain', birthday: '1996-01-01', age: 30, weightKg: 72, heightCm: 175, sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false });
     const rows = [];
     for (let i = 1; i <= 28; i++) {
       const date = '2026-08-' + String(i).padStart(2, '0');
@@ -34,8 +34,14 @@ try {
     await store.reloadStoreFromDB();
   });
   await tab('今日');
-  await page.waitForSelector('.intake-trend[data-state="under"]');
-  check('真实记录经store计算出摄入不足趋势', await page.locator('.trend-action').textContent().then(s => /主食/.test(s) && /脂肪/.test(s)));
+  check('日内800kcal部分记录不判定全天摄入不足', await page.locator('.intake-trend[data-state="under"]').count() === 0);
+  await page.evaluate(async () => (await import('/js/lib/store.js')).addEntry({
+    meal: 'snack', custom: { name: '合成餐' },
+    nutrients: { kcal: 3000, protein: 10, fat: 100, carb: 400, fiber: 2 },
+    name: '超出预算的合成记录', grams: 100,
+  }));
+  await page.waitForSelector('.intake-trend[data-state="over"]');
+  check('已记录摄入超出全天预算时给出餐次建议', await page.locator('.trend-action').textContent().then(s => /餐/.test(s)));
   for (const width of [320, 393, 430]) {
     await page.setViewportSize({ width, height: 852 });
     check(width + 'px趋势卡无横向溢出', await page.locator('.intake-trend').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
@@ -47,12 +53,12 @@ try {
   }
   await page.locator('.trend-go').click();
   await page.waitForSelector('.recommend-direction');
-  check('纠偏入口跳到现有推荐，带着同一份营养方向', await page.locator('.recommend-direction').textContent().then(s => /主食/.test(s) && /脂肪/.test(s)));
+  check('纠偏入口跳到现有餐次推荐', await page.locator('.recommend-direction').textContent().then(s => /餐/.test(s)));
   const suggested = await page.evaluate(async () => (await import('/js/lib/store.js')).state.derived.advice.recommend[0].grams);
   await page.locator('.rec-row .add-btn').first().click();
   await page.waitForSelector('.sheet[role="dialog"]');
   check('推荐食物打开现有份量面板，预填建议份量与餐次', await page.locator('.sheet').evaluate((el, grams) =>
-    !![...el.querySelectorAll('input')].find(i => Number(i.value) === grams) && !![...el.querySelectorAll('.portion-meal .active')].find(e => e.textContent === '晚餐'), suggested));
+    !![...el.querySelectorAll('input')].find(i => Number(i.value) === grams) && el.querySelectorAll('.portion-meal .active').length === 1, suggested));
   await page.evaluate(async () => (await import('/js/lib/sheet.js')).closeSheet({ force: true }));
   await page.evaluate(async () => {
     const s = await import('/js/lib/store.js');
@@ -90,7 +96,7 @@ try {
     await s.reloadStoreFromDB();
   });
   await tab('饮食');
-  check('热量已超但蛋白不足仍有带热量的推荐', await page.locator('.recommend-budget').textContent().then(s => /可选少量蛋白/.test(s)) && await page.locator('.rec-row').count() > 0);
+  check('热量已超但蛋白不足仍有带热量的推荐', await page.locator('.recommend-budget').textContent().then(s => /kcal/.test(s)) && await page.locator('.rec-row').count() > 0);
   check('没有只喝水茶的旧空态提示', !/剩下时间以水和无糖茶为主/.test(await page.locator('#view').textContent()));
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.tab');

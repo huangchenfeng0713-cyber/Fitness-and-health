@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const pw = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const engine = process.env.BROWSER || 'chromium';
-const browser = await pw[engine].launch();
+const browser = await pw[engine].launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 393, height: 852 },
   hasTouch: true, isMobile: true, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
 const page = await context.newPage();
@@ -48,8 +48,13 @@ try {
   await page.clock.setFixedTime(new Date('2026-09-07T12:00:00+08:00'));
   await page.route('https://**/*', route => route.abort());
   await page.goto(process.argv[2] || 'http://127.0.0.1:8137', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.hero');
+  await page.waitForSelector('.tab');
   await page.waitForFunction(() => !document.querySelector('.account-data-lock'));
+  await page.evaluate(async () => (await import('/js/lib/store.js')).saveProfile({
+    goal: 'maintain', birthday: '1996-01-01', weightKg: 72, heightCm: 175,
+    sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false,
+  }));
+  await page.waitForSelector('.hero');
   for (const width of [320, 375, 393, 430, 768]) {
     await page.setViewportSize({ width, height: 852 });
     await render({ carb: 182.5, fat: 30, fiber: 11, sodium: 2039, sugar: 58 });
@@ -63,7 +68,7 @@ try {
         const track = el.querySelector('.split-bar,.nutrient-scale').getBoundingClientRect();
         return track.top - label.bottom <= 20 && el.getBoundingClientRect().bottom - track.bottom <= 14;
       })));
-    for (const [key, expected] of [['split', '碳水 73% / 脂肪 27%\n碳水 182.5 g / 脂肪 30 g'], ['fiber', '11 g'], ['sodium', '2039 mg'], ['sugar', '58 g']]) {
+    for (const [key, expected] of [['split', '碳水 73% / 脂肪 27%\n碳水 182.5 g / 脂肪 30 g'], ['fiber', '11 g'], ['sodium', '2039 mg'], ['sugar', '58.0 g']]) {
       // 第一项直接点圆点，其他项点远离圆点的轨道热区。
       if (key === 'split') await trigger(key).locator('.split-bar-point').tap();
       else await trigger(key).tap({ position: { x: 3, y: 22 } });

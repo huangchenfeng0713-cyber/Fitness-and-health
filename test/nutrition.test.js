@@ -20,8 +20,8 @@ test('Mifflin-St Jeor 与已知数值一致', () => {
   assert.equal(basalMetabolicRate(male).formula, 'Mifflin-St Jeor');
 });
 
-test('有体脂率时改用 Katch-McArdle', () => {
-  const r = basalMetabolicRate({ ...male, bodyFatPct: 18 });
+test('显式选择且体脂新鲜时使用 Katch-McArdle', () => {
+  const r = basalMetabolicRate({ ...male, bodyFatPct: 18, energyFormula: 'katch', bodyFatFresh: true });
   assert.equal(r.formula, 'Katch-McArdle');
   // 370 + 21.6 * (72 * 0.82) = 370 + 1275.26 = 1645
   assert.equal(r.kcal, 1645);
@@ -30,14 +30,14 @@ test('有体脂率时改用 Katch-McArdle', () => {
 test('年龄由生日推算，跨生日前后差一岁', () => {
   assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date(2026, 1, 28)), 30);
   assert.equal(ageFrom({ birthday: '1995-03-01' }, new Date(2026, 2, 1)), 31);
-  assert.equal(ageFrom({}), 30, '缺数据时回落到 30');
+  assert.equal(ageFrom({}), null, '缺失年龄不得猜测');
 });
 
 test('瘦体重与 BMI 分类', () => {
   assert.equal(leanBodyMass(72, 18), 59.04);
   assert.equal(leanBodyMass(72, null), null);
   assert.equal(leanBodyMass(72, 80), null, '荒谬的体脂率应被拒绝');
-  assert.equal(bmi(72, 175), 23.5);
+  assert.equal(round(bmi(72, 175), 1), 23.5);
   assert.equal(bmiCategory(23.5).key, 'normal');
   assert.equal(bmiCategory(29).key, 'obese');
   assert.equal(bmiCategory(17).key, 'under');
@@ -58,13 +58,11 @@ test('减脂目标产生赤字，增肌产生盈余', () => {
   assert.ok(bulk.kcal > keep.kcal);
 });
 
-test('过激速率会按体重比例、每日赤字和成人常用下限共同限制', () => {
-  const extreme = dailyTargets({ ...female, rateKgPerWeek: -1.5 });
-  assert.ok(extreme.clampedByFloor, '过激的目标速率应触发下限保护');
-  assert.ok(extreme.kcal >= 1200);
-  assert.ok(extreme.rateWasClamped);
-  assert.ok(Math.abs(extreme.rateKgPerWeek) <= female.weightKg * 0.01 + 0.01);
-  assert.ok(extreme.dailyDelta >= -750);
+test('超出自动计划范围不输出截断后伪目标', () => {
+  const t = dailyTargets({ ...female, rateKgPerWeek: -1.5 });
+  assert.equal(t.status, 'unavailable');
+  assert.equal(t.kcal, null);
+  assert.equal(t.rateKgPerWeek, null);
 });
 
 test('宏量营养素分配自洽：三大宏量的热量之和与总热量闭合', () => {
@@ -81,11 +79,11 @@ test('宏量营养素分配自洽：三大宏量的热量之和与总热量闭�
   }
 });
 
-test('蛋白质目标：减脂 > 维持，且以瘦体重为基准更高', () => {
+test('蛋白质目标按总重使用相同分母', () => {
   const cut = proteinTarget({ ...male, bodyFatPct: 18 }, 'cut');
   const keep = proteinTarget({ ...male, bodyFatPct: 18 }, 'maintain');
   assert.ok(cut.grams > keep.grams);
-  assert.match(cut.basis, /瘦体重/);
+  assert.match(cut.basis, /g\/kg 体重/);
   assert.match(proteinTarget(male, 'cut').basis, /体重/);
 });
 
@@ -97,9 +95,9 @@ test('自定义 g/kg 覆盖默认算法', () => {
 test('非法身体信息和过高自定义蛋白不会生成伪精确结果', () => {
   assert.equal(validateProfile({}).valid, false);
   assert.throws(() => basalMetabolicRate({}), /身体|性别|体重/);
-  assert.throws(() => dailyTargets({ ...male, rateKgPerWeek: 'x' }), /目标速率/);
+  assert.match(dailyTargets({ ...male, rateKgPerWeek: 'x' }).reason, /目标速率/);
   assert.throws(() => proteinTarget({ ...male, proteinPerKg: 8 }, 'cut'), /蛋白质/);
-  assert.throws(() => dailyTargets({ ...male, sex: 'unknown' }), /性别/);
+  assert.match(dailyTargets({ ...male, sex: 'unknown' }).reason, /性别/);
   assert.match(validateProfile({ ...male, goal: 'cut', rateKgPerWeek: 0.3 }).errors.join('；'), /不能为正数/);
   assert.match(validateProfile({ ...male, goal: 'bulk', rateKgPerWeek: -0.3 }).errors.join('；'), /不能为负数/);
   assert.match(validateProfile({ ...male, goal: 'maintain', rateKgPerWeek: 0.1 }).errors.join('；'), /应为 0/);
@@ -334,9 +332,9 @@ test('Mifflin-St Jeor 与原文公式逐项吻合', () => {
   }
 });
 
-test('Katch-McArdle 与原文公式吻合，且优先于 Mifflin', () => {
+test('Katch-McArdle 显式选用时保留代数计算', () => {
   // Katch & McArdle：BMR = 370 + 21.6 × 瘦体重(kg)
-  const p = { ...male, weightKg: 80, bodyFatPct: 20 };
+  const p = { ...male, weightKg: 80, bodyFatPct: 20, energyFormula: 'katch', bodyFatFresh: true };
   const lbm = 80 * 0.8;                       // 64 kg
   const r = basalMetabolicRate(p);
   assert.equal(r.formula, 'Katch-McArdle', '填了体脂率就该用体成分公式');
@@ -369,6 +367,7 @@ test('微量目标对齐各自的权威推荐值', () => {
 test('脂肪目标落在 IOM 的 AMDR 区间内（占总能量 20%~35%）', () => {
   for (const p of [male, female, { ...male, weightKg: 100 }, { ...female, weightKg: 45 }]) {
     const t = dailyTargets(p);
+    if (t.status === 'unavailable') { assert.equal(t.kcal, null); continue; }
     const pct = (t.fat * 9) / t.kcal;
     assert.ok(pct >= 0.195 && pct <= 0.355, `${JSON.stringify(p)} 得到 ${(pct * 100).toFixed(1)}%`);
   }
@@ -471,8 +470,8 @@ test('年龄是填的还是兜底猜的，必须能分辨', () => {
   assert.equal(ageIsEstimated({ age: 41 }), false);
   assert.equal(ageIsEstimated({}), true, '什么都没填时用的是默认 30 岁');
   assert.equal(ageIsEstimated({ birthday: '乱写' }), true);
-  assert.equal(ageFrom({}), 30);
-  assert.equal(dailyTargets({ ...male, age: undefined }).ageEstimated, true);
+  assert.equal(ageFrom({}), null);
+  assert.equal(dailyTargets({ ...male, age: undefined }).status, 'unavailable');
   assert.equal(dailyTargets({ ...male, age: undefined, birthday: '1996-03-02' }).ageEstimated, false);
 });
 
@@ -484,8 +483,8 @@ test('蛋白目标落在文献给出的区间内', () => {
   assert.ok(noBf.grams / 72 >= 1.4 && noBf.grams / 72 <= 2.0, `${noBf.grams / 72} g/kg`);
 
   const withBf = proteinTarget({ ...male, weightKg: 80, heightCm: 178, bodyFatPct: 20 }, 'cut');
-  const perLbm = withBf.grams / 64;
-  assert.ok(perLbm >= 2.3 && perLbm <= 3.1, `减脂期 ${perLbm} g/kg 瘦体重应落在 Helms 区间`);
+  assert.equal(withBf.grams, 144);
+  assert.match(withBf.basis, /体重/);
 });
 
 test('增重的建议上沿不能照抄减重那条 1% 体重/周', () => {
@@ -539,7 +538,7 @@ test('建议上沿只警告不截断，硬闸门只拦离谱的量级', () => {
   const slightlyOver = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 0.3 });
   assert.equal(slightlyOver.rateKgPerWeek, 0.3, '越过建议上沿一点点不该被改数');
   assert.equal(slightlyOver.rateWasClamped, false);
-  assert.equal(slightlyOver.rateOverAdvisory, true, '越线了得说出来');
+  assert.equal(slightlyOver.rateOverAdvisory, false, '显示精度内的差异与预览使用同一容差');
   assert.equal(slightlyOver.rateAdvisoryKg, 0.29);
 
   const onCap = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 0.29 });
@@ -547,9 +546,8 @@ test('建议上沿只警告不截断，硬闸门只拦离谱的量级', () => {
 
   // 离谱的输入照样拦下来，而且要说清是被哪一条限住的
   const absurd = dailyTargets({ ...prof, goal: 'bulk', rateKgPerWeek: 3 });
-  assert.ok(absurd.rateWasClamped);
-  assert.ok(Math.abs(absurd.rateKgPerWeek) < 3);
-  assert.equal(absurd.rateAbsurd, true);
+  assert.equal(absurd.status, 'unavailable');
+  assert.equal(absurd.rateKgPerWeek, null);
 
   /*
    * 「是哪一条限住的」只许点名一个。原先那句话同时点了体重比例和
@@ -579,7 +577,7 @@ test('填速率时的即时提示：三档说三种话', () => {
   assert.match(at(0.45).text, /连续几周体重趋势/);
 
   assert.equal(at(1.2).level, 'absurd');
-  assert.match(at(1.2).text, /填错/);
+  assert.match(at(1.2).text, /自动计划范围/);
 
   assert.equal(at(0).text, '维持体重：热量按估算消耗安排，不做刻意的盈余或赤字。');
   // 体重还没填时不要硬凑一句话出来

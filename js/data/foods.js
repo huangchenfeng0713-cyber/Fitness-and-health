@@ -1,3 +1,4 @@
+import { sumNutrients, isNutrientNumber } from '../core/nutrition.js';
 /**
  * 食物营养库（固体按每 100g 可食部，饮品按每 100ml）
  * 数据参考《中国食物成分表》标准版及常见品牌营养标签的通用值，用于估算而非临床用途。
@@ -2205,7 +2206,9 @@ export function defaultFoodMix(food) {
 
 const roundMix = (value, decimals = 1) => {
   const scale = 10 ** decimals;
-  return Math.round((Number(value) || 0) * scale) / scale;
+  if (value == null) return null;
+  if (!Number.isFinite(Number(value)) || Number(value) < 0) throw new RangeError('配料份量需为非负有限数');
+  return Math.round(Number(value) * scale) / scale;
 };
 
 /**
@@ -2229,7 +2232,10 @@ export function foodMixNutrition(food, amounts = null) {
     const amount = Math.min(max, Math.max(0, roundMix(selected?.[component.foodId] ?? 0)));
     if (amount <= 0) continue;
     const nutrients = nutrientsFor(ingredient, amount);
-    for (const key of Object.keys(total)) total[key] += Number(nutrients[key]) || 0;
+    for (const key of Object.keys(total)) {
+      if (nutrients[key] == null || !Number.isFinite(nutrients[key]) || nutrients[key] < 0) total[key] = null;
+      else if (total[key] != null) total[key] += nutrients[key];
+    }
     grams += amount;
     components.push({
       foodId: component.foodId,
@@ -2243,14 +2249,14 @@ export function foodMixNutrition(food, amounts = null) {
   return {
     grams: roundMix(grams),
     nutrients: {
-      kcal: Math.round(total.kcal),
+      kcal: total.kcal == null ? null : Math.round(total.kcal),
       protein: roundMix(total.protein),
       fat: roundMix(total.fat),
       carb: roundMix(total.carb),
       fiber: roundMix(total.fiber),
       totalSugar: roundMix(total.totalSugar),
       sugar: roundMix(total.sugar),
-      sodium: Math.round(total.sodium),
+      sodium: total.sodium == null ? null : Math.round(total.sodium),
     },
     components,
   };
@@ -2258,7 +2264,7 @@ export function foodMixNutrition(food, amounts = null) {
 
 /** 把 n 数组展开成具名对象（每 100g） */
 export function per100(food) {
-  const [kcal, protein, fat, carb, fiber, sugar, sodium] = food.n;
+  const [kcal, protein, fat, carb, fiber, sugar, sodium] = (food.n || []).map(v => v == null || v === '' ? null : Number(v));
   return { kcal, protein, fat, carb, fiber, sugar, totalSugar: sugar, sodium };
 }
 
@@ -2267,6 +2273,11 @@ export function per100(food) {
  * 茶饮糖度只缩放可调糖，固定配料糖仍保留。
  */
 export function freeSugarPer100(food, levelKey = DEFAULT_SUGAR_LEVEL) {
+  if (food.custom) {
+    if (food.freeSugar == null || food.freeSugar === '') return null;
+    const v = Number(food.freeSugar);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  }
   const base = per100(food);
   const adjusted = applySugarLevel(food, base, levelKey);
   let nonFree = 0;
@@ -2339,17 +2350,21 @@ const ATWATER_CARB = 4;
  */
 export function nutrientsFor(food, grams, levelKey) {
   const p = applySugarLevel(food, per100(food), levelKey);
-  const k = Math.max(0, Number(grams) || 0) / 100;
-  const r = (v) => Math.round(v * k * 10) / 10;
+  if (!isNutrientNumber(grams)) throw new RangeError('份量需为非负有限数');
+  const k = Number(grams) / 100;
+  const r = v => v == null || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0 ? null : Math.round(v * k * 10) / 10;
+  const carbBasis = food.carbBasis || (food.custom ? 'unknown' : 'total');
+  const available = carbBasis === 'available' ? p.carb
+    : carbBasis === 'total' && p.carb != null && p.fiber != null ? Math.max(0, p.carb - p.fiber) : null;
   return {
-    kcal: Math.round(p.kcal * k),
+    kcal: r(p.kcal) == null ? null : Math.round(p.kcal * k),
     protein: r(p.protein),
     fat: r(p.fat),
-    carb: r(p.carb),
+    carb: r(available),
     fiber: r(p.fiber),
     totalSugar: r(p.sugar),
     sugar: r(freeSugarPer100(food, levelKey || DEFAULT_SUGAR_LEVEL)),
-    sodium: Math.round(p.sodium * k),
+    sodium: r(p.sodium) == null ? null : Math.round(p.sodium * k),
   };
 }
 
@@ -2411,4 +2426,14 @@ export function searchFoods(query, list = FOODS, limit = 30) {
   // 按名称排会让「肯德基 醇香土豆泥」跑到「劲脆鸡腿堡」前面。
   scored.sort((a, b) => b.score - a.score || a.order - b.order);
   return scored.slice(0, limit).map((x) => x.f);
+}
+
+export function validateFood(food = {}) {
+  const errors = [];
+  if (!Array.isArray(food.n) || food.n.length !== 7) errors.push('营养字段格式无效');
+  (Array.isArray(food.n) ? food.n : []).forEach((v, i) => { if (v != null && v !== '' && !isNutrientNumber(v)) errors.push('营养字段 ' + i + ' 需为非负有限数'); });
+  if (food.freeSugar != null && food.freeSugar !== '' && !isNutrientNumber(food.freeSugar)) errors.push('游离糖需为非负有限数');
+  if (food.freeSugar != null && food.n?.[5] != null && Number(food.freeSugar) > Number(food.n[5])) errors.push('游离糖不能大于总糖');
+  if (food.carbBasis === 'total' && food.n?.[3] != null && food.n?.[4] != null && Number(food.n[4]) > Number(food.n[3])) errors.push('总碳水不能低于纤维');
+  return { valid: !errors.length, errors };
 }

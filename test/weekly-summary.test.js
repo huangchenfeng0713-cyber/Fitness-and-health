@@ -1,3 +1,4 @@
+import { completeRow } from './fixtures/review-samples.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { weeklySummary, windowDates } from '../js/core/weekly-summary.js';
@@ -52,14 +53,15 @@ test('样本少于三天不给日均', () => {
   }
 });
 
-test('蛋白达标按目标的九成算，差一两克不算没达标', () => {
+test('蛋白按达到目标统计，所有页面采用相同规则', () => {
   const at = (v) => weeklySummary({
     endDate: '2026-08-28',
     dietDaily: [0, 1, 2].map((i) => ({ date: day(i), kcal: 2000, protein: v })),
     targets: { kcal: 2000, protein: 150 },
   });
-  assert.match(rowOf(at(148), 'protein').value, /^3 \//, '差 2g 被判成没达标，太苛刻');
-  assert.match(rowOf(at(135), 'protein').value, /^3 \//, '正好九成应当算达标');
+  assert.match(rowOf(at(148), 'protein').value, /^0 \//);
+  assert.match(rowOf(at(135), 'protein').value, /^0 \//);
+  assert.match(rowOf(at(150), 'protein').value, /^3 \//);
   assert.match(rowOf(at(120), 'protein').value, /^0 \//, '只有八成不该算达标');
 });
 
@@ -153,7 +155,7 @@ test('累计收支只算同时有摄入和消耗的日子', () => {
     // 七天里只记了四天饮食
     dietDaily: days.slice(0, 4).map((date) => ({ date, kcal: 2000, protein: 100 })),
     // 七天都有设备消耗
-    healthDays: days.map((date) => ({ date, restingEnergy: 1500, activeEnergy: 700, steps: 8000, exerciseMinutes: 30 })),
+    healthDays: days.map((date) => completeRow({ date, restingEnergy: 1500, activeEnergy: 700, steps: 8000, exerciseMinutes: 30 })),
     targets: { kcal: 2200, protein: 110 },
   });
   const by = Object.fromEntries(s.rows.map((r) => [r.key, r]));
@@ -214,7 +216,7 @@ test('配对不足时点名缺的是哪一半', () => {
    */
   const health = [];
   for (let i = 0; i < 6; i += 1) {
-    health.push({ date: day(i), restingEnergy: 1500, activeEnergy: 400 });
+    health.push(completeRow({ date: day(i), restingEnergy: 1500, activeEnergy: 400 }));
   }
   const s = weeklySummary({ endDate: '2026-08-28', healthDays: health, dietDaily: [] });
   const balance = s.rows.find((r) => r.key === 'balance');

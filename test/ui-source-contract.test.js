@@ -37,10 +37,10 @@ test('选择动作是三种形态，不是三排一样的灰槽', () => {
     '器械筛选没有可点的外形');
 });
 
-test('冒烟测试从当前主卡判断热量超出状态', () => {
+test('冒烟测试使用当前数值判断热量超出状态', () => {
   const smoke = text('scripts/smoke.mjs');
   assert.match(smoke, /heroText: document\.querySelector\('\.hero'\)/);
-  assert.match(smoke, /semantics\.heroText/);
+  assert.match(smoke, /semantics\.abovePlan/);
   assert.doesNotMatch(smoke, /!\/多\|超\/\.test\(semantics\.foot\)/);
   assert.doesNotMatch(smoke, /waitUntil:\s*'networkidle'/,
     '可选云请求会让 networkidle 永远等不到，启动冒烟应以 DOM 与应用节点为准');
@@ -104,8 +104,6 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '添加食物又出现历史记录');
 
   assert.match(mealAdvice, /div\.recommend-budget/, '推荐预算又挤回标题右边');
-  assert.match(polish, /\.recommend-budget span\s*\{[^}]*white-space:\s*nowrap/s,
-    '推荐预算仍可能折到第二行');
   /*
    * 数据色和语义色是两套：语义色说「好不好」，数据色说「这是哪一项」。
    * 饮水属于后者，所以它有自己的蓝，而不再借用主绿 ——

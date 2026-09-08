@@ -346,6 +346,7 @@ export {
 } from '../core/day.js';
 
 export const num = (v, d = 0) => {
+  if (v == null || !['number', 'string'].includes(typeof v) || String(v).trim() === '') return '—';
   const n = Number(v);
   if (!Number.isFinite(n)) return '—';
   return d > 0 ? n.toFixed(d) : String(Math.round(n));

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const pw = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const engine = process.env.BROWSER || 'chromium';
-const browser = await pw[engine].launch();
+const browser = await pw[engine].launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
 const page = await context.newPage();
 await page.clock.setFixedTime(new Date('2026-09-06T18:00:00+08:00'));
@@ -37,7 +37,7 @@ try {
   await page.evaluate(async () => {
     const s = await import('/js/lib/store.js');
     window.dietTestStore = s;
-    await s.saveProfile({ goal: 'maintain', birthDate: '1996-01-01', weightKg: 72, heightCm: 175, sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false });
+    await s.saveProfile({ goal: 'maintain', birthday: '1996-01-01', weightKg: 72, heightCm: 175, sex: 'male', useAppleEnergy: false, onboarded: true, demoMode: false });
   });
   await tab('饮食');
   const waterTipBox = () => page.locator('.water-tools summary').evaluate(el => {
@@ -112,8 +112,8 @@ try {
 
   await custom();
   check('自定义食物使用同一弹窗、滚动区与固定底栏', await page.locator('.sheet .custom-form').count() === 1 && await page.locator('.sheet-footer .primary-btn').isVisible());
-  check('新建所有输入和分类为空，无饮品复选框或示例占位', await page.locator('.custom-form').evaluate(el =>
-    [...el.querySelectorAll('input,select')].every(e => e.value === '' && !e.placeholder) && !el.querySelector('[type=checkbox]')));
+  check('新建数值为空，碳水口径未知，提示允许保留未知', await page.locator('.custom-form').evaluate(el =>
+    [...el.querySelectorAll('input,select')].every(e => (e.value === '' || (e.tagName === 'SELECT' && e.value === 'unknown')) && (!e.placeholder || e.placeholder === '未知可留空')) && !el.querySelector('[type=checkbox]')));
   check('字段名称符合要求，说明跟随每100g口径', /食物名称[\s\S]*常用分量单位[\s\S]*每份克重\/体积/.test(await page.locator('.custom-form').textContent()));
   check('每个输入都有可见边框', await page.locator('.custom-form').evaluate(el => [...el.querySelectorAll('input')].every(e => {
     const c = getComputedStyle(e); return parseFloat(c.borderTopWidth) >= 1 && c.borderTopColor !== 'rgba(0, 0, 0, 0)';
@@ -191,15 +191,15 @@ try {
   });
   await tab('今日');
   await page.waitForSelector('.hero');
-  check('历史日期仅展示当日回顾，不出现行动入口', await page.locator('#view').textContent().then(t => /当日回顾/.test(t) && !/今日提示|下一餐|后续餐次|晚餐建议|接下来|蛋白还差/.test(t))
+  check('历史日期仅展示当日回顾，不出现行动入口', await page.locator('#view').textContent().then(t => /回顾/.test(t) && !/今日提示|下一餐|后续餐次|晚餐建议|接下来|蛋白还差/.test(t))
     && await page.locator('.insight-actionable,.intake-trend,.insight-go').count() === 0);
   check('碳水脂肪默认保留名称、状态与可点击刻度，隐藏精确值', await page.locator('.split-row').evaluate(el =>
     el.querySelector('.metric-row-label').textContent === '碳水:脂肪' && !/\d/.test(el.textContent)
     && !el.textContent.includes('碳水参考') && !!el.querySelector('button.point-value-trigger') && !!el.querySelector('.split-bar-point')));
-  const review = await page.locator('.insight-list').textContent();
+  const review = await page.locator('.hero').textContent();
   await page.clock.setFixedTime(new Date('2026-09-06T23:00:00+08:00'));
   await page.evaluate(async () => (await import('/js/lib/store.js')).reloadStoreFromDB());
-  check('晚间重新查看同一历史日，回顾内容不随当前时间变化', await page.locator('.insight-list').textContent() === review);
+  check('晚间重新查看同一历史日，回顾内容不随当前时间变化', await page.locator('.hero').textContent() === review);
   await screenshot('#view', 'historical-review');
   await page.evaluate(async () => (await import('/js/lib/store.js')).setDay('2026-09-06'));
   check('返回当天仍保留实时提示和食物入口', await page.locator('#view').textContent().then(t => t.includes('今日提示')) && await page.locator('.insight-actionable').count() > 0);

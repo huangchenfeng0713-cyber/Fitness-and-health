@@ -1,3 +1,4 @@
+import { completeEnergyDay, presentNumber } from './energy-observation.js';
 /**
  * 近 7 日速览：截至昨天的七个完整日。
  *
@@ -40,7 +41,7 @@ export function windowDates(endDate, days = 7) {
 const row = (key, label, value) => ({ key, label, value });
 
 export function weeklySummary({
-  endDate, dietDaily = [], healthDays = [], targets = null, days = 7,
+  endDate, dietDaily = [], healthDays = [], targets = null, days = 7, mixedTargets = false,
 } = {}) {
   const dates = windowDates(endDate, days);
   if (!dates.length) return null;
@@ -48,7 +49,7 @@ export function weeklySummary({
   const to = dates[dates.length - 1];
   const inWindow = (d) => d?.date >= from && d.date <= to;
 
-  const diet = dietDaily.filter(inWindow);
+  const diet = dietDaily.filter(d => inWindow(d) && presentNumber(d.kcal) && d.kcal >= 0 && d.coverage?.kcal?.complete !== false);
   const health = healthDays.filter(inWindow);
   const rows = [];
 
@@ -64,9 +65,10 @@ export function weeklySummary({
     rows.push(row('kcal', '日均摄入', `${avgKcal} kcal`));
 
     const proteinGoal = Number(targets?.protein) || 0;
-    if (proteinGoal > 0) {
-      const hit = diet.filter((d) => (Number(d.protein) || 0) >= proteinGoal * 0.9).length;
-      rows.push(row('protein', '蛋白达标', `${hit} / ${diet.length} 天`));
+    if (proteinGoal > 0 && !mixedTargets) {
+      const proteinDays = diet.filter(d => presentNumber(d.protein) && Number(d.protein) >= 0 && d.coverage?.protein?.complete !== false);
+      const hit = proteinDays.filter(d => Number(d.protein) >= proteinGoal).length;
+      rows.push(row('protein', targets.context === '当时计划' ? '蛋白达到计划' : '蛋白·当前设置对照', `${hit} / ${proteinDays.length} 天`));
     }
   } else {
     // 为什么没有日均，正上方那行「饮食记录 N / 7 天」已经说了
@@ -82,15 +84,14 @@ export function weeklySummary({
     .sort((a, b) => (a.date < b.date ? -1 : 1));
   if (weights.length >= 2) {
     const delta = round(Number(weights[weights.length - 1].weightKg) - Number(weights[0].weightKg), 1);
-    rows.push(row('weight', '体重', `${delta > 0 ? '+' : ''}${delta} kg`));
+    rows.push(row('weight', '区间体重变化', `${delta > 0 ? '+' : ''}${delta} kg`));
   } else {
-    rows.push(row('weight', '体重', weights.length ? `${weights[0].weightKg} kg` : '—'));
+    rows.push(row('weight', '最新体重', weights.length ? `${weights[0].weightKg} kg` : '—'));
   }
 
   const byDate = new Map(diet.map((d) => [d.date, d]));
-  const hasIntake = (hd) => Number(byDate.get(hd.date)?.kcal) > 0;
-  const hasSpend = (hd) => Number(hd.restingEnergy) > 0
-    && Number.isFinite(Number(hd.activeEnergy)) && Number(hd.activeEnergy) >= 0;
+  const hasIntake = hd => byDate.has(hd.date);
+  const hasSpend = hd => Boolean(completeEnergyDay(hd));
   const paired = health.map((hd) => {
     if (!hasIntake(hd) || !hasSpend(hd)) return null;
     return Number(byDate.get(hd.date).kcal) - (Number(hd.restingEnergy) + Number(hd.activeEnergy));
@@ -98,7 +99,7 @@ export function weeklySummary({
 
   if (paired.length >= MIN_POINTS_FOR_CLAIM) {
     const total = round(paired.reduce((a, b) => a + b, 0));
-    rows.push(row('balance', '累计收支', `${total >= 0 ? '盈余' : '缺口'} ${Math.abs(total)} kcal`));
+    rows.push(row('balance', `已配对 ${paired.length}/${days} 日收支`, `${total >= 0 ? '盈余' : '缺口'} ${Math.abs(total)} kcal`));
   } else {
     /*
      * **这一行算不出来时要自己说清楚，不能只画一道杠。**
@@ -109,14 +110,14 @@ export function weeklySummary({
      */
     const intakeDays = health.filter(hasIntake).length;
     const spendDays = health.filter(hasSpend).length;
-    rows.push(row('balance', '累计收支',
+    rows.push(row('balance', `已配对 ${paired.length}/${days} 日收支`,
       spendDays >= MIN_POINTS_FOR_CLAIM && intakeDays < MIN_POINTS_FOR_CLAIM ? '缺饮食记录'
         : intakeDays >= MIN_POINTS_FOR_CLAIM && spendDays < MIN_POINTS_FOR_CLAIM ? '缺设备记录'
           : '记录不齐'));
   }
 
   const avgOf = (key, digits = 0) => {
-    const vals = health.map((d) => Number(d[key])).filter((v) => Number.isFinite(v) && v >= 0);
+    const vals = health.filter(d => presentNumber(d[key])).map((d) => Number(d[key])).filter((v) => Number.isFinite(v) && v >= 0);
     return vals.length >= MIN_POINTS_FOR_CLAIM
       ? round(vals.reduce((a, b) => a + b, 0) / vals.length, digits)
       : null;

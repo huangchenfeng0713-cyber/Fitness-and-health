@@ -1,3 +1,4 @@
+import { sumNutrients, isNutrientNumber } from './nutrition.js';
 /**
  * 饮食记录的合并口径。
  *
@@ -25,8 +26,6 @@ function groupKey(entry) {
   ].join('|');
 }
 
-const SUMMED = ['grams', 'kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'sodium'];
-
 /**
  * 把一组记录按「是不是同一笔」合并。
  *
@@ -42,12 +41,21 @@ export function mergeSameEntries(entries = []) {
     const hit = groups.get(key);
     if (hit) {
       hit.entries.push(entry);
-      for (const field of SUMMED) hit[field] += Number(entry[field]) || 0;
       continue;
     }
     const row = { key, entries: [entry], name: entry.name, unit: entry.unit || 'g' };
-    for (const field of SUMMED) row[field] = Number(entry[field]) || 0;
     groups.set(key, row);
   }
-  return [...groups.values()].map((row) => ({ ...row, count: row.entries.length }));
+  return [...groups.values()].map((row) => {
+    const totals = sumNutrients(row.entries);
+    let grams = 0;
+    for (const entry of row.entries) {
+      if (!isNutrientNumber(entry.grams) || !Number.isFinite(grams + Number(entry.grams))) {
+        totals.issues.push({ id: entry.id, name: entry.name, field: 'grams', value: entry.grams, reason: '份量需为非负有限数且合计不能溢出' });
+        grams = null; break;
+      }
+      grams += Number(entry.grams);
+    }
+    return { ...row, ...totals, grams, count: row.entries.length };
+  });
 }
