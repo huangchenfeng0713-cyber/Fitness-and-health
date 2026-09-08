@@ -113,7 +113,17 @@ try {
       await current();
       if (mode === 'history') await history();
       if (mode === 'picker') await open();
-      if (mode === 'picker') await page.locator('.ex-row:not(.chosen):not(.marked) .ex-pick').first().click();
+      if (mode === 'picker') {
+        const choice = page.locator('.ex-row:not(.chosen):not(.marked) .ex-pick').first();
+        // Scroll the actual sheet, without asking older Chromium to scroll every clipped ancestor.
+        // The subsequent real click still verifies visibility, hit testing and enabled state.
+        await choice.evaluate(el => {
+          const scroll = el.closest('.sheet-scroll');
+          const rect = el.getBoundingClientRect(), bounds = scroll.getBoundingClientRect();
+          scroll.scrollTop += rect.top - bounds.top - scroll.clientHeight / 2;
+        });
+        await choice.click();
+      }
       check(`${width}px ${mode} 无横向溢出`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && [...document.querySelectorAll('.training-panel, .sheet-scroll, .sheet-footer')].filter(el => el.getClientRects().length).every(el => el.scrollWidth <= el.clientWidth + 1)));
       if (mode === 'picker') check(`${width}px 确认按钮留在弹窗可见底栏`, await page.locator('.training-select-bar .select-bar-go').evaluate(el => { const rect = el.getBoundingClientRect(); return rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth; }));
       if (width === 390 && process.env.ARTIFACT_DIR) await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/training-${mode}.png` });
@@ -176,6 +186,10 @@ try {
   console.log(`${checks} checks passed`);
 } catch (error) {
   console.error('Page errors:', errors);
+  console.error('Picker bounds:', await page.evaluate(() => ['.sheet', '.sheet-scroll', '.sheet-footer', '.ex-row:not(.chosen):not(.marked) .ex-pick'].map(selector => {
+    const el = document.querySelector(selector), rect = el?.getBoundingClientRect();
+    return { selector, rect: rect?.toJSON(), scrollTop: el?.scrollTop, scrollHeight: el?.scrollHeight };
+  })));
   console.error('Overflow:', await page.evaluate(() => [...document.querySelectorAll('.training-panel *, .training-picker *, .training-select-bar *')].filter(el => el.getClientRects().length && el.scrollWidth > el.clientWidth + 2).map(el => ({ tag: el.className, width: el.clientWidth, scroll: el.scrollWidth }))));
   if (process.env.ARTIFACT_DIR) await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/training-failure.png` });
   console.error((await page.locator('body').innerText()).slice(-5000));
