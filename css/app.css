@@ -340,8 +340,8 @@ html, body { height: 100%; overflow: hidden; }
 
 /* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
 .topbar-day {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  z-index: 1; flex: none; width: max-content; max-width: calc(100% - 2 * var(--control-md) - 24px);
+  position: relative; flex: 1;
+  z-index: 1; width: auto; min-width: 0;
   text-align: center; line-height: 1.15;
   border: 0; background: none; color: inherit; font-family: inherit;
   cursor: pointer; padding: 2px 4px;
@@ -500,7 +500,7 @@ html, body { height: 100%; overflow: hidden; }
  */
 .card-head-actions {
   display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
-  min-width: 0; height: var(--card-head-line);
+  min-width: 0; min-height: var(--card-head-line); flex-wrap: wrap;
 }
 .card-head-actions .card-tag { max-width: 180px; }
 .card-desc { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--fs-footnote); line-height: 1.55; font-weight: var(--w-regular); }
@@ -700,7 +700,10 @@ html, body { height: 100%; overflow: hidden; }
   display: grid; justify-items: start; gap: var(--space-1);
   font-size: var(--fs-caption); color: var(--muted);
 }
-.ring-legend-item { display: grid; grid-template-columns: 9px 4.5em auto auto; align-items: baseline; gap: var(--space-1); white-space: nowrap; }
+.ring-legend-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); max-width: 100%; }
+.ring-legend { max-width: 100%; width: fit-content; }
+.ring-legend-k { min-width: 4.5em; }
+.ring-legend-v { overflow-wrap: anywhere; }
 .ring-legend-k { color: var(--muted); }
 .ring-legend-v {
   font-size: var(--fs-body); font-weight: var(--w-semibold); font-variant-numeric: tabular-nums;
@@ -764,7 +767,7 @@ html, body { height: 100%; overflow: hidden; }
   font-size: var(--fs-body); font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .metric-row-top {
-  display: flex; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-1);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin-bottom: var(--space-1);
   font-size: var(--fs-footnote);
 }
 .metric-row-label { color: var(--muted); white-space: nowrap; }
@@ -787,7 +790,7 @@ html, body { height: 100%; overflow: hidden; }
 .metric-row.over .metric-row-value { color: var(--danger); }
 
 /* 三个短刻度同排，精确值收进点击浮层。 */
-.hero-micros { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); margin-top: var(--space-2); padding: 8px 2px 0; border-top: 1px solid var(--hairline); }
+.hero-micros { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5em), 1fr)); gap: var(--space-3); margin-top: var(--space-2); padding: 8px 2px 0; border-top: 1px solid var(--hairline); }
 .micro-chip { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .micro-label { color: var(--muted); font-size: var(--fs-caption); white-space: nowrap; }
 .nutrient-scale { position: relative; height: 6px; border-radius: 999px; background: var(--track); margin: 0 var(--space-2); }
@@ -1068,9 +1071,9 @@ html, body { height: 100%; overflow: hidden; }
  */
 .metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4) var(--space-1); --metric-cols: 3; }
 .metric-cell {
-  flex: 0 0 calc((100% - (var(--metric-cols) - 1) * var(--space-1)) / var(--metric-cols));
+  flex: 0 1 auto;
   display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
-  min-width: 0; text-align: center;
+  min-width: min(100%, 7em); max-width: 100%; text-align: center;
 }
 .metric-icon { width: 22px; height: 22px; flex: none; color: var(--muted); opacity: .8; }
 .metric-body { min-width: 0; }
@@ -1086,7 +1089,7 @@ html, body { height: 100%; overflow: hidden; }
 .metric-grid.cols-4 .metric-value { font-size: var(--fs-value); }
 .metric-unit { font-size: var(--fs-caption); font-weight: var(--w-medium); color: var(--muted); }
 .metric-unit.gap { margin-left: var(--space-0); }
-.metric-label { font-size: var(--fs-caption); color: var(--faint); margin-top: var(--space-0); white-space: nowrap; }
+.metric-label { font-size: var(--fs-caption); color: var(--faint); margin-top: var(--space-0); overflow-wrap: anywhere; }
 /* 缺数据那格整体压暗：那道杠不该和真实数字一样醒目 */
 .metric-cell.empty { opacity: .45; }
 
@@ -1169,7 +1172,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 
 .btn-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10em), 1fr)); gap: var(--space-2); }
 /* grid 子项默认 min-width:auto，日期输入的固有宽度会把格子撑破 */
 .form-grid > * { min-width: 0; }
 .form-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--fs-footnote); color: var(--muted); min-width: 0; }
@@ -1185,7 +1188,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
   /* 描边、圆角、底色由「输入控件」那一节统一给，别在这儿再写一份 */
   color: var(--text);
   width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box;
-  height: var(--control-inline); line-height: 1.2;
+  min-height: max(var(--control-inline), calc(1.5em + 20px)); height: auto; line-height: 1.5;
   font-size: var(--fs-headline);   /* iOS Safari 对小于 16px 的输入框会自动放大页面 */
 }
 /* iOS 的原生日期控件自带内边距和固有宽度，不压一下会溢出容器 */
@@ -1907,7 +1910,7 @@ body.sheet-open {
 .entry-name .info-tip > summary { width: var(--info-size); height: var(--info-size); }
 .entry-meta {
   font-size: var(--fs-caption); color: var(--faint); margin-top: var(--space-0);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: normal; overflow-wrap: anywhere;
 }
 /*
  * 编辑态那一行还挂着克数输入、餐次下拉和删除，留给营养那行的宽度只剩 152px，
@@ -3093,22 +3096,22 @@ h1, h2, h3 { letter-spacing: -.02em; }
 /* 推荐预算独占一行，避免卡片标题右边的长句断成两行。 */
 .recommend-card-head { align-items: center; margin-bottom: var(--space-2); }
 .recommend-budget {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   min-height: var(--control-sm);
   margin-bottom: var(--space-2);
-  padding: 0 10px;
+  padding: 8px 10px;
   border-radius: var(--r-sm);
   background: var(--card-2);
   color: var(--muted);
   font-size: var(--fs-footnote);
   font-variant-numeric: tabular-nums;
 }
-.recommend-budget span { min-width: 0; white-space: nowrap; text-align: center; }
+.recommend-budget span { min-width: 0; overflow-wrap: anywhere; text-align: left; }
 .recommend-budget span:first-child { color: var(--accent); font-weight: var(--w-semibold); text-align: left; }
-.recommend-budget span + span { border-left: 1px solid var(--hairline); }
+.recommend-budget span + span { padding-left: var(--space-2); border-left: 1px solid var(--hairline); }
 /* 固定选择栏始终是屏幕级横幅，不继承卡片内 sticky 与负边距。 */
 .actionbar-slot .training-select-bar { width: 100%; }
 .actionbar-slot .select-bar-go { min-height: var(--control-md); padding-inline: 18px; }

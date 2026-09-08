@@ -143,6 +143,10 @@ function lastSyncPanel(last) {
     details.length && rememberedDetails('sync-details', 'details.sync-details',
       h('summary', null, '导入详情'),
       h('ul', null, details.map((item) => h('li', null, item))),
+      last.quality?.issues?.length ? rememberedDetails('sync-issues', 'details',
+        h('summary', null, `异常定位（最多 100 条）`),
+        h('p', null, '原文件不变。请按日期、字段和单位核对来源，修正后重新导入。'),
+        h('ul', null, last.quality.issues.map(issue => h('li', null, JSON.stringify(issue))))) : null,
       sources.length && h('p', null, `识别来源：${sources.slice(0, 6).join('、')}${sources.length > 6 ? '等' : ''}`)));
 }
 
@@ -301,7 +305,7 @@ function syncFieldPanel() {
         h('ul', null, missing.map(([, , fix]) => h('li', null, fix))),
         h('p', null, '服务端对空值是静默跳过的（否则少一项就会让整次上传失败），'
           + '所以缺字段不会报错，只能在这里核对。静息心率、体重、体脂率读到 0 也算「今天没有样本」——'
-          + '活人这几项不可能是 0，快捷指令的空数值链只会产出 0。'))
+          + '这些字段的零值无法作为有效测量使用，请核对样本、权限和上传值。'))
       : missing.length
         ? h('p.sync-fields-ok', null,
           `${missing.map(([, l]) => l).join('、')}今天还没有数据；跑一次快捷指令或在下面手动补录。`)
@@ -544,7 +548,7 @@ function importPanel(rerender) {
           handleImport({ text }, rerender);
           pasteArea.value = '';
         },
-      }, '解析并同步')),
+      }, '导入')),
     lastSyncPanel(last),
     priorityEditor,
   );
@@ -555,17 +559,17 @@ function guidePanel() {
     '先登录本应用，在“同步 Apple 健康”里生成连接信息，点击“复制基础配置”保存上传 URL、设备令牌和字段示例',
     '在 iPhone 上点击“新建”直接打开「快捷指令」编辑器',
     '每个指标各加一组两步动作：先「查找健康样本」（类型分别选步数 / 活动能量 / 静息能量，'
-      + '范围选“今天”），紧接着加一个「计算统计数据」并把运算改成“总计”',
+      + '范围选“今天”，并固定已核对的单一来源），紧接着加一个「计算统计数据」并把运算改成“总计”',
     '这一步最容易漏：「查找健康样本」返回的是一天里几十上百条样本，不接“总计”就不是一个数字，'
-      + '上传时会被当成空值跳过——步数收不到几乎都是这个原因',
+      + '上传时会被当成空值跳过——可检查统计方式、权限、日期与来源设置',
     '添加“字典”，放入 date、timestamp、timezone、steps、activeEnergyKcal、restingEnergyKcal，'
       + '每个值选对应那一步「计算统计数据」的结果；某项确实没有样本时省略该键，不要填 0',
     '添加“获取 URL 内容”：方法选 POST，请求体选 JSON；标头增加 X-Health-Sync-Token，值填刚才保存的设备令牌',
     '首次手动运行。iOS 会逐项询问健康读取权限，步数、活动能量、静息能量都要单独允许；'
       + '若当时点了“不允许”，之后要到 设置 → 隐私与安全性 → 健康 → 快捷指令 里补开',
     '返回 ok: true 就表示已经写入账号。返回里的 stored 是真正入库的字段，'
-      + 'skipped 是今天还没有样本的，rejected 是数值超出生理范围被挑出来的',
-    '静息心率、体重、体脂率这类不是每天都有的指标，没样本时快捷指令只会产出 0。'
+      + 'skipped 是今天还没有样本的，rejected 是数值未通过应用校验的',
+    '静息心率、体重、体脂率这类不是每天都有的指标，无样本时应省略字段；具体返回行为尚待真机验证。'
       + '服务端把这几项的 0 当成「今天没有样本」跳过，不会因此丢掉同一次的步数和能量',
     '基础同步稳定后再添加锻炼、站立和距离；体重、体脂等必须同时上传真实 measuredAt。睡眠容易因阶段重叠重复，默认不添加',
   ];
@@ -582,7 +586,8 @@ function guidePanel() {
       h('div.method-head', null, h('span.method-badge.fast', null, '推荐'), h('strong', null, '快捷指令自动上传')),
       h('p', null, '上传直接进入当前账号，不需要复制粘贴，也不要求网页在后台常驻。'),
       subDetails('recipe-shortcut', '创建自动上传快捷指令',
-        h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
+        h('p.form-hint', null, '真机待验证：需固定并核对来源，不能把多来源原始样本直接求和当作健康 App 总计。23:30 同步仍是部分日，不能进入完整日基线。'),
+          h('ol.guide-list', null, shortcutRecipe.map((t) => h('li', null, t)))),
       subDetails('recipe-automation', '设置定时自动运行',
         h('ol.guide-list', null, automationRecipe.map((t) => h('li', null, t))))),
 

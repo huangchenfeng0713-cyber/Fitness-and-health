@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const base = process.argv[2] || 'http://127.0.0.1:8137';
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ serviceWorkers: 'allow' });
 const page = await context.newPage();
 

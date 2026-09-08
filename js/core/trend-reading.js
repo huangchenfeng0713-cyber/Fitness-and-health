@@ -219,7 +219,7 @@ function readRestingHR(points) {
     `日均 ${s.avg} bpm，区间内 ${s.min} ~ ${s.max} bpm。`,
     s.avg > 100 ? '高于多数成人静息时常见的 60–100 bpm 范围；若复测仍高，或伴有胸痛、气短、晕厥等不适，应及时就医。'
       : s.avg < 50 ? '低于 50 bpm；训练者可能出现较低读数，但若伴有头晕、乏力或晕厥，应就医评估。'
-        : '处在成人常见参考范围内。',
+        : s.avg < 60 ? '低于多数成人常见静息范围；训练者可有较低读数。若伴头晕、胸痛、气短或晕厥，应就医评估。' : '处在成人常见参考范围内。',
     s.enoughForTrend && s.drift >= 3
       ? `后半段比前半段高了约 ${s.drift} bpm；压力、感染、药物、训练负荷和测量条件都可能影响读数，单凭这条趋势不能确定原因。`
       : '',
@@ -238,11 +238,9 @@ function readBalance(points) {
   if (s.n < MIN_POINTS_FOR_CLAIM) {
     return INSUFFICIENT_DATA_TEXT;
   }
-  const weekly = round((Math.abs(s.avg) * 7) / 7700, 2);
   return join([
     head,
-    `按 7700 kcal/kg 的脂肪当量换算，相当于每周 ${weekly} kg 的${s.avg > 0 ? '盈余' : '赤字'}——`,
-    '这只是能量换算，不等于体重一定这样变，实际还要看体重曲线。',
+    '仅为已配对记录日的收支，不能换算成确定的体重变化。',
     Math.abs(s.avg) > 900 ? '日均偏差偏大，先确认饮食记得全不全，再决定要不要调目标。' : '',
   ]);
 }
@@ -270,16 +268,8 @@ function readSteps(points) {
 function readExercise(points) {
   const s = analyzeSeries(points);
   if (!s) return INSUFFICIENT_DATA_TEXT;
-  const weekly = Math.round((s.avg * 7));
-  const zero = countDays(points, (y) => y <= 0);
-  return join([
-    `日均 ${s.avg} 分钟，按这个节奏一周约 ${weekly} 分钟。`,
-    weekly >= 150
-      ? '若这些分钟主要达到中等强度，则时长达到 WHO 每周至少 150 分钟的下限；当前数据不能确认强度。'
-      : `若这些分钟主要达到中等强度，则距 WHO 每周至少 150 分钟的下限约 ${150 - weekly} 分钟；当前数据不能确认强度。`,
-    zero ? `其中 ${zero} 天没有记录到锻炼。` : '',
-    'WHO 另建议成人每周至少 2 天进行肌肉强化活动；这里只统计设备时长，不能据此判断是否完成力量训练。',
-  ]);
+  const total = points.filter(p => p.y != null && Number.isFinite(p.y) && p.y >= 0).reduce((sum, p) => sum + p.y, 0);
+  return '记录 ' + s.n + ' 天，共 ' + Math.round(total) + ' 分钟，强度未确认。设备时长不能用于判断整周运动达标或力量训练完成情况。';
 }
 
 const READERS = {
@@ -298,6 +288,7 @@ export function trendReading(metric, points = [], opts = {}) {
    * 需要补几天、体重为什么还要拉开 7 天，放进右上角的方法说明，避免同一张
    * 空图下面再常驻一大段教程。
    */
+  if (metric === 'exercise' && summary) return readExercise(points);
   if (!summary || summary.n < MIN_POINTS_FOR_CLAIM) return INSUFFICIENT_DATA_TEXT;
   if (metric === 'weight' && opts.kgPerWeek == null) return INSUFFICIENT_DATA_TEXT;
   return reader(points, opts);

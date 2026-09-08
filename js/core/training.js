@@ -133,11 +133,11 @@ export function replacementsFor(target, selection = [], limit = 3) {
 }
 
 /**
- * 针对某几块「还没练到」的肌肉，能补什么动作。
+ * 针对某几块「未安排主练」的肌肉，能补什么动作。
  *
  * 排序有两层：先看这个动作把多少块缺失肌肉当主动肌（补得准），
  * 再看它与已选动作的最高重合度（补进去不会变成又一次重复）。
- * 只说「还没练到三角肌后束」而不给动作名，等于把问题原样退回给用户。
+ * 只说「未安排主练三角肌后束」而不给动作名，等于把问题原样退回给用户。
  */
 export function exercisesForMuscles(muscles = [], options = {}) {
   const { exclude = [], group = null, limit = 3 } = options;
@@ -294,7 +294,7 @@ function comboForPatterns(list, patterns, requestedSize, seed = 0) {
  * 三个动作全压在胸大肌中部，上胸下胸一个没练到。
  *
  * 现在的规则：默认的 4–5 个动作优先来自不同动作模式（推 / 拉 / 铰链…），
- * 每一步只收「至少练到一块还没练到的肌肉」的，其中复合动作优先，
+ * 每一步只收「至少练到一块未安排主练的肌肉」的，其中复合动作优先，
  * 再按库里的录入顺序（主流动作排在前面）。
  *
  * 换模式这条比「多覆盖几块肌肉」更管用：只按覆盖面排会搭出
@@ -391,7 +391,7 @@ export function recommendFor({
     if (options.length) {
       replacements.push({
         dropId: drop.id,
-        title: `${keep.name}和${drop.name}刺激高度重叠`,
+        title: `${keep.name}和${drop.name}动作模式相近`,
         options: options.map((e) => ({ id: e.id, name: e.name })),
       });
     }
@@ -442,7 +442,7 @@ export function exerciseTags(exercise, { scopeMuscles = null } = {}) {
 /**
  * 整套训练的建议。
  *
- * 只给能从「动作构成」本身看出来的结论：重复、推拉失衡、缺主要动作、
+ * 只给动作标签支持的模式相似及顺序建议；周覆盖由 training-coverage 单独判断。
  * 复合动作该排前面。训练量、强度、周期这些要结合个人情况，不在这里瞎猜。
  */
 export function planAdvice(selection = []) {
@@ -477,20 +477,14 @@ export function planAdvice(selection = []) {
     tipped.add(o.b.id);
     const alts = replacementsFor(o.b, list, 3);
     dupTips.push({
-      level: 'warn',
+      level: 'info',
       key: `dup-${o.a.id}-${o.b.id}`,
-      title: `${o.a.name} 和 ${o.b.name} 的刺激高度相似`,
+      title: `${o.a.name} 和 ${o.b.name} 的动作模式相近`,
       // 建议要能直接点，光念一串动作名等于让人回到列表里自己找。
       // 动作名只出现在按钮上，正文不再重复念一遍。
       actions: alts.map((e) => ({ id: e.id, label: e.name, replaces: o.b.id })),
       // 现在库里同一个模式往往有好几台器械，两边都是 machine 时不能再说「只差器械」
-      text: `两者都是${PATTERNS[o.a.pattern]}、主要练${o.sharedPrimary.map((m) => MUSCLES[m]).join('、') || MUSCLES[o.a.primary[0]]}，`
-        + (o.a.equipment === o.b.equipment
-          ? `器械也一样（${EQUIPMENT[o.a.equipment]}），只是换了台机子。`
-          : `只差器械（${EQUIPMENT[o.a.equipment]} / ${EQUIPMENT[o.b.equipment]}）。`)
-        + '同一次训练里放两个，多出来的组数主要是加训练量，不是增加明显不同的刺激角度——'
-        + '要不要保留取决于你的训练目的和这一周的总量。'
-        + (alts.length ? `如果想换个角度，把 ${o.b.name} 换成下面任意一个，它们和这套没有高度重复。` : ''),
+      text: '主要肌群与动作模式标签相近。轨迹、幅度和负荷曲线未纳入比较，可按目标和周总量决定保留。',
     });
   }
   tips.push(...dupTips);
@@ -500,8 +494,8 @@ export function planAdvice(selection = []) {
     tips.push({
       level: 'info',
       key: 'dup-more',
-      title: `另有 ${stillOverlapping.length} 个动作和上面这些刺激相似`,
-      text: '先按上面的建议换掉几个，剩下的重叠多半会跟着消失，调整完再看一遍这里。',
+      title: `另有 ${stillOverlapping.length} 个动作和上面这些标签相近`,
+      text: '标签相近不表示必须替换，可结合周安排查看。',
     });
   }
 
@@ -515,7 +509,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: `part-${o.a.id}-${o.b.id}`,
       title: `${o.a.name} 与 ${o.b.name} 有部分重叠`,
-      text: `共同练到 ${[...new Set([...o.a.primary, ...o.b.primary])].map((m) => MUSCLES[m]).join('、')}。`
+      text: `共同主练 ${o.a.primary.filter(m => o.b.primary.includes(m)).map((m) => MUSCLES[m]).join('、')}。`
         + '放在一起很常见，只是两个都做到接近力竭时，后一个的可用负荷会明显下降；'
         + '如果复合动作是当天主项，通常把它排在前面更容易维持动作质量。',
     });
@@ -525,21 +519,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'part-more',
       title: `还有 ${somes.length - 3} 组动作部分重叠`,
-      text: '部分重叠不算错，这里只列最像的三组；更值得先看的是上面那些刺激高度相似的。',
-    });
-  }
-
-  // 推拉平衡：只在同时含有推或拉时才提，纯腿日不该被这条打扰
-  const pushPatterns = new Set(['horizontal_push', 'incline_push', 'vertical_push', 'dip', 'chest_fly']);
-  const pullPatterns = new Set(['horizontal_pull', 'vertical_pull', 'pullover', 'rear_delt']);
-  const push = list.filter((e) => pushPatterns.has(e.pattern)).length;
-  const pull = list.filter((e) => pullPatterns.has(e.pattern)).length;
-  if (push + pull >= 3 && (push === 0 || pull === 0 || Math.max(push, pull) >= Math.min(push, pull) * 3)) {
-    tips.push({
-      level: 'info',
-      key: 'push-pull',
-      title: push > pull ? `推的动作 ${push} 个，拉只有 ${pull} 个` : `拉的动作 ${pull} 个，推只有 ${push} 个`,
-      text: '不必每次训练都一比一，但一周内同时安排推和拉，通常比长期只练一侧更完整。具体比例应按目标、动作和恢复情况调整。',
+      text: '部分重叠不算错，这里只列最像的三组；更值得先看的是上面那些动作模式相近的。',
     });
   }
 
@@ -550,7 +530,7 @@ export function planAdvice(selection = []) {
       level: 'info',
       key: 'no-compound',
       title: '这套全是孤立动作',
-      text: '孤立动作也能有效训练局部肌肉；复合动作的优势是用更少动作覆盖更多肌群。可先加一个适合自己的多关节动作作为主项。',
+      text: '孤立动作也能有效训练局部肌肉；复合动作的优势是用更少动作覆盖更多肌群。可按训练目的保留；需要提高覆盖效率时再考虑多关节动作。',
     });
   } else if (compound > 0) {
     const first = list.findIndex((e) => e.compound);
@@ -564,22 +544,6 @@ export function planAdvice(selection = []) {
     }
   }
 
-  // 覆盖情况
-  const cov = coverage(list).filter((c) => c.exercises > 0);
-  for (const c of cov) {
-    if (!c.missing.length || c.exercises < 2) continue;
-    const fills = exercisesForMuscles(c.missing, { exclude: list, group: c.key, limit: 3 });
-    // note 是「这个动作补的是哪块」，交给界面贴在按钮上；正文不再把动作名重复一遍
-    const fillsFor = (e) => MUSCLES[e.primary.find((x) => c.missing.includes(x))] || '';
-    tips.push({
-      level: 'info',
-      key: `gap-${c.key}`,
-      title: `${c.label}：还没练到 ${c.missing.map((m) => MUSCLES[m]).join('、')}`,
-      text: `这次${c.label}安排了 ${c.exercises} 个动作，但都集中在 ${c.covered.map((m) => MUSCLES[m]).join('、')}。`
-        + (fills.length ? '想练全的话，从下面挑一个补上。' : '想练全的话补一个针对性动作。'),
-      actions: fills.map((e) => ({ id: e.id, label: e.name, note: fillsFor(e) })),
-    });
-  }
   return tips;
 }
 

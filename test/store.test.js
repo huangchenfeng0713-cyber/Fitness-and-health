@@ -45,8 +45,8 @@ test('建议只使用完整且新鲜可信的当前消耗，过期或缺字段�
     };
     const valid = run(fresh);
     assert.equal(valid.advice.trend.burnedNow, valid.liveEnergy.burnedNow);
-    assert.equal(valid.advice.trend.currentCovered, true);
-    assert.equal(run({ ...fresh, activeEnergy: 0 }).advice.trend.currentCovered, true);
+    assert.equal(valid.advice.trend.currentCovered, false);
+    assert.equal(run({ ...fresh, activeEnergy: 0 }).advice.trend.currentCovered, false);
     for (const health of [
       { ...fresh, energyObservedAt: new Date(2026, 8, 6, 20).toISOString() },
       { ...fresh, energyObservedAt: null },
@@ -93,7 +93,7 @@ test('v1.2 升级会迁移旧版冲突目标，不让应用在启动时崩溃', 
 
 test('同一份健康快照随时钟前进仍使用原覆盖比例', () => {
   const local = (hour, minute = 0) => new Date(2026, 7, 23, hour, minute);
-  const health = { energyObservedAt: local(12).toISOString() };
+  const health = { restingEnergy:900, activeEnergy:200, energyObservedAt: local(12).toISOString() };
   const atNoon = resolveEnergyObservation(health, null, '2026-08-23', local(12, 5));
   const atNight = resolveEnergyObservation(health, null, '2026-08-23', local(22));
   assert.equal(atNoon.dayFraction, 0.5);
@@ -102,17 +102,11 @@ test('同一份健康快照随时钟前进仍使用原覆盖比例', () => {
   assert.equal(atNight.ageMinutes, 600);
 });
 
-test('旧数据可用导入时刻作覆盖时间，完全缺时间则明确回退', () => {
-  const local = (hour) => new Date(2026, 7, 23, hour);
-  const fromImport = resolveEnergyObservation({}, {
-    at: local(15).toISOString(), days: 1, range: ['2026-08-23', '2026-08-23'],
-  }, '2026-08-23', local(16));
-  assert.equal(fromImport.dayFraction, 0.625);
-  assert.equal(fromImport.missingObservationTime, false);
-
-  const missing = resolveEnergyObservation({}, null, '2026-08-23', local(16));
-  assert.equal(missing.observedAt, null);
-  assert.equal(missing.missingObservationTime, true);
+test('导入时刻不能冒充观测覆盖时间', () => {
+  const row = { restingEnergy:900, activeEnergy:200 };
+  const result = resolveEnergyObservation(row, {at:'2026-08-23T15:00:00+08:00',days:1},'2026-08-23',new Date('2026-08-23T16:00:00+08:00'));
+  assert.equal(result.observedAt,null);
+  assert.equal(result.missingObservationTime,true);
 });
 
 
@@ -147,8 +141,7 @@ test('身体信息算不出目标时不会让整条流水线崩掉', () => {
     let derived;
     assert.doesNotThrow(() => { derived = runWith(patch); }, `${label} 让 recompute 抛异常了`);
     assert.ok(derived.profileError, `${label} 没有记录原因`);
-    assert.ok(Number.isFinite(derived.targets.kcal) && derived.targets.kcal > 0,
-      `${label} 之后算不出可用的热量目标`);
+    assert.equal(derived.targets.kcal, null);
     // 退回默认档案算出来的数字不能冒充个性化结果
     assert.equal(derived.demoMode, true, `${label} 没有标成非个性化`);
   }
@@ -244,12 +237,12 @@ test('recompute 对着脏数据也不许抛 —— 它在 boot 里就会跑一�
     assert.doesNotThrow(() => recompute(), `${name} 让 recompute 抛了异常`);
     const t = state.derived?.targets || {};
     for (const k of ['kcal', 'protein', 'fat', 'carb']) {
-      assert.ok(Number.isFinite(t[k]) && t[k] >= 0, `${name} 之后 ${k} 是 ${t[k]}`);
+      assert.ok(t.status === 'unavailable' ? t[k] === null : Number.isFinite(t[k]) && t[k] >= 0, `${name} 之后 ${k} 是 ${t[k]}`);
     }
   }
 });
 
-test('身体信息算不出目标时退回默认档案，并把原因交给界面去说', () => {
+test('身体信息不可用时保留错误原因且没有默认目标', () => {
   Object.assign(state, {
     profile: { sex: 'male', age: 30, heightCm: 5, weightKg: 5, activity: 'moderate', goal: 'cut' },
     healthDays: [], healthByDate: new Map(), dietEntries: [], dietDaily: [],
@@ -257,7 +250,8 @@ test('身体信息算不出目标时退回默认档案，并把原因交给界�
   });
   recompute();
   assert.ok(state.derived.profileError, '没有把失败原因记进 derived，界面就无话可说');
-  assert.ok(state.derived.targets.kcal > 0, '仍要给出一份能显示的默认目标');
+  assert.equal(state.derived.targets.kcal, null);
+  assert.deepEqual(state.derived.advice.recommend, []);
 });
 
 test('升级旧个人参照偏好时仅清理过期设置，不改身体资料或原对象', () => {

@@ -175,8 +175,8 @@ test('热量收支样本少于 3 天时不换算成每周体重变化', () => {
   assert.equal(few, INSUFFICIENT_DATA_TEXT);
 
   const enough = trendReading('balance', pts(-600, -500, -550));
-  assert.match(enough, /按 7700 kcal\/kg 的脂肪当量换算/);
-  assert.match(enough, /不等于体重一定这样变/);
+  assert.doesNotMatch(enough, /7700|每周.*kg/);
+  assert.match(enough, /配对记录日/);
   assert.ok(MIN_POINTS_FOR_CLAIM === 3);
 });
 

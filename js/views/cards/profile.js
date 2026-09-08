@@ -2,9 +2,9 @@
 
 import { h, num, toast, field } from '../../lib/utils.js';
 import { infoTip } from '../../lib/ui.js';
-import { state, saveProfile } from '../../lib/store.js';
+import { state, saveProfile, planForProfile } from '../../lib/store.js';
 import {
-  ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile, rateGuidance,
+  ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile, rateGuidance, ageFrom,
 } from '../../core/nutrition.js';
 
 let draft = null;
@@ -36,7 +36,8 @@ function isDirty() {
 export function profileCard(rerender) {
   const d = ensureDraft();
   const bodySource = state.derived?.bodySource || {};
-  const planWeight = () => Number(state.derived?.effectiveProfile?.weightKg ?? d.weightKg) || 0;
+  const previewProfile = () => ({ ...d, targetVersions: [], ...Object.fromEntries(Object.entries(bodySource).filter(([, hit]) => hit).map(([k, hit]) => [k, hit.value])) });
+  const planWeight = () => Number(previewProfile().weightKg) || 0;
 
   const saveBtn = h('button.primary-btn', {
     disabled: !isDirty(),
@@ -51,7 +52,7 @@ export function profileCard(rerender) {
         ...draft, ageEstimated: !draft.birthday, demoMode: false, onboarded: true,
       });
       resetDraft();
-      toast('已保存', 'ok');
+      toast('已保存，从今天生效', 'ok');
       rerender();
     },
   }, '保存身体信息');
@@ -61,6 +62,8 @@ export function profileCard(rerender) {
     const dirty = isDirty();
     saveBtn.disabled = !dirty;
     dirtyMark.hidden = !dirty;
+    syncRateHint();
+    syncDraftStats();
   };
 
   const sexSelect = h('select', {
@@ -98,9 +101,12 @@ export function profileCard(rerender) {
   const plannedRate = () => (d.rateKgPerWeek != null
     ? d.rateKgPerWeek : GOALS[d.goal]?.defaultRateKgPerWeek ?? 0);
   const syncRateHint = () => {
-    const g = rateGuidance({ weightKg: planWeight(), rateKgPerWeek: plannedRate() });
-    rateHint.textContent = g.text || '减脂填负数';
-    rateHint.className = g.level === 'ok' ? '' : `rate-hint ${g.level}`;
+    const solved = planForProfile(previewProfile());
+    rateHint.textContent = solved.status === 'unavailable' ? solved.reason
+      : '输入意愿 ' + plannedRate() + ' kg/周；实际预算 ' + solved.kcal + ' kcal/天，初始调整 ' + solved.dailyDelta + ' kcal/天。'
+        + (solved.rateLimitedBy ? ({ floor: '受应用计划下限约束。', 'daily-kcal': '受每日调整上限约束。' })[solved.rateLimitedBy] || '' : '')
+        + '7700 换算仅作初始预算近似。';
+    rateHint.className = solved.status === 'unavailable' ? 'rate-hint over' : '';
   };
 
   const rate = h('input', {
@@ -124,14 +130,17 @@ export function profileCard(rerender) {
     },
   }, Object.values(GOALS).map((g) => h('option', { value: g.key, selected: d.goal === g.key }, g.label)));
 
-  const p = state.profile;
-  const w = state.derived?.effectiveProfile?.weightKg ?? p.weightKg;
-  const bmiVal = bmi(w, state.derived?.effectiveProfile?.heightCm ?? p.heightCm);
-  const cat = bmiCategory(bmiVal);
-  const lbm = leanBodyMass(w, state.derived?.effectiveProfile?.bodyFatPct ?? p.bodyFatPct);
-
-  const sourceNote = h('p.profile-source-note', null,
-    '身高、体重、体脂同步过 Apple 健康后自动采用最近一次设备记录；尚未同步的项目仍可手动填写。');
+  const stats = h('div.stat-row');
+  const syncDraftStats = () => {
+    const p = previewProfile(), solved = planForProfile(p);
+    const bmiVal = bmi(p.weightKg, p.heightCm), cat = bmiCategory(bmiVal, ageFrom(p));
+    const lbm = leanBodyMass(p.weightKg, p.bodyFatPct);
+    stats.replaceChildren(...[
+      [num(bmiVal, 1), `BMI · 成人参考${cat ? ` · ${cat.label}` : ''}`],
+      [num(lbm, 1), '瘦体重 kg'], [num(solved.bmr), '估算静息能量 kcal'], [num(solved.tdee), '计划参考 TDEE kcal'],
+    ].map(([value, label]) => h('div.stat', null, h('strong', null, value), h('span', null, label))));
+  };
+  syncDraftStats();
 
   return h('section.card', null,
     h('div.card-head', null,
@@ -139,25 +148,23 @@ export function profileCard(rerender) {
       h('div.card-head-actions', null,
         dirtyMark,
         infoTip('查看身体信息用途',
-          h('p', null, '身高、体重、生日和性别用来估算你的能量需求。前三项以 Apple 健康最近一次记录为准，所以在这儿改不了。'),
-          h('p', null, '体脂率可选。家用体脂秤的单次数值误差较大，更适合看长期趋势。')))),
-    sourceNote,
+          h('p', null, '身高、体重、生日和性别用来估算你的能量需求。已同步的身高、体重、体脂采用设备记录，生日在此填写。自动计划适用于 19–78 岁一般健康成人，不覆盖孕哺和需医疗营养治疗者。'),
+          h('p', null, '体脂率可选。家用体脂秤的单次数值误差较大，更适合看长期趋势。'),
+          h('p', null, '日常活动量包括工作、通勤和运动，不能仅按每周训练次数选择。活动系数是粗略参考，可结合多日记录调整。')))),
+
     h('div.form-grid', null,
       field('性别', sexSelect),
-      field('生日', birthday, '用于计算个人目标', 'span-all'),
+      field('生日', birthday, null, 'span-all'),
       lockedField('身高（cm）', 'heightCm', 'cm', trim)
         || field('身高（cm）', numInput('heightCm', '0.5')),
       lockedField('体重（kg）', 'weightKg', 'kg')
         || field('体重（kg）', numInput('weightKg', '0.1')),
       lockedField('体脂率（%）', 'bodyFatPct', '%')
         || field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
-      field('日常活动量', activity, '选择平时的生活强度', 'span-all'),
+      field('日常活动量', activity, null, 'span-all'),
       field('目标', goal),
       field('目标速率（kg/周）', rate, rateHint, 'span-all')),
     saveBtn,
-    h('div.stat-row', null,
-      h('div.stat', null, h('strong', null, bmiVal ?? '—'), h('span', null, `BMI${cat ? ` · ${cat.label}` : ''}`)),
-      h('div.stat', null, h('strong', null, lbm != null ? num(lbm, 1) : '—'), h('span', null, '瘦体重 kg')),
-      h('div.stat', null, h('strong', null, num(state.derived?.bmr)), h('span', null, '估算静息能量 kcal')),
-      h('div.stat', null, h('strong', null, num(state.derived?.staticTdee)), h('span', null, '估算 TDEE kcal'))));
+    h('p.form-hint', null, '新计划从保存当天生效，历史无版本时按当前设置对照。'),
+    stats);
 }

@@ -6,7 +6,7 @@
  */
 
 import { FOODS, per100, nutrientsFor, freeSugarPer100 } from '../data/foods.js';
-import { clamp, round, ATWATER } from './nutrition.js';
+import { clamp, round, ATWATER, computeGaps } from './nutrition.js';
 import { macroSplit } from './metrics.js';
 import { formatDuration } from './duration.js';
 import { MEALS, paceNote } from './eating-rhythm.js';
@@ -310,13 +310,13 @@ function scoreFood(food, ctx) {
   }
 
   // 5) 微量营养约束：已超标的项要扣分
-  if (gaps.sodium.remaining < gaps.sodium.target * 0.25) {
+  if (gaps.sodium.complete && gaps.sodium.remaining < gaps.sodium.target * 0.25) {
     score -= clamp(nut.sodium / 120, 0, 20);
   }
-  if (gaps.sugar.remaining < 8) {
+  if (gaps.sugar.complete && gaps.sugar.remaining < 8) {
     score -= clamp(nut.sugar / 3, 0, 18);
   }
-  if (gaps.fiber.remaining > 8 && nut.fiber >= 3) {
+  if (gaps.fiber.complete !== false && gaps.fiber.remaining > 8 && nut.fiber >= 3) {
     score += 6;
     if (!reasons.some((r) => r.includes('纤维'))) reasons.push(`补 ${nut.fiber}g 纤维`);
   }
@@ -424,22 +424,19 @@ export function buildAdvice(input) {
     isToday = true,
     waterCount = null,
     trendEnabled = true,
-    burnedNow = null,
+    burnedNow = null, observation = null, deviceBudgetEnabled = profile.useAppleEnergy !== false,
   } = input;
 
-  const gaps = {};
-  for (const k of ['kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'sodium']) {
-    const target = Number(targets[k]) || 0;
-    const eaten = Number(intake[k]) || 0;
-    gaps[k] = { target, eaten: round(eaten, 1), remaining: round(target - eaten, 1), pct: target > 0 ? round((eaten / target) * 100) : 0 };
-    if (k === 'fat') {
-      const upper = Number(targets.fatUpper) || target;
-      gaps[k].upper = round(upper, 1);
-      gaps[k].upperRemaining = round(upper - eaten, 1);
-      gaps[k].upperPct = upper > 0 ? round((eaten / upper) * 100) : 0;
-    }
-  }
+  const gaps = computeGaps(targets, intake);
 
+  if (!isToday || targets.status === 'unavailable' || !gaps.kcal.complete) {
+    const future = observation?.dateMode === 'future';
+    return { generatedAt: now.toISOString(), gaps, budget: null, isTrainingDay: false, recommend: [], insights: [], correction: null,
+      trend: { state: future ? 'future' : !isToday ? 'historical' : 'unavailable', active: false, remainingMeals: [] },
+      status: { level: 'good', label: !isToday ? (future ? '预填记录' : '记录回顾') : '待完善',
+        headline: !isToday ? (future ? '未来日期的预填记录' : '回看这一天的记录') : targets.reason || '部分热量未知',
+        detail: '已知记录合计 ' + gaps.kcal.eaten + ' kcal。' + (targets.status === 'ready' ? (targets.context || '按当前设置对照') + '：' + targets.kcal + ' kcal。' : '暂不生成个体计划。') } };
+  }
   const kcalLeft = gaps.kcal.remaining;
   const proteinLeft = gaps.protein.remaining;
   const hour = now.getHours() + now.getMinutes() / 60;
@@ -463,9 +460,9 @@ export function buildAdvice(input) {
     budget.optionalKind = correction.optionalProtein ? 'protein' : 'snack';
   }
   // 活动能量已经被判为不可信时不能拿它推断训练日，
-  // 否则会出现「凌晨躺床上却被告知今天是训练日、该补蛋白和碳水」这种事
+  // 否则会出现「凌晨躺床上却被告知今天活动较多、该补蛋白和碳水」这种事
   const isTrainingDay = (health.exerciseMinutes || 0) >= 30
-    || (!targets.activeCapped && baseline.activeEnergy > 0
+    || (observation?.fields?.activeEnergy?.status === 'valid' && baseline.activeEnergy > 0
       && (health.activeEnergy || 0) > baseline.activeEnergy * 1.25);
 
   const ctx = {
@@ -520,7 +517,7 @@ export function buildAdvice(input) {
   // ---- 洞察 ----
   const insights = buildInsights({
     gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
-    isToday, waterCount, correction,
+    isToday, waterCount, correction, observation, deviceBudgetEnabled,
   });
 
   return {
@@ -553,113 +550,12 @@ export function buildAdvice(input) {
  * 一笔都没记的人看到的也是它，读起来像句口号，不知道它在要求什么。
  * 现在这一格专门回答「那我接下来怎么办」，一句话、不报数字。
  */
-export function judgeStatus({
-  gaps, kcalLeft, hour, targets, budget, hasIntake = true,
-  trend = null,
-}) {
-  const kcalPct = gaps.kcal.pct;
-  if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录',
-    detail: '已记录 ' + gaps.kcal.eaten + ' kcal，对照目标 ' + gaps.kcal.target + ' kcal。回顾基于已保存记录，可能不完整。' };
-  // 时间和已完成餐次优先于目标偏差，不能把夜宵默认为今天还应吃的一餐。
-  const dayComplete = hour >= TREND_POLICY.lateHour || trend?.dayComplete === true;
-  const recorded = `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`;
-  if (dayComplete) {
-    if (!hasIntake) return { level: 'warn', headline: '今晚不必一次补完',
-      detail: '夜里不建议一次补完全天计划差额；按饥饿感决定是否少量进食，明天回到正常三餐。' };
-    if (kcalLeft < -BALANCE_WITHIN) return { level: 'good', headline: '明天照常安排三餐',
-      detail: recorded + `比计划多 ${round(-kcalLeft)} kcal。今天无需补偿性少吃，明天照常安排三餐；单日偏差不能说明增减脂结果。` };
-    if (trend?.currentCovered && kcalLeft > BALANCE_WITHIN) return { level: 'good', headline: '今天不必再追齐数字',
-      detail: recorded + `当前设备记录消耗 ${round(trend.burnedNow)} kcal，摄入已覆盖这部分消耗。无需为了达到计划强行补吃；若饿了可少量进食，明天照常安排三餐。` };
-    if (Math.abs(kcalLeft) <= BALANCE_WITHIN) return { level: 'good', headline: '今天不用再补热量',
-      detail: recorded + '已接近今日计划，明天照常安排三餐。' };
-    return { level: 'good', headline: hour >= TREND_POLICY.lateHour ? '今晚不必一次补完' : '不必为目标额外加餐',
-      detail: recorded + '计划余量不等于必须补吃的量。按饥饿感决定是否少量进食，明天回到正常三餐，不必追齐数字。' };
-  }
-  if (trend?.currentCovered && kcalLeft > BALANCE_WITHIN && trend.direction !== 'over') return {
-    level: 'good', headline: '暂不必为目标额外加餐',
-    detail: recorded + `当前设备记录消耗 ${round(trend.burnedNow)} kcal，摄入已覆盖这部分消耗。当前收支会随消耗继续变化，后续正餐照常安排，不必为了计划余量额外补吃。`,
-  };
-  if (trend?.active && trend.direction === 'under') return {
-    level: 'warn', headline: '下一餐可以多吃些',
-    detail: '按当前记录和剩余三餐安排，全天摄入可能明显低于今日计划。' + budget.meal.label
-      + '可在正常一餐内小幅调整，不必一次补齐差额。',
-  };
-  if (trend?.active && trend.range && trend.direction === 'over') return {
-    level: 'warn', headline: '后续餐次调整搭配即可',
-    detail: '如果后续主餐按固定三餐参照安排，全天摄入可能明显高于今日计划。不必跳餐或额外运动抵消。',
-  };
-  /*
-   * 这个钟点该吃到多少，由 core/eating-rhythm.js 说了算。
-   *
-   * 原先这里是 `(hour-6)/16` —— 一条匀速直线，等于假设人从早到晚均匀地吃。
-   * 没有一个人是这样的：按它算，中午 12 点该吃到 37.5%，而三餐比例下
-   * 一顿午饭吃完就该到 60%，同一个人会被这条直线判成「吃得快了」。
-   */
-  const pace = paceNote({ hour, eatenPct: kcalPct });
-
-  /*
-   * 标题只说下一步，不报数字。圈心里已经是「还可摄入 / 超出目标 / 接近目标」加那个数，
-   * 标题再写一遍余量就叠了。差 40 kcal 以内和圈心同一把尺：那时候要说的是
-   * 「今天不用再补」，不是再念一遍「到位」。
-   */
-  if (Math.abs(kcalLeft) <= BALANCE_WITHIN) {
-    return {
-      level: 'good',
-      headline: '今天不用再补热量',
-      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划 ${gaps.kcal.target} kcal。`
-        + (kcalLeft < 0
-          ? '已接近今日计划，今天无需补偿性少吃。'
-          : ''),
-    };
-  }
-
-  if (kcalLeft < -Math.max(TREND_POLICY.notableKcal, targets.kcal * TREND_POLICY.notableShare)) {
-    return {
-      // 热量目标是计划区间，不是安全上限。单日偏高用橙色提醒即可；
-      // 红色只留给钠、游离糖等真正的上限，避免诱导跳餐或补偿性节食。
-      level: trend && !trend.active ? 'good' : 'warn',
-      headline: '不必少吃补回来',
-      detail: `已记录 ${gaps.kcal.eaten} kcal，今日计划为 ${gaps.kcal.target} kcal。单日偏差不能说明增减脂结果，不必跳过下一餐或明天补偿性少吃；如果一周内反复偏高，再结合 7 天体重趋势调整份量。`,
-    };
-  }
-  if (kcalLeft < 0) {
-    return {
-      level: 'good',
-      headline: '下一餐回到正常预算',
-      detail: recorded + `比计划多 ${round(-kcalLeft)} kcal。单日记录略高于计划，无需补偿性少吃；后续正餐照常安排，按饥饿感决定份量。`,
-    };
-  }
-  /*
-   * 0 kcal 只说明「没有饮食记录」，不能据此断言这个人吃得慢。
-   * 之前到下午会拿 0% 直接和时间进度比较，结果用户明明一口没记，界面却说
-   * 「吃得慢一些」——既像在评价进食速度，也没有指出更可能的漏记。
-   */
-  if (!hasIntake) {
-    // 没吃早餐时，剩余预算算法会把缺口按后续餐次重新分配，午餐数字因此可能接近
-    // 全天的一半。那适合内部排预算，却不适合直接叫人一餐补回；空记录时只展示
-    // 当前餐原本的日占比，避免出现「13:30 午餐建议 975 kcal」这种过量暗示。
-    const normalMealKcal = round(Math.min(budget.kcal, targets.kcal * budget.meal.share));
-    /*
-     * 这一段只说热量。「漏记了就先补记」是数据质量的事，归今日提示第一条，
-     * 在这儿再说一遍就是同一屏里写两次。
-     */
-    return {
-      level: 'good',
-      headline: '先照常吃这一餐',
-      detail: `按计划今天要吃到 ${gaps.kcal.target} kcal。${budget.meal.label}先按正常一餐安排，约 ${normalMealKcal} kcal，不必在这一餐补完当天缺口。`,
-    };
-  }
-  if (trend && ['uncertain', 'watch', 'settled', 'historical'].includes(trend.state)) return {
-    level: 'good', label: trend.state === 'historical' ? '记录回顾' : '先观察',
-    headline: trend.state === 'historical' ? '回看这一天的记录' : '先照常安排下一餐', detail: trend.reason,
-  };
-  if (trend?.state === 'steady') return { level: 'good', headline: '照现在的节奏继续',
-    detail: '当前记录暂未显示明确的全天偏离，后续主餐照常安排，按饥饿感决定份量。' };
-  return {
-    level: 'good',
-    headline: '照现在的节奏继续',
-    detail: `热量完成 ${kcalPct}%，${pace.text}。${budget.meal.label}建议 ${budget.kcal} kcal。`,
-  };
+export function judgeStatus({ gaps, kcalLeft, targets, trend = null }) {
+  const recorded = '已记录 ' + gaps.kcal.eaten + ' kcal，每日计划 ' + gaps.kcal.target + ' kcal。';
+  if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录', detail: recorded + '按当前设置对照。' };
+  if (trend?.dayComplete) return { level: 'good', headline: '记录已完成', detail: recorded + '不必为凑数强行进食。' };
+  if (kcalLeft < -BALANCE_WITHIN) return { level: 'good', headline: '后续餐次照常安排', detail: recorded + '按饥饿感调整份量，不需要跳餐或额外运动抵消。' };
+  return { level: 'good', headline: '按正常餐次安排', detail: recorded + '餐次有记录不代表已吃完，全天摄入仍需结合后续记录。' };
 }
 
 /**
@@ -687,7 +583,7 @@ export const INSIGHT_PRIORITY = {
  */
 export function buildInsights({
   gaps, targets, health, baseline, profile, now, isTrainingDay, budget, entries,
-  isToday = true, waterCount = null, correction = null,
+  isToday = true, waterCount = null, correction = null, observation = null, deviceBudgetEnabled = true,
 }) {
   const list = [];
   const add = (type, priority, title, basis, action = '') => list.push({
@@ -728,7 +624,7 @@ export function buildInsights({
     return list;
   }
   const hour = now.getHours();
-  const dayComplete = hour >= TREND_POLICY.lateHour || correction?.dayComplete === true;
+  const dayComplete = correction?.dayComplete === true;
 
   /* ---------------- 1 数据本身有没有问题 ---------------- */
 
@@ -749,29 +645,10 @@ export function buildInsights({
    * 热量目标被顶到 4455。数值已经在 dynamicTDEE 那层挡掉了，但不说出来的话，
    * 用户只会看到一个正常的目标，不知道自己的快捷指令一直在取错数据。
    */
-  if (targets.activeCapped) {
-    add('warn', INSIGHT_PRIORITY.data, '今天的活动能量数值不可信',
-      `健康数据里今天的活动能量是 ${round(targets.activeReported || 0)} kcal，`
-      + `按现在的时间点算不可能达到（近期日均 ${round(baseline.activeEnergy || 0)} kcal）。`
-      + '热量目标已改按平时的活动节奏估算。',
-      '常见原因是取数快捷指令的日期范围没有选「今天」，把多天累加成了一天；也可能是单位或同步异常，请到「数据」页核对原始数值。');
-  }
-
-  // 没同步到活动能量，热量目标就退回公式估算——这件事得让人知道，而不是静默降级
-  if (isToday && !targets.activeCapped && targets.tdeeSource !== 'apple') {
-    add('warn', INSIGHT_PRIORITY.data, '今天还没有同步到活动能量',
-      '热量目标暂时按活动系数估算，不是按设备记录算的。',
-      '到设置的「数据管理」同步一次，目标会按今天实际的活动重新估。');
-  }
-
-  /*
-   * 目标是怎么算出来的，依据够不够硬，得让用户看得到。
-   * 年龄差 10 岁在 Mifflin-St Jeor 里就是 50 kcal，静默用兜底值等于悄悄编数据。
-   */
-  if (targets.ageEstimated) {
-    add('warn', INSIGHT_PRIORITY.data, '年龄按 30 岁估算',
-      '没有生日，静息能量只能用默认年龄算——年龄每差 10 岁就是 50 kcal。',
-      '到设置里补上生日会更准。');
+  if (observation && !observation.valid && deviceBudgetEnabled) {
+    const missing = Object.entries(observation.fields).filter(([, f]) => f.status === 'missing').map(([k]) => k === 'activeEnergy' ? '活动能量' : '静息能量');
+    add('warn', INSIGHT_PRIORITY.data, missing.length ? '缺少' + missing.join('、') : observation.reason,
+      '原始单项仍可在数据页查看；每日计划与今天记录分开计算。', '核对数据页的日期、来源与字段截止时间。');
   }
 
   /* ---------------- 2 热量和蛋白 ---------------- */
@@ -836,7 +713,7 @@ export function buildInsights({
   }
   if (gaps.fiber.remaining > gaps.fiber.target * 0.5 && hour >= 14) {
     add('fiber', INSIGHT_PRIORITY.threshold,
-      `膳食纤维偏低（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`,
+      `已记录纤维较少（${gaps.fiber.eaten}g / ${gaps.fiber.target}g）`,
       '中国成人参考 25–30g，现在过了大半天还不到一半。',
       dayComplete ? '明天在正常三餐里安排蔬菜、完整水果或全谷物，不必今晚集中补齐。' : '加一份蔬菜、完整水果或全谷物。');
   }
@@ -865,9 +742,9 @@ export function buildInsights({
   /* ---------------- 5 活动、睡眠、饮水 ---------------- */
 
   if (isTrainingDay) {
-    add('info', INSIGHT_PRIORITY.habit, '今天是训练日',
+    add('info', INSIGHT_PRIORITY.habit, '今天活动较多',
       `锻炼 ${round(health.exerciseMinutes || 0)} 分钟`
-      + (targets.activeCapped ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
+      + (observation?.fields?.activeEnergy?.status === 'suspect' ? '' : `、活动能量 ${round(health.activeEnergy || 0)} kcal`)
       + '。',
       '每日总蛋白和分餐分配更重要；可把一餐约 20–40g 蛋白安排在训练前后，按耐受和饮食习惯调整。');
   }

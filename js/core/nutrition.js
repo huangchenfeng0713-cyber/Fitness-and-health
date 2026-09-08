@@ -4,7 +4,7 @@
  *
  * 主要能力：
  *  1. 基础代谢 BMR（Mifflin-St Jeor / Katch-McArdle）
- *  2. 静态 TDEE（活动系数）与动态 TDEE（结合 Apple 设备当日能量记录）
+ *  2. 每日计划 TDEE（活动系数或完整日基线），独立的日内估算兼容接口
  *  3. 热量 / 蛋白质 / 脂肪 / 碳水 / 纤维 / 钠 / 糖 / 饮水 的每日目标
  *  4. 当日预算的实时再分配（按已过时间、已摄入量）
  */
@@ -12,7 +12,7 @@
 /*
  * 1 kg 脂肪组织约含 7700 kcal（Wishnofsky 1958，英制原文是 3500 kcal/lb）。
  * 这是个经验换算，不是精确的生理常数：真实的体重变化里还有瘦体重、水分和
- * 代谢适应，所以凡是用它的地方都要说成「脂肪当量」，不能说成「会瘦多少」。
+ * 代谢适应。仅用于初始预算近似，不在主区输出每周脂肪当量，也不能说成「会瘦多少」。
  */
 export const KCAL_PER_KG_FAT = 7700;
 
@@ -22,28 +22,20 @@ export const CARB_RDA_G = 130;
 export const CARB_HARD_FLOOR_G = 50;
 export const ATWATER = { protein: 4, carb: 4, fat: 9, alcohol: 7 };
 
-/*
- * 活动系数。沿用 Harris-Benedict 体系里流传最广的那组倍数（1.2 / 1.375 / 1.55 /
- * 1.725 / 1.9）。要说清楚：这组数字是营养实践里的**惯例**，不是某项测量的结果，
- * 不同教科书给的档位也略有出入。
- *
- * 它只在「没有 Apple 健康数据」时决定 TDEE。一旦当天有设备活动能量记录，
- * dynamicTDEE 会改用「静息 + 活动」，不再乘这个系数或重复叠加固定 TEF，
- * 所以不存在把运动量算两遍的问题。
- */
+/* 活动系数仅用于每日计划的公式分支；设备分支要求近期完整日。今天观测不改变已保存计划。 */
 export const ACTIVITY_LEVELS = {
-  sedentary: { key: 'sedentary', label: '久坐（几乎不运动）', factor: 1.2 },
-  light: { key: 'light', label: '轻度活动（每周 1-3 次）', factor: 1.375 },
-  moderate: { key: 'moderate', label: '中等活动（每周 3-5 次）', factor: 1.55 },
-  active: { key: 'active', label: '高强度（每周 6-7 次）', factor: 1.725 },
-  athlete: { key: 'athlete', label: '运动员 / 体力劳动', factor: 1.9 },
+  sedentary: { key: 'sedentary', label: '久坐', factor: 1.2 },
+  light: { key: 'light', label: '轻度活动', factor: 1.375 },
+  moderate: { key: 'moderate', label: '中等活动', factor: 1.55 },
+  active: { key: 'active', label: '较高日常活动量', factor: 1.725 },
+  athlete: { key: 'athlete', label: '高强度活动', factor: 1.9 },
 };
 
 /*
  * 体重变化速率的上限，按占体重的比例/周。计划和判读共用这两个数 ——
  * 「计划允许多快」和「实测多快算偏快」不该是两个门槛。
  *
- * 减：1%/周。再快下去掉的就不只是脂肪。约束的是脂肪能被动员多快。
+ * 减：1%/周。仅为运动营养实践参考，不代表个体组织变化的确定界线。
  * 增：0.5%/周。约束的是另一回事 —— 肌肉本身长多快。即便新手，肌肉的
  *     增肌期常用的体重变化参考是每周 0.25%~0.5%；更快增重可能提高脂肪增加比例。
  * 两者共用一个 1% 会允许 45kg 的人计划每周 +0.45kg，一个月长 4% 体重。
@@ -51,33 +43,22 @@ export const ACTIVITY_LEVELS = {
 export const MAX_LOSS_RATE_PCT = 0.01;
 export const MAX_GAIN_RATE_PCT = 0.005;
 
-/*
- * 上面两个是**建议上沿**，不是硬闸门。
- *
- * 证据支持的是「超过这个速度，脂肪增加或瘦体重流失风险可能上升」，
- * 不是「0.517% 不安全，必须拦下」。原先按 0.5% 硬截断，58kg 的人填 0.30
- * 会被悄悄改成 0.29 —— 差 11 kcal/天，远小于食物估算和 TDEE 的误差，
- * 却让界面说出「你填的 0.3 过快」这种过度精确的话。
- *
- * 现在只拦明显不可能的输入：每周超过体重的 1.5%。那个量级已经不是
- * 「激进的计划」而是填错了（60kg 的人每周 ±0.9kg）。
- * 落在建议上沿和硬上限之间的值原样保留，由界面说明它站在哪儿。
- */
+/* 1.5%/周是本应用自动计划范围，不代表普遍生理极限。 */
 export const ABSURD_RATE_PCT = 0.015;
 
 export const GOALS = {
   cut: { key: 'cut', label: '减脂', defaultRateKgPerWeek: -0.5 },
   maintain: { key: 'maintain', label: '维持', defaultRateKgPerWeek: 0 },
-  bulk: { key: 'bulk', label: '增肌', defaultRateKgPerWeek: 0.25 },
+  bulk: { key: 'bulk', label: '增肌期增重', defaultRateKgPerWeek: 0.25 },
 };
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const round = (v, d = 0) => {
   const m = 10 ** d;
-  return Math.round(v * m) / m;
+  return Number.isFinite(v * m) ? Math.round(v * m) / m : v;
 };
 
-/** 没填生日也没填年龄时的兜底值。用到它的地方必须让界面提示「这是估算」 */
+/** @deprecated 仅保留旧调用方的常量兼容；计算不再使用缺省年龄。 */
 export const DEFAULT_AGE = 30;
 
 /** 由出生日期算年龄；也接受直接传入的数字年龄 */
@@ -92,15 +73,16 @@ export function ageFrom(profile, today = new Date()) {
       let a = today.getFullYear() - b.getFullYear();
       const m = today.getMonth() - b.getMonth();
       if (m < 0 || (m === 0 && today.getDate() < b.getDate())) a -= 1;
-      if (a > 0 && a < 120) return a;
+      return a;
     }
   }
-  return Number(profile?.age) > 0 ? Number(profile.age) : DEFAULT_AGE;
+  if (profile?.birthday) return null;
+  return profile?.ageEstimated !== true && profile?.age != null && Number.isFinite(Number(profile.age)) ? Number(profile.age) : null;
 }
 
 /** 年龄到底是填的还是兜底猜的 —— Mifflin-St Jeor 里年龄每差 10 岁就是 50 kcal */
 export function ageIsEstimated(profile, today = new Date()) {
-  // 设置页没有“年龄”输入框；默认档案用 ageEstimated 标记 30 岁占位值。
+  // ageEstimated 仅用于识别旧版本猜测的年龄；此类年龄不再参与计算。
   // API/测试显式传入的 age 仍视为用户给定，保持向后兼容。
   if (!profile?.birthday) return profile?.ageEstimated === true || !(Number(profile?.age) > 0);
   // YYYY-MM-DD 不能直接交给 Date 解析：规范会按 UTC 午夜处理，在美洲时区会落到前一天。
@@ -117,15 +99,16 @@ export function ageIsEstimated(profile, today = new Date()) {
 }
 
 /** 成人静息能量与营养目标的输入校验；不拿虚构的默认身高体重去生成“精确”结果。 */
-export function validateProfile(profile) {
+export function validateProfile(profile, today = new Date()) {
   const errors = [];
   const finiteIn = (value, lo, hi) => Number.isFinite(Number(value)) && Number(value) >= lo && Number(value) <= hi;
   if (!profile || typeof profile !== 'object') return { valid: false, errors: ['缺少身体信息'] };
   if (!['male', 'female'].includes(profile.sex)) errors.push('请选择性别');
   if (!finiteIn(profile.weightKg, 35, 350)) errors.push('体重需在 35–350 kg');
   if (!finiteIn(profile.heightCm, 130, 230)) errors.push('身高需在 130–230 cm');
-  const age = ageFrom(profile);
-  if (!finiteIn(age, 18, 100)) errors.push('本计算仅适用于 18–100 岁成人');
+  const age = ageFrom(profile, today);
+  if (age == null && !profile.birthday) errors.push('请填写生日或明确年龄');
+  if (age != null && !finiteIn(age, 18, 100)) errors.push('本计算仅适用于 18–100 岁成人');
   if (profile.birthday) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(profile.birthday));
     const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
@@ -185,10 +168,10 @@ export function rateGuidance({ weightKg, rateKgPerWeek } = {}) {
       ...shape,
       level: 'absurd',
       text: `每周 ${magnitude} kg 超过了体重的 ${round(ABSURD_RATE_PCT * 100, 1)}%（约 ${absurdKg} kg/周）。`
-        + '这个量级已经不是激进的计划而是填错了，请先改小。',
+        + '超出本应用自动计划范围，请调整输入或寻求个体评估。',
     };
   }
-  if (magnitude > advisoryKg + 1e-9) {
+  if (magnitude > advisoryKg + 0.025) {
     return {
       ...shape,
       level: 'over',
@@ -202,8 +185,8 @@ export function rateGuidance({ weightKg, rateKgPerWeek } = {}) {
   return { ...shape, level: 'ok', text: `${base}在建议范围内（上沿约 ${advisoryKg} kg/周）。` };
 }
 
-function assertValidProfile(profile) {
-  const checked = validateProfile(profile);
+function assertValidProfile(profile, today = new Date()) {
+  const checked = validateProfile(profile, today);
   if (!checked.valid) throw new RangeError(checked.errors.join('；'));
   return checked;
 }
@@ -212,19 +195,20 @@ function assertValidProfile(profile) {
 export function leanBodyMass(weightKg, bodyFatPct) {
   if (!(weightKg > 0)) return null;
   const bf = Number(bodyFatPct);
-  if (!(bf > 0) || bf >= 70) return null;
+  if (bodyFatPct == null || bodyFatPct === '' || !Number.isFinite(bf) || bf < 2 || bf > 70) return null;
   return round(weightKg * (1 - bf / 100), 2);
 }
 
 export function bmi(weightKg, heightCm) {
   if (!(weightKg > 0) || !(heightCm > 0)) return null;
   const m = heightCm / 100;
-  return round(weightKg / (m * m), 1);
+  return weightKg / (m * m);
 }
 
-export function bmiCategory(value) {
+export function bmiCategory(value, age = null) {
   // 采用《中国成人超重和肥胖症预防控制指南》切点
-  if (value == null) return null;
+  if (value == null || !Number.isFinite(value)) return null;
+  if (age != null && (age < 18 || age >= 80)) return { key: 'outside', label: '普通成人分类不适用' };
   if (value < 18.5) return { key: 'under', label: '偏瘦' };
   if (value < 24) return { key: 'normal', label: '正常' };
   if (value < 28) return { key: 'over', label: '超重' };
@@ -233,18 +217,17 @@ export function bmiCategory(value) {
 
 /**
  * 基础代谢率（kcal/天）
- * 有体脂率优先用 Katch-McArdle（对体成分敏感），否则 Mifflin-St Jeor。
+ * 默认用 Mifflin-St Jeor；仅明确选择且体脂记录有效、近期时使用 Katch-McArdle。
  */
-export function basalMetabolicRate(profile) {
-  assertValidProfile(profile);
+export function basalMetabolicRate(profile, today = new Date()) {
+  assertValidProfile(profile, today);
   const weight = Number(profile.weightKg);
   const height = Number(profile.heightCm);
-  const age = ageFrom(profile);
+  const age = ageFrom(profile, today);
   const lbm = leanBodyMass(weight, profile.bodyFatPct);
 
-  // Katch-McArdle：BMR = 370 + 21.6 × 瘦体重(kg)。有体脂率时优先，因为它对体成分敏感，
-  // 且不需要年龄和性别——填了体脂率的人能拿到更硬的依据。
-  if (lbm) {
+  // Katch-McArdle：BMR = 370 + 21.6 × 瘦体重(kg)。体脂测量误差会传入结果，不能保证更准确。
+  if (lbm && profile.energyFormula === 'katch' && profile.bodyFatFresh === true) {
     return { kcal: round(370 + 21.6 * lbm), formula: 'Katch-McArdle', lbm, ageEstimated: false };
   }
   // Mifflin-St Jeor（1990）：10W + 6.25H − 5A，男 +5 / 女 −161
@@ -259,8 +242,8 @@ export function basalMetabolicRate(profile) {
 }
 
 /** 静态 TDEE：BMR × 活动系数 */
-export function staticTDEE(profile) {
-  const { kcal: bmr, formula, lbm, ageEstimated } = basalMetabolicRate(profile);
+export function staticTDEE(profile, today = new Date()) {
+  const { kcal: bmr, formula, lbm, ageEstimated } = basalMetabolicRate(profile, today);
   const level = ACTIVITY_LEVELS[profile.activity] || ACTIVITY_LEVELS.light;
   return { bmr, formula, lbm, ageEstimated, factor: level.factor, tdee: round(bmr * level.factor) };
 }
@@ -353,34 +336,11 @@ export function dynamicTDEE({
     basalSource = 'measured-today';
   }
 
-  /*
-   * 活动能量也要设上限，理由和静息那条一样。
-   *
-   * 凌晨 00:57 报来 2010 kcal 活动能量（近期日均才 310），换算成 35 kcal/分钟
-   * 持续了一小时——世界纪录级选手也做不到。这种数只可能是导入端把多天累加成
-   * 了一天。不拦的话热量目标会被顶到 4455 kcal，比真实需要多出近一倍。
-   *
-   * 天花板取 15 kcal/分钟：接近人类持续输出的极限，真实的大运动量碰不到它，
-   * 而按天累加出来的假数据一定会超。
-   */
+  /* 15 kcal/分钟是快照合理性检查阈值；超出时暂不用于外推，不作生理定论。 */
   const MAX_ACTIVE_PER_MIN = 15;
   const elapsedMin = Math.max(1, f * 1440);
   const activeCeiling = elapsedMin * MAX_ACTIVE_PER_MIN;
-  /*
-   * 第二道：和这个人自己近期的活动量比。
-   *
-   * 上面那条速率天花板只在一天刚开始时收得紧 —— 到了晚上 elapsedMin 接近 1440，
-   * 它涨到 21600 kcal，而它本来就是为了拦「导入端把多天累加成一天」写的：
-   * 日均 600 kcal 的人晚上报来 18000（一个月的量）照样放行，
-   * 热量目标被顶到 19717 kcal。那不是「今天练得狠」，是数据错了。
-   *
-   * 所以再按本人基线卡一道：4 倍日均、或日均 + 2500 kcal，取宽的那个。
-   * 一场马拉松的活动能量约 2600 kcal，日均 600 的人放行到 3100，接得住；
-   * 按天累加出来的假数据一定会超。没有基线时这条不生效 ——
-   * 新用户手上没有可比的数，宁可信设备。
-   *
-   * 两个都是护栏，没有生理含义，只是「这个数还能不能当依据」的判断。
-   */
+  /* 外推另参考本人完整日基线，采用 4 倍或 +2500 kcal 的宽松产品检查范围。 */
   const MAX_ACTIVE_VS_BASELINE = 4;
   const MAX_ACTIVE_EXTRA = 2500;
   const baselineCeiling = hasBaselineActive
@@ -441,8 +401,8 @@ export function dynamicTDEE({
 }
 
 /** 蛋白质目标（g/天） */
-export function proteinTarget(profile, goalKey) {
-  assertValidProfile(profile);
+export function proteinTarget(profile, goalKey, today = new Date()) {
+  assertValidProfile(profile, today);
   const weight = Number(profile.weightKg);
   const height = Number(profile.heightCm);
   const lbm = leanBodyMass(weight, profile.bodyFatPct);
@@ -451,14 +411,8 @@ export function proteinTarget(profile, goalKey) {
   if (profile.proteinPerKg > 0) {
     return { grams: round(weight * profile.proteinPerKg), basis: '自定义 g/kg 体重' };
   }
-  if (lbm) {
-    // 以瘦体重为基准更准确：减脂期需要更高比例以保住肌肉
-    const perKgLbm = goal === 'cut' ? 2.4 : goal === 'bulk' ? 2.2 : 2.0;
-    return { grams: round(lbm * perKgLbm), basis: `${perKgLbm} g/kg 瘦体重` };
-  }
-  const bmiVal = bmi(weight, height) || 22;
-  // 肥胖人群用"调整体重"，避免蛋白目标被脂肪重量抬高
-  const refWeight = bmiVal > 30 ? round(24 * (height / 100) ** 2 + 0.25 * (weight - 24 * (height / 100) ** 2), 1) : weight;
+  // 默认按总重计算；体脂和 BMI 分界不隐式切换分母。
+  const refWeight = weight;
   const perKg = goal === 'cut' ? 1.8 : goal === 'bulk' ? 1.8 : 1.4;
   return { grams: round(refWeight * perKg), basis: `${perKg} g/kg 体重` };
 }
@@ -468,9 +422,12 @@ export function proteinTarget(profile, goalKey) {
  * @param {object} profile 身体信息与目标设置
  * @param {object} [dynamic] 动态消耗结果（有则用设备能量估算替代活动系数）
  */
-export function dailyTargets(profile, dynamic = null) {
-  assertValidProfile(profile);
-  const stat = staticTDEE(profile);
+export function dailyTargets(profile, dynamic = null, today = new Date()) {
+  const check = validateProfile(profile, today);
+  if (!check.valid) return unavailablePlan(profile, check.errors.join('；'));
+  if (check.age < 19 || check.age > 78) return unavailablePlan(profile, '自动计划适用于 19–78 岁一般健康成人；当前年龄需个体评估');
+  if (profile.goal === 'cut' && bmi(profile.weightKg, profile.heightCm) < 18.5) return unavailablePlan(profile, 'BMI 偏低与减脂目标冲突，暂不生成限制摄入计划');
+  const stat = staticTDEE(profile, today);
   const goal = GOALS[profile.goal] ? profile.goal : 'maintain';
   const requestedRate = profile.rateKgPerWeek != null
     ? Number(profile.rateKgPerWeek)
@@ -500,6 +457,11 @@ export function dailyTargets(profile, dynamic = null) {
   const clampedByFloor = kcal < floor;
   kcal = round(Math.max(kcal, floor));
   const dailyDelta = round(kcal - tdee);
+  if ((goal === 'cut' && dailyDelta >= 0) || (goal === 'bulk' && dailyDelta <= 0)
+    || (goal === 'maintain' && Math.abs(dailyDelta) > 1)) {
+    return unavailablePlan(profile, '应用计划下限与目标方向冲突，当前设置不能生成该目标');
+  }
+  if (rateAbsurd) return unavailablePlan(profile, '输入速率超出本应用自动计划范围');
   const rate = round((dailyDelta * 7) / KCAL_PER_KG_FAT, 2);
   /*
    * 三个状态，界面要说不同的话：
@@ -513,12 +475,12 @@ export function dailyTargets(profile, dynamic = null) {
   // 谁最后决定了这个数：先按离谱上限收，再按每日热量上限收，后者更靠后
   const cappedByDailyKcal = Math.abs(requestedDailyDelta - plannedDelta) > 0.5;
   const rateLimitedBy = !rateWasClamped ? null
-    : cappedByDailyKcal ? 'daily-kcal' : rateAbsurd ? 'absurd' : 'floor';
+    : clampedByFloor ? 'floor' : cappedByDailyKcal ? 'daily-kcal' : rateAbsurd ? 'absurd' : null;
   const rateAdvisoryPct = weight > 0 ? round((advisoryCap / weight) * 100, 2) : null;
   const ratePctOfWeight = weight > 0 ? round((Math.abs(rate) / weight) * 100, 2) : null;
-  const overAdvisory = Math.abs(rate) > advisoryCap + 1e-9;
+  const overAdvisory = Math.abs(rate) > advisoryCap + 0.025;
 
-  const proteinPlan = proteinTarget(profile, goal);
+  const proteinPlan = proteinTarget(profile, goal, today);
 
   // 在同一个热量约束里求解三大宏量：先保留产品的低碳下限，再放入脂肪和蛋白目标。
   // 50 g 是工程护栏而非推荐量；低于 130 g RDA 时会另行提示。
@@ -567,6 +529,7 @@ export function dailyTargets(profile, dynamic = null) {
   const carbUpper = Math.ceil(Math.max(carbAtFat(fatLower), carbRounded));
 
   return {
+    status: 'ready', reason: null,
     goal,
     rateKgPerWeek: rate,
     requestedRateKgPerWeek: requestedRate,
@@ -612,66 +575,81 @@ export function dailyTargets(profile, dynamic = null) {
   };
 }
 
-/**
- * 中国 DRIs 2023 成人纤维 AI 25–30g；钠 AI/PI 按年龄分组。
- * AI 仅用于提前留意后续摄入，不是毒性或疾病危险线；PI 是本界面的最高建议量。
- * 游离糖沿用 WHO 10%/5% 供能口径，并采用中国指南 50g/25g 的克数护栏。
- * 运动、增肌不会把克数护栏向上推。来源见 docs/算法依据.md。
- */
+/** 已核实 WHO 一般成人钠及游离糖参考。年龄钠表未核实，不启用；5% 为进一步益处参考。 */
 export function nutrientReferences(profile = {}, kcal = 2000) {
   const age = ageFrom(profile);
   const energy = Number(kcal) > 0 ? Number(kcal) : 2000;
   return {
-    sodium: age >= 75 ? 1800 : age >= 65 ? 1900 : 2000,
-    sodiumAttention: age >= 65 ? 1400 : 1500,
+    sodium: 2000,
+    sodiumAttention: null,
     sugar: Math.min(50, energy * 0.1 / ATWATER.carb),
     sugarAttention: Math.min(25, energy * 0.05 / ATWATER.carb),
   };
 }
 
 /** 汇总一组饮食条目的营养 */
+export const NUTRIENT_KEYS = ['kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'totalSugar', 'sodium'];
+/** Read-time migration only. Old custom forms converted blanks to zero and did not
+ * specify carbohydrate/free-sugar semantics. Keep that snapshot for review. */
+export function normalizeDietEntry(entry) {
+  if (!entry || typeof entry !== 'object') return entry;
+  if (entry.nutritionSchema >= 2 || !(entry.custom || String(entry.foodId || '').startsWith('custom_'))) return entry;
+  const raw = entry.legacyNutrition || Object.fromEntries(NUTRIENT_KEYS.map(k => [k, entry[k] ?? null]));
+  return { ...entry, legacyNutrition: raw, nutritionReview: true, carbBasis: 'unknown',
+    ...Object.fromEntries(NUTRIENT_KEYS.filter(k => k !== 'kcal').map(k => [k,null])) };
+}
+export const isNutrientNumber = v => (typeof v === 'number' || typeof v === 'string') && v !== '' && String(v).trim() !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
+export function nutrientIssues(entry = {}, index = null) {
+  const issues = NUTRIENT_KEYS.filter(k => entry[k] != null && entry[k] !== '' && !isNutrientNumber(entry[k]))
+    .map(field => ({ id: entry.id ?? index, name: entry.name || entry.foodName || '', field, value: entry[field], reason: '需为非负有限数' }));
+  if (isNutrientNumber(entry.sugar) && isNutrientNumber(entry.totalSugar) && Number(entry.sugar) > Number(entry.totalSugar)) issues.push({ id: entry.id ?? index, name: entry.name || '', field: 'sugar', value: entry.sugar, reason: '游离糖不能超过总糖' });
+  return issues;
+}
 export function sumNutrients(entries = []) {
-  const total = {
-    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sugar: 0, totalSugar: 0, sodium: 0,
-  };
-  for (const e of entries) {
-    // 恢复备份和云端同步是绕过 addEntry 直接落库的，条目里混进 null 不是假想：
-    // 这里一抛，recompute 就断了，用户连设置抽屉都打不开、没法回去删那条数据
-    if (!e || typeof e !== 'object') continue;
-    total.kcal += Number(e.kcal) || 0;
-    total.protein += Number(e.protein) || 0;
-    total.fat += Number(e.fat) || 0;
-    total.carb += Number(e.carb) || 0;
-    total.fiber += Number(e.fiber) || 0;
-    total.sugar += Number(e.sugar) || 0;
-    total.totalSugar += Number(e.totalSugar) || 0;
-    total.sodium += Number(e.sodium) || 0;
-  }
-  for (const k of Object.keys(total)) total[k] = round(total[k], 1);
-  return total;
+  const total = Object.fromEntries(NUTRIENT_KEYS.map(k => [k, 0]));
+  const coverage = Object.fromEntries(NUTRIENT_KEYS.map(k => [k, { known: 0, total: entries.length, complete: true }]));
+  const issues = [];
+  entries.map(normalizeDietEntry).forEach((e, i) => {
+    if (!e || typeof e !== 'object') { issues.push({ id: i, reason: '条目格式无效' }); Object.values(coverage).forEach(c => { c.complete = false; }); return; }
+    const invalid = nutrientIssues(e, i);
+    issues.push(...invalid);
+    for (const k of NUTRIENT_KEYS) {
+      const v = e[k];
+      if (!isNutrientNumber(v) || invalid.some(issue => issue.field === k)) { coverage[k].complete = false; continue; }
+      const sum = total[k] + Number(v);
+      if (!Number.isFinite(sum)) { coverage[k].complete = false; issues.push({ id: e.id ?? i, field: k, reason: '合计溢出' }); continue; }
+      total[k] = sum; coverage[k].known += 1;
+    }
+  });
+  for (const k of NUTRIENT_KEYS) total[k] = round(total[k], 1);
+  return { ...total, coverage, issues };
 }
 
 /** 目标 vs 实际的差额与完成度 */
-export function computeGaps(targets, intake) {
-  const keys = ['kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'sodium'];
+export function computeGaps(targets = {}, intake = {}) {
   const out = {};
-  for (const k of keys) {
-    const target = Number(targets[k]) || 0;
-    const eaten = Number(intake[k]) || 0;
-    out[k] = {
-      target: round(target, 1),
-      eaten: round(eaten, 1),
-      remaining: round(target - eaten, 1),
-      pct: target > 0 ? round((eaten / target) * 100) : 0,
-    };
+  for (const k of ['kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'sodium']) {
+    const target = targets[k] != null && Number.isFinite(Number(targets[k])) && Number(targets[k]) >= 0 ? Number(targets[k]) : null;
+    const known = intake[k] != null && intake[k] !== '' && Number.isFinite(Number(intake[k])) && Number(intake[k]) >= 0;
+    const eaten = known ? Number(intake[k]) : 0;
+    const complete = known && intake.coverage?.[k]?.complete !== false;
+    out[k] = { target, eaten: round(eaten,1), complete,
+      remaining: complete && target != null ? round(target-eaten,1) : null,
+      pct: complete && target > 0 ? round(eaten/target*100) : null };
     if (k === 'fat') {
-      const upper = Number(targets.fatUpper) || target;
-      out[k].upper = round(upper, 1);
-      out[k].upperRemaining = round(upper - eaten, 1);
-      out[k].upperPct = upper > 0 ? round((eaten / upper) * 100) : 0;
+      const upper = targets.fatUpper ?? target;
+      Object.assign(out[k], { upper, upperRemaining: complete && upper != null ? round(upper-eaten,1) : null,
+        upperPct: complete && upper > 0 ? round(eaten/upper*100) : null });
     }
   }
   return out;
 }
 
 export { clamp, round };
+
+/** No invented person's targets: nullable shape keeps record views usable. */
+export function unavailablePlan(profile = {}, reason = '请完善身体信息') {
+  return { status: 'unavailable', reason, goal: GOALS[profile?.goal] ? profile.goal : 'maintain',
+    ...Object.fromEntries(['kcal', 'protein', 'fat', 'fatUpper', 'fatLower', 'carb', 'carbLower', 'carbUpper', 'fiber', 'fiberUpper', 'sodium', 'sugar', 'tdee', 'bmr', 'dailyDelta', 'rateKgPerWeek'].map(k => [k, null])),
+    requestedRateKgPerWeek: profile?.rateKgPerWeek ?? null };
+}

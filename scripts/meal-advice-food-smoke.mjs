@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const pw = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const engine = process.env.BROWSER || 'chromium';
-const browser = await pw[engine].launch();
+const browser = await pw[engine].launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
 const page = await context.newPage();
 const errors = [];
@@ -33,11 +33,8 @@ try {
       nutrients: { kcal: 2359, protein: 87, carb: 362, fat: 60, fiber: 11, sugar: 58, sodium: 2039 } });
   });
   await tab('今日');
-  check('2359/2162 的深夜主卡指向明天，当前收支仍为 +685', await page.locator('.hero').evaluate(el =>
-    el.querySelector('h2').textContent === '明天照常安排三餐'
-    && /2359 kcal.*2162 kcal.*197 kcal/.test(el.querySelector('.hero-detail').textContent)
-    && el.querySelector('.ring-value').textContent === '+685'));
-  check('当晚主卡和提示没有虚构下一餐', !/下一餐|后续餐|余下餐/.test(await page.locator('main').innerText()));
+  check('深夜仍按计划与记录分别显示收支', await page.locator('.hero').evaluate(el => /2359 kcal.*2162 kcal/.test(el.querySelector('.hero-detail').textContent) && el.querySelector('.ring-value').textContent === '+685'));
+  check('钟点不自动完成全天记录', await page.evaluate(async () => !(await import('/js/lib/store.js')).state.derived.advice.trend.dayComplete));
   await shot('.hero', 'late-over-plan');
   await page.evaluate(async () => {
     const s = await import('/js/lib/store.js');
@@ -45,10 +42,7 @@ try {
     await s.addEntry({ foodId: 'rice_white', grams: 100, meal: 'dinner', name: '测试全天摄入',
       nutrients: { kcal: 1900, protein: 87, carb: 250, fat: 60, fiber: 11, sugar: 20, sodium: 1500 } });
   });
-  check('未达计划但覆盖当前消耗时，主卡不催补且仍展示计划差额', await page.locator('.hero').evaluate(el =>
-    el.querySelector('h2').textContent === '今天不必再追齐数字'
-    && /当前设备记录消耗 1674 kcal/.test(el.textContent)
-    && el.querySelector('.ring-value').textContent === '+226'));
+  check('正收支不代替全天摄入判断', await page.locator('.ring-value').textContent() === '+226' && await page.evaluate(async () => {const s=await import('/js/lib/store.js');return !s.state.derived.advice.trend.currentCovered && !s.state.derived.advice.trend.dayComplete;}));
   for (const width of [320, 393, 430]) {
     await page.setViewportSize({ width, height: 852 });
     check(`${width}px 主卡无横向溢出`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -56,7 +50,7 @@ try {
   await page.setViewportSize({ width: 393, height: 852 });
   await shot('.hero', 'late-current-covered');
   await tab('饮食');
-  check('当天结束后的推荐明确按饥饿感选择，没有再分配晚餐义务', /按需少量选择/.test(await page.locator('.recommend-card').innerText()));
+  check('深夜仍可打开正常推荐并记录实际食物', await page.locator('.recommend-card .rec-row').count() > 0);
   for (const query of ['青椒炒鸡蛋', '尖椒炒蛋', '辣椒炒蛋', '鸡蛋炒青椒']) {
     await page.locator('.ui-search-input').fill(query);
     await page.waitForFunction(() => document.querySelector('.search-item')?.textContent.includes('辣椒炒鸡蛋'));

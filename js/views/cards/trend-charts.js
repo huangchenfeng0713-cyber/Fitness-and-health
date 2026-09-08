@@ -1,3 +1,5 @@
+import { completeEnergyDay } from '../../core/energy-observation.js';
+import { planForProfile } from '../../lib/store.js';
 /**
  * 趋势图区块。作为卡片模块挂在「数据」页——数据和趋势本来就是一件事，
  * 分成两个栏目要来回切才能把「现在怎么样」和「在往哪走」对上。
@@ -203,17 +205,19 @@ export function trendCharts(rerender) {
   const isWeek = range === 7;
   const health = state.healthByDate;
   const dietByDate = new Map(state.dietDaily.map((r) => [r.date, r]));
-  const targets = d.targets;
+  const targets = planForProfile(state.profile, endDay);
+  const versions = (state.profile.targetVersions || []).filter(v => v.effectiveDate >= days[0] && v.effectiveDate <= endDay);
+  const mixedTargets = versions.some(v => v.effectiveDate > days[0]) || targets.status === 'unavailable';
 
   const weightSeries = series(days, (date) => {
     const v = health.get(date)?.weightKg;
     return v > 0 ? v : null;
   });
-  const kcalTimeline = timeline(days, (date) => dietByDate.get(date)?.kcal ?? null);
-  const proteinTimeline = timeline(days, (date) => dietByDate.get(date)?.protein ?? null);
+  const kcalTimeline = timeline(days, (date) => dietByDate.get(date)?.coverage?.kcal?.complete === false ? null : dietByDate.get(date)?.kcal ?? null);
+  const proteinTimeline = timeline(days, (date) => dietByDate.get(date)?.coverage?.protein?.complete === false ? null : dietByDate.get(date)?.protein ?? null);
   const kcalSeries = kcalTimeline.filter((p) => p.y != null);
   const proteinSeries = proteinTimeline.filter((p) => p.y != null);
-  const activeSeries = series(days, (date) => health.get(date)?.activeEnergy ?? null);
+  const activeSeries = series(days, (date) => completeEnergyDay(health.get(date))?.fields.activeEnergy.value ?? null);
   const stepsSeries = series(days, (date) => health.get(date)?.steps ?? null);
   const exerciseSeries = series(days, (date) => health.get(date)?.exerciseMinutes ?? null);
   const hrSeries = series(days, (date) => {
@@ -228,25 +232,22 @@ export function trendCharts(rerender) {
     const eaten = dietByDate.get(date)?.kcal;
     const hd = health.get(date);
     if (eaten == null || !hd) return null;
-    const hasResting = Number(hd.restingEnergy) > 0;
-    const hasActive = hd.activeEnergy != null
-      && Number.isFinite(Number(hd.activeEnergy)) && Number(hd.activeEnergy) >= 0;
-    // 历史收支不能用「今天的 BMR / 近期活动均值」替缺失字段，否则会把当前假设倒灌进过去
-    if (!hasResting || !hasActive) return null;
-    return Math.round(eaten - (Number(hd.restingEnergy) + Number(hd.activeEnergy)));
+    const observation = completeEnergyDay(hd);
+    if (!observation || dietByDate.get(date)?.coverage?.kcal?.complete === false) return null;
+    return Math.round(eaten - observation.burnedNow);
   });
 
   // 图上的目标线画的是**现在这套设置**算出来的目标，历史那几天当时未必是这个数
-  const targetContext = '当前目标';
-  const proteinThreshold = targets.protein * 0.9;
-  const proteinHit = proteinSeries.filter((p) => p.y >= proteinThreshold).length;
+  const targetContext = targets.status === 'unavailable' ? '当前无法生成计划，仅展示记录' : mixedTargets ? '区间内计划有变更，仅展示记录' : targets.context;
+  const proteinThreshold = mixedTargets ? null : targets.protein;
+  const proteinHit = mixedTargets ? null : proteinSeries.filter((p) => p.y >= proteinThreshold).length;
   const avgKcal = average(kcalSeries);
   const avgActive = average(activeSeries);
   const avgSteps = average(stepsSeries);
   const avgExercise = average(exerciseSeries);
   const avgSleep = average(sleepSeries, 1);
   const avgHR = average(hrSeries);
-  const weightStats = weightTrendStats(state.healthDays, spanDays, shiftDay(endDay, 1));
+  const weightStats = weightTrendStats(state.healthDays, spanDays, endDay);
   const axisDomain = [days[0], days[days.length - 1]];
 
   if (selectedDay && (!isWeek || !days.includes(selectedDay))) selectedDay = null;
@@ -285,27 +286,27 @@ export function trendCharts(rerender) {
       title: '每日热量摄入',
       tag: avgKcal != null ? `已结束日平均 ${avgKcal} kcal` : null,
       chart: lineChart({
-        data: kcalTimeline, color: 'var(--accent)', target: targets.kcal,
+        data: kcalTimeline, color: 'var(--accent)', target: mixedTargets ? null : targets.kcal,
         targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
         overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
-      note: trendReading('kcal', kcalSeries, { target: targets.kcal }),
+      note: mixedTargets ? targetContext : trendReading('kcal', kcalSeries, { target: targets.kcal }),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
       tip: '单日高于参考线不等于做错。判断要看多日的体重和收支趋势，一天的高低说明不了什么。',
     }),
     protein: () => ({
       title: '每日蛋白摄入',
-      tag: proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
+      tag: !mixedTargets && proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
       chart: lineChart({
         data: proteinTimeline, color: 'var(--protein)', target: proteinThreshold,
         targetLabel: `达标线 ${Math.round(proteinThreshold)}g`, unit: 'g',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
         overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
-      note: trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
+      note: mixedTargets ? targetContext : trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
       readout: readoutRow(valueAt((v) => `${num(v)} g`)((dd) => dietByDate.get(dd)?.protein ?? null)),
-      tip: `虚线是达标参考 ${Math.round(proteinThreshold)}g。蛋白吃超一点没有坏处，不必刻意压在线下。`,
+      tip: mixedTargets ? targetContext : `虚线是${targetContext} ${Math.round(proteinThreshold)}g，并非人人适用的最低需求或上限。`,
     }),
     weight: () => ({
       title: '体重',
@@ -315,7 +316,7 @@ export function trendCharts(rerender) {
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('weight', weightSeries, {
-        kgPerWeek: weightStats.kgPerWeek, goalRate: targets.rateKgPerWeek,
+        kgPerWeek: weightStats.kgPerWeek, goalRate: mixedTargets ? null : targets.rateKgPerWeek,
         records: weightStats.records, spanDays: weightStats.spanDays,
       }),
       readout: readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))),
@@ -338,13 +339,12 @@ export function trendCharts(rerender) {
       tag: avgExercise != null ? `已结束日平均 ${formatDuration(avgExercise)}` : null,
       chart: lineChart({
         data: exerciseSeries, color: 'var(--carb)', unit: '分钟', domain: axisDomain, ...pick,
-        target: 150 / 7, targetLabel: '中等强度参考 150/周',
+        target: null,
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('exercise', exerciseSeries, {}),
       readout: readoutRow(valueAt((v) => formatDuration(v))((dd) => health.get(dd)?.exerciseMinutes ?? null)),
-      tip: '参考线是 WHO 每周至少 150 分钟中等强度活动折算到每天（约 21 分钟）。'
-        + '设备时长不一定等同中等强度，本应用没有可靠强度字段，因此只能作条件性对照；WHO 另建议每周至少两天进行肌肉强化活动。',
+      tip: '显示所选区间的设备记录时长。设备时长不等同于中等强度活动；缺失日期不视为零，也不据此推算整周达标。',
     }),
     active: () => ({
       title: '活动能量',
@@ -354,9 +354,9 @@ export function trendCharts(rerender) {
         target: avgActive, targetLabel: avgActive != null ? `平均 ${avgActive}` : '',
       }),
       note: trendReading('active', activeSeries, {}),
-      readout: readoutRow(kcalAt((dd) => health.get(dd)?.activeEnergy ?? null)),
+      readout: readoutRow(kcalAt((dd) => completeEnergyDay(health.get(dd))?.fields.activeEnergy.value ?? null)),
       tip: '活动能量来自设备估算，适合在同一设备与相近佩戴条件下比较，不是精确消耗。'
-        + '新数据导入后会调整当日预算；长期是否合适仍应结合饮食完整度和多周体重趋势校准。',
+        + '今天同步更新记录收支；每日计划参考近期完整日；长期是否合适仍应结合饮食完整度和多周体重趋势校准。',
     }),
     sleep: () => ({
       title: '睡眠',
@@ -380,7 +380,7 @@ export function trendCharts(rerender) {
       }),
       note: trendReading('restingHR', hrSeries, {}),
       readout: readoutRow(valueAt((v) => `${num(v)} bpm`)((dd) => (health.get(dd)?.restingHR > 0 ? health.get(dd).restingHR : null))),
-      tip: '静息心率由手表自动估算，手动补录不会产生这项。多数成人常见范围约为 60–100 bpm；'
+      tip: '静息心率可来自设备记录或手动补录。多数成人常见范围约为 60–100 bpm；'
         + '训练状态、压力、感染、药物和测量条件都可能影响读数，应优先和个人基线比较。',
     }),
     balance: () => ({

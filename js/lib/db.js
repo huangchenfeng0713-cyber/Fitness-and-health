@@ -1,3 +1,11 @@
+import { nutrientIssues, isNutrientNumber } from '../core/nutrition.js';
+import { validateFood } from '../data/foods.js';
+export function validateNutritionRow(store, value) {
+  if (store === 'diet' && value.grams != null && !isNutrientNumber(value.grams)) throw new RangeError('diet 条目 ' + (value.id || value.name || '未命名') + '：份量需为非负有限数');
+  const errors = store === 'diet' ? nutrientIssues(value).map(e => e.field + ' ' + e.reason)
+    : store === 'customFoods' ? validateFood(value).errors : [];
+  if (errors.length) throw new RangeError(store + ' 条目 ' + (value.id || value.name || '未命名') + '：' + errors.join('；'));
+}
 /**
  * IndexedDB 封装
  * IndexedDB 始终保存当前设备副本；是否同步到当前登录账号由 cloud-sync.js 明确控制。
@@ -124,6 +132,7 @@ export function validateImportPayload(payload) {
   assertUnique('settings', 'key', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
   assertUnique('customFoods', 'id', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
   assertUnique('training', 'date', validDayKey);
+  for (const store of ['diet', 'customFoods']) for (const value of rows[store]) validateNutritionRow(store, value);
   return rows;
 }
 
@@ -385,6 +394,7 @@ export async function get(store, key) {
 }
 
 export async function put(store, value) {
+  validateNutritionRow(store, value);
   return guardedBusinessWrite((db, expectedContext) => committedWrite(
     db, store, 'put', (objectStore) => objectStore.put(value), { expectedContext },
   ));
@@ -404,6 +414,7 @@ export async function clear(store) {
 
 /** 批量写入（导入健康数据时一次几千天也不卡） */
 export async function bulkPut(store, values, { merge = false } = {}) {
+  values.forEach(value => validateNutritionRow(store, value));
   return guardedBusinessWrite((db, expectedContext) => new Promise((resolve, reject) => {
     const t = writeTransaction(db, store, { expectedContext });
     const os = t.objectStore(store);
@@ -431,6 +442,7 @@ export async function bulkPut(store, values, { merge = false } = {}) {
 
 /** 在同一个事务里写入完整行并删除已失效的主键，供全量快照同步使用。 */
 export async function bulkSync(store, values = [], deleteKeys = []) {
+  values.forEach(value => validateNutritionRow(store, value));
   return guardedBusinessWrite((db, expectedContext) => new Promise((resolve, reject) => {
     const t = writeTransaction(db, store, { expectedContext });
     const os = t.objectStore(store);

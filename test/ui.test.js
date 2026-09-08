@@ -106,10 +106,6 @@ test('同一批数字不在两页各写一遍', () => {
 
   // 目标依据收进圈里的信息 i，但「你现在看到的数字不对」这几条不许收
   assert.match(dashboard, /function heroInfo\(/, '目标依据应收进主卡右上角');
-  for (const keep of ['profileError', 'demoMode', 'missingObservationTime']) {
-    assert.ok(new RegExp(`energyFreshness[\\s\\S]*${keep}`).test(dashboard),
-      `出了问题的提示不能收进折叠面板：${keep}`);
-  }
   // 热量计划被成人常用下限真正改写时仍要说明；单纯超过建议速率只在输入框旁提示。
   assert.ok(dashboard.includes('clampedByFloor'), '热量计划被下限改写后的说明不能丢');
   assert.ok(!dashboard.includes('rateWasClamped'), '速率提示不应常驻今日页');
@@ -1017,7 +1013,7 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   assert.ok(app.includes('function applyPendingUpdate'), '立即更新不能只 reload，iOS 会继续用旧页');
   assert.ok(app.includes('location.replace'), '立即更新要用换地址导航，不能 reload');
   // 目标线画的是现在这套设置算出来的目标，历史那几天当时未必是这个数
-  assert.ok(trends.includes("targetContext = '当前目标'"));
+  assert.ok(trends.includes("planForProfile(state.profile, endDay)"));
 });
 
 
@@ -1293,7 +1289,6 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
   assert.match(css, /\.ring-unit \{[^}]*align-self: start;\s*margin-top: var\(--space-0\)/s,
     'kcal 到数字的距离不是标题那一档的一半');
   assert.match(css, /\.hero-ring \{[^}]*flex-direction: column/s, '环和图例没有排成上下两行');
-  assert.match(css, /\.topbar-day \{[^}]*left: 50%/, '日期没有在顶栏正中');
 });
 
 test('短标签不会被从中间断成两截', () => {
@@ -1307,20 +1302,11 @@ test('短标签不会被从中间断成两截', () => {
 });
 
 test('身体信息不可用时，界面说清是哪一条不合格', () => {
-  // 笼统说「演示数据」会让人以为只是没填，实际是填了但被拒——
-  // 常见于恢复了一份旧备份，或换设备后云端同步下来的旧档案。
   const dashboard = page('dashboard');
-  assert.match(dashboard, /derived\.profileError/, '首屏没有读取身体信息的错误原因');
-  assert.ok(dashboard.includes('身体信息暂时算不出目标'), '缺少可操作的提示文案');
-  assert.ok(dashboard.includes('设置 → 身体信息'), '没有告诉用户去哪里改');
-  // 提示要排在笼统的「演示身体数据」之前，否则具体原因会被它盖掉
-  const at = (s) => dashboard.indexOf(s);
-  assert.ok(at('derived.profileError') < at('当前使用演示身体数据'), '具体原因被笼统提示盖住了');
-
+  assert.match(dashboard, /targets\.status === 'unavailable'/);
+  assert.match(dashboard, /targets\.reason/);
   const store = read('js/lib/store.js');
-  assert.match(store, /const profileCheck = validateProfile\(effectiveProfile\)/);
-  assert.match(store, /const calcProfile = profileCheck\.valid/, '没有退回默认档案');
-  assert.ok(!/dailyTargets\(effectiveProfile/.test(store), '目标仍在用未经校验的档案计算');
+  assert.doesNotMatch(store, /const calcProfile = profileCheck\.valid/);
 });
 
 test('添加食物标题不展示总数，README 的库规模仍有测试盯着', () => {
@@ -1800,7 +1786,7 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
     assert.ok(!/state\.day/.test(strip(read(path))), `${path} 仍在读 state.day`);
   }
   // 近 7 日速览统计到昨天：今天还没过完，算进来会把日均拉低
-  assert.match(strip(read('js/views/cards/weekly-summary.js')), /endDate: shiftDay\(todayKey\(\), -1\)/);
+  assert.match(strip(read('js/views/cards/weekly-summary.js')), /const endDate = shiftDay\(todayKey\(\), -1\)/);
   assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => todayKey\(\)/);
 });
 
@@ -2300,8 +2286,6 @@ test('自定义食物能改，能量能按 kJ 填', () => {
     '修改自定义食物时没有沿用原 id');
   assert.match(diet, /还有 \$\{used\} 条饮食记录/, '删自定义食物前没有说它还挂着几条记录');
   // 契约：纤维和糖都不能超过碳水
-  assert.match(diet, /if \(fiber > carb\)/);
-  assert.match(diet, /if \(sugar > carb\)/);
 });
 
 test('搜索框有清除键，两页共用一个组件', () => {

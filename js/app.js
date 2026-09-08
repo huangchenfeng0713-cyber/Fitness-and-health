@@ -428,9 +428,6 @@ function syncOnboarding() {
     h('h2', null, '先花 30 秒填一下身体信息'),
     h('p', null, '热量与蛋白目标都由这些数据算出来。填完就能开始记录，之后随时能在「设置」里改。'),
     h('button.primary-btn', { onclick: openSettings }, '去填写'),
-    h('button.text-btn', {
-      onclick: () => saveProfile({ demoMode: true, onboarded: true }),
-    }, '使用演示数据预览'),
   ));
 }
 

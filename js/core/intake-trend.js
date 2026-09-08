@@ -8,76 +8,27 @@ export const TREND_POLICY = Object.freeze({ graceHours: 0.75, notableShare: 0.12
 const positive = n => Number.isFinite(Number(n)) ? Math.max(0, Number(n)) : 0;
 const label = key => ({ breakfast: '早餐', lunch: '午餐', dinner: '晚餐' })[key];
 
-export function intakeTrend({ targets = {}, intake = {}, entries = [], now = new Date(), isToday = true, enabled = true, burnedNow = null } = {}) {
+export function intakeTrend({ targets = {}, intake = {}, entries = [], now = new Date(), isToday = true, enabled = true, burnedNow = null, completedMeals = [], dayComplete = false } = {}) {
   const target = positive(targets.kcal), eaten = positive(intake.kcal);
   const date = todayKey(now), hour = now.getHours() + now.getMinutes() / 60;
-  const meals = GUIDELINE_MEALS;
-  const source = 'guideline';
-  const basis = '固定三餐参照';
-  // burnedNow 由调用方排除过期、缺字段和不可信的设备快照；不能用全天外推值代替。
-  const burn = isToday && enabled && Number.isFinite(burnedNow) && burnedNow > 0 ? burnedNow : null;
-  const base = { state: 'uncertain', active: false, direction: null, range: null, source, basis, remainingMeals: [], target, eaten,
-    burnedNow: burn, currentCovered: burn != null && eaten >= burn, dayComplete: isToday && hour >= TREND_POLICY.lateHour };
-  if (!isToday) return { ...base, state: 'historical', reason: '历史日期只展示记录，不预测接下来的摄入。' };
-  if (!enabled || !target) return { ...base, reason: '先完善身体资料，再判断今日摄入趋势。' };
-  const todayEntries = entries.filter(e => e && e.date === date && positive(e.kcal) > 0);
-  const byMeal = new Map();
-  let latest = -Infinity, timedKcal = 0;
-  for (const e of todayEntries) {
-    const time = new Date(e.time || '');
-    if (!Number.isFinite(time.getTime()) || todayKey(time) !== date || time > now) continue;
-    const h = time.getHours() + time.getMinutes() / 60;
-    latest = Math.max(latest, h);
-    timedKcal += positive(e.kcal);
-    byMeal.set(e.meal, (byMeal.get(e.meal) || 0) + positive(e.kcal));
-  }
-  const remainingMeals = meals.filter(m => hour < m.endHour && !(byMeal.get(m.key) >= 100));
-  const info = { ...base, dayComplete: base.dayComplete || !remainingMeals.length,
-    remainingMeals: remainingMeals.map(m => ({ ...m, label: label(m.key) })) };
-  if (todayEntries.some(e => new Date(e.time || '') > now)) return {
-    ...info, currentCovered: false, reason: '今天含有未来时间的饮食条目，先核对哪些已经吃过，再判断全天走势。',
-  };
-  if (hour >= TREND_POLICY.lateHour) return { ...info, state: 'late', reason: '今晚不必追齐数字；若饿了可少量进食，明天回到正常三餐。' };
+  const todayEntries = entries.filter(e => e?.date === date);
+  const completed = new Set(completedMeals);
+  for (const e of todayEntries) if (e.mealComplete === true && new Date(e.time) <= now) completed.add(e.meal);
+  const remainingMeals = GUIDELINE_MEALS.filter(m => !completed.has(m.key))
+    .map(m => ({ ...m, label: label(m.key) }));
+  const base = { state: 'uncertain', active: false, direction: null, range: null, source: 'guideline', basis: '固定三餐参照',
+    remainingMeals, target, eaten, burnedNow, currentCovered: false, dayComplete: isToday && dayComplete === true };
+  if (!isToday) return { ...base, remainingMeals: [], state: 'historical', reason: '仅展示所选日期记录。' };
+  if (!enabled || !target) return { ...base, reason: '先完善身体资料，再判断今日摄入。' };
+  if (todayEntries.some(e => new Date(e.time) > now)) return { ...base, reason: '有提前记录的餐次，请核对已吃部分。' };
+  if (intake.coverage?.kcal?.complete === false) return { ...base, reason: '部分食物热量未知，暂不判断全天摄入。' };
+  if (base.dayComplete) return { ...base, state: 'settled', reason: '已标记记录完成。不必为追齐数字强行进食。' };
   const margin = Math.max(TREND_POLICY.notableKcal, target * TREND_POLICY.notableShare);
-  // 已经明显超过全天计划是记录事实，不需要把缺失记录误当成零来预测。
-  if (eaten > target + margin) {
-    if (!remainingMeals.length) return {
-      ...info, state: 'settled', reason: '今天不再追着计划差额调整，明天回到正常三餐。',
-    };
-    return { ...info, state: 'over', active: true, direction: 'over', reason: '当前已记录摄入已明显高于今日计划，后续餐次仍正常安排。' };
-  }
-  if (timedKcal < Math.max(400, target * 0.2) || Math.abs(timedKcal - eaten) > Math.max(50, eaten * 0.1)
-    || meals.filter(m => byMeal.get(m.key) >= 100).length < 2) {
-    return info.dayComplete
-      ? { ...info, state: 'settled', reason: '今天的记录可能尚未记全，先核对是否漏记；不必为计划差额额外加餐。' }
-      : { ...info, reason: '当前记录还不足以判断全天走势；先核对是否漏记，下一餐照常安排。' };
-  }
-  const grace = TREND_POLICY.graceHours;
-  const insideMeal = h => meals.some(m => h >= m.startHour && h < m.endHour + grace && !(byMeal.get(m.key) >= 100 && latest < h - grace));
-  // 刚记餐、餐窗尚未结束、已过餐窗却没有该餐记录：不把短暂进度差当成全天偏离。
-  if (hour - latest < grace || insideMeal(hour)
-    || meals.some(m => hour >= m.endHour + grace && !(byMeal.get(m.key) >= 100))) {
-    return { ...info, state: info.dayComplete ? 'settled' : 'watch', reason: '餐次可能仍在进行或尚未记全，暂不提醒调整。' };
-  }
-  const plannedShare = remainingMeals.reduce((s, m) => s + m.share, 0);
-  // 保留原固定参照的误差空间，不再从历史餐量学习份额或范围。
-  const slack = 0.18;
-  const lowShare = Math.max(0, plannedShare - slack);
-  const highShare = remainingMeals.length ? Math.min(1, plannedShare + slack) : 0;
-  const low = eaten + target * lowShare, high = eaten + target * highShare;
-  const range = { low: Math.max(Math.round(eaten), Math.floor(low / 50) * 50), high: Math.ceil(high / 50) * 50 };
-  const direction = high < target - margin ? 'under' : low > target + margin ? 'over' : null;
-  const forecast = { ...info, range, reason: `若后续主餐延续${basis}，全天可能落在这个范围；漏记或临时加餐会改变结果。` };
-  if (!remainingMeals.length) return { ...forecast, state: 'settled', reason: '今天不必追齐计划差额；按饥饿感决定是否少量加餐，明天照常安排三餐。' };
-  if (!direction) return { ...forecast, state: 'steady' };
-  // 当前这顿已记录且至少经过 45 分钟，参照阶段也保持了 45 分钟，才确认持续偏离。
-  const priorHour = hour - grace;
-  if (insideMeal(priorHour) || remainingMeals.some(m => priorHour >= m.startHour)) {
-    return { ...forecast, state: 'watch', reason: '先留出餐后观察时间，暂不提醒调整。' };
-  }
-  if (direction === 'under' && base.currentCovered) return { ...forecast, state: 'covered',
-    reason: '已记录摄入覆盖当前消耗，暂不必为达到计划额外加餐；当前收支会随消耗继续变化，后续正餐照常安排。' };
-  return { ...forecast, direction, state: direction, active: true };
+  if (eaten > target + margin) return { ...base, state: 'over', direction: 'over', active: true,
+    reason: '已记录摄入高于每日计划；后续正餐照常安排，按饥饿感调整份量。' };
+  if (hour >= TREND_POLICY.lateHour) return { ...base, state: 'late',
+    reason: '若尚未吃正餐，照常安排；晚间不必为凑数字强行加餐。' };
+  return { ...base, reason: '目前记录不足以判断全天摄入；下一餐照常安排。' };
 }
 
 /** 同一份纠偏方向交给文案、推荐筛选和份量预算，避免各自判断。 */
@@ -89,7 +40,7 @@ export function correctionPlan({ trend, gaps, targets, hour }) {
   const carbLow = gaps.carb.remaining > 30 && split.structure !== 'carb';
   const carbHigh = split.structure === 'carb';
   const energyOver = gaps.kcal.remaining <= 0 || trend.direction === 'over';
-  const active = trend.active && !trend.dayComplete && !(trend.direction === 'under' && trend.currentCovered);
+  const active = trend.active && !trend.dayComplete;
   // 超计划不取消正常吃饭。蛋白不足时允许明确标注的少量食物选择，绝不伪装成剩余额度。
   const optionalProtein = gaps.kcal.remaining <= 0 && protein;
   const lean = fatHigh || energyOver;
@@ -97,8 +48,7 @@ export function correctionPlan({ trend, gaps, targets, hour }) {
   let action = '';
   if (trend.dayComplete) {
     action = '今天不必追齐计划数字；若饿了可按需少量进食，明天回到正常三餐。';
-  } else if (trend.currentCovered && gaps.kcal.remaining > 0 && !active) {
-    action = '当前摄入已覆盖设备记录的消耗，暂不必为目标额外加餐；后续正餐照常安排，按饥饿感决定份量。';
+
   } else if (active && trend.direction === 'under') {
     action = carbLow
       ? `${nextMeal?.label || '下一餐'}正常吃，在餐内增加一小份米饭、薯类或全谷主食${protein ? '，搭配鱼虾、去皮禽肉或低脂奶豆类' : ''}。`

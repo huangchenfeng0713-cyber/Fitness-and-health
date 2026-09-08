@@ -22,7 +22,7 @@ test('碳水按 AMDR 区间判断，不再说「按剩余热量分配」', () =>
    */
   const st = metricState({ kind: KIND.range, eaten: 356, target: 357, lo: 281, hi: 406, unit: 'g' });
   assert.equal(st.level, LEVEL.met);
-  assert.equal(st.note, '在建议范围内');
+  assert.equal(st.note, '在计划范围内');
   assert.doesNotMatch(st.note, /还差|剩余热量|吃满/, `碳水不该说这些：${st.note}`);
   assert.equal(st.range, '281–406g', '要把区间本身写出来，光说「在范围内」看不出范围是多少');
 });
@@ -131,7 +131,7 @@ test('八项指标各自归到该有的性质', () => {
   // 碳水 254g 低于 45% 供能（约 234g 起）—— 这里它落在区间里
   assert.ok([LEVEL.met, LEVEL.near].includes(by.carb.state.level), '碳水应按区间判断');
   assert.equal(by.fat.state.level, LEVEL.near, '脂肪 91 高出 AMDR 上界 81');
-  assert.match(by.fat.state.note, /高于建议 10g/, '脂肪区间是 AMDR，措辞该是「建议」不是「计划」');
+  assert.match(by.fat.state.note, /高于成人参考 10g/);
 
   /*
    * 红的只有钠和游离糖 —— 这两项确实超过了各自的上限（2814/2000、56.7/52）。
@@ -194,12 +194,12 @@ test('参考区间由脂肪 AMDR 反解，不是随手划的一个点', () => {
   assert.equal(referenceBand({ kcal: 0, protein: 0 }), null);
 });
 
-test('两个百分比凑成 100，落在区间里叫「结构适中」', () => {
+test('两个百分比凑成 100，落在区间里叫「接近计划比例」', () => {
   const onPlan = splitAt(240, 74);
   assert.equal(onPlan.carbPct + onPlan.fatPct, 100);
   assert.equal(onPlan.carbPct, 59);
   assert.equal(onPlan.structure, 'balanced');
-  assert.equal(onPlan.label, '结构适中');
+  assert.equal(onPlan.label, '接近计划比例');
   assert.equal(onPlan.level, LEVEL.met);
   assert.equal(onPlan.carbG, 240);
   assert.equal(onPlan.fatG, 74);
@@ -253,7 +253,7 @@ test('一口没吃时不硬凑一个比例出来', () => {
 
 /*
  * 拿 AMDR 的 45%~65% 当碳水靶子会自相矛盾：高蛋白减脂档蛋白就占掉四成供能，
- * 照方案吃到的碳水远在 45% 供能以下，卡片会对着照方案吃的人写「低于建议 108g」。
+ * 照方案吃到的碳水远在 45% 供能以下，卡片会对着照方案吃的人写「低于计划 108g」。
  *
  * 现在区间说的是「碳水占**这块热量**的几成」，两端由脂肪 AMDR 反解，
  * 和总热量解耦。下面这条扫遍 2880 种档案，锁住的正是那件事不会再发生：
@@ -268,6 +268,7 @@ test('照着方案吃的人不会被判成偏碳水或偏脂肪', () => {
           for (const goal of ['cut', 'maintain', 'bulk']) {
             for (const bodyFatPct of [null, 12, 25, 40]) {
               const t = dailyTargets({ sex, age: 30, weightKg, heightCm, activity, goal, bodyFatPct });
+              if (t.status === 'unavailable') { assert.equal(t.kcal,null); continue; }
               const s = macroSplit(t, { carb: { eaten: t.carb }, fat: { eaten: t.fat } });
               if (s.structure !== 'balanced' && s.structure !== 'low') {
                 offenders.push(`${sex}/${weightKg}kg/${activity}/${goal}/bf=${bodyFatPct}`

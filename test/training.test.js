@@ -99,14 +99,14 @@ test('按部位取动作，复合动作排在前面', () => {
 
 test('组合建议：重复、推拉失衡、全孤立动作都能指出来', () => {
   const dup = planAdvice(['bench_press_bb', 'bench_press_db']);
-  assert.ok(dup.some((t) => t.level === 'warn' && /刺激高度相似/.test(t.title)));
+  assert.ok(dup.some((t) => t.level === 'info' && /动作模式相近/.test(t.title)));
   // 动作名只出现在按钮上，正文不再重复念一遍
   const dupTip = dup.find((t) => t.key.startsWith('dup-'));
-  assert.ok(/把 哑铃卧推 换成/.test(dupTip.text), '没指明该换掉哪一个');
+  assert.ok(dupTip.actions.every(a => a.replaces === 'bench_press_db'));
   assert.ok(dupTip.actions.length, '没给出替换方案');
 
   const allPush = planAdvice(['bench_press_bb', 'ohp_db', 'incline_bench_db', 'cable_fly']);
-  assert.ok(allPush.some((t) => /拉只有 0 个/.test(t.title)), JSON.stringify(allPush.map((t) => t.title)));
+  assert.ok(!allPush.some(t => t.key === 'push-pull'));
 
   const isolationOnly = planAdvice(['lateral_raise_db', 'curl_db', 'leg_extension']);
   assert.ok(isolationOnly.some((t) => /全是孤立动作/.test(t.title)));
@@ -161,25 +161,9 @@ test('补缺口的动作不会和已选动作再重复一遍', () => {
   }
 });
 
-test('缺口提示带上可以直接点的动作', () => {
-  // 两个动作都压中胸，上胸和下胸没练到
+test('单日动作选择不触发无周计划依据的覆盖要求', () => {
   const tips = planAdvice(['bench_press_bb', 'pec_deck']);
-  const gap = tips.find((t) => t.key === 'gap-chest');
-  assert.ok(gap, '没给出胸部缺口提示');
-  assert.match(gap.title, /还没练到 上胸、下胸/);
-  assert.ok(gap.actions.length, '缺口提示没有可点的动作');
-  for (const a of gap.actions) {
-    const e = EXERCISE_BY_ID.get(a.id);
-    assert.ok(e, `动作 ${a.id} 不在库里`);
-    assert.ok(e.primary.some((m) => ['pec_upper', 'pec_lower'].includes(m)),
-      `${e.name} 补不上这个缺口`);
-  }
-  assert.match(gap.text, /想练全的话，从下面挑一个补上。/);
-  // 补的是哪块肌肉交给按钮上的注解，正文不重复动作名
-  for (const a of gap.actions) {
-    assert.ok(['上胸', '下胸'].includes(a.note), `按钮没标出补的是哪块：${JSON.stringify(a)}`);
-    assert.ok(!gap.text.includes(a.label), `正文重复了动作名 ${a.label}`);
-  }
+  assert.ok(!tips.some(t => t.key.startsWith('gap-')), '单日分化训练不能据此要求补齐所有肌群');
 });
 
 test('重复提示里的替换动作可以一键换掉原来那个', () => {
@@ -198,11 +182,11 @@ test('两个动作器械相同时不说「只差器械」', () => {
     .find((t) => t.key.startsWith('dup-'));
   assert.ok(same, '两台器械推胸没被判成重复');
   assert.ok(!same.text.includes('只差器械'), same.text);
-  assert.match(same.text, /器械也一样（器械），只是换了台机子/);
+  assert.doesNotMatch(same.text, /只是换了台机子/);
 
   const diff = planAdvice(['bench_press_bb', 'bench_press_db'])
     .find((t) => t.key.startsWith('dup-'));
-  assert.match(diff.text, /只差器械（杠铃 \/ 哑铃）/);
+  assert.doesNotMatch(diff.text, /只差器械/);
 });
 
 test('替换建议优先同类：不拿孤立动作换掉复合动作', () => {
@@ -293,8 +277,8 @@ test('重复提示不把话说死：重复度只看动作构成，看不出训�
     assert.ok(!all.includes(tooAbsolute), `措辞过于绝对：${tooAbsolute}`);
   }
   // 但也不能含糊到没有立场——要说清「相似在哪」和「取决于什么」
-  assert.ok(all.includes('刺激高度相似'));
-  assert.ok(all.includes('取决于你的训练目的和这一周的总量'));
+  assert.ok(all.includes('动作模式相近'));
+  assert.ok(all.includes('周总量'));
 });
 
 test('训练记录：坏数据清洗掉，不抛异常', () => {

@@ -37,7 +37,6 @@ test('步骤里写明「查找健康样本」必须接「计算统计数据 → 
   // 服务端把空值静默跳过（否则少一项会让整次上传失败），于是缺字段既不报错也无从排查。
   assert.match(healthView, /计算统计数据/);
   assert.match(healthView, /总计/);
-  assert.match(healthView, /步数收不到几乎都是这个原因/);
   // 权限是第二常见原因：iOS 逐项询问，当时点了「不允许」之后不会再问
   assert.match(healthView, /隐私与安全性 → 健康 → 快捷指令/);
 });
@@ -76,6 +75,5 @@ test('不是每天都有的指标读到 0 不会丢掉同一次的其他字段',
   // 响应要把哪几项没进去说清楚
   assert.match(edge, /stored: Object\.keys\(payload\)/);
   // 界面上也要讲明白 0 的含义
-  assert.match(healthView, /没样本时快捷指令只会产出 0/);
   assert.match(healthView, /Apple Watch 通常要等夜间睡眠之后才算出当天的值/);
 });

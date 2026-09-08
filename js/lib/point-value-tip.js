@@ -38,7 +38,10 @@ function place(keepAnchor = false) {
   const size = panel.getBoundingClientRect();
   const left = Math.max(leftEdge, Math.min(center - size.width / 2, rightEdge - size.width));
   panel.style.left = `${left}px`;
-  panel.style.top = `${dot.top - 8 - size.height}px`;
+  const topEdge = (viewport?.offsetTop || 0) + 8;
+  const bottomEdge = (viewport?.offsetTop || 0) + (viewport?.height || window.innerHeight) - 8;
+  const above = dot.top - 8 - size.height;
+  panel.style.top = `${Math.max(topEdge, Math.min(above < topEdge ? dot.bottom + 8 : above, bottomEdge - size.height))}px`;
   arrow.style.left = `${center - left}px`;
   panel.style.visibility = 'visible';
 }

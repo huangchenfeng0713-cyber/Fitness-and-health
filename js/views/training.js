@@ -1,5 +1,5 @@
 /**
- * 健身：按身体部位或动作模式挑动作，实时指出刺激高度相似的组合，并按天记下来。
+ * 健身：按身体部位或动作模式挑动作，实时指出动作模式相近的组合，并按天记下来。
  *
  * 计划本身存 IndexedDB（`store.saveTraining`），不再是页面内存里的一个数组——
  * 之前刷新一下当天选的动作就全没了，记不下来的计划等于没记。
@@ -178,7 +178,7 @@ function splitTabs(rerender) {
  *
  * **勾中还没提交的那些也要算进来。** 原先只比已经在计划里的：
  * 连勾杠铃卧推和哑铃卧推，两个都还没落库，一句提示都不出，
- * 等按下「加入计划」之后才在训练建议里读到「这俩刺激高度相似」——
+ * 等按下「加入计划」之后才在训练建议里读到「这俩动作模式相近」——
  * 那时候人已经选完了，改起来要回头再走一遍。
  */
 function clashWith(e) {
@@ -272,7 +272,7 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
       }
       /*
        * 还没加的：只改这一行的样子和底下那条多选条，不整页重绘。
-       * 走 rerender() 的话列表会重排（多出一行「与已选的X刺激高度相似」），
+       * 走 rerender() 的话列表会重排（多出一行「与已选的X动作模式相近」），
        * 下一个要点的动作就跑走了 —— 这正是要避开的那件事。
        */
       if (pending.has(e.id)) pending.delete(e.id); else pending.add(e.id);
@@ -769,8 +769,10 @@ function planCard() {
       h('h3', null, dayLabel),
       h('div.card-head-actions', null,
         h('span.card-tag', null, volume.sets
-          ? `${list.length} 个动作 · ${volume.sets} 组${volume.tonnage ? ` · ${num(volume.tonnage)} kg` : ''}`
+          ? `${list.length} 个动作 · ${volume.sets} 计划组${volume.tonnage ? ` · 已录负荷量 ${num(volume.tonnage)} kg·次` : ''}`
           : `${list.length} 个动作`),
+        volume.tonnage ? persistentInfoTip('training-load-scope', '负荷量统计范围',
+          '已录组的重量 × 次数之和（kg·次），包括尚未标记完成的组。自重未换算；辅助重量和不同器械的数字不代表相同阻力，合计不能解释为净做功或热量消耗。') : null,
         h('button.text-btn', {
           onclick: async () => {
             const removed = session().items.map(cloneTrainingItem);

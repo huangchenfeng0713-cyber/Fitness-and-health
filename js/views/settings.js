@@ -28,13 +28,6 @@ import {
 } from '../core/feedback.js';
 
 /** 固定参照只读展示，避免只有一个选项还保留可切换控件。 */
-function rhythmReference() {
-  return h('div.setting-choice', null,
-    h('div.setting-choice-row', null,
-      h('div.setting-choice-head', null, h('strong', null, '进食节奏参照')),
-      h('span', null, '参照膳食')),
-    h('p.setting-choice-desc', null, '按固定三餐窗口与早 30%、午 40%、晚 30% 参照，两餐之间保持。'));
-}
 
 function toggleCard() {
   const p = state.profile;
@@ -48,12 +41,12 @@ function toggleCard() {
     h('div.card-head', null,
       h('div', null,
         h('h3', null, '计算方式'),
-        h('p.card-desc', null, '每日目标怎么算、进度和什么比。')),
+        h('p.card-desc', null, '计划来源与记录偏好。')),
       infoTip('查看计算方式说明',
-        h('p', null, '消耗来源只影响之后显示的目标，进食节奏采用固定三餐参照，已记录的饮食保持原样。'))),
-    toggle('useAppleEnergy', '用 Apple 健康的消耗记录算预算',
-      '有设备记录时自动采用，没有时使用估算。'),
-    rhythmReference(),
+        h('p', null, '计划修改从保存当天生效；旧日无版本时按当前设置对照，进食节奏采用固定三餐参照，已记录的饮食保持原样。'))),
+    toggle('useAppleEnergy', '用健康数据估算每日消耗',
+      '参考近期至少 3 个有效完整日；不足时按公式参考。今天同步更新记录收支。'),
+
   );
 }
 
@@ -529,7 +522,7 @@ function sectionStatus(key, account) {
     return `最近同步 ${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`;
   }
   if (key === 'calc') {
-    return p.useAppleEnergy ? '跟随设备消耗' : '按公式估算';
+    return p.useAppleEnergy ? '近期完整日参考' : '按公式估算';
   }
   return `v${APP_VERSION}`;
 }

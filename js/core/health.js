@@ -1,3 +1,5 @@
+import { coordinateIntervals } from './source-intervals.js';
+import { completeEnergyDay, ENERGY_POLICY } from './energy-observation.js';
 /**
  * Apple 健康数据解析与按天聚合
  * 纯逻辑模块（无 DOM / 无 File API），供 Web Worker 与单元测试共用。
@@ -131,10 +133,15 @@ export function resolveKey(k) {
 }
 
 /** 单位归一化 */
-export function normalizeValue(kind, value, unit) {
+export function normalizeValue(kind, value, unit, { allowDefault = false, percentFormat = 'percent' } = {}) {
+  if (value == null || String(value).trim() === '') return null;
   const v = Number(value);
-  if (!Number.isFinite(v)) return null;
+  if (!Number.isFinite(v) || v < 0) return null;
   const u = String(unit || '').trim().toLowerCase();
+  const allowed = { energy: ['kcal', 'cal', 'kj', 'j'], mass: ['kg', 'lb', 'g', 'st'], mass_g: ['g','mg','mcg','µg','oz'],
+    mass_mg: ['mg','g','mcg','µg'], length: ['cm','m','in','ft'], distance: ['km','m','mi','ft','yd'], volume: ['ml','l','fl_oz_us','floz_us','fl oz','cup_us'],
+    percent: ['%','percent','ratio','fraction'], time: ['min','分钟','hr','h','s','sec'], sleep: ['min','分钟','hr','h','s','sec'], count: ['count','步'], rate: ['bpm','count/min'], raw: ['ml/kg·min','ml/kg/min','ml/(kg*min)'] };
+  if (u ? !allowed[kind]?.includes(u) : !allowDefault) return null;
   switch (kind) {
     case 'energy': {
       // 能量单位必须区分大小写：Apple 健康导出的 export.xml 写的是 unit="Cal"，
@@ -180,7 +187,7 @@ export function normalizeValue(kind, value, unit) {
     case 'percent':
       // HealthKit 的 % 单位存的是 0~1 的比例（0.181 表示 18.1%），
       // 而第三方导出常直接写 18.1，按数值大小区分。
-      return v > 0 && v <= 1 ? v * 100 : v;
+      return percentFormat === 'ratio' || u === 'ratio' || u === 'fraction' ? v * 100 : v;
     case 'time':
     case 'sleep':
       if (u === 'hr' || u === 'h') return v * 60;
@@ -304,6 +311,8 @@ export function createAggregator(options = {}) {
   let skipped = 0;
   let duplicateRecords = 0;
   let invalidRecords = 0;
+  const issues = [];
+  const invalid = detail => { invalidRecords++; if (issues.length < 100) issues.push(detail); };
   let activitySummaryCount = 0;
   let activitySummaryOverrides = 0;
   let supersededSyncRecords = 0;
@@ -424,38 +433,17 @@ export function createAggregator(options = {}) {
     let entry = bySource.get(sourceId);
     if (!entry) {
       entry = {
-        source: sourceInfo.source,
+        source: sourceInfo.source, sourceId, segments: [],
         userEntered: sourceInfo.userEntered,
         rank: sourceInfo.rank,
-        values: new Float64Array(bucketCount),
-        present: new Uint8Array(bucketCount),
       };
       bySource.set(sourceId, entry);
     } else {
       entry.rank = Math.max(entry.rank, sourceInfo.rank);
     }
 
-    const [y, m, d] = part.dayKey.split('-').map(Number);
-    const localDayStart = Date.UTC(y, m - 1, d);
-    const offsetMs = part.offsetMinutes * 60000;
-    const localStart = Math.max(0, part.startMs + offsetMs - localDayStart);
-    const localEnd = Math.min(24 * 60 * 60 * 1000, part.endMs + offsetMs - localDayStart);
-    if (!(localEnd > localStart)) {
-      const bucket = Math.max(0, Math.min(bucketCount - 1, Math.floor(localStart / bucketMs)));
-      entry.values[bucket] += part.value;
-      entry.present[bucket] = 1;
-      return;
-    }
-    const duration = localEnd - localStart;
-    const first = Math.max(0, Math.floor(localStart / bucketMs));
-    const last = Math.min(bucketCount - 1, Math.floor((localEnd - 0.001) / bucketMs));
-    for (let bucket = first; bucket <= last; bucket += 1) {
-      const overlap = Math.max(0,
-        Math.min(localEnd, (bucket + 1) * bucketMs) - Math.max(localStart, bucket * bucketMs));
-      if (!overlap) continue;
-      entry.values[bucket] += part.value * (overlap / duration);
-      entry.present[bucket] = 1;
-    }
+    entry.segments.push(part);
+
   };
 
   function processRecord(attrs = {}) {
@@ -502,9 +490,9 @@ export function createAggregator(options = {}) {
       return true;
     }
 
-    const v = normalizeValue(meta.kind, value, unit);
+    const v = normalizeValue(meta.kind, value, unit, { percentFormat: 'ratio' });
     if (v == null || !isPlausibleHealthValue(meta.key, v)) {
-      skipped += 1; invalidRecords += 1; return false;
+      skipped += 1; invalid({ field: meta.key, value, unit, date: startDate, source, reason: v == null ? '单位或数值无效' : '超出应用检查范围' }); return false;
     }
     const rank = sourceRank(source, device, userEntered);
     noteSource({ source, sourceVersion, device, creationDate, type, userEntered });
@@ -741,29 +729,24 @@ export function createAggregator(options = {}) {
         clean[k] = typeof v === 'number' ? Math.round(v * 100) / 100 : v;
       }
       for (const [metricKey, bySource] of Object.entries(day._sourceBuckets || {})) {
-        let total = 0;
-        for (let bucket = 0; bucket < bucketCount; bucket += 1) {
-          const candidates = [...bySource.values()].filter((entry) => entry.present[bucket]);
-          if (!candidates.length) continue;
-          let winner = candidates[0];
-          for (const candidate of candidates.slice(1)) {
-            if (candidate.rank > winner.rank
-              || (candidate.rank === winner.rank && candidate.values[bucket] > winner.values[bucket])) winner = candidate;
-          }
-          total += winner.values[bucket];
-          sourceStats.get(winner.source).selectedBuckets += 1;
-          if (candidates.length > 1) {
-            overlapBuckets += 1;
-            multiSourceMetrics.add(`${key}|${metricKey}`);
-            for (const candidate of candidates) {
-              if (candidate === winner) continue;
-              const dropped = candidate.values[bucket];
-              droppedOverlapByMetric[metricKey] = (droppedOverlapByMetric[metricKey] || 0) + dropped;
-              sourceStats.get(candidate.source).droppedBuckets += 1;
-            }
-          }
+        const combined = coordinateIntervals([...bySource.values()]);
+        clean[metricKey] = Math.round(combined.total * 100) / 100;
+        overlapBuckets += combined.overlaps;
+        if (combined.dropped) droppedOverlapByMetric[metricKey] = (droppedOverlapByMetric[metricKey] || 0) + combined.dropped;
+        if (combined.overlaps) multiSourceMetrics.add(key + '|' + metricKey);
+        for (const source of combined.sources) sourceStats.get(source).selectedBuckets += 1;
+        if (ENERGY_OBSERVATION_KEYS.has(metricKey) && combined.end != null) {
+          const sample = [...bySource.values()][0].segments[0];
+          const offset = sample.offsetMinutes * 60000;
+          const [y, m, d] = key.split('-').map(Number);
+          const start = Date.UTC(y, m - 1, d) - offset, end = Date.UTC(y, m - 1, d + 1) - offset;
+          const exported = parseAppleDate(exportMetadata.exportDate?.value)?.date?.getTime() || 0;
+          const complete = combined.start === start && combined.end === end && combined.coveredMs >= end - start && exported >= end;
+          clean._fieldProvenance ||= {};
+          clean._fieldProvenance[metricKey] = { origin: 'apple', source: combined.sources.join('、'),
+            observedAt: new Date(combined.end).toISOString(), coverage: { status: complete ? 'complete' : 'partial', start: new Date(start).toISOString(), end: new Date(end).toISOString() } };
+          if (metricKey === 'restingEnergy') clean.energyCoverage = clean._fieldProvenance[metricKey].coverage;
         }
-        clean[metricKey] = Math.round(total * 100) / 100;
       }
       const summary = day._activitySummary;
       if (summary) {
@@ -775,6 +758,14 @@ export function createAggregator(options = {}) {
           clean[metricKey] = Math.round(summary[metricKey] * 100) / 100;
         }
         clean.activityGoals = summary.goals;
+        if (summary.activeEnergy != null) {
+          // 汇总覆盖了区间值，截止时间也必须来自汇总来源；不能沿用被替换样本的时间。
+          const exportStamp = parseAppleDate(exportMetadata.exportDate?.value);
+          clean._fieldProvenance ||= {};
+          clean._fieldProvenance.activeEnergy = { origin: 'apple', source: 'Apple ActivitySummary',
+            observedAt: exportStamp?.dayKey === key ? exportStamp.date.toISOString() : null,
+            coverage: { status: 'unknown' } };
+        }
       }
       // 动态预算必须按「这份累计能量覆盖到几点」外推。丢掉这个时间戳后，
       // 页面每分钟都会拿同一份旧快照除以更晚的当前时间，预算便会凭空下降。
@@ -785,6 +776,10 @@ export function createAggregator(options = {}) {
       }
       if ((clean.activeEnergy != null || clean.restingEnergy != null) && energyObservedMs > 0) {
         clean.energyObservedAt = new Date(energyObservedMs).toISOString();
+      }
+      if (clean.energyCoverage?.status === 'complete' && clean.activeEnergy != null) {
+        clean._fieldProvenance.activeEnergy = { ...clean._fieldProvenance.activeEnergy,
+          observedAt: clean.energyCoverage.end, coverage: clean.energyCoverage };
       }
       if (day._workouts?.length) {
         clean.workouts = day._workouts;
@@ -843,7 +838,7 @@ export function createAggregator(options = {}) {
       metadata: { ...exportMetadata, sources },
       quality: {
         duplicateRecords,
-        invalidRecords,
+        invalidRecords, issues,
         unsupportedRecords: [...unsupportedTypes.values()].reduce((a, b) => a + b, 0),
         unsupportedTypes: unsupported,
         unsupportedXmlElements,
@@ -860,7 +855,7 @@ export function createAggregator(options = {}) {
           estimated: true,
         },
         sourceCoverage: sources,
-        resolutionMinutes: SOURCE_BUCKET_MINUTES,
+        resolutionMinutes: null, resolution: 'interval-boundaries',
         estimatedOverlap: overlapBuckets > 0,
         priorityMode: explicitPriority.size ? 'explicit+inferred' : 'inferred',
         identityCounts,
@@ -1063,7 +1058,10 @@ export function parseHealthJson(json) {
   let recordCount = 0;
   let skipped = 0;
   let invalidRecords = 0;
+  const issues = [];
+  const invalid = detail => { invalidRecords++; if (issues.length < 100) issues.push(detail); };
 
+  const sampleTime = value => /(?:T|\s)\d{1,2}:\d{2}/.test(String(value || '')) ? (parseAppleDate(value)?.date?.getTime() || 0) : 0;
   const put = (dayKey, key, value, mode = 'sum', timestamp = 0) => {
     if (!dayKey || !isPlausibleHealthValue(key, value)) return false;
     let d = days.get(dayKey);
@@ -1080,8 +1078,11 @@ export function parseHealthJson(json) {
       d._lastTs[key] = timestamp;
       d[key] = v;
     }
-    if (ENERGY_OBSERVATION_KEYS.has(key) && timestamp > 0) {
-      d._energyObservedMs = Math.max(d._energyObservedMs || 0, timestamp);
+    if (ENERGY_OBSERVATION_KEYS.has(key)) {
+      d._fieldProvenance ||= {};
+      const prior = Date.parse(d._fieldProvenance[key]?.observedAt || '') || 0;
+      d._fieldProvenance[key] = { origin: 'apple', observedAt: timestamp > 0 ? new Date(mode === 'sum' ? Math.max(prior,timestamp) : timestamp).toISOString() : null, coverage: { status: 'unknown' } };
+      if (timestamp > 0) d._energyObservedMs = Math.max(d._energyObservedMs || 0, timestamp);
     }
     return true;
   };
@@ -1104,8 +1105,8 @@ export function parseHealthJson(json) {
         if (value == null || String(value).trim() === '') { skipped += 1; continue; }
         const norm = meta ? normalizeValue(meta.kind, value, units) : Number(value);
         const mode = meta?.agg === 'avg' ? 'avg' : meta?.agg === 'last' ? 'last' : 'sum';
-        if (norm == null || !put(stamp.dayKey, key, norm, mode, stamp.date?.getTime() || 0)) {
-          skipped += 1; invalidRecords += 1; continue;
+        if (norm == null || !put(stamp.dayKey, key, norm, mode, sampleTime(point.date || point.startDate || point.timestamp))) {
+          skipped += 1; invalid({ field: key, value, unit: units, date: point.date || point.startDate, reason: '单位或数值无效' }); continue;
         }
         recordCount += 1;
       }
@@ -1128,19 +1129,25 @@ export function parseHealthJson(json) {
       if (!dayKey) { skipped += 1; continue; }
       let accepted = false;
       for (const [k, v] of Object.entries(row)) {
-        if (DATE_KEYS.has(normalizeKey(k)) || normalizeKey(k) === 'units' || /unit$/i.test(k)) continue;
+        if (k.startsWith('_') || k === 'energyCoverage' || /ObservedAt$/.test(k) || DATE_KEYS.has(normalizeKey(k)) || normalizeKey(k) === 'units' || /unit$/i.test(k)) continue;
         const key = resolveKey(k);
         if (!key) { ignored.add(String(k)); continue; }
         if (v == null || String(v).trim() === '') continue;
         const meta = HEALTH_BY_KEY.get(key);
         const unit = row.units?.[k] ?? row.units?.[key] ?? row[`${k}Unit`] ?? row[`${key}Unit`];
-        const norm = meta ? normalizeValue(meta.kind, v, unit) : Number(v);
-        if (norm == null || !put(dayKey, key, norm, 'last', stamp.date?.getTime() || 0)) {
-          skipped += 1; invalidRecords += 1; continue;
+        const norm = meta ? normalizeValue(meta.kind, v, unit, { allowDefault: true }) : Number(v);
+        if (norm == null || !put(dayKey, key, norm, 'last', sampleTime(row[`${key}ObservedAt`] || row.energyObservedAt || dateEntry?.[1]))) {
+          skipped += 1; invalid({ field: key, value: v, unit, date: dayKey, reason: '单位或数值无效' }); continue;
         }
         accepted = true;
       }
-      if (accepted) recordCount += 1;
+      if (accepted) {
+        const d = days.get(dayKey);
+        if (row._fieldProvenance) d._fieldProvenance = { ...(d._fieldProvenance || {}), ...row._fieldProvenance };
+        if (row.energyCoverage) d.energyCoverage = row.energyCoverage;
+        if (row.energyObservedAt) d.energyObservedAt = row.energyObservedAt;
+        recordCount += 1;
+      }
     }
   }
 
@@ -1151,12 +1158,14 @@ export function parseHealthJson(json) {
       c.energyObservedAt = new Date(d._energyObservedMs).toISOString();
     }
     for (const [k, v] of Object.entries(c)) if (typeof v === 'number') c[k] = Math.round(v * 100) / 100;
+    if (d._fieldProvenance) c._fieldProvenance = d._fieldProvenance;
+    if (d.energyObservedAt) c.energyObservedAt = d.energyObservedAt;
     return c;
   });
   out.sort((a, b) => (a.date < b.date ? -1 : 1));
   return {
     days: out, recordCount, skipped, types: [], ignoredKeys: [...ignored],
-    quality: { invalidRecords, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
+    quality: { invalidRecords, issues, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
   };
 }
 
@@ -1200,6 +1209,8 @@ export function parseHealthCsv(text) {
   let recordCount = 0;
   let skipped = 0;
   let invalidRecords = 0;
+  const issues = [];
+  const invalid = detail => { invalidRecords++; if (issues.length < 100) issues.push(detail); };
   const numeric = (raw) => {
     const s = String(raw ?? '').trim();
     if (!s) return null;
@@ -1220,14 +1231,18 @@ export function parseHealthCsv(text) {
       if (idx === dateIdx) return;
       if (!spec.key) { if (spec.raw) ignored.add(spec.raw); return; }
       const v = numeric(cells[idx]);
-      if (v == null) return;
+      if (v == null) { if (String(cells[idx]).trim()) invalid({ row: i+1, field: spec.raw, value: cells[idx], reason: '数值无效' }); return; }
       const meta = HEALTH_BY_KEY.get(spec.key);
-      const norm = meta ? normalizeValue(meta.kind, v, spec.unit) : v;
+      const norm = meta ? normalizeValue(meta.kind, v, spec.unit, { allowDefault: true }) : v;
       if (norm == null || !isPlausibleHealthValue(spec.key, norm)) {
-        invalidRecords += 1; return;
+        invalid({ row: i+1, field: spec.raw, value: cells[idx], unit: spec.unit, reason: '单位或数值无效' }); return;
       }
       current[spec.key] = norm;
-      if (ENERGY_OBSERVATION_KEYS.has(spec.key) && stamp.date) {
+      if (ENERGY_OBSERVATION_KEYS.has(spec.key)) {
+        const timestamp = /(?:T|\s)\d{1,2}:\d{2}/.test(cells[dateIdx]) ? stamp.date?.toISOString() : null;
+        current._fieldProvenance ||= {};
+        current._fieldProvenance[spec.key] = { origin: 'apple', observedAt: timestamp, coverage: { status: 'unknown' } };
+        if (!timestamp) { accepted = true; return; }
         const previous = Date.parse(current.energyObservedAt || '');
         if (!Number.isFinite(previous) || stamp.date.getTime() >= previous) {
           current.energyObservedAt = stamp.date.toISOString();
@@ -1242,7 +1257,7 @@ export function parseHealthCsv(text) {
   rows.sort((a, b) => (a.date < b.date ? -1 : 1));
   return {
     days: rows, recordCount, skipped, types: [], ignoredKeys: [...ignored],
-    quality: { invalidRecords, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
+    quality: { invalidRecords, issues, duplicateRecords: 0, multiSourceDays: 0, sleepOverlapMinutes: 0 },
   };
 }
 
@@ -1253,27 +1268,16 @@ export function parseHealthCsv(text) {
 /** 受单位缺陷影响的能量字段 */
 export const ENERGY_FIELDS = ['activeEnergy', 'restingEnergy', 'hkKcal'];
 
-/**
- * 找出被「Cal 当成小卡」缺陷缩小一千倍的日子。
- *
- * 判据要足够保守，宁可漏也不能误伤手动录入的正确数据：
- *  - 全天静息能量低于 50 kcal 在生理上不可能（成人躺一天也有 1200+）
- *  - 活动能量低于 20 kcal 却走了一千步以上，同样只可能是量级错了
- */
+/** 只修复明确携带旧解析器版本、原单位和原始值证据的历史字段。 */
 function misscaledEnergyFields(day, today) {
   if (!day?.date || day.date >= today) return [];
-  const resting = Number(day.restingEnergy);
-  const active = Number(day.activeEnergy);
-  const intake = Number(day.hkKcal);
-  const steps = Number(day.steps) || 0;
-  const restingBad = resting > 0 && resting < 50;
-  const activeBad = active > 0 && active < 20 && (steps > 1000 || restingBad);
-  const fields = [];
-  if (restingBad) fields.push('restingEnergy');
-  if (activeBad) fields.push('activeEnergy');
-  // 膳食热量低本身完全可能；只有同一天活动和静息都呈现旧缺陷的千分之一量级时才联动修复。
-  if (intake > 0 && intake < 10 && restingBad && activeBad) fields.push('hkKcal');
-  return fields;
+  return ENERGY_FIELDS.filter(key => {
+    const p = day._fieldProvenance?.[key];
+    const value = Number(day[key]);
+    return !day._energyRepair && p?.parserVersion === 'cal-div1000-v1' && p?.originalUnit === 'Cal'
+      && p?.originalValue != null && Number(p.originalValue) === value * 1000
+      && value > 0 && Number.isFinite(value) && value * 1000 <= (IMPLAUSIBLE_LIMITS[key] || 15000);
+  });
 }
 
 export function findMisscaledEnergyDays(days = [], today = toDayKey(new Date())) {
@@ -1286,24 +1290,17 @@ export function findMisscaledEnergyDays(days = [], today = toDayKey(new Date()))
  */
 export function repairMisscaledEnergy(days = [], today = toDayKey(new Date())) {
   return findMisscaledEnergyDays(days, today).map((d) => {
-    const fixed = { ...d };
+    const fixed = { ...d, _energyRepair: { original: Object.fromEntries(ENERGY_FIELDS.filter(k => d[k] != null).map(k => [k, d[k]])), kind: 'Cal-v1' } };
     for (const key of misscaledEnergyFields(d, today)) {
       const v = Number(fixed[key]);
       if (Number.isFinite(v) && v > 0) fixed[key] = Math.round(v * 1000 * 100) / 100;
     }
+    fixed._energyRepair.repaired = Object.fromEntries(Object.keys(fixed._energyRepair.original).map(k => [k, fixed[k]]));
     return fixed;
   });
 }
 
-/*
- * 生理上不可能的数值。
- *
- * 这些数不是「偏高」而是「不可能」：成人静息代谢再高也到不了 5000 kcal，
- * 环法车手一个赛段的活动能量约 7000 kcal。真出现这种数，只可能是导入端把
- * 多天累加成了一天（快捷指令里日期范围选错最常见），或者单位换算出了岔子。
- *
- * 上限故意放得很宽 —— 只拦「不可能」，不拦「少见」，免得误伤真实的大运动量。
- */
+/** 产品合理性检查上限；超过只代表可疑，不能认定普遍生理不可能。 */
 export const IMPLAUSIBLE_LIMITS = {
   restingEnergy: 5000,
   activeEnergy: 8000,
@@ -1313,11 +1310,11 @@ export const IMPLAUSIBLE_LIMITS = {
   sleepMinutes: 1440,
 };
 
-/** 这一天有哪几个字段的数值不可能是真的 */
+/** 列出超出检查范围的字段，供显示、排除与人工核对。 */
 export function implausibleFields(day = {}) {
   return Object.keys(IMPLAUSIBLE_LIMITS).filter((k) => {
     const v = Number(day[k]);
-    return Number.isFinite(v) && v > IMPLAUSIBLE_LIMITS[k];
+    return day[k] != null && day[k] !== '' && (!Number.isFinite(v) || v < 0 || v > IMPLAUSIBLE_LIMITS[k]);
   });
 }
 
@@ -1325,14 +1322,11 @@ export function findImplausibleDays(days = []) {
   return days.filter((d) => implausibleFields(d).length > 0);
 }
 
-/**
- * 把不可能的数值抹掉，其余字段原样保留。
- * 不猜正确值——猜错了比没有更糟，宁可留空让人重新导入或手动补录。
- */
+/** 标记排除，不清除原值。核对后可重新导入或补录。 */
 export function clearImplausibleValues(days = []) {
   return findImplausibleDays(days).map((d) => {
     const fixed = { ...d };
-    for (const k of implausibleFields(d)) delete fixed[k];
+    fixed._excludedFields = [...new Set([...(d._excludedFields || []), ...implausibleFields(d)])];
     return fixed;
   });
 }
@@ -1348,6 +1342,8 @@ export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey
     .filter((d) => Number.isFinite(dayNumber(d.date)) && d.date < today)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
   const recent = healthHistory.filter((d) => dayNumber(d.date) >= todayNo - window);
+  const energyDays = recent.filter(d => completeEnergyDay(d, new Date(`${today}T00:00:00`)));
+  const usableEnergy = energyDays.length >= ENERGY_POLICY.minimumBaselineDays ? energyDays : [];
   const avg = (arr, key) => {
     // 上限过滤不能省：一天坏数据会顺着基线污染之后 14 天的热量预算
     const cap = IMPLAUSIBLE_LIMITS[key] ?? Infinity;
@@ -1390,22 +1386,25 @@ export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey
     .filter((d) => Number.isFinite(dayNumber(d.date))
       && d.date < today && dayNumber(d.date) >= todayNo - window)
     .sort((a, b) => (a.date < b.date ? -1 : 1));
-  const loggedDays = dietRecent.length;
-  const kcalIntake = loggedDays
-    ? dietRecent.reduce((a, d) => a + (d.kcal || 0), 0) / loggedDays
-    : null;
-  const proteinIntake = loggedDays
-    ? dietRecent.reduce((a, d) => a + (d.protein || 0), 0) / loggedDays
-    : null;
+  const nutrientDays = (key) => dietRecent.filter(d => d.coverage?.[key]?.complete !== false
+    && ['number', 'string'].includes(typeof d[key]) && String(d[key]).trim() !== ''
+    && Number.isFinite(Number(d[key])) && Number(d[key]) >= 0);
+  const kcalDays = nutrientDays('kcal'), proteinDays = nutrientDays('protein');
+  const mean = (rows, key) => rows.length ? rows.reduce((sum, d) => sum + Number(d[key]) / rows.length, 0) : null;
+  const loggedDays = kcalDays.length;
+  const kcalIntake = mean(kcalDays, 'kcal');
+  const proteinIntake = mean(proteinDays, 'protein');
 
   return {
     days: Math.max(recent.length, loggedDays),
     healthDaysCounted: recent.length,
     // 摄入类结论的真实分母：有饮食记录的天数，和上面那个 days 不是一回事
     loggedDays,
+    proteinLoggedDays: proteinDays.length,
     windowDays: window,
-    activeEnergy: avg(recent, 'activeEnergy'),
-    restingEnergy: avg(recent, 'restingEnergy'),
+    energyPairedDays: energyDays.length,
+    activeEnergy: avg(usableEnergy, 'activeEnergy'),
+    restingEnergy: avg(usableEnergy, 'restingEnergy'),
     steps: avg(recent, 'steps'),
     sleepMinutes: avg(recent, 'sleepMinutes'),
     weightTrend,

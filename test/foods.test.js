@@ -334,9 +334,7 @@ test('份量换算：克数与营养线性对应', () => {
   assert.equal(half.kcal, Math.round(p.kcal * 0.5));
   assert.equal(double.kcal, Math.round(p.kcal * 2));
   assert.equal(nutrientsFor(rice, 0).kcal, 0);
-  assert.deepEqual(nutrientsFor(rice, -50), {
-    kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, totalSugar: 0, sugar: 0, sodium: 0,
-  }, '负克数必须按 0 处理，不能生成负营养');
+  assert.throws(() => nutrientsFor(rice, -50), /份量/, '负克数必须拒绝，不能静默清零');
 });
 
 test('游离糖可按部分糖扣除，不再强迫乳品整项全算或全免', () => {

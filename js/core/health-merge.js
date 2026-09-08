@@ -13,7 +13,7 @@ export const APPLE_HEALTH_FIELDS = new Set([
   'workoutDistanceKm',
   'workouts',
   'activityGoals',
-  'energyObservedAt',
+  'energyObservedAt', 'energyCoverage', 'activeEnergyObservedAt', 'restingEnergyObservedAt',
 ]);
 
 const metaKeys = new Set(['date', 'source', '_fieldProvenance', '_importQuality']);
@@ -51,6 +51,8 @@ export function stampAppleRow(row, importId = null) {
     if (!APPLE_HEALTH_FIELDS.has(key)) continue;
     provenance[key] = {
       ...(provenance[key] || {}),
+      observedAt: provenance[key] && Object.hasOwn(provenance[key], 'observedAt') ? provenance[key].observedAt : row._cloudHealthSync?.fieldCursors?.[key] || row[`${key}ObservedAt`] || row.energyObservedAt || null,
+      coverage: provenance[key]?.coverage || row.energyCoverage || { status: 'unknown' },
       origin: 'apple',
       ...(importId ? { importId } : {}),
     };
@@ -62,7 +64,8 @@ export function stampAppleRow(row, importId = null) {
 export function stampManualPatch(existing, patch) {
   const provenance = { ...(existing?._fieldProvenance || {}) };
   for (const key of dataKeys(patch)) {
-    if (APPLE_HEALTH_FIELDS.has(key)) provenance[key] = { origin: 'manual' };
+    if (APPLE_HEALTH_FIELDS.has(key)) provenance[key] = { origin: 'manual', observedAt: patch[`${key}ObservedAt`] || null, coverage: patch.energyCoverage || { status: 'unknown' } };
+    if (key === 'activeEnergy' || key === 'restingEnergy') { provenance[key].observedAt = patch[`${key}ObservedAt`] || patch.energyObservedAt || null; }
   }
   const row = { ...existing, ...patch, _fieldProvenance: provenance };
   return { ...row, source: sourceLabel(row) };

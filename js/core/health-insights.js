@@ -153,6 +153,7 @@ export function weightTrendStats(healthDays = [], windowDays = 30, asOfDate = nu
  * @param {object} opts { targets, dietDaily, windowDays, asOfDate/endDate }
  * @returns {Array<{key,level,title,text,metric}>} level: good | info | warn | bad
  */
+/** @deprecated 未挂载的旧兼容 API；新页面使用 trendReading，禁止用作新的推荐入口。 */
 export function healthInsights(healthDays = [], opts = {}) {
   const {
     targets = null, dietDaily = [], windowDays = 14, asOfDate = null, endDate = null,
@@ -397,6 +398,7 @@ export function healthInsights(healthDays = [], opts = {}) {
 }
 
 /** 汇总卡片用的关键指标；asOfDate 可用于查看某个历史截止日。 */
+/** @deprecated 未挂载的旧汇总 API；新页面使用 weeklySummary 的配对和窗口规则。 */
 export function healthSummary(healthDays = [], windowDays = 14, asOfDate = null) {
   const days = windowedDays(healthDays, windowDays, asOfDate);
   const pick = (key) => {

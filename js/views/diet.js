@@ -1,3 +1,4 @@
+import { sumNutrients, nutrientIssues, NUTRIENT_KEYS } from '../core/nutrition.js';
 /**
  * 饮食记录页
  *
@@ -958,7 +959,7 @@ const CUSTOM_NUM_FIELDS = [
   ['fat', '脂肪 g', 1],
   ['carb', '碳水 g', 2],
   ['fiber', '膳食纤维 g', 3],
-  ['sugar', '糖 g', 4],
+  ['sugar', '总糖 g', 4],
   ['sodium', '钠 mg', 5],
 ];
 
@@ -1045,17 +1046,25 @@ function refreshCustomForm() {
     },
   }, customDraft.portionUnit);
 
+  inputs.carbBasis = h('select', null,
+    h('option', { value: 'available', selected: editing?.carbBasis === 'available' }, '可利用碳水（不含纤维）'),
+    h('option', { value: 'total', selected: editing?.carbBasis === 'total' }, '总碳水（含纤维）'),
+    h('option', { value: 'unknown', selected: !editing?.carbBasis || editing.carbBasis === 'unknown' }, '口径未确认'));
+  inputs.freeSugar = h('input', { type: 'number', min: '0', step: '0.1', placeholder: '未知可留空', value: editing?.freeSugar ?? '' });
   const save = async () => {
     const name = inputs.name.value.trim();
     const kcal = energyValue();
     if (!name || kcal == null) { toast(`请填写食物名称和每 100 ${customDraft.portionUnit} 能量`, 'warn'); return; }
-    const val = (key) => Math.max(0, Number(inputs[key].value) || 0);
+    const val = key => inputs[key].value.trim() === '' ? null : Number(inputs[key].value);
+    for (const [key] of CUSTOM_NUM_FIELDS) {
+      if (val(key) != null && (!Number.isFinite(val(key)) || val(key) < 0)) { toast(key + '需为非负有限数', 'warn'); return; }
+    }
     const carb = val('carb');
     const fiber = val('fiber');
     const sugar = val('sugar');
     // 食物库自己的契约：纤维和糖都不能超过碳水，否则营养汇总会算出负的可用碳水
-    if (fiber > carb) { toast('膳食纤维不能超过碳水', 'warn'); return; }
-    if (sugar > carb) { toast('糖不能超过碳水', 'warn'); return; }
+    if (inputs.carbBasis.value === 'total' && fiber != null && carb != null && fiber > carb) { toast('膳食纤维不能超过碳水', 'warn'); return; }
+    if (sugar != null && carb != null && sugar > carb) { toast('糖不能超过碳水', 'warn'); return; }
     if (inputs.portionGrams.value.trim() === '') { toast('请填写每份克重或体积', 'warn'); return; }
     const grams = Math.round(Number(inputs.portionGrams.value));
     if (!(grams > 0 && grams <= 1000)) { toast('常用份量要在 1~1000 之间', 'warn'); return; }
@@ -1066,7 +1075,8 @@ function refreshCustomForm() {
       name, alias: '', cat: inputs.cat.value || 'other', custom: true,
       n: [Math.round(kcal * 10) / 10, val('protein'), val('fat'), carb, fiber, sugar, val('sodium')],
       s: [[inputs.portionName.value.trim() || '一份', grams]],
-      ...(liquid ? { basis: '100ml', state: 'ready', edibleRatio: 1, carbBasis: 'total' } : {}),
+      basis: liquid ? '100ml' : '100g', state: 'ready', edibleRatio: 1, carbBasis: inputs.carbBasis.value,
+      freeSugar: inputs.freeSugar.value.trim() === '' ? null : Number(inputs.freeSugar.value), nutritionSchema: 2,
       f: [],
     });
     toast(customDraft.id ? `已保存「${name}」` : `已添加「${name}」`, 'ok');
@@ -1094,6 +1104,9 @@ function refreshCustomForm() {
       h('label.form-field', null, h('span', null, '能量'),
         h('div.energy-field', null, inputs.energy, unitBtn)),
       CUSTOM_NUM_FIELDS.map(([key, label, idx]) => numInput(key, label, n[idx + 1])),
+      h('label.form-field.span-all', null, h('span', null, '标签碳水口径'), inputs.carbBasis),
+      h('label.form-field', null, h('span', null, '游离糖 g（可选）'), inputs.freeSugar),
+      h('p.form-hint.span-all', null, '空字段保留未知。总糖不等于游离糖；天然乳糖和完整水果中的糖不属于游离糖。'),
       h('label.form-field', null, h('span', null, '常用分量单位'), inputs.portionName),
       h('label.form-field', null, h('span', null, '每份克重/体积'),
         h('div.energy-field', null, inputs.portionGrams, portionUnitBtn))),
@@ -1164,20 +1177,27 @@ function mealIcon(meal) {
  */
 function mergedRow(group) {
   if (group.count === 1) return entryRow(group.entries[0], false);
+  const value = (key, decimals = 0) => group.coverage[key].known === 0 ? '—'
+    : num(group[key], decimals) + (group.coverage[key].complete ? '' : '（已知部分）');
   return h('details.entry-merged', null,
     h('summary.entry-row', null,
       h('div.entry-main', null,
         h('div.entry-name', null, group.name,
           h('span.entry-times', null, `×${group.count}`)),
         h('div.entry-meta', null,
-          h('strong', null, `${num(group.kcal)} kcal`),
-          ` · 蛋 ${num(group.protein, 1)} · 脂 ${num(group.fat, 1)} · 碳 ${num(group.carb, 1)} g`)),
+          h('strong', null, `${value('kcal')} kcal`),
+          ` · 蛋 ${value('protein', 1)} · 脂 ${value('fat', 1)} · 碳 ${value('carb', 1)} g`)),
       h('span.entry-grams-text', null, `${num(group.grams)}${group.unit}`)),
     h('div.entry-merged-list', null, group.entries.map((e) => entryRow(e, false))));
 }
 
 function refreshEntries() {
   clearEl(nodes.entries);
+  const issues = state.derived?.intake?.issues || [];
+  const total = state.derived.intake;
+  if (issues.length) mount(nodes.entries, h('section.card', null, h('h3', null, '饮食记录需修正'),
+    issues.map(e => h('p', null, (e.name || '条目 ' + e.id) + ' · ' + (e.field || '') + '：' + e.reason)),
+    h('p', null, '异常字段未参与合计。可编辑对应记录，或删除后按正确标签重新录入。')));
   const order = MEALS.map((m) => m.key);
   const entries = [...state.dietEntries].sort(
     (a, b) => order.indexOf(a.meal) - order.indexOf(b.meal) || String(a.time).localeCompare(String(b.time)),
@@ -1193,7 +1213,7 @@ function refreshEntries() {
   }
 
   const grouped = {};
-  for (const e of entries) (grouped[e.meal] ||= []).push(e);
+  for (const e of entries) (grouped[MEAL_LABEL[e.meal] ? e.meal : 'unknown'] ||= []).push(e);
   const editing = ui.editEntries;
 
   mount(nodes.entries, h('section.card', null,
@@ -1206,7 +1226,7 @@ function refreshEntries() {
        */
       h('div.card-head-actions', null,
         h('span.card-tag', null,
-          `${num(entries.reduce((a, e) => a + e.kcal, 0))} kcal · 蛋白 ${num(entries.reduce((a, e) => a + e.protein, 0), 1)}g`),
+          `${num(total.kcal)} kcal · 蛋白 ${num(total.protein, 1)}g${total.coverage.protein.complete ? '' : '（已知部分）'}`),
         h('button.text-btn', {
           type: 'button', 'aria-pressed': String(editing),
           onclick: () => { ui.editEntries = !ui.editEntries; refreshEntries(); },
@@ -1235,8 +1255,8 @@ function refreshEntries() {
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
         mealIcon(meal),
-        h('strong', null, MEAL_LABEL[meal] || meal),
-        h('span', null, `${num(list.reduce((a, e) => a + e.kcal, 0))} kcal`)),
+        h('strong', null, MEAL_LABEL[meal] || '餐次待核对'),
+        h('span', null, `${num(sumNutrients(list).kcal)} kcal${sumNutrients(list).coverage.kcal.complete ? '' : '（已知部分）'}`)),
       /*
        * 只读态把「同一笔」合成一行（`米饭（白米） ×3 · 450g`），点开看明细。
        * 编辑态一条是一条 —— 删的、改克数的、换餐次的都是某一条具体记录。
@@ -1295,6 +1315,23 @@ function mealSelect(entry) {
  * 查不到的情形是真实存在的：自定义食物被删、换设备恢复的备份没带上它、
  * 旧版本留下的 id。这时候明说「食物已删除」，别装作没事，也别崩。
  */
+function editNutrition(entry) {
+  const labels = { kcal: '包装热量 kcal', protein: '蛋白质 g', fat: '脂肪 g', carb: '可利用碳水 g', fiber: '纤维 g', totalSugar: '总糖 g', sugar: '游离糖 g', sodium: '钠 mg' };
+  const inputs = Object.fromEntries(NUTRIENT_KEYS.map(k => [k, h('input', { type: 'number', min: 0, step: 'any', value: entry[k] ?? '', 'aria-label': labels[k] })]));
+  const save = h('button.primary-btn', { onclick: async ev => {
+    const nutrients = Object.fromEntries(NUTRIENT_KEYS.map(k => [k, inputs[k].value.trim() === '' ? null : Number(inputs[k].value)]));
+    const result = await runLocalAction(ev.currentTarget, () => updateEntry(entry.id, { ...nutrients, nutritionSchema: 2, nutritionReview: false, carbBasis: 'available' }), '核对营养');
+    if (result.ok) { closeSheet({ force: true }); refreshEntries(); toast('已保存本条营养', 'ok'); }
+  } }, '保存本条记录');
+  openSheet(h('div.portion-panel', null,
+    h('h3', null, entry.name + ' · 核对营养'),
+    h('p.form-hint', null, entry.date + ' · 以下是本条 ' + num(entry.grams) + (entry.unit || 'g') + ' 的营养总量。空白保留未知；包装热量独立保存。'),
+    entry.legacyNutrition ? h('details', null, h('summary', null, '查看保留的旧值'), NUTRIENT_KEYS.map(k => h('p', null, labels[k] + '：' + (entry.legacyNutrition[k] ?? '未知')))) : null,
+    h('div.form-grid', null, NUTRIENT_KEYS.map(k => h('label.form-field', null, h('span', null, labels[k]), inputs[k])))),
+  { label: '核对本条营养' });
+  setSheetFooter(h('div.sheet-action', null, save));
+}
+
 function entryRow(e, editing) {
   const food = findFood(e.foodId);
   // 记录自带单位；老记录没有这个字段，才回头看查到的食物
@@ -1320,7 +1357,9 @@ function entryRow(e, editing) {
       h('div.entry-meta', null,
         h('strong', null, `${num(e.kcal)} kcal`),
         ` · 蛋 ${num(e.protein, 1)} · 脂 ${num(e.fat, 1)} · 碳 ${num(e.carb, 1)} g`),
-      editing ? recordNote : null),
+      editing ? recordNote : null,
+      e.nutritionReview ? h('p.entry-record-note', null, '旧自定义营养待确认') : null,
+      editing || e.nutritionReview || nutrientIssues(e).length ? h('button.text-btn', { onclick: () => editNutrition(e) }, '核对本条营养') : null),
     editing ? h('div.entry-actions', null,
       h('input.entry-grams', {
         type: 'number', value: num(e.grams), min: 1, step: 5, inputmode: 'numeric',
@@ -1482,7 +1521,7 @@ function refreshAdvice() {
   // 正在搜索或正在调份量时不插推荐：那会儿人有明确目标，多两张卡只会把操作区顶下去
   if (ui.query || ui.selected) return;
   // ＋ 走和搜索结果一样的路：先开份量面板，不直接落库
-  mount(nodes.advice, recommendCard(rerender, (food, options) => {
+  mount(nodes.advice, state.derived?.isToday && state.derived?.targets?.status !== 'unavailable' ? recommendCard(rerender, (food, options) => {
     selectFood(food);
     if (options?.meal) ui.meal = options.meal;
     if (options?.grams > 0) {
@@ -1491,7 +1530,7 @@ function refreshAdvice() {
       ui.qty = options.grams;
     }
     refreshPortion();
-  }));
+  }) : null);
 }
 
 export function renderDiet(root) {

@@ -1,3 +1,4 @@
+import { planForProfile } from '../../lib/store.js';
 /** 近 7 日速览卡：截至昨天的七个完整日。 */
 
 import { h, shiftDay, todayKey } from '../../lib/utils.js';
@@ -5,11 +6,13 @@ import { state } from '../../lib/store.js';
 import { weeklySummary } from '../../core/weekly-summary.js';
 
 export function weeklySummaryCard() {
+  const endDate = shiftDay(todayKey(), -1);
   const s = weeklySummary({
-    endDate: shiftDay(todayKey(), -1),
+    endDate,
     dietDaily: state.dietDaily,
     healthDays: state.healthDays,
-    targets: state.derived?.targets,
+    targets: planForProfile(state.profile, endDate),
+    mixedTargets: (state.profile.targetVersions || []).some(v => v.effectiveDate > shiftDay(endDate, -6) && v.effectiveDate <= endDate),
   });
   if (!s) return null;
 
