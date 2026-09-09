@@ -26,6 +26,9 @@
 
   --accent: #0d8f70;
   --accent-soft: #e5f4ef;
+  --action-fill: #087d62;
+  --on-action: #ffffff;
+  --touch-target: 44px;
   --ring-eat: #4ca38e;
   --ring-eat-wrap: #2d7d6b;
   --ring-burn: #cbb67a;
@@ -188,6 +191,8 @@
 
     --accent: #2dc39a;
     --accent-soft: #102c25;
+    --action-fill: #2dc39a;
+    --on-action: #0d1014;
     --ring-eat: #4db89a;
     --ring-eat-wrap: #2f9a7e;
     --ring-burn: #d4c186;
@@ -1015,7 +1020,7 @@ html, body { height: 100%; overflow: hidden; }
   max-height: min(60vh, 420px); overflow-y: auto;
   overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
-/* 建议里可以直接点的动作：点一下就进今日计划 */
+/* 可选替换入口；有组数时先确认，完成后可撤销。 */
 .tip-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .tip-action { font-size: var(--fs-footnote); display: inline-flex; align-items: baseline; gap: var(--space-1); }
 
@@ -1124,7 +1129,7 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 /* 圆角、字重、过渡在下面「按钮」那一节里和次按钮一起给，这里只管排布和配色 */
 .primary-btn {
   width: 100%; padding: 11px; border: 0;
-  background: var(--accent); color: #fff; font-size: var(--fs-value);
+  background: var(--action-fill); color: var(--on-action); font-size: var(--fs-value);
   cursor: pointer; margin-top: var(--space-3);
 }
 .primary-btn:active { opacity: .8; }
@@ -2809,46 +2814,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
 }
 
 /*
- * 两排筛选滚出视野后，用摘要接管顶栏内容区；点击可回到原筛选。
- *
- * 不能继续 sticky 在 .view 顶部：.view 本身位于应用顶栏下面，所以无论 top:0
- * 写得多正确，摘要都只会停在“健身”标题下方。fixed 到安全区下沿后，摘要与
- * 顶栏占同一个 --topbar-row，滚动时真正贴住屏幕顶部，同时不侵入系统状态栏。
- */
-.picker-compact-summary {
-  position: fixed;
-  top: var(--safe-top);
-  left: 50%;
-  z-index: 28;
-  width: min(100vw, 720px);
-  height: var(--topbar-row);
-  margin: 0;
-  padding: 0 calc(var(--view-inline-pad) + var(--safe-right))
-    0 calc(var(--view-inline-pad) + var(--safe-left));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  border: 0;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--bg);
-  color: var(--muted);
-  font: 600 var(--fs-footnote)/1.3 var(--font);
-  text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-50%);
-  transition: opacity .14s ease;
-}
-.picker-controls-collapsed .picker-compact-summary {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-.picker-compact-action { flex: none; color: var(--accent); font-weight: var(--w-semibold); }
-
-/*
  * 「2 + 1」：上面两排是筛（挑法 → 范围），这里往下是「这张列表本身」。
  * 中间留一整档空，把两块分开 —— 它们回答的不是同一个问题。
  */
@@ -3180,4 +3145,61 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .sheet { background: var(--card); }
   .toast { background: #252b30; }
+}
+
+/* Shared hierarchy and training pilot. Layout follows content; touch targets do not shrink. */
+.ui-card-heading { margin-bottom: var(--space-3); }
+.ui-card-heading .card-head { align-items: center; margin-bottom: 0; }
+.ui-card-heading .card-head-actions { height: auto; }
+.ui-card-heading .card-desc { margin-top: var(--space-2); }
+.ui-empty-state .empty-hint { line-height: 1.5; }
+.training-view-tabs { flex: none; }
+.training-view-tabs .chip-btn { flex: 1; min-height: var(--touch-target); }
+.training-panel { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; }
+.training-panel .text-btn, .training-panel summary, .training-picker .chip-btn,
+.training-picker .picker-mode-select, .training-picker .equip-filter-btn { min-height: var(--touch-target); }
+.training-panel .text-btn { min-width: var(--touch-target); }
+.training-panel .plan-row { align-items: center; gap: var(--space-2); padding-block: var(--space-3); }
+.training-panel .plan-main .form-hint { display: block; margin-top: var(--space-1); }
+.training-panel .set-editor { padding: 0 0 var(--space-3); }
+.training-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+.training-edit-actions .secondary-btn { margin-top: 0; }
+.training-add { width: 100%; margin-top: var(--space-3); }
+.training-load-note { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); margin-top: var(--space-3); }
+.training-load-note > span { min-width: 0; overflow-wrap: anywhere; }
+.training-panel .info-tip > summary { width: var(--touch-target); height: var(--touch-target); }
+.training-panel .tip-action { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.training-advice > summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); cursor: pointer; }
+.training-advice > summary span { color: var(--muted); font-size: var(--fs-footnote); }
+.training-advice .insight-list { margin-top: var(--space-3); }
+.training-log-day h4 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-body); }
+.training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--touch-target); }
+.training-history-card .log-name { min-width: 0; overflow-wrap: anywhere; }
+.training-history-card .log-meta { white-space: normal; text-align: right; }
+.training-planned { margin-top: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); }
+.training-planned summary { cursor: pointer; display: flex; align-items: center; }
+.training-picker-head { position: sticky; top: 0; z-index: 2; background: var(--card); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.training-picker-head h2 { margin: 0; font-size: var(--fs-title); }
+.sheet:has(.training-picker) { background: var(--card); }
+.training-picker .exercise-picker-card { padding: 0; border-radius: 0; background: transparent; }
+.training-picker .picker-card-head:has(.card-head-actions:empty) { display: none; }
+.training-picker .picker-card-head { justify-content: flex-end; margin-bottom: var(--space-2); }
+.training-picker .picker-card-head .card-head-actions { height: auto; }
+.training-picker .exercise-choice-action:disabled { opacity: 1; }
+.training-picker .ex-clash-slot { border: 0; background: transparent; color: var(--muted); cursor: pointer; min-height: var(--touch-target); text-align: left; }
+.training-picker .ex-clash-slot:empty { display: none; }
+.training-picker .picker-view-switch { flex-shrink: 0; }
+.training-picker .equip-filter-wrap { max-width: 100%; }
+.training-picker .equip-filter-btn { max-width: 100%; padding-block: var(--space-2); white-space: normal; }
+.training-picker .equip-filter-label { overflow: visible; overflow-wrap: anywhere; }
+.training-picker .picker-scope-switch .chip-btn { white-space: normal; overflow-wrap: anywhere; }
+.sheet-footer .training-select-bar { position: static; margin: 0; width: 100%; border: 0; padding: 0; background: transparent; }
+.sheet-footer:has(.training-select-bar) { touch-action: pan-y; }
+.sheet-footer .training-select-bar .select-bar-list { max-height: 24vh; overflow-y: auto; }
+.sheet-footer .training-select-bar .select-bar-go { width: auto; min-width: 110px; white-space: normal; }
+.sheet-footer .training-select-bar .select-bar-main { flex-wrap: wrap; }
+.sheet-footer .training-select-bar .select-bar-summary { min-width: 0; flex: 1 1 120px; }
+@media (max-width: 380px) {
+  .training-picker .picker-scope-row { gap: var(--space-2); }
+  .training-panel .set-row { flex-wrap: wrap; }
 }

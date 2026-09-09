@@ -14,6 +14,7 @@
 
 import { h, clearEl, mount, scrimDismiss } from './utils.js';
 import { dragGesture } from './gesture.js';
+import { containModalFocus } from './modal-focus.js';
 
 let wrap = null;
 let panel = null;
@@ -21,6 +22,7 @@ let scrollArea = null;
 let footer = null;
 let handle = null;
 let onClose = null;
+let releaseFocus = null;
 let lockedScrollY = 0;
 /*
  * 正在往下退场。
@@ -31,6 +33,7 @@ let lockedScrollY = 0;
  */
 let closing = false;
 let exitAnim = null;
+let exitBackdropAnim = null;
 let inputGuardTimer = null;
 let dismissGuardTimer = null;
 let exitTimer = null;
@@ -177,7 +180,7 @@ function restoreScroll() {
  *  - label   无障碍名称
  *  - onClose 关闭时回调（点背景、按 Esc、或调用 closeSheet 都会触发）
  */
-export function openSheet(content, { label = '', onClose: close = null } = {}) {
+export function openSheet(content, { label = '', onClose: close = null, returnFocus } = {}) {
   build();
   onClose = close;
   panel.setAttribute('aria-label', label);
@@ -187,7 +190,7 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
   panel.classList.remove('has-footer');
   // 上一层还在往下退场：掐掉它的收尾，否则新开的这一层会被那次 finish 清空
   closing = false;
-  if (exitAnim) { exitAnim.cancel(); exitAnim = null; }
+  cancelExitAnimations();
   clearTimeout(exitTimer);
   exitTimer = null;
   resetDragStyles();
@@ -199,6 +202,11 @@ export function openSheet(content, { label = '', onClose: close = null } = {}) {
    */
   setInputReady(false);
   wrap.hidden = false;
+  if (!releaseFocus) releaseFocus = containModalFocus(panel, {
+    background: [document.getElementById('app'), document.querySelector('.settings-overlay.open')],
+      onEscape: () => { if (sheetReady()) closeSheet(); },
+      returnFocus,
+  });
   restartRise();
   armOpenGuards();
   scrollArea.scrollTop = 0;
@@ -247,6 +255,8 @@ export function closeSheet({ fromY = 0, force = false } = {}) {
   const fn = onClose;
   onClose = null;
   if (fn) fn();
+  releaseFocus?.();
+  releaseFocus = null;
   restoreScroll();
   playExit(fromY);
 }
@@ -263,7 +273,10 @@ function playExit(fromY) {
   const finish = () => {
     if (settled) return;
     settled = true;
-    exitAnim = null;
+    // A finished animation with fill:forwards still owns transform/opacity.
+    // Cancel retained handles before hiding; getAnimations() on a hidden node
+    // is not a reliable way to discover that effect on the next open.
+    cancelExitAnimations();
     clearTimeout(exitTimer);
     exitTimer = null;
     if (!closing) return;         // 动画没跑完又被重新打开了，别把新的这层收掉
@@ -302,10 +315,17 @@ function playExit(fromY) {
     { duration: 220, easing: 'cubic-bezier(.32,.72,0,1)', fill: 'forwards' },
   );
   if (backdrop) {
-    backdrop.animate([{ opacity: backdrop.style.opacity || '1' }, { opacity: '0' }],
+    exitBackdropAnim = backdrop.animate([{ opacity: backdrop.style.opacity || '1' }, { opacity: '0' }],
       { duration: 220, easing: 'ease-out', fill: 'forwards' });
   }
   exitAnim.finished.then(finish).catch(finish);
+}
+
+function cancelExitAnimations() {
+  const animations = [exitAnim, exitBackdropAnim];
+  exitAnim = null;
+  exitBackdropAnim = null;
+  for (const animation of animations) animation?.cancel();
 }
 
 /* 跟手时写在行内的位移和遮罩透明度：留着的话下次打开是歪的、背景还是透的 */

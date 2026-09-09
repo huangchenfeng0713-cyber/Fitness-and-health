@@ -128,7 +128,7 @@ function buildShell(root) {
     })),
     onRemove: (id) => { removeFromBasket(id); refreshResults(); },
     onClear: () => { ui.basket = []; refreshResults(); },
-    onConfirm: () => { recordBasket(); },
+    onConfirm: () => recordBasket(),
   });
 
   nodes.searchCard = h('section.card.search-card', null,

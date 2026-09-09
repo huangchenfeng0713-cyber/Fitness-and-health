@@ -118,13 +118,38 @@ export function groupRole(kind = 'tab') {
 
 /** 一组互斥选择的容器属性 */
 export function segmentedGroupProps(label, kind = 'tab') {
-  return { role: groupRole(kind).container, 'aria-label': label };
+  return { role: groupRole(kind).container, 'aria-label': label, onkeydown: event => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    const group = event.currentTarget;
+    const items = [...group.querySelectorAll('button:not([disabled])')];
+    const index = items.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+      : (index + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + items.length) % items.length;
+    items[next].click();
+    queueMicrotask(() => {
+      const live = group.isConnected ? group : [...document.querySelectorAll('[role="tablist"], [role="radiogroup"]')].find(el => el.getAttribute('aria-label') === label);
+      live?.querySelectorAll('button:not([disabled])')[next]?.focus({ preventScroll: true });
+    });
+  } };
 }
 
 /** 组里一个选项的属性 */
 export function segmentedItemProps(active, kind = 'tab') {
   const role = groupRole(kind);
-  return { type: 'button', role: role.item, [role.selected]: String(Boolean(active)) };
+  return { type: 'button', role: role.item, tabindex: active ? 0 : -1, [role.selected]: String(Boolean(active)) };
+}
+
+/** Shared card hierarchy. Long summaries get their own line. */
+export function cardHeader(title, { summary = null, actions = [] } = {}) {
+  return h('div.ui-card-heading', null,
+    h('div.card-head', null, h('h3', null, title), actions.length ? h('div.card-head-actions', null, actions) : null),
+    summary ? h('p.card-desc', null, summary) : null);
+}
+
+export function emptyState(message, action = null) {
+  return h('div.ui-empty-state', null, h('p.empty-hint', null, message), action);
 }
 
 /**

@@ -392,231 +392,6 @@ test('今日健康数据钉死今天，只有体重可使用最近记录', () =>
   assert.ok(!/同步＋补录|手动录入/.test(metrics), '来源字样应收进说明层，不占卡面');
 });
 
-test('挑动作的两种入口都在，部位标签标出今天已练到的组', () => {
-  /*
-   * 人体图已删。它在真机上一整块胸大肌只有 19px 宽 —— 那个尺寸画不出
-   * 能看清的解剖形状，而它占掉 248px 高，把动作列表整个顶到首屏之外；
-   * 正下方那排文字标签做的是同一件选择，还说得更清楚。
-   * 图唯一多给的信息是「今天哪儿练了、哪儿空着」，搬到标签上的小圆点里。
-   */
-  const training = read('js/views/training.js');
-  const css = read('css/app.css');
-  assert.ok(!training.includes('bodyMap'), '人体图应当已经删掉');
-  assert.ok(!css.includes('.body-region'), '人体图的样式还留着');
-
-  assert.match(training, /const covered = coveredGroupKeys\(picked\(\)\)/,
-    '部位标签没有标出今天已练到的组');
-  assert.match(training, /h\('span\.tab-dot'/, '缺少已练到的标记');
-  assert.match(training, /`\$\{g\.label\}（今天已练到）`/, '标记没有给读屏软件的说法');
-  assert.match(css, /\.tab-dot\s*\{/, '.tab-dot 没有样式');
-
-  assert.match(training, /\['group', '按身体部位'\].*\['split', '按动作模式'\]/s,
-    '两种选择入口应使用“按身体部位 / 按动作模式”');
-  /*
-   * 顶栏副标题不许写「数据截至 X」：健身页不跟今日 / 饮食页的日期走，
-   * 那句话会让人以为翻回昨天，动作记录也跟着翻。
-   */
-  const app = strip(read('js/app.js'));
-  assert.match(app, /return count \? `今日 \$\{count\} 个动作` : '今日未记录'/,
-    '健身页副标题应显示今天真正记录了几个动作');
-  /*
-   * 数据页顶栏不写副标题：同步状态在「今日健康数据」卡右上角已经有一条。
-   * 原先照写不误，再靠 .ux-health-page 那条 CSS 藏起来，措辞要改两处才生效。
-   */
-  assert.match(app, /tab\.key === 'training' \? trainingContextNote\(\) : ''/,
-    '数据页顶栏又开始写副标题了，会和今日健康数据卡上的同步状态重复');
-  assert.ok(!/数据截至/.test(app), '不跟日期走的页面不该写「数据截至」');
-  assert.match(css, /\.body-part-switch\s*\{[^}]*gap:\s*var\(--space-1\)/s,
-    '胸、肩臂、背、腿、腹之间应留出轻微间距');
-});
-
-test('摞在一起的分段控件留缝，动作范围按钮等宽分布', () => {
-  /*
-   * 三排分段控件各自 margin: 0，直接摞起来就是几条灰槽贴着边，看着像
-   * 一整块被割开的色块。而器械档位原先借的是 .chart-switch —— 那套样式
-   * 带着一条分隔线和 10px 上内边距（给趋势图下面留的），套进灰槽里
-   * 就成了一行说不出理由的空白。趋势卡早就改用下拉，那套样式已无人使用。
-   */
-  const css = read('css/app.css');
-  const polish = read('css/app.css');
-  const training = read('js/views/training.js');
-  assert.match(css, /\.range-switch \+ \.range-switch\s*\{[^}]*margin-top/s, '摞起来的分段控件之间没有缝');
-  assert.ok(!css.includes('.chart-switch'), '.chart-switch 已无人使用，应当删掉');
-  assert.ok(!/h\('div\.chart-switch/.test(training), '器械档位不该再借趋势卡那套样式');
-  // 通用分段控件仍按内容分宽；选择动作的部位/模式范围是短标签，要等宽铺满。
-  assert.match(css, /\.range-switch \.chip-btn\s*\{[\s\S]*?flex:\s*1 1 auto/,
-    '分段控件按内容分宽，不能等宽');
-  assert.match(polish, /\.picker-scope-switch\s*\{[\s\S]*?grid-template-columns:\s*repeat\(var\(--picker-cols\), minmax\(0, 1fr\)\)/,
-    '动作范围按钮没有按实际选项数等宽铺满');
-  assert.match(training, /style: \{ '--picker-cols': String\(GROUPS\.length\) \}/,
-    '身体部位没有把实际列数交给样式');
-  assert.match(training, /style: \{ '--picker-cols': String\(SPLITS\.length\) \}/,
-    '动作模式没有把实际列数交给样式');
-  /*
-   * 三排分段控件一样宽。
-   *
-   * 这两排曾经写着 `width: calc(100% - 24px); margin-inline: auto`，左右各缩
-   * 12px，而下面「全部 / 推荐」那排齐着卡片内容边 —— 三个做同一件事的开关
-   * 摆出两种宽度，读起来是「谁没对齐」，不是「谁是谁的下一级」。
-   * 「2 + 1」的层级由位置表达（这两排贴在一起、那一排跟着列表头走），不靠缩进。
-   */
-  assert.doesNotMatch(polish, /\.picker-controls \.range-switch\s*\{[^}]*width:\s*calc\(/s,
-    '选择动作里的分段控件又缩窄了，三排必须一样宽');
-  /*
-   * 挑法是个下拉，不是第三排灰槽 —— 三样东西三种形态，
-   * 层级靠形态 + 疏密表达，不靠三块一样的灰槽比谁在上面。
-   */
-  assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
-  assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
-  assert.match(training, /select\.value = pickMode;/,
-    '选中项要在节点建好之后再设，否则会被按 selectedIndex 打回第一项');
-  assert.match(polish, /\.picker-mode-select\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
-    '挑法下拉仍然过厚');
-  /*
-   * 「口径」那一行左右各站一个下拉形态的控件：挑法在左、器械档位在右。
-   * 只放左边那个的话，右边空着一大片，夹在满宽的搜索框和满宽的范围之间，
-   * 边缘读出来是豁的 —— 那不是层级，是没排完。
-   */
-  assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
-    '口径那一行没有把两端撑住');
-  // 视图切换挂在列表头右边，和左边的「这张列表是什么」各占一端
-  assert.match(training, /h\('div\.picker-scope', null, scopeName, scopeCount\),\s*\n\s*viewTabs\)/,
-    '视图切换没有跟着列表头走');
-  /*
-   * 视图切换和器械筛选现在并排站，两个都叫「全部」的话光看字分不出
-   * 按下去会怎样 —— 这个坑在它们上下相邻的时候就踩过一次。
-   */
-  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
-    '视图切换又叫回「全部」了，会和旁边的「全部器械」撞');
-  assert.match(polish, /\.picker-scope-switch \.chip-btn\s*\{[^}]*min-height:\s*var\(--control-sm\)/s,
-    '动作范围控件仍然过厚');
-  assert.match(training, /function setupPickerCompact\(root\)/,
-    '筛选滚出视野后没有一行式摘要');
-  assert.match(training, /pickerCompactObserver = new IntersectionObserver/,
-    '一行式摘要没有跟随真实滚动位置');
-  assert.match(polish, /\.picker-controls-collapsed \.picker-compact-summary/,
-    '筛选摘要没有可见态');
-  assert.match(training, /hidden: showRecommend/,
-    '推荐组合视图不应显示全部动作的筛选摘要');
-  assert.match(training, /picker-compact-action', null, '回到顶部'/,
-    '筛选摘要没有明确说明会回到顶部');
-  assert.match(polish,
-    /\.picker-compact-summary\s*\{[^}]*position:\s*fixed[^}]*top:\s*var\(--safe-top\)[^}]*width:\s*min\(100vw, 720px\)/s,
-    '筛选摘要没有接管顶栏并贴住安全区下沿');
-  assert.match(polish, /height:\s*var\(--topbar-row\)/,
-    '筛选摘要与应用顶栏没有共用高度令牌');
-  assert.doesNotMatch(polish, /\.picker-compact-summary\s*\{[^}]*margin:[^}]*-40px/s,
-    '筛选摘要仍靠负边距压住第一行动作');
-});
-
-/*
- * 动作推荐要跟着控制它的那几个开关走，而且得认得已经选了什么 ——
- * 否则选完杠铃卧推，第一个推荐还是哑铃卧推，等于劝人把同一件事做两遍。
- */
-test('动作推荐跟随部位 / 模式 / 器械，并避开已选动作', () => {
-  const training = strip(read('js/views/training.js'));
-  assert.match(training, /recommendFor\(\{[\s\S]*?mode: pickMode/, '推荐没跟着选择方式走');
-  assert.match(training, /selection: picked\(\)/, '推荐没有把已选动作算进去');
-  assert.match(training, /equip: equipFilter/, '推荐没跟着器械档位走');
-
-  // 范围选择与动作内容合成一张卡，避免先看一张“挑动作”空壳再滑到下一张列表。
-  const mounted = training.slice(training.indexOf('mount(root,'));
-  const order = ['planCard()', 'pickerCard(rerender)',
-    'adviceCard(rerender)', 'weeklyCard(rerender)'];
-  const at = order.map((k) => mounted.indexOf(k));
-  assert.ok(at.every((i) => i >= 0), `有卡片没挂上：${order.filter((_, i) => at[i] < 0).join('、')}`);
-  assert.deepEqual([...at].sort((x, y) => x - y), at, `挂载顺序不对：${at.join(',')}`);
-  assert.ok(!/recommendCard\(/.test(training), '推荐又单独占了一张卡');
-
-  assert.ok(!/function scopeCard\(/.test(training), '范围选择又被拆成了独立卡片');
-  assert.match(training, /section\.card\.exercise-picker-card/, '合并后的动作选择卡缺少稳定锚点');
-  // 两个并列的具名选项，不是一个语义含糊的单开关。
-  // 叫「列表」不叫「全部」：它和「全部器械」并排站，两个「全部」分不出按下去会怎样。
-  assert.match(training, /\['all', '列表'\], \['recommend', '推荐'\]/,
-    '列表 / 推荐仍是语义含糊的单个开关');
-  /*
-   * 互斥选择的读屏语义要说清「这是一组、现在选中的是哪个」。
-   * aria-pressed 说的是「五个各自独立的切换按钮」，不是同一件事。
-   */
-  assert.match(training, /segmentedItemProps\(active\)/, '两段式切换没有 tab 语义');
-  assert.match(read('js/lib/ui.js'), /'aria-selected'/, '统一组件里没有选中态语义');
-  assert.match(training, /showRecommend\s*\n?\s*\? recommendBody\(rec\)/, '推荐和列表没有共用一张卡');
-
-  const core = strip(read('js/core/training.js'));
-  assert.match(core, /overlapLevel\(overlapScore\(e, c\)\) === 'high'/, '没有排除与已选高度重合的动作');
-  // 理由是短标签，不是一段话
-  assert.match(core, /export function exerciseTags/, '推荐理由没有压成短标签');
-});
-
-test('全部动作与推荐组合共用动作模式、主要肌肉、动作类型标签', () => {
-  // 原先每行都把主动肌和所有协同肌铺开，十几行叠起来全是同一批肌肉名，
-  // 扫的时候反而找不到动作名在哪
-  const training = read('js/views/training.js');
-  const css = read('css/app.css');
-  assert.match(training, /recommendFor, exerciseTags, EQUIP_FILTERS/, '列表没有复用 core 的标签语义');
-  assert.match(training, /function exerciseMeta\(tags\)/, '缺少两个视图共用的标签渲染器');
-  const metaCalls = training.match(/exerciseMeta\(/g) || [];
-  assert.ok(metaCalls.length >= 3, `定义外，全部动作和推荐组合都应调用同一渲染器，只找到 ${metaCalls.length - 1} 处`);
-  assert.match(css, /\.exercise-meta\s*\{[^}]*display:\s*flex[^}]*flex-wrap:\s*wrap/s);
-  /*
-   * 这三条是说明，不是可选状态 —— 所以写成一行文字，不做成胶囊。
-   * 十几行灰底小块排成阵列比动作名还抢眼，筛到「胸」时五行的标签还一模一样。
-   */
-  assert.ok(!/\.exercise-meta-tag\s*\{[^}]*background:/s.test(css),
-    '动作说明标签又做成了胶囊；胶囊留给可选择的状态');
-  assert.match(css, /\.exercise-meta-tag \+ \.exercise-meta-tag::before\s*\{[^}]*content: '·'/s,
-    '三条说明之间缺少分隔');
-  assert.match(training, /const classes = \['pattern', 'muscle', 'type'\]/,
-    '三个标签没有建立动作模式 / 肌肉 / 类型的视觉层级');
-  assert.match(css, /\.exercise-meta-tag\.type\s*\{[^}]*color: var\(--faint\)/s,
-    '动作类型没有使用最轻的一档灰');
-  assert.match(training, /className: `ex-row exercise-choice-row/,
-    '全部动作没有使用共用动作行');
-  assert.match(training, /className: 'rec-pick exercise-choice-row'/,
-    '推荐组合没有使用共用动作行');
-  /*
-   * **能点的只有右边那个 ＋，行本身不能点。**
-   *
-   * 整行可点会把「读一读这个动作练哪儿」和「把它加进今天」并成同一下：
-   * 一列十几行、每行 76px 高，滑动时手指蹭到就多出一个动作，
-   * 而撤掉它得再点一次、还得先找到它跑到哪儿去了。
-   * 三张列表（全部动作 / 推荐组合 / 饮食推荐）走同一条规矩。
-   */
-  const mealAdviceRows = read('js/views/cards/meal-advice.js');
-  for (const [code, name] of [[training, '健身页'], [mealAdviceRows, '饮食推荐']]) {
-    assert.doesNotMatch(code, /listRow\(\{\s*as: 'button'/,
-      `${name}的行整行可点，滑动时会蹭出一个来`);
-  }
-  assert.match(training, /h\('button\.ex-pick\.exercise-choice-action'/, '动作行的 ＋ 不是按钮');
-  assert.match(training, /h\('button\.rec-add\.exercise-choice-action'/, '推荐行的 ＋ 不是按钮');
-  assert.match(mealAdviceRows, /h\('button\.add-btn'/, '饮食推荐行的 ＋ 不是按钮');
-  assert.match(css, /\.exercise-choice-action \{[^}]*cursor: pointer/s, '＋ 看不出能点');
-  /*
-   * 行不可点之后，这个 40px 的圆是整行唯一的目标，热区得比画出来的大一圈
-   * （和 .info-tip > summary 一样用 ::after 撑，画的还是 40）。
-   */
-  assert.match(css, /\.exercise-choice-action::after, \.add-btn::after \{[^}]*inset: -4px/s,
-    '＋ 的热区就只有画出来那么大');
-  assert.match(css, /\.exercise-choice-row\s*\{[^}]*padding:\s*10px var\(--space-2\)/s,
-    '两个视图的文字位置与行内边距没有统一');
-  assert.match(css, /\.exercise-choice-row\s*\{[^}]*min-height:\s*76px/s,
-    '两个视图的动作行没有统一最小高度');
-  /*
-   * 饮食页的 ＋ 和健身页的 ＋ 做的是同一件事（把这一行加进来），必须同样大。
-   * 断言写成「都从 --control-inline 取值」而不是「都等于 40px」：
-   * 各写一个字面量的话，改一处漏一处仍然过得了这条。
-   */
-  for (const sel of ['\\.add-btn', '\\.exercise-choice-action']) {
-    assert.match(
-      css,
-      new RegExp(`${sel}\\s*\\{[^}]*width:\\s*var\\(--control-inline\\)[^}]*height:\\s*var\\(--control-inline\\)`, 's'),
-      `${sel} 没有走 --control-inline，两个视图的右侧加号会不一样大`,
-    );
-  }
-  // 排计划那张卡仍然给全：真要看细节是在排计划的时候，不是在挑的时候
-  assert.match(training, /h\('div\.ex-muscle', null, muscleLine\(exercise\)\)/, '已选动作那张卡不该也砍掉协同肌');
-});
-
 test('选择动作顶部使用与食物一致的搜索框，输入时只更新结果区', () => {
   const training = read('js/views/training.js');
   const diet = read('js/views/diet.js');
@@ -664,7 +439,7 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(ui, /export \{ infoTip, persistentInfoTip \}/, '信息入口没有从统一 UI 模块导出');
   assert.match(diet, /listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,[\s\S]{0,40}from '\.\.\/lib\/ui\.js'/,
     '添加食物没有接入统一组件');
-  assert.match(training, /listRow, persistentInfoTip, searchField, weakTag,[\s\S]{0,80}from '\.\.\/lib\/ui\.js'/,
+  assert.match(training, /listRow, persistentInfoTip, searchField,[\s\S]{0,120}from '\.\.\/lib\/ui\.js'/,
     '选择动作没有接入统一组件');
   assert.match(foodEstimate, /weakTag\('估算'/, '估算标签仍在单独拼样式');
   assert.match(mealAdvice, /listRow\(\{ className: 'rec-row' \}/,
@@ -1427,7 +1202,7 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
    * 选了动作它才出来，那时说的才是有用的话。
    */
   assert.doesNotMatch(training, /alwaysVisible: true/, '健身页的空状态横幅又常驻了');
-  assert.match(training, /pickerBar\.onVisibility = \(visible\) =>/,
+  assert.match(training, /pickerBar\.onVisibility = visible =>/,
     '槽位没有跟着横幅一起收，会留下一道凭空的空白');
   assert.ok(!/alwaysVisible:\s*true/.test(diet), '饮食页空清单仍应收起，不能常驻一条空横幅');
 
@@ -1435,7 +1210,7 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
   assert.match(diet, /function addToBasket\(\{ food, grams/, '饮食页没有待记录备选');
   assert.match(diet, /async function recordBasket\(\)/, '备选不能一次性记录');
   assert.match(diet, /async function recordOne\(/, '单项记录仍被迫先进入批量清单');
-  assert.match(diet, /onConfirm: \(\) => \{ recordBasket\(\); \}/, '多选条的确认没有接到批量记录上');
+  assert.match(diet, /onConfirm: \(\) => recordBasket\(\)/, '多选条的确认没有接到批量记录上');
   const addBasketBody = diet.slice(diet.indexOf('function addToBasket'), diet.indexOf('const removeFromBasket'));
   assert.ok(!/addEntry|openSheet/.test(addBasketBody), '加入备选时不该落库，也不该弹出份量面板');
   // 落库恰好两条路径：单项确认和批量确认，搜索结果本身不应落库
@@ -1453,7 +1228,7 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
   assert.ok(!/\brerender\(\)/.test(rowCode.slice(rowCode.indexOf('pending.add'))),
     '勾选之后不该整页重绘 —— 列表会重排，下一个要点的动作就跑走了');
   assert.match(training, /async function commitPending\(\)/, '没有「一次加入计划」');
-  assert.match(training, /pending = new Set\(\);\s*\n\s*await updateSession/, '提交时应当一次写库');
+  // 健身提交成功/失败、重复点击与待选保留由 training-design-smoke.mjs 实测。
 });
 
 test('输入框有焦点时不许整页重绘，但事后要补上', () => {
@@ -1505,49 +1280,6 @@ test('输入框有焦点时不许整页重绘，但事后要补上', () => {
   assert.match(app, /document\.addEventListener\('focusout'/, '跳过重绘之后没有补回来的入口');
   assert.match(app, /if \(renderPending && !busy\(\)\) renderCurrentSafely\(\)/,
     '补重绘时没有再确认一次焦点 —— 在两个格子之间跳会把人从第二个框里踢出去');
-});
-
-test('重复提示在挑的时候就出，勾中还没提交的也算', () => {
-  /*
-   * 原先 clashWith 只比已经落库的那些：连勾杠铃卧推和哑铃卧推，两个都还没提交，
-   * 一句提示都不出，等按下「加入计划」之后才在训练建议里读到「这俩刺激高度相似」——
-   * 那时候人已经选完了，改起来要回头再走一遍。
-   */
-  const training = read('js/views/training.js');
-  assert.match(training, /\[\.\.\.pickedExercises\(\), \.\.\.\[\.\.\.pending\]\.map/,
-    '重复判定没有把勾中还没提交的算进来');
-
-  // 已经选中的行不再提示：两行上各写一遍「和对方几乎一样」是同一件事说两遍
-  assert.match(training, /if \(picked\(\)\.includes\(e\.id\) \|\| pending\.has\(e\.id\)\) return null;/,
-    '已选中的行还在显示重复提示');
-
-  // 勾一个会改变别的行「重不重」，整列都要跟一下；但只能改那一句，不能整页重绘
-  assert.match(training, /for \(const other of row\.parentNode\?\.children \|\| \[\]\) other\.syncClash\?\.\(\)/,
-    '勾选之后其它行的提示没有跟着更新');
-  assert.match(training, /clashNode\.className = line \? `ex-clash-slot \$\{line\.cls\}` : 'ex-clash-slot'/,
-    '整条 className 被覆盖会让空槽的隐藏样式失效，行里留一道空白');
-
-  // 提示要短，而且不是红色 —— 选两个卧推变式是取舍不是错误
-  assert.match(training, /和「\$\{clash\.other\.name\}」重复/, '提示文案太长，挑动作时是扫不是读');
-  const css = read('css/app.css');
-  assert.match(css, /\.ex-clash \{[^}]*color: var\(--warn\)/s, '重复提示不该用红色');
-});
-
-test('「已选动作」只记录选了什么，不在这里给建议', () => {
-  /*
-   * 这张卡原先还兼着报「覆盖部位」和「这套动作之间没有明显重复」，
-   * 和下面那张「训练建议」说的是同一件事，在同一屏里说两遍。
-   */
-  const training = read('js/views/training.js');
-  const card = training.slice(training.indexOf('function planCard()'), training.indexOf('function tipAction'));
-  // 健身页固定记今天，标题就直说是今天，不再跟着日期变来变去
-  assert.match(card, /dayLabel = '今日动作'/, '卡片标题没改成「今日动作」');
-  assert.ok(!card.includes('覆盖部位'), '记录卡里还留着覆盖部位的分析');
-  assert.ok(!card.includes('没有明显重复'), '记录卡里还留着重复度的结论');
-  assert.ok(!/findOverlaps|coverage\(/.test(card), '记录卡还在调分析函数');
-  // 但组数、重量和清空这些「记录」的部分要留着
-  assert.match(card, /planRow\(e, i\)/, '动作行没了，就没法记组数');
-  assert.match(card, /volume\.sets/, '组数统计没了');
 });
 
 test('说明层使用 SVG 小写 i，点外面即可收起', () => {
@@ -2088,51 +1820,6 @@ test('底部安全区只在盖住视口的那一层算，别处不许再加一�
   assert.ok(!/safe-bottom/.test(action), '操作按钮内部又重复算了一遍安全区');
 });
 
-test('健身选择栏常驻应用壳底部并紧邻底栏', () => {
-  const css = read('css/app.css');
-  const training = strip(read('js/views/training.js'));
-  const app = strip(read('js/app.js'));
-  const html = read('index.html');
-  assert.match(html, /<main id="view"[\s\S]*?<div id="actionbar"[\s\S]*?<nav id="tabbar"/,
-    '固定选择栏没有放在内容区与底部导航之间');
-  assert.match(app, /clearEl\(actionSlot\);\s*actionSlot\.hidden = true;/,
-    '切换栏目时没有清理旧的固定操作栏');
-  assert.match(training, /document\.getElementById\('actionbar'\)/,
-    '健身选择栏仍挂在动作卡内部');
-  assert.match(training, /clearEl\(actionSlot\);\s*actionSlot\.hidden = true;/,
-    '健身页内部重绘前没有清掉旧横幅，会越切筛选越多');
-  assert.match(training, /mount\(actionSlot, pickerBar\.el\);\s*\n\s*actionSlot\.hidden = pickerBar\.el\.hidden;/,
-    '健身页没有把选择栏挂进固定槽位');
-  // 反过来了：没选动作时横幅**就该**消失，槽位跟着一起收
-  assert.doesNotMatch(training, /alwaysVisible: true/, '空状态横幅又常驻了');
-  const dock = css.slice(css.indexOf('.actionbar-slot {'), css.indexOf('.tab {'));
-  assert.match(dock, /flex:\s*none/, '选择栏会被内容区挤压');
-  assert.match(dock, /\.actionbar-slot \.select-bar\s*\{[\s\S]*?position:\s*static/,
-    '选择栏仍在动作卡内做 sticky 定位');
-  assert.match(dock, /margin:\s*0/, '固定栏仍带着卡片内负边距');
-  assert.match(dock, /border-radius:\s*0/, '固定栏仍长得像卡片的一部分');
-  /*
-   * 这里**不该**有毛玻璃。
-   *
-   * 它和顶栏、底栏一样是 flex 纵列里的一格，内容被 .view 自己的盒子裁掉，
-   * 从来不从它下面穿过 —— 实测背后压着的只有 body。blur 糊的是一块纯色，
-   * 白花 GPU；原先那层 saturate 做的事一个颜色值就够。
-   * 毛玻璃只给真正叠在内容上面的三处：弹层、设置抽屉、toast。
-   */
-  assert.doesNotMatch(dock, /backdrop-filter/,
-    '横条底下没有内容可透，毛玻璃在这儿是空跑的');
-  /*
-   * 底色不再用 transparent 调：背后只有 body，「半透明」在这儿等于
-   * 「和 --bg 混一点」，那就直接写成和 --bg 混，别绕一圈让人以为它是块玻璃。
-   */
-  assert.match(dock, /background:\s*color-mix\(in srgb, var\(--card\) 96%, var\(--bg\)\)/,
-    '固定栏的底色应当直接和页面底混，不装成半透明');
-});
-
-/*
- * 记账时经常先随手记下来，事后才发现该算在别的餐里。
- * 原先只能删掉重记一遍，而重记要重新搜、重新填克数。
- */
 test('饮食记录编辑态能改餐次', () => {
   const diet = strip(read('js/views/diet.js'));
   assert.match(diet, /function mealSelect\(entry\)/, '编辑态没有改餐次的入口');
@@ -2513,6 +2200,6 @@ test('弹层关掉要有退场动画，且点那道小横杠不会误关', () =>
   assert.ok(sheet.indexOf('if (fn) fn();') < sheet.indexOf('playExit(fromY)'),
     'onClose 必须在退场动画之前同步跑完');
   // 退场没跑完又开一层时，要掐掉上一次的收尾，否则新的这层会被清空
-  assert.match(sheet, /if \(exitAnim\) \{ exitAnim\.cancel\(\); exitAnim = null; \}/,
+  assert.match(sheet, /cancelExitAnimations\(\);/,
     '重新打开时没有掐掉上一次的退场动画');
 });

@@ -246,7 +246,7 @@ function rotate(options, seed) {
   return options[((((Number(seed) || 0) % n) + n) % n)];
 }
 
-function comboForPatterns(list, patterns, requestedSize, seed = 0) {
+function comboForPatterns(list, patterns, requestedSize, seed = 0, fill = true) {
   const size = Math.max(1, Math.min(Number(requestedSize) || patterns.length, list.length));
   const combo = [];
   for (const pattern of patterns) {
@@ -273,6 +273,7 @@ function comboForPatterns(list, patterns, requestedSize, seed = 0) {
    * 背出现过第 25 / 26 个。ROTATE_POOL 立的规矩（只在这个模式的代表动作之间换）
    * 在模式槽位上守住了，凑数这一段却漏了一道，同一份推荐里两种标准。
    */
+  if (!fill) return combo;
   const rest = list.filter((e) => !combo.some((picked) => picked.id === e.id));
   const span = Math.min(ROTATE_POOL, rest.length);
   const offset = span ? (((Number(seed) || 0) % span) + span) % span : 0;
@@ -347,8 +348,9 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  * 挑的顺序仍然是「先覆盖不同的动作模式，复合动作优先」，
  * 这样一套下来角度是散开的，而不是五个动作练同一个角度。
  *
- * 数量：按部位 3–5 个，按推拉腿 4–6 个。部位窄，四五个就够铺开；
- * 推 / 拉 / 腿跨的部位多，少了盖不住。
+ * 只为尚未安排的模式提供候选；按部位最多 5 个、按模式最多 6 个。
+ * 没有可用新模式时返回空列表，不用同模式变式填满。selection 包含已存和待选动作。
+ * 此处不读取个人目标、时间或周组数预算，不将候选解释为个体训练处方。
  *
  * @returns {{items, replacements, scopeKey}}
  *  - items        [{ id, name, tags }]，tags 是短标签，不写长句
@@ -376,7 +378,11 @@ export function recommendFor({
   // 已选的、以及和已选高度重合的，都不再推荐
   const candidates = pool.filter((e) => !chosenIds.has(e.id)
     && !chosen.some((c) => overlapLevel(overlapScore(e, c)) === 'high'));
-  const combo = comboForPatterns(candidates, patterns, Math.min(size, candidates.length), seed);
+  // Candidate count is a display cap, never a requirement to fill a workout.
+  // Already arranged patterns occupy their slots; repeated renders cannot refill them.
+  const arranged = new Set(chosen.map(e => e.pattern));
+  const missingPatterns = patterns.filter(pattern => !arranged.has(pattern));
+  const combo = comboForPatterns(candidates, missingPatterns, Math.min(size, candidates.length), seed, false);
 
   /*
    * 已经选了高度重合的一对时，直接把「换掉哪个」摆出来。
@@ -411,8 +417,26 @@ export function recommendFor({
   };
 }
 
-/** 推荐几个。按部位窄、按推拉腿宽，见 recommendFor 的注释 */
+/** 候选显示上限，不是一次训练必须完成的数量。 */
 export const RECOMMEND_SIZE = Object.freeze({ group: 5, split: 6 });
+
+/** Restore only this deletion. Preserve unrelated additions; refuse same-ID edits. */
+export function restoreTrainingItems(current, removed) {
+  const next = current.map(item => ({ ...item, sets: item.sets.map(set => ({ ...set })) }));
+  for (const { item, index } of removed) {
+    const existing = next.find(row => row.id === item.id);
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(item)) {
+        const error = new Error('这个动作已有新修改，未覆盖新记录。请在今日动作中核对。');
+        error.name = 'TrainingConflictError';
+        throw error;
+      }
+      continue;
+    }
+    next.splice(Math.min(index, next.length), 0, { ...item, sets: item.sets.map(set => ({ ...set })) });
+  }
+  return next;
+}
 
 /**
  * 推荐理由压成三个短标签：动作模式 · 主练哪儿 · 复合还是孤立。

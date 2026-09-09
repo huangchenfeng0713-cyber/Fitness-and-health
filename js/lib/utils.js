@@ -423,7 +423,7 @@ export async function runLocalAction(control, action, failureLabel = '保存') {
   } catch (error) {
     console.error(`${failureLabel}失败`, error);
     const name = String(error?.name || '');
-    const message = name === 'QuotaExceededError'
+    const message = name === 'TrainingConflictError' ? error.message : name === 'QuotaExceededError'
       ? `${failureLabel}失败：本机存储空间不足`
       : ['InvalidStateError', 'NotAllowedError', 'SecurityError'].includes(name)
         ? `${failureLabel}失败：浏览器本地存储不可用`
