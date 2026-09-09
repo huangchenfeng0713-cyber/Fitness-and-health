@@ -2200,6 +2200,6 @@ test('弹层关掉要有退场动画，且点那道小横杠不会误关', () =>
   assert.ok(sheet.indexOf('if (fn) fn();') < sheet.indexOf('playExit(fromY)'),
     'onClose 必须在退场动画之前同步跑完');
   // 退场没跑完又开一层时，要掐掉上一次的收尾，否则新的这层会被清空
-  assert.match(sheet, /if \(exitAnim\) \{ exitAnim\.cancel\(\); exitAnim = null; \}/,
+  assert.match(sheet, /cancelExitAnimations\(\);/,
     '重新打开时没有掐掉上一次的退场动画');
 });

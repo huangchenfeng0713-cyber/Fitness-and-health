@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const { chromium } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
-const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', serviceWorkers: 'block' });
 const page = await context.newPage();
 await page.clock.install({ time: new Date('2026-09-08T12:00:00+08:00') });
 const errors = [];
@@ -54,6 +54,23 @@ try {
   check('主动重开后，已安排模式不会自动补齐六个', await page.locator('.rec-picks .ex-row').count() === 0);
   await close();
   check('关闭选择器后焦点回到添加入口', await page.locator('.training-add').evaluate(el => el === document.activeElement));
+  // Reproduce browsers that do not enumerate a retained exit effect after hiding.
+  // Explicit animation handles must release fill:forwards independently of enumeration.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('.sheet, .sheet-backdrop')) {
+      el.originalGetAnimations = el.getAnimations;
+      el.getAnimations = () => [];
+    }
+  });
+  await open(); await close(); await open();
+  check('退场动画不可枚举时，重开仍在可见视口', await page.locator('.sheet').evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= innerHeight + 1;
+  }));
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll('.sheet, .sheet-backdrop')) el.getAnimations = el.originalGetAnimations;
+  });
+  await close();
   await history();
   check('零组计划不算训练记录，单独折叠', await page.locator('.training-log-day').count() === 0 && await page.locator('.training-planned').count() === 1 && !await page.locator('.training-planned').getAttribute('open'));
   await current();
@@ -185,6 +202,7 @@ try {
   check('无未捕获异常', errors.length === 0);
   console.log(`${checks} checks passed`);
 } catch (error) {
+  console.error('Failure:', error);
   console.error('Page errors:', errors);
   console.error('Picker bounds:', await page.evaluate(() => ['.sheet', '.sheet-scroll', '.sheet-footer', '.ex-row:not(.chosen):not(.marked) .ex-pick'].map(selector => {
     const el = document.querySelector(selector), rect = el?.getBoundingClientRect();
