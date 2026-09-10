@@ -407,8 +407,7 @@ export function recommendFor({
     scopeKey,
     /*
      * 标签和「全部动作」那一列必须一致 —— 两个视图看的是同一批动作，
-     * 标签数不一样会让人以为它们说的不是一回事。所以范围也一起传进去：
-     * 按部位挑时省掉「主练 XX」（那就是筛选条件本身），按模式挑时照写。
+     * 两个视图都保留细分主练部位，部位筛选不会隐藏动作之间的区域差别。
      */
     items: combo.map((e) => ({
       id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }),
