@@ -134,10 +134,10 @@ try {
   await page.waitForTimeout(750);
   await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '推荐' }).click();
   const tags = await page.locator('.rec-picks .exercise-meta').evaluateAll(rows => rows.map(row => row.children.length));
-  await page.locator('.exercise-picker-card .info-tip > summary').click();
+  await page.getByLabel('这几个是怎么挑的', { exact: true }).click();
   await page.evaluate(async () => (await import('./js/views/training.js')).renderTraining(document.querySelector('#view')));
-  check('推荐使用共用标签，主页面重绘不关闭选择器说明', tags.length > 0 && tags.every(n => n === 2)
-    && await page.locator('.exercise-picker-card .info-tip').evaluate(el => el.open));
+  check('推荐使用模式、细分主练、动作类型三项共用标签，主页面重绘不关闭推荐说明', tags.length > 0 && tags.every(n => n === 3)
+    && await page.locator('.picker-card-head .info-tip').evaluate(el => el.open));
   await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '列表' }).click();
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
