@@ -13,7 +13,7 @@
  * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
  */
 
-import { h, num, formatDuration, todayKey, unitGap } from '../../lib/utils.js';
+import { h, num, formatDuration, durationParts, todayKey, unitGap } from '../../lib/utils.js';
 import { icon, ICON_SHAPES } from '../../lib/icons.js';
 import { infoTip } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
@@ -53,6 +53,28 @@ const fmt = (cell) => {
   if (cell.kind === 'duration') return formatDuration(cell.value);
   return num(cell.value, cell.decimals || 0);
 };
+
+/*
+ * 一格里的「大数字 + 小单位」。
+ *
+ * 单位和数字之间空不空格由 unitGap 定（西文空、中文和 g/ml 不空），
+ * 不再是所有单位一律 margin-left: 2px —— 那会把「30 分钟」写成带空格，
+ * 而同一页的「34分钟」又是不带的。
+ *
+ * 时长拆成几段走同一条路：睡眠原先把整串「6小时42分」印成和数字一样大，
+ * 而它左右两格是「430 kcal」「42分钟」—— 同一行里两种写法。
+ */
+const unitNode = (unit) => h('span.metric-unit', { class: unitGap(unit) ? 'gap' : '' }, unit);
+
+function valueParts(cell) {
+  if (cell.value == null) return [DASH];
+  if (cell.kind === 'duration') {
+    const parts = durationParts(cell.value);
+    if (!parts) return [DASH];
+    return parts.flatMap((p) => [String(p.value), unitNode(p.unit)]);
+  }
+  return [fmt(cell), cell.unit ? unitNode(cell.unit) : null].filter(Boolean);
+}
 
 /** 体脂与静息心率仍只显示当天值；最近一次收进信息按钮供核对。 */
 function lastSeenLines(today) {
@@ -133,19 +155,11 @@ export function healthMetricsCard() {
        * 会把格子撑破（scripts/smoke.mjs 里那条 1~8 项的检查就是拦这个的）。
        * 密一档的排布配密一档的字号，不是所有列数都用同一个 17px。
        */
-      ? h('div.metric-grid', { class: `metric-grid cols-${cols}`, style: { '--metric-cols': String(cols) } },
+      ? h('div.metric-grid', { class: `metric-grid cols-${cols}` },
         info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
           icon(ICON_SHAPES[cell.key] ? cell.key : 'steps', 'metric-icon'),
           h('div.metric-body', null,
-            h('div.metric-value', null, fmt(cell),
-              /*
-               * 单位和数字之间空不空格由 unitGap 定（西文空、中文和 g/ml 不空），
-               * 不再是所有单位一律 margin-left: 2px —— 那会把「30 分钟」写成
-               * 带空格，而同一页的「34分钟」（formatDuration）又是不带的。
-               */
-              cell.value != null && cell.unit
-                ? h('span.metric-unit', { class: unitGap(cell.unit) ? 'gap' : '' }, cell.unit)
-                : null),
+            h('div.metric-value', null, ...valueParts(cell)),
             h('div.metric-label', null, cell.label, cell.recent ? h('span.metric-date', null, '最近 · ' + cell.observedDate) : null)))))
       // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
       : h('p.empty-hint', null,

@@ -793,8 +793,15 @@ html, body { height: 100%; overflow: hidden; }
 .metric-row.over .metric-row-note { color: var(--danger); font-weight: var(--w-semibold); }
 .metric-row.over .metric-row-value { color: var(--danger); }
 
-/* 三个短刻度同排，精确值收进点击浮层。 */
-.hero-micros { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5em), 1fr)); gap: var(--space-3); margin-top: var(--space-2); padding: 8px 2px 0; border-top: 1px solid var(--hairline); }
+/*
+ * 三个短刻度同排，精确值收进点击浮层。
+ *
+ * 左右不留内边距：这一排上面那条分隔线铺满卡片内宽（32→361），
+ * 原先那 2px 让线下面的三格缩在 34→359 —— 同一张卡里蛋白条、
+ * 碳水条都齐在 32，唯独这一排往里让了两个像素，读出来是「谁没对齐」。
+ * 刻度端点探出去那一点由 `.nutrient-scale` 自己的左右 margin 兜着，不靠这里。
+ */
+.hero-micros { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 5em), 1fr)); gap: var(--space-3); margin-top: var(--space-2); padding: 8px 0 0; border-top: 1px solid var(--hairline); }
 .micro-chip { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .micro-label { color: var(--muted); font-size: var(--fs-caption); white-space: nowrap; }
 .nutrient-scale { position: relative; height: 6px; border-radius: 999px; background: var(--track); margin: 0 var(--space-2); }
@@ -893,11 +900,26 @@ html, body { height: 100%; overflow: hidden; }
 .rec-info { flex: 1; min-width: 0; }
 .rec-name { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-value); font-weight: var(--w-semibold); flex-wrap: wrap; }
 .rec-portion { font-size: var(--fs-footnote); color: var(--accent); font-weight: var(--w-semibold); margin-top: var(--space-0); }
-.rec-reasons { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
-.reason {
-  font-size: var(--fs-caption); color: var(--muted); background: var(--card-2);
-  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border);
+/*
+ * 推荐理由写成一行文字，不做成胶囊。
+ *
+ * 它点不动也选不了，而**胶囊留给「可以选的状态」**。做成灰底圆角块之后，
+ * 三行推荐下面就是六个色块，比食物名还抢眼；每行还为此高出约 20px
+ * （实测 79 → 99）。和动作行下面那三条（模式 · 主练哪儿 · 复合还是孤立）
+ * 是同一类东西，用同一种写法：`·` 隔开，行高 1.5 让行底落在整像素上。
+ */
+.rec-reasons {
+  margin-top: var(--space-0);
+  font-size: var(--fs-caption); color: var(--faint-readable); line-height: 1.5;
 }
+/*
+ * 一条一行，不用「·」串起来。
+ *
+ * 这几条是句子不是短标签（「每 100 kcal 含 14.6g 蛋白」），串成一行必然换行，
+ * 而分隔点跟在后一条前面时会吊在第二行的行首，读起来像是这一行漏了半句。
+ * 动作行下面那三条能用「·」是因为它们各自两三个字、一行放得下。
+ */
+.reason { display: block; }
 .rec-nums { text-align: right; flex-shrink: 0; line-height: 1.25; }
 .rec-kcal { font-size: var(--fs-headline); font-weight: var(--w-bold); font-variant-numeric: tabular-nums; }
 .rec-unit { font-size: var(--fs-caption); color: var(--faint); margin-left: 2px; }
@@ -1074,10 +1096,26 @@ html, body { height: 100%; overflow: hidden; }
  * 左右对称，末行三格要和它平衡，得跟它共用同一条中轴，而不是同一个左边缘。
  */
 .metric-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-4) var(--space-1); --metric-cols: 3; }
+/*
+ * 列数写在 class 上，格子宽度由它算出来。
+ *
+ * 这两件事一度断开过：JS 照旧算出列数、写上 `cols-4`，可格子是 `flex: 0 1 auto`
+ * 加一条 `min-width: 7em`，宽度跟列数一点关系都没有 —— `--metric-cols` 成了
+ * 死代码。于是 8 项在 393px 上挤不下四格，自己折成 3+3+2 三排，
+ * 而「末行整组居中」这条规矩的前提**就是每格同宽**：宽度各随内容的话，
+ * 两端余量相等也拼不出上一行的那条中轴。
+ *
+ * 不写成 inline style：行内自定义属性压得过任何选择器，窄屏就没法再降一档。
+ */
+.metric-grid.cols-1 { --metric-cols: 1; }
+.metric-grid.cols-2 { --metric-cols: 2; }
+.metric-grid.cols-3 { --metric-cols: 3; }
+.metric-grid.cols-4 { --metric-cols: 4; }
 .metric-cell {
-  flex: 0 1 auto;
+  /* 同宽 + 容器居中 = 末行整组落在上一行的中轴上，空缺一分为二落到两端 */
+  flex: 0 0 calc((100% - (var(--metric-cols) - 1) * var(--space-1)) / var(--metric-cols));
   display: flex; flex-direction: column; align-items: center; gap: var(--space-1);
-  min-width: min(100%, 7em); max-width: 100%; text-align: center;
+  min-width: 0; max-width: 100%; text-align: center;
 }
 .metric-icon { width: 22px; height: 22px; flex: none; color: var(--muted); opacity: .8; }
 .metric-body { min-width: 0; }
@@ -3056,6 +3094,12 @@ h1, h2, h3 { letter-spacing: -.02em; }
 
 @media (max-width: 360px) {
   .equip-filter-btn { max-width: 136px; }
+  /*
+   * 四列在 320px 上每格只剩 64.5px，而「6<小时>42<分>」还要 67px ——
+   * 再降一档就正好收进格子。14 仍然明显大过 12px 的标签，层级不塌。
+   * 宁可降字号也不降列数：3 列时 7 项会排成 3+3+1，末行吊着一个。
+   */
+  .metric-grid.cols-4 .metric-value { font-size: var(--fs-body); }
 }
 
 /* 统一常用控件的点击尺寸。紧凑标签仍保留较小的视觉体量。 */

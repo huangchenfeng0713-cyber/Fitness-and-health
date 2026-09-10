@@ -39,7 +39,14 @@ function recRow(item, meal, onPick) {
     h('div.rec-info', null,
       h('div.rec-name', null, f.name, estimateTag(f)),
       h('div.rec-portion', null, item.portionLabel),
-      h('div.rec-reasons', null, item.reasons.slice(0, 2).map((r) => h('span.reason', null, r)))),
+      /*
+       * 理由是一行文字，不是两枚胶囊。
+       *
+       * 它点不动也选不了 ——「胶囊留给可以选的状态」，而这三行下面各挂两个
+       * 灰底圆角块之后，一屏六个色块比食物名还抢眼，每行还因此高出 20px。
+       * 和动作行下面那三条（模式 · 主练哪儿 · 复合还是孤立）用同一种写法。
+       */
+      h('div.rec-reasons', null, (item.distinctReasons || item.reasons.slice(0, 2)).map((r) => h('span.reason', null, r)))),
     h('div.rec-nums', null,
       h('span.rec-kcal', null, `${item.nutrients.kcal}`),
       h('span.rec-unit', null, 'kcal'),

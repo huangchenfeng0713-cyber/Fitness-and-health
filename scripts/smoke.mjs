@@ -302,9 +302,19 @@ try {
       return { rows: boxes.map((b) => b.length), badWidth, badGap, offCenter,
         cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1) };
     });
+    /*
+     * badWidth / badGap 以前算出来就扔了，只断言 cut 和 offCenter ——
+     * 而「每格同宽」正是「末行整组居中」的前提，漏掉它就等于这条检查只测了一半。
+     * 实测代价：`--metric-cols` 变成死代码之后，格子改成按内容分宽，8 项在 393px 上
+     * 挤不下四格、自己折成 3+3+2，两端余量照样相等，于是这条检查一路是绿的。
+     */
     if (!r) badLayouts.push(`${n} 项没渲染出格子`);
     else if (r.cut) badLayouts.push(`${n} 项有格子被撑破`);
+    else if (r.badWidth) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，格子不同宽`);
+    else if (r.badGap) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，行内间距对不上`);
     else if (r.offCenter) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，有一行没落在正中`);
+    // 末行至少两格：7 项要排成 4+3，不许出现 3+3+1 那种吊着一个的末行
+    else if (r.rows.length > 1 && r.rows.at(-1) < 2) badLayouts.push(`${n} 项排成 ${r.rows.join('+')}，末行只剩一格`);
   }
   check('健康数据 1~8 项都排得平整，末行整组居中', badLayouts.length === 0, badLayouts.join('；'));
   /*

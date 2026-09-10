@@ -19,12 +19,29 @@
  * 没记到睡眠的那天会显示成「0分钟」，读起来是「你一夜没睡」。
  */
 export function formatDuration(mins) {
-  if (mins == null || mins === '') return '—';
+  const parts = durationParts(mins);
+  return parts ? parts.map((p) => `${p.value}${p.unit}`).join('') : '—';
+}
+
+/**
+ * 拆成「数 + 单位」几段：`[{ value: 6, unit: '小时' }, { value: 42, unit: '分' }]`。
+ *
+ * 给的是同一个写法的另一种形状，不是第二套口径 —— `formatDuration` 就建在它上面，
+ * 两处不可能说出不同的时长。
+ *
+ * 之所以要拆：健康数据那一行里，每一格都是「大数字 + 小单位」（`430 kcal`、
+ * `42分钟`），唯独睡眠把整串「6小时42分」印成和数字一样大的粗体 ——
+ * 同一行两种写法，而且那三个汉字按数字的字号排，四列时正好把格子撑破
+ * （实测 76px 的字塞进 64.5px 的格）。把单位交回 `.metric-unit`，
+ * 它既和邻居一致，也不再需要为一格特例去改整行的排布。
+ */
+export function durationParts(mins) {
+  if (mins == null || mins === '') return null;
   const v = Number(mins);
-  if (!Number.isFinite(v)) return '—';
+  if (!Number.isFinite(v)) return null;
   const total = Math.round(v);
-  if (total < 60) return `${total}分钟`;
+  if (total < 60) return [{ value: total, unit: '分钟' }];
   const h = Math.floor(total / 60);
   const m = total % 60;
-  return m ? `${h}小时${m}分` : `${h}小时`;
+  return m ? [{ value: h, unit: '小时' }, { value: m, unit: '分' }] : [{ value: h, unit: '小时' }];
 }
