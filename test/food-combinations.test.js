@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   FOODS, FOOD_BY_ID, searchFoods, parseFoodCombination, generatedFoodById,
-  hasFoodMix, foodMixNutrition, nutrientsFor,
+  hasFoodMix, foodMixNutrition, nutrientsFor, defaultFoodMix, foodMixComponents, foodBrandOptions,
 } from '../js/data/foods.js';
 
 test('高优先级固定菜与组合菜都能按用户输入首条命中', () => {
@@ -120,4 +120,50 @@ test('已确认的液体与冲调粉单位不再混用', () => {
   assert.equal(powder.basis, '100g');
   assert.equal(powder.state, 'dry');
   assert.match(powder.s[0][0], /干粉/);
+});
+
+test('炒三丁可取消、添加食材并按保存配方恢复，不污染默认搭配', () => {
+  const food = searchFoods('炒三丁')[0];
+  assert.equal(food.id, 'combo_three_dice_stir');
+  const defaults = defaultFoodMix(food);
+  assert.deepEqual(Object.keys(defaults), ['green_pea', 'sweet_corn_kernel', 'carrot', 'ham_sausage', 'oil', 'soy_sauce']);
+  const amounts = { ...defaults, green_pea: 0, cucumber: 120 };
+  delete amounts.ham_sausage;
+  amounts.ham_sausage_jinluo = 60;
+  const mixed = foodMixNutrition(food, amounts);
+  assert.ok(mixed.components.some(c => c.foodId === 'cucumber' && c.grams === 120));
+  assert.ok(mixed.components.some(c => c.foodId === 'ham_sausage_jinluo' && c.grams === 60));
+  assert.ok(mixed.components.every(c => !['green_pea', 'ham_sausage'].includes(c.foodId)));
+  const restored = foodMixNutrition(generatedFoodById(food.id), Object.fromEntries(mixed.components.map(c => [c.foodId, c.grams])));
+  assert.deepEqual(restored, mixed);
+  assert.deepEqual(defaultFoodMix(food), defaults);
+  assert.equal(foodMixNutrition(food, {}).grams, 0);
+  assert.deepEqual(foodMixComponents(food, { bogus_food: 10 }).map(c => c.foodId), Object.keys(defaults));
+});
+
+test('火腿肠品牌适用于独立食物和组合菜，切换后只计算选中的品牌', () => {
+  for (const brand of foodBrandOptions(FOOD_BY_ID.get('ham_sausage'))) {
+    assert.equal(searchFoods(brand.name)[0].id, brand.id);
+    const food = searchFoods('青椒洋葱火腿肠')[0];
+    assert.equal(food.id, 'combo_pepper_onion_ham_stir');
+    const amounts = defaultFoodMix(food);
+    delete amounts.ham_sausage;
+    amounts[brand.id] = 75;
+    const mixed = foodMixNutrition(food, amounts);
+    const ham = mixed.components.filter(c => c.foodId.startsWith('ham_sausage'));
+    assert.equal(ham.length, 1);
+    assert.equal(ham[0].foodId, brand.id);
+    assert.equal(ham[0].grams, 75);
+  }
+});
+
+test('必胜客新品可搜索，全部披萨按片换算且旧id仍有效', () => {
+  assert.equal(searchFoods('薯角培根披萨')[0].id, 'ph_potato_bacon');
+  assert.equal(searchFoods('五常大米蛋挞')[0].id, 'ph_wuchang_rice_tart');
+  for (const food of FOODS.filter(f => /披萨|比萨/.test(f.name))) {
+    assert.equal(food.s[0][0], '一片');
+    assert.ok(!food.name.includes('块'));
+    const [_, grams] = food.s[0];
+    assert.ok(Math.abs(nutrientsFor(food, grams * 2).kcal - nutrientsFor(food, grams).kcal * 2) <= 1);
+  }
 });

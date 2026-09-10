@@ -21,8 +21,8 @@ test('选择动作是三种形态，不是三排一样的灰槽', () => {
   assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
   assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
   assert.match(training, /picker-scope-switch/);
-  assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\)\);/,
-    'picker-controls 里只该有挑法和范围');
+  assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\),\s*targetSelect\);/,
+    '范围后应提供细分部位筛选');
   assert.match(training, /const listHead = h\('div\.picker-list-head'/,
     '缺少「这张列表是什么」那一行');
   assert.match(training, /h\('div\.picker-scope-row', null, modeSelect\(rerender\), equipMenu\(rerender, all\)\)/,
@@ -84,8 +84,8 @@ test('截图反馈对应的移动端文案与布局不会回退', () => {
     '集中后的提示依据在手机上可能长出屏幕');
   assert.doesNotMatch(training, /h\('h3', null, '挑动作'\)/);
   /*
-   * 标签仍由 exerciseTags 统一给；只是把「主练 XX」在它等于筛选条件本身时省掉 ——
-   * 筛到「胸」的时候五行全写「主练胸大肌中部」，重复五遍反而把有区别的那两条挤淡了。
+   * 标签由 exerciseTags 统一给；用户要求每个动作显示细分部位，
+   * 即使已经筛到胸也保留上胸、中胸和下胸等主练信息。
    */
   assert.match(training, /exerciseMeta\(exerciseTags\(e, \{ scopeMuscles \}\)\)/,
     '全部动作没有使用主要动作模式、主要肌肉、动作类型标签');

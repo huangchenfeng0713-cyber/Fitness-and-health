@@ -7,6 +7,7 @@ import {
 } from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
+  MUSCLE_TARGETS, exerciseTargets, exerciseTargetText, muscleTargetOptions, matchesMuscleTarget,
 } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
@@ -21,6 +22,7 @@ import {
 let activeGroup = 'chest';
 let pickMode = 'group';     // 'group' 按部位 | 'split' 按推拉腿
 let activeSplit = 'push';
+let targetFilter = 'all';
 // 展开着记组数的那个动作；纯界面状态，不落库
 let expanded = null;
 const LIST_PREVIEW = 8;
@@ -80,11 +82,11 @@ let proposalKey = '';
 let committing = false;
 
 function currentProposal() {
-  const key = [pickMode, activeGroup, activeSplit, equipFilter].join(':');
+  const key = [pickMode, activeGroup, activeSplit, equipFilter, targetFilter].join(':');
   if (!proposal || key !== proposalKey) {
     proposalKey = key;
     proposal = recommendFor({ mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-      selection: [...picked(), ...pending], equip: equipFilter, seed: daySeed(trainingDay()) });
+      selection: [...picked(), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter });
   }
   return proposal;
 }
@@ -129,8 +131,8 @@ let equipMenuOpen = false;
 const pickedExercises = () => picked().map((id) => EXERCISE_BY_ID.get(id)).filter(Boolean);
 
 function muscleLine(e) {
-  const primary = e.primary.map((m) => MUSCLES[m]).join('、');
-  const secondary = e.secondary.map((m) => MUSCLES[m]).join('、');
+  const primary = exerciseTargetText(e);
+  const secondary = exerciseTargetText(e, 'secondary');
   return secondary ? `${primary}　协同：${secondary}` : primary;
 }
 
@@ -147,7 +149,7 @@ function groupTabs(rerender) {
         ...segmentedItemProps(activeGroup === g.key),
         // 点是纯装饰，读屏软件按这句话来
         'aria-label': done ? `${g.label}（今日已安排）` : g.label,
-        onclick: () => { activeGroup = g.key; showAllExercises = false; rerender(); },
+        onclick: () => { activeGroup = g.key; targetFilter = 'all'; showAllExercises = false; rerender(); },
       }, g.label, done ? h('span.tab-dot', { 'aria-hidden': 'true' }) : null);
     }));
 }
@@ -155,7 +157,7 @@ function groupTabs(rerender) {
 function modeSelect(rerender) {
   const select = h('select.picker-mode-select', {
     'aria-label': '按什么挑动作',
-    onchange: (ev) => { pickMode = ev.currentTarget.value; showAllExercises = false; rerender(); },
+    onchange: (ev) => { pickMode = ev.currentTarget.value; targetFilter = 'all'; showAllExercises = false; rerender(); },
   }, [['group', '按身体部位'], ['split', '按动作模式']].map(([key, label]) => h('option', { value: key }, label)));
   // 选中项要在节点建好之后再设：给还没挂上的 option 设 selected 会被按 selectedIndex 打回第一项
   select.value = pickMode;
@@ -173,7 +175,7 @@ function splitTabs(rerender) {
     SPLITS.map((sp) => h('button', {
       class: `chip-btn${activeSplit === sp.key ? ' active' : ''}`,
       ...segmentedItemProps(activeSplit === sp.key),
-      onclick: () => { activeSplit = sp.key; showAllExercises = false; rerender(); },
+      onclick: () => { activeSplit = sp.key; targetFilter = 'all'; showAllExercises = false; rerender(); },
     }, sp.label)));
 }
 
@@ -256,7 +258,9 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
     className: `ex-row exercise-choice-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
   },
   h('div.ex-main.exercise-choice-main', null,
-    h('div.ex-name', null, h('strong', null, e.name)),
+    h('div.ex-name', null, h('strong', null, e.name),
+      persistentInfoTip(`exercise-target-${e.id}`, '训练部位与动作要点',
+        `主练：${muscleLine(e)}。${exerciseTargets(e).note || '具体侧重随动作幅度、关节角度与完成方式变化。'}`)),
     exerciseMeta(exerciseTags(e, { scopeMuscles })),
     lastLine(e),
     clashNode),
@@ -318,7 +322,7 @@ function pickerCard(rerender) {
   const byGroup = pickMode === 'group';
   const all = byGroup ? exercisesForGroup(activeGroup) : exercisesForSplit(activeSplit);
   const filter = equipFilterOf(equipFilter);
-  const list = all.filter(filter.match);
+  const list = all.filter(filter.match).filter(exercise => matchesMuscleTarget(exercise, targetFilter));
   const group = GROUPS.find((g) => g.key === activeGroup);
   const split = SPLITS.find((sp) => sp.key === activeSplit);
   const scopeLabel = byGroup ? group.label : `${split.label}的动作`;
@@ -342,10 +346,18 @@ function pickerCard(rerender) {
       }, label);
     }));
 
+  const targetSelect = h('select.picker-target-select', {
+    'aria-label': '细分训练部位',
+    onchange: event => { targetFilter = event.currentTarget.value; showAllExercises = false; rerender(); },
+  }, h('option', { value: 'all' }, '全部细分部位'),
+  muscleTargetOptions(all).map(target => h('option', { value: target.key }, target.label)));
+  targetSelect.value = targetFilter;
   const controls = h('div.picker-controls', null,
     h('div.picker-scope-row', null, modeSelect(rerender), equipMenu(rerender, all)),
-    byGroup ? groupTabs(rerender) : splitTabs(rerender));
-  const scopeName = h('strong.picker-scope-name', null, byGroup ? `${group.label}部动作` : `${split.label}的动作`);
+    byGroup ? groupTabs(rerender) : splitTabs(rerender),
+    targetSelect);
+  const scopeName = h('strong.picker-scope-name', null, targetFilter !== 'all'
+    ? MUSCLE_TARGETS[targetFilter] : byGroup ? `${group.label}部动作` : `${split.label}的动作`);
   const scopeCount = h('span.picker-scope-count', null,
     showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`);
   const listHead = h('div.picker-list-head', null,
@@ -355,7 +367,7 @@ function pickerCard(rerender) {
     className: 'exercise-search-row',
     inputClassName: 'exercise-search-input',
     value: exerciseQuery,
-    ariaLabel: '搜索动作，支持中文、拼音或英文', placeholder: '搜索动作、拼音或英文',
+    ariaLabel: '搜索动作，支持中文、拼音或英文', placeholder: '搜索动作或部位，如下腹、后束',
   });
   const searchInput = search.input;
   const searchCount = h('span.card-tag', { hidden: true });
@@ -448,7 +460,7 @@ function buildPickerBar() {
     actionAriaLabel: () => `把已选的 ${pending.size} 个动作加入计划`,
     items: () => [...pending].map((id) => {
       const e = EXERCISE_BY_ID.get(id);
-      return e ? { key: id, label: e.name, note: `${MUSCLES[e.primary[0]] || ''} · ${PATTERNS[e.pattern]}` } : null;
+      return e ? { key: id, label: e.name, note: `${exerciseTargetText(e)} · ${PATTERNS[e.pattern]}` } : null;
     }).filter(Boolean),
     onRemove: (id) => { pending.delete(id); rerenderPicker(); },
     onClear: () => { pending = new Set(); rerenderPicker(); },
@@ -526,6 +538,7 @@ function planRow(exercise, index) {
           onclick: () => removeExerciseWithUndo(exercise) }, '移除'))),
     open ? h('div.set-editor', { id: `sets-${exercise.id}` },
       h('p.form-hint', null, `${EQUIPMENT[exercise.equipment]} · 主练 ${muscleLine(exercise)}`),
+      exerciseTargets(exercise).note ? h('p.form-hint', null, exerciseTargets(exercise).note) : null,
       item.sets.length ? item.sets.map((set, k) => setRow(item, k, set))
         : h('p.form-hint', null, '重量可留空；填写次数后计为已记录组。'),
       h('div.training-edit-actions', null,

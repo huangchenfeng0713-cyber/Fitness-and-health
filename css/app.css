@@ -1877,6 +1877,18 @@ body.sheet-open {
   text-overflow: ellipsis; white-space: nowrap;
 }
 .mix-ingredient span { display: block; margin-top: var(--space-0); color: var(--faint); font-size: var(--fs-caption); white-space: nowrap; }
+.mix-brand-select {
+  display: block; width: 100%; min-height: var(--control-sm); margin-top: var(--space-1);
+  padding: 4px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--card); color: var(--text); font-size: var(--fs-footnote);
+}
+.mix-add-results { display: grid; }
+.mix-add-result {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  min-height: var(--control-md); padding: var(--space-2); text-align: left;
+  border: 0; border-bottom: 1px solid var(--border); background: transparent;
+  color: var(--text); font: inherit;
+}
 .mix-amount-control { display: flex; align-items: center; gap: var(--space-1); }
 .mix-step {
   width: 30px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--r-sm);
@@ -2810,6 +2822,14 @@ h1, h2, h3 { letter-spacing: -.02em; }
   display: grid;
   gap: var(--space-1);
 }
+.picker-target-select {
+  width: 100%; min-width: 0; min-height: var(--control-md);
+  padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--card); color: var(--text); font: inherit;
+}
+.exercise-choice-main .ex-name { display: flex; align-items: center; gap: var(--space-1); }
+.exercise-choice-main .ex-name > strong { min-width: 0; }
+.exercise-meta-tag.muscle { overflow-wrap: anywhere; }
 /*
  * 「口径」那一行：左边挑法、右边器械档位，两个都是下拉形态，各撑一端。
  *

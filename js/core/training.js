@@ -9,7 +9,7 @@
  * 而窄距卧推和绳索下压名字毫不相干，主动肌都是肱三头肌，反而有真实重叠。
  */
 
-import { EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, EQUIPMENT } from '../data/exercises.js';
+import { EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, EQUIPMENT, exerciseTargetText, matchesMuscleTarget } from '../data/exercises.js';
 import { dayOffset } from './day.js';
 
 const jaccard = (a = [], b = []) => {
@@ -357,7 +357,7 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  *  - replacements 已选里有高度重合的一对时，给出「换掉哪个、换成什么」
  */
 export function recommendFor({
-  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0,
+  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0, target = 'all',
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
@@ -366,7 +366,7 @@ export function recommendFor({
     : null;
   const inScope = byGroup ? exercisesForGroup(groupKey) : exercisesForSplit(splitKey);
   // 器械档位也得算进去：列表里全是徒手动作、推荐位却在推杠铃，那不叫推荐
-  const pool = inScope.filter(equipFilterOf(equip).match);
+  const pool = inScope.filter(equipFilterOf(equip).match).filter(exercise => matchesMuscleTarget(exercise, target));
   if (!pool.length) return { items: [], replacements: [], scopeKey };
 
   const chosen = toExercises(selection);
@@ -445,20 +445,15 @@ export function restoreTrainingItems(current, removed) {
 /**
  * 动作行下面那几个短标签。
  *
- * `scopeMuscles` 是当前筛选范围覆盖的肌肉。筛到「胸」的时候，五行全写着
- * 「主练胸大肌中部」—— 这句话是筛选条件本身，重复了五遍，
- * 反而把真正有区别的那两条（模式、复合还是孤立）挤淡了。
- * 所以主动肌已经落在当前范围里时就省掉它；搜索结果里没有范围可言，照写不误。
+ * 部位筛选不再隐藏主练目标：同在胸部也要看得出上胸与下胸的区别。
+ * 列表、推荐、搜索统一列出所有主要目标，而不是只取第一个肌群。
  */
 export function exerciseTags(exercise, { scopeMuscles = null } = {}) {
   if (!exercise) return [];
-  const primary = exercise.primary?.[0];
-  const scopeSaysIt = primary && scopeMuscles?.length === 1 && scopeMuscles[0] === primary;
-  const redundant = primary && Array.isArray(scopeMuscles) && scopeMuscles.includes(primary)
-    && scopeMuscles.length <= 3;
+  const primary = exerciseTargetText(exercise);
   return [
     PATTERNS[exercise.pattern],
-    primary && !(scopeSaysIt || redundant) ? `主练${MUSCLES[primary]}` : null,
+    primary ? `主练${primary}` : null,
     exercise.compound ? '复合动作' : '孤立动作',
   ].filter(Boolean);
 }

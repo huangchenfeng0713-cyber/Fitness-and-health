@@ -383,7 +383,7 @@ export const FOODS = [
   { id: 'malatang', name: '麻辣烫', alias: 'malatang 串串香 串串 冒菜', cat: 'dish', n: [145, 7.0, 9.5, 8.5, 1.5, 2.0, 1100], s: [['一份', 500]], f: [] },
   { id: 'burger', name: '汉堡（牛肉）', alias: 'hanbao burger', cat: 'dish', n: [270, 13.0, 13.0, 25.0, 1.2, 5.0, 520], s: [['一个', 200]], f: ['processed', 'quick'] },
   { id: 'french_fries', name: '薯条', alias: 'shutiao fries', cat: 'dish', n: [312, 3.5, 15.0, 41.0, 3.5, 0.5, 300], s: [['中份', 115]], f: ['fried', 'processed', 'quick'] },
-  { id: 'pizza', name: '披萨（芝士）', alias: 'pisa pizza', cat: 'dish', n: [266, 11.0, 10.0, 33.0, 2.0, 3.5, 600], s: [['一块', 110]], f: ['processed'] },
+  { id: 'pizza', name: '披萨（芝士）', alias: 'pisa pizza', cat: 'dish', n: [266, 11.0, 10.0, 33.0, 2.0, 3.5, 600], s: [['一片', 110]], f: ['processed'] },
   { id: 'sushi', name: '寿司卷', alias: 'shousi sushi', cat: 'dish', n: [150, 6.0, 2.5, 26.0, 0.8, 4.0, 400], s: [['一盒8个', 200]], f: ['quick'] },
   { id: 'salad_chicken', name: '鸡胸沙拉（轻食）', alias: 'shala salad 沙拉 轻食', cat: 'dish', n: [95, 10.5, 3.5, 5.5, 1.8, 2.0, 320], s: [['一份', 350]], f: ['quick'] },
   { id: 'sandwich_egg', name: '鸡蛋三明治', alias: 'sanmingzhi sandwich', cat: 'dish', n: [228, 10.0, 10.5, 23.0, 1.5, 4.0, 520], s: [['一个', 160]], f: ['quick', 'breakfast'] },
@@ -782,9 +782,11 @@ export const FOODS = [
   { id: 'tastien_beef', name: '塔斯汀 麻辣嫩牛堡', alias: 'tasiting tastien', cat: 'chain', n: [237, 11.1, 10.5, 25.3, 1.3, 3.2, 526], s: [['一个', 190]], f: ['quick', 'processed', 'est'] },
   { id: 'tastien_duck', name: '塔斯汀 北京烤鸭堡', alias: 'tasiting tastien kaoyabao', cat: 'chain', n: [247, 10.5, 11.6, 25.3, 1.3, 4.2, 553], s: [['一个', 190]], f: ['quick', 'processed', 'est'] },
   { id: 'wallace_burger', name: '华莱士 全鸡堡', alias: 'hualaishi wallace', cat: 'chain', n: [240, 11.4, 10.9, 24.6, 1.1, 3.4, 514], s: [['一个', 175]], f: ['quick', 'processed', 'est'] },
-  { id: 'ph_supreme', name: '必胜客 超级至尊比萨（1块）', alias: 'pizzahut bishengke zhizun', cat: 'chain', n: [250, 11.8, 10.9, 26.4, 1.8, 3.6, 564], s: [['一块', 110]], f: ['quick', 'processed'] },
-  { id: 'ph_cheese_crust', name: '必胜客 芝心比萨（1块）', alias: 'pizzahut bishengke zhixin', cat: 'chain', n: [272, 12.0, 12.8, 27.2, 1.6, 4.0, 600], s: [['一块', 125]], f: ['quick', 'processed'] },
-  { id: 'ph_durian', name: '必胜客 榴莲比萨（1块）', alias: 'pizzahut bishengke liulian', cat: 'chain', n: [264, 9.1, 10.0, 34.5, 1.8, 10.9, 436], s: [['一块', 110]], f: ['quick', 'processed', 'est'] },
+  { id: 'ph_supreme', name: '必胜客 超级至尊比萨（1片）', alias: 'pizzahut bishengke zhizun 超级至尊披萨', cat: 'chain', n: [250, 11.8, 10.9, 26.4, 1.8, 3.6, 564], s: [['一片', 110]], f: ['quick', 'processed'] },
+  { id: 'ph_cheese_crust', name: '必胜客 芝心比萨（1片）', alias: 'pizzahut bishengke zhixin 芝心披萨', cat: 'chain', n: [272, 12.0, 12.8, 27.2, 1.6, 4.0, 600], s: [['一片', 125]], f: ['quick', 'processed'] },
+  { id: 'ph_durian', name: '必胜客 榴莲比萨（1片）', alias: 'pizzahut bishengke liulian 榴莲披萨', cat: 'chain', n: [264, 9.1, 10.0, 34.5, 1.8, 10.9, 436], s: [['一片', 110]], f: ['quick', 'processed', 'est'] },
+  { id: 'ph_potato_bacon', name: '必胜客 薯角培根披萨（1片）', alias: 'pizzahut bishengke shujiao peigen pisa 薯角培根披萨 薯角培根比萨', cat: 'chain', n: [260, 10, 11, 31, 1.8, 3.5, 600], s: [['一片', 110]], ...META_RECIPE_READY, note: '未取得此单品官方营养表；按芝士、培根、薯角和饼底的同类披萨估算。一片暂按约110g，尺寸、饼底和切片数不同请改用实际克重', f: ['quick', 'processed', 'est'] },
+  { id: 'ph_wuchang_rice_tart', name: '必胜客 五常大米蛋挞', alias: 'pizzahut bishengke wuchang dami danta 五常大米蛋挞 大米蛋挞', cat: 'chain', n: [300, 5, 17, 32, 0.5, 15, 180], s: [['一个', 60]], nfs: 1, ...META_RECIPE_READY, note: '品名按用户提供；未取得官方营养表及单个重量，暂用通用蛋挞代表值和60g/个估算，大米馅及挞皮比例存在差异', f: ['quick', 'processed', 'est'] },
   { id: 'ph_pasta', name: '必胜客 意式肉酱面', alias: 'pizzahut bishengke rouzjiangmian', cat: 'chain', n: [160, 6.3, 5.1, 22.3, 1.1, 2.6, 314], s: [['一份', 350]], f: ['quick', 'processed', 'est'] },
   { id: 'ph_wing', name: '必胜客 蜜汁烤翅', alias: 'pizzahut bishengke mizhikaochi', cat: 'chain', n: [267, 20.0, 15.6, 11.1, 0.0, 8.9, 778], s: [['一只', 45]], f: ['quick', 'processed', 'est'] },
   { id: 'subway_chicken', name: '赛百味 6寸鸡胸三明治', alias: 'subway saibaiwei', cat: 'chain', n: [141, 10.9, 2.3, 20.0, 1.8, 2.7, 364], s: [['一个', 220]], f: ['quick', 'processed'] },
@@ -1071,7 +1073,16 @@ export const FOODS = [
   { id: 'loquat', name: '枇杷', alias: 'pipa loquat', cat: 'fruit', n: [41, 0.8, 0.2, 9.3, 0.8, 7.0, 4], s: [['一份可食部', 150]], ...META_CNFCT_RAW, f: [] },
 
   // 曾被合并但营养差异明显的条目，拆开后搜索不再把它们当作同一种食物。
-  { id: 'ham_sausage', name: '火腿肠', alias: 'huotuichang ham sausage', cat: 'meat', n: [212, 13.0, 16.0, 10.0, 0, 3.0, 900], s: [['一根', 50]], ...META_RECIPE_READY, f: ['processed', 'quick', 'est'] },
+  { id: 'ham_sausage', name: '火腿肠', brand: '通用', alias: 'huotuichang ham sausage 通用火腿肠', cat: 'meat', n: [212, 13.0, 16.0, 10.0, 0, 3.0, 900], s: [['一根', 50]], ...META_RECIPE_READY, note: '通用火腿肠代表值；一根暂按50g，可选择品牌，具体系列和包装克重请以标签为准', f: ['processed', 'quick', 'est'] },
+  ...[
+    ['shuanghui', '双汇', 'shuanghui'], ['jinluo', '金锣', 'jinluo'], ['yurun', '雨润', 'yurun'],
+  ].map(([key, brand, alias]) => ({
+    id: `ham_sausage_${key}`, name: `${brand} 火腿肠`, brand,
+    alias: `${alias} huotuichang ham sausage ${brand}火腿肠`, cat: 'meat',
+    n: [212, 13, 16, 10, 0, 3, 900], s: [['一根', 50]], ...META_RECIPE_READY,
+    note: '未指定产品系列、未核实包装标签，暂沿用通用火腿肠营养和50g/根估算；选择品牌仅区分记录，不代表该品牌所有产品营养相同',
+    f: ['processed', 'quick', 'est'],
+  })),
   { id: 'sole_fish', name: '龙利鱼（鳎目鱼）', alias: 'longliyu sole fish tamuyu', cat: 'seafood', n: [83, 17.7, 1.4, 0, 0, 0, 80], s: [['一片可食部', 150]], source: SOURCE_RECIPE, basis: '100g', state: 'raw', edibleRatio: 1, carbBasis: 'total', f: ['cook', 'est'] },
   { id: 'apricot_kernel', name: '甜杏仁（杏核仁）', alias: 'xingren tianxingren apricot kernel 杏核', cat: 'nut', n: [562, 22.0, 45.0, 23.0, 10.0, 4.0, 5], s: [['一小把', 20]], source: SOURCE_RECIPE, basis: '100g', state: 'raw', edibleRatio: 1, carbBasis: 'total', note: '不是巴旦木；按市售可食甜杏核仁代表值估算，苦杏仁不可直接替代', f: ['quick', 'est'] },
   { id: 'coconut_milk_unsweetened', name: '椰浆（无糖）', alias: 'yejiang coconut milk unsweetened', cat: 'drink', n: [200, 2.0, 20.0, 3.0, 0, 2.0, 15], s: [['半杯', 100]], ...META_RECIPE_READY, f: ['natsugar', 'est'] },
@@ -2059,6 +2070,8 @@ const braiseSeasoning = () => [
 ];
 
 const HOME_COMBINATION_RECIPES = [
+  { key: 'pepper_onion_ham_stir', name: '青椒洋葱火腿肠', aliases: ['青椒洋葱炒火腿肠', '青椒炒洋葱火腿肠', '洋葱青椒炒火腿肠'], method: '炒', parts: [comboPart('pepper_green', '青椒', 100, 10), comboPart('onion', '洋葱', 100, 10), comboPart('ham_sausage', '火腿肠', 100, 5), ...stirSeasoning()] },
+  { key: 'three_dice_stir', name: '炒三丁', aliases: ['什锦炒三丁', '什锦三丁', '豌豆玉米胡萝卜火腿肠', '豌豆玉米胡萝卜炒火腿肠'], method: '炒', allowCustomComponents: true, parts: [comboPart('green_pea', '豌豆', 80, 10), comboPart('sweet_corn_kernel', '玉米粒', 80, 10), comboPart('carrot', '胡萝卜', 80, 10), comboPart('ham_sausage', '火腿肠', 60, 5), ...stirSeasoning()] },
   { key: 'carrot_egg_stir', name: '胡萝卜炒鸡蛋', aliases: ['胡萝卜炒蛋'], method: '炒', terms: [['胡萝卜'], ['鸡蛋', '蛋']], parts: [comboPart('carrot', '胡萝卜', 150, 10), comboPart('egg_whole', '鸡蛋', 110, 5), ...stirSeasoning()] },
   { key: 'ham_egg_stir', name: '火腿肠炒鸡蛋', aliases: ['火腿炒鸡蛋', '火腿炒蛋', '火腿肠炒蛋'], method: '炒', terms: [['火腿肠', '火腿'], ['鸡蛋', '蛋']], parts: [comboPart('ham_sausage', '火腿肠', 100, 5), comboPart('egg_whole', '鸡蛋', 110, 5), ...stirSeasoning()] },
   // 旧配方只用于按 id 恢复历史记录；搜索统一落到已有的辣椒炒鸡蛋。
@@ -2136,7 +2149,7 @@ function buildCombinationFood(recipe) {
     note: `按基础食材、默认比例和“${recipe.method || '组合'}”做法计算；可在份量面板逐项调整，实际用油、调味和成品失水会造成差异`,
     f: ['est'],
     generated: true,
-    mix: { label: '这份组合菜里有什么', components: recipe.parts },
+    mix: { label: '这份组合菜里有什么', components: recipe.parts, allowCustomComponents: !!recipe.allowCustomComponents },
   };
   const mixed = foodMixNutrition(shell);
   if (!(mixed.grams > 0)) return null;
@@ -2204,6 +2217,34 @@ export function defaultFoodMix(food) {
   ]));
 }
 
+const HAM_SAUSAGE_IDS = ['ham_sausage', 'ham_sausage_shuanghui', 'ham_sausage_jinluo', 'ham_sausage_yurun'];
+
+/** 品牌选项共用稳定食物 id，独立记录和组合菜保存同一身份。 */
+export function foodBrandOptions(food) {
+  return HAM_SAUSAGE_IDS.includes(food?.id) ? HAM_SAUSAGE_IDS.map(id => FOOD_BY_ID.get(id)) : [];
+}
+
+/** 仅显式允许自由搭配的菜接受额外原料，不修改缓存中的默认配方。 */
+export function foodMixComponents(food, amounts = null) {
+  if (!hasFoodMix(food)) return [];
+  const selected = amounts ?? defaultFoodMix(food);
+  const components = food.mix.components.map(component => {
+    const brands = foodBrandOptions(FOOD_BY_ID.get(component.foodId));
+    const chosen = brands.find(brand => brand.id !== component.foodId && Object.hasOwn(selected, brand.id));
+    return chosen ? { ...component, foodId: chosen.id, label: chosen.name } : component;
+  });
+  if (food.mix.allowCustomComponents) {
+    const known = new Set(components.map(component => component.foodId));
+    for (const id of Object.keys(selected)) {
+      const ingredient = FOOD_BY_ID.get(id);
+      if (known.has(id) || !ingredient || hasFoodMix(ingredient)) continue;
+      components.push(comboPart(id, ingredient.name, 0, 5, 1000));
+      known.add(id);
+    }
+  }
+  return components;
+}
+
 const roundMix = (value, decimals = 1) => {
   const scale = 10 ** decimals;
   if (value == null) return null;
@@ -2225,7 +2266,7 @@ export function foodMixNutrition(food, amounts = null) {
   const components = [];
   let grams = 0;
 
-  for (const component of food.mix.components) {
+  for (const component of foodMixComponents(food, selected)) {
     const ingredient = FOOD_BY_ID.get(component.foodId);
     if (!ingredient) throw new Error(`复合食物缺少原料：${component.foodId}`);
     const max = Math.max(0, Number(component.max) || 1000);

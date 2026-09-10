@@ -119,6 +119,7 @@ export const EXERCISES = [
   X('chinup', '反握引体向上', 'fanwo yintixiangshang chinup', 'back', 'vertical_pull', ['lat'], ['biceps', 'forearm'], 'bodyweight'),
   X('lat_pulldown', '高位下拉', 'gaowei xiala lat pulldown', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid'], 'cable'),
   X('lat_pulldown_close', '窄握下拉', 'zhaiwo xiala close grip pulldown', 'back', 'vertical_pull', ['lat'], ['biceps'], 'cable'),
+  X('single_arm_cable_pulldown', '单臂绳索下拉', 'danbi shengsuo xiala 单手绳索下拉 单臂高位下拉 single arm cable pulldown unilateral lat pulldown', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid', 'deep_core'], 'cable'),
   X('barbell_row', '杠铃划船', 'gangling huachuan barbell row', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps', 'erector'], 'barbell'),
   X('dumbbell_row', '单臂哑铃划船', 'danbi yaling huachuan db row', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'dumbbell'),
   X('seated_row_cable', '坐姿绳索划船', 'zuozi shengsuo huachuan seated row', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'cable'),
@@ -200,6 +201,69 @@ export const EXERCISES = [
 export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));
 export const GROUP_BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
 
+/**
+ * 细分部位用于显示与筛选，保留原有肌群键参与覆盖和动作重合计算。
+ * 腹直肌上下部是同一肌肉的区域；标签描述常见动作侧重，不声称独立隔离。
+ * 未能可靠区分肌头的动作保留整体名称，不按握距或器械名称硬分长短头。
+ */
+export const MUSCLE_TARGETS = {
+  ...MUSCLES,
+  pec_upper: '上胸（锁骨部）', pec_mid: '中胸（胸肋部）', pec_lower: '下胸侧重',
+  triceps: '肱三头肌整体', biceps: '肱二头肌长头、短头',
+  forearm: '前臂握力肌群', quad: '股四头肌（大腿前侧）',
+  ham: '腘绳肌（大腿后侧）', glute: '臀大肌', abductor: '臀中肌、臀小肌',
+  calf: '腓肠肌、比目鱼肌', abs: '腹直肌整体', oblique: '腹内、外斜肌',
+  abs_upper: '腹直肌上部侧重', abs_lower: '腹直肌下部侧重',
+  triceps_long: '肱三头肌长头侧重',
+  brachialis: '肱肌', brachioradialis: '肱桡肌',
+  forearm_flexors: '前臂屈肌群', forearm_extensors: '前臂伸肌群',
+  gastrocnemius: '腓肠肌', soleus: '比目鱼肌',
+};
+
+const TARGET_OVERRIDES = {
+  crunch: { primary: ['abs_upper'], note: '上腹侧重是躯干卷起的训练分类；整条腹直肌共同参与，不能只收缩上半段。' },
+  cable_crunch: { primary: ['abs_upper'], note: '以肋骨向骨盆卷起为主；手臂固定绳索，避免只屈髋鞠躬。' },
+  ab_crunch_machine: { primary: ['abs_upper'], note: '躯干卷起为主；机器转轴和坐姿会改变侧重，上下腹共同参与。' },
+  reverse_crunch: { primary: ['abs_lower'], secondary: ['hip_flexor'], note: '下腹侧重以骨盆后倾、尾骨卷离支撑面为前提；上下腹仍共同参与。' },
+  hanging_leg_raise: { primary: ['abs_lower', 'hip_flexor'], note: '下腹侧重要求举腿末段卷起骨盆；仅抬大腿主要是屈髋。避免摆荡借力。' },
+  captains_chair_raise: { primary: ['abs_lower', 'hip_flexor'], note: '骨盆向肋骨卷起时增加腹部参与；单纯抬腿不能等同于下腹孤立训练。' },
+  decline_situp: { note: '腹直肌整体与屈髋肌共同参与；不因凳面下斜就标为下腹动作。' },
+  overhead_triceps: { primary: ['triceps_long'], note: '过顶位置使长头处于较长肌长；内侧头、外侧头也参与伸肘。' },
+  hammer_curl: { primary: ['brachialis', 'brachioradialis'], secondary: ['biceps'], note: '中立握突出肘屈肌群；肱二头肌也参与，不标为只练某一个头。' },
+  reverse_curl: { primary: ['brachioradialis', 'brachialis'], secondary: ['biceps', 'forearm_extensors'] },
+  wrist_curl: { primary: ['forearm_flexors'] },
+  wrist_curl_reverse: { primary: ['forearm_extensors'] },
+  calf_raise_standing: { primary: ['gastrocnemius', 'soleus'] },
+  calf_raise_leg_press: { primary: ['gastrocnemius', 'soleus'] },
+  donkey_calf_raise: { primary: ['gastrocnemius', 'soleus'] },
+  calf_raise_seated: { primary: ['soleus'], secondary: ['gastrocnemius'], note: '屈膝时腓肠肌缩短，比目鱼肌侧重更明显；不表示腓肠肌完全不参与。' },
+  single_arm_cable_pulldown: { note: '使用高位单手把，肘向同侧髋部下拉，躯干保持稳定。左右各完成一次算一组；次数按单侧填写。' },
+};
+
+export function exerciseTargets(exercise) {
+  if (!exercise) return { primary: [], secondary: [], note: '' };
+  const detail = TARGET_OVERRIDES[exercise.id] || {};
+  return {
+    primary: detail.primary || exercise.primary || [],
+    secondary: detail.secondary || exercise.secondary || [],
+    note: detail.note || '',
+  };
+}
+
+export function exerciseTargetText(exercise, role = 'primary') {
+  return exerciseTargets(exercise)[role].map(key => MUSCLE_TARGETS[key]).filter(Boolean).join('、');
+}
+
+export function matchesMuscleTarget(exercise, target = 'all') {
+  return !target || target === 'all' || exerciseTargets(exercise).primary.includes(target);
+}
+
+/** 只列当前动作范围内的主练部位，协同肌不冒充主练覆盖。 */
+export function muscleTargetOptions(list = EXERCISES) {
+  const keys = new Set(list.flatMap(exercise => exerciseTargets(exercise).primary));
+  return [...keys].map(key => ({ key, label: MUSCLE_TARGETS[key] }));
+}
+
 /** 名称 / 拼音 / 拼音首字母 / 英文都能搜；和食物搜索用同一个首字母匹配器 */
 export function searchExercises(query, list = EXERCISES) {
   const q = String(query || '').trim().toLowerCase();
@@ -207,5 +271,8 @@ export function searchExercises(query, list = EXERCISES) {
   return list.filter((e) => substringMatch(q, e.name)
     || substringMatch(q, e.alias)
     || matchesInitials(q, e.alias)
-    || (MUSCLES[e.primary[0]] || '').includes(q));
+    || exerciseTargetText(e).includes(q)
+    || exerciseTargetText(e, 'secondary').includes(q)
+    || (q === '上腹' && exerciseTargets(e).primary.includes('abs_upper'))
+    || (q === '下腹' && exerciseTargets(e).primary.includes('abs_lower')));
 }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, searchExercises,
+  MUSCLE_TARGETS, exerciseTargets, exerciseTargetText, matchesMuscleTarget, muscleTargetOptions,
 } from '../js/data/exercises.js';
 import {
   overlapScore, overlapLevel, findOverlaps, coverage,
@@ -26,6 +27,43 @@ test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模�
     assert.ok(EXERCISES.filter((e) => e.group === g.key).length >= 8,
       `${g.label} 的动作太少，选起来不够用`);
   }
+});
+
+test('每个动作完整显示主练与协同的细分部位，不因大类筛选隐藏目标', async () => {
+  const { exerciseTags } = await import('../js/core/training.js');
+  for (const exercise of EXERCISES) {
+    const detail = exerciseTargets(exercise);
+    assert.ok(detail.primary.length, exercise.name);
+    for (const key of [...detail.primary, ...detail.secondary]) assert.ok(MUSCLE_TARGETS[key], key);
+    const tags = exerciseTags(exercise, { scopeMuscles: GROUPS.find(g => g.key === exercise.group).muscles });
+    assert.equal(tags[1], `主练${exerciseTargetText(exercise)}`);
+  }
+  assert.ok(searchExercises('上腹').some(e => e.id === 'crunch'));
+  assert.ok(searchExercises('下腹').some(e => e.id === 'reverse_crunch'));
+  assert.ok(searchExercises('下腹').every(e => !['plank', 'decline_situp', 'crunch'].includes(e.id)));
+  assert.ok(searchExercises('后束').some(e => e.id === 'reverse_pec_deck'));
+  assert.deepEqual(exerciseTargets(EXERCISE_BY_ID.get('calf_raise_seated')).primary, ['soleus']);
+  assert.deepEqual(exerciseTargets(EXERCISE_BY_ID.get('overhead_triceps')).primary, ['triceps_long']);
+});
+
+test('细分部位筛选与推荐保持一致，新增单臂下拉使用绳索垂直拉模式', async () => {
+  const { recommendFor } = await import('../js/core/training.js');
+  const core = EXERCISES.filter(e => e.group === 'core');
+  assert.ok(muscleTargetOptions(core).some(t => t.key === 'abs_lower'));
+  const rec = recommendFor({ groupKey: 'core', target: 'abs_lower' });
+  assert.ok(rec.items.length > 0);
+  assert.ok(rec.items.every(e => matchesMuscleTarget(EXERCISE_BY_ID.get(e.id), 'abs_lower')));
+  const single = EXERCISE_BY_ID.get('single_arm_cable_pulldown');
+  assert.equal(single.equipment, 'cable');
+  assert.equal(single.pattern, 'vertical_pull');
+  assert.deepEqual(single.primary, ['lat']);
+  assert.match(exerciseTargets(single).note, /单侧/);
+  for (const query of ['单臂绳索下拉', '单手绳索下拉', '单臂高位下拉']) {
+    assert.ok(searchExercises(query).some(e => e.id === single.id));
+  }
+  // 上下腹不是两块独立肌肉，原来的覆盖/重合逻辑继续使用同一 abs 键。
+  assert.ok(EXERCISE_BY_ID.get('crunch').primary.includes('abs'));
+  assert.ok(EXERCISE_BY_ID.get('reverse_crunch').primary.includes('abs'));
 });
 
 test('每个部位的主要肌肉都至少有一个动作练得到', () => {

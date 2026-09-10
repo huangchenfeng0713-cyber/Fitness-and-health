@@ -23,7 +23,7 @@ import {
 import {
   searchFoods, nutrientsFor, CATEGORIES, per100, unitLabel, portionTip,
   SUGAR_LEVELS, DEFAULT_SUGAR_LEVEL, hasSugarLevel, sugarLevel,
-  hasFoodMix, defaultFoodMix, foodMixNutrition,
+  FOODS, hasFoodMix, defaultFoodMix, foodMixNutrition, foodMixComponents, foodBrandOptions,
 } from '../data/foods.js';
 import { MEALS, MEAL_LABEL, currentMeal, focusFoods, FOCUS_LABEL } from '../core/advisor.js';
 import { initialPortion } from '../core/portion.js';
@@ -430,8 +430,7 @@ function selectFood(food) {
  * 原料快照随记录保存；之后在当天列表改总量时，store 会按比例缩放整份配方。
  */
 function refreshMixedPortion(food) {
-  const components = food.mix.components;
-  const controllers = [];
+  const components = foodMixComponents(food, ui.mix);
   let currentMix = foodMixNutrition(food, ui.mix);
 
   nodes.preview = h('div.preview-slot');
@@ -468,6 +467,19 @@ function refreshMixedPortion(food) {
 
   const rows = components.map((component) => {
     const ingredient = findFood(component.foodId);
+    const brands = foodBrandOptions(ingredient);
+    const brandSelect = brands.length ? h('select.mix-brand-select', {
+      'aria-label': `${component.label}品牌`,
+      onchange: (event) => {
+        const amount = ui.mix[component.foodId] || 0;
+        delete ui.mix[component.foodId];
+        ui.mix[event.target.value] = amount;
+        refreshPortion();
+      },
+    }, brands.map(brand => h('option', {
+      value: brand.id, selected: brand.id === ingredient.id,
+    }, brand.brand))) : null;
+    if (brandSelect) brandSelect.value = ingredient.id;
     const step = Math.max(1, Number(component.step) || 5);
     const max = Math.max(step, Number(component.max) || 1000);
     const unit = component.unit || (ingredient?.basis === '100ml' ? 'ml' : 'g');
@@ -486,6 +498,7 @@ function refreshMixedPortion(food) {
       toggle,
       h('div.mix-ingredient', null,
         h('strong', null, component.label),
+        brandSelect,
         ingredient && h('span', null, `${per100(ingredient).kcal} kcal / 100${unit}`)),
       h('div.mix-amount-control', null,
         h('button.mix-step', {
@@ -532,7 +545,6 @@ function refreshMixedPortion(food) {
     input.onblur = () => setAmount(input.value);
 
     syncComponent();
-    controllers.push(syncComponent);
     return row;
   });
 
@@ -557,13 +569,43 @@ function refreshMixedPortion(food) {
     ui.basket.length ? null : queueBtn,
     directBtn);
 
+  let ingredientPicker = null;
+  if (food.mix.allowCustomComponents) {
+    const results = h('div.mix-add-results');
+    const search = searchField({
+      ariaLabel: '搜索并添加配料', placeholder: '搜索配料，如黄瓜、鸡丁、火腿肠',
+      oninput: (event) => {
+        const query = event.target.value.trim();
+        clearEl(results);
+        if (!query) return;
+        const candidates = FOODS.filter(ingredient => !hasFoodMix(ingredient));
+        const matches = searchFoods(query, candidates, 8).filter(ingredient => !ingredient.generated);
+        mount(results, matches.length ? matches.map(ingredient => h('button.mix-add-result', {
+          type: 'button',
+          onclick: () => {
+            const existing = components.find(component => component.foodId === ingredient.id);
+            // 同一根火腿肠换品牌时替换，不把两个品牌一起默认加进去。
+            const brands = foodBrandOptions(ingredient);
+            const previous = components.find(component => brands.some(brand => brand.id === component.foodId));
+            const amount = previous ? ui.mix[previous.foodId] : ui.mix[ingredient.id];
+            if (previous) delete ui.mix[previous.foodId];
+            ui.mix[ingredient.id] = amount > 0 ? amount : (existing?.defaultGrams || 50);
+            refreshPortion();
+          },
+        }, ingredient.name, icon('plus'))) : h('p.form-hint', null, '未找到配料，请换个名称搜索'));
+      },
+    });
+    ingredientPicker = h('div.mix-add-picker', null,
+      h('div.field-label', null, '添加其他配料'), search.el, results);
+  }
+
   mount(nodes.portion, h('div.portion-panel.mix-picker', null,
     h('div.portion-head', null,
       h('div.portion-head-main', null,
         h('div.portion-title-line', null,
           h('strong', null, food.name),
           estimateTag(food)),
-        h('div.portion-per100', null, '营养按当前选择逐项计算，不套用固定一碗。')),
+        h('div.portion-per100', null, '营养按所选配料和份量逐项计算。')),
       h('div.portion-head-actions', null,
         foodInfoTip(food, { label: '查看估算依据与误差' }),
         h('button.icon-btn', {
@@ -582,13 +624,13 @@ function refreshMixedPortion(food) {
         type: 'button',
         onclick: () => {
           ui.mix = defaultFoodMix(food);
-          controllers.forEach((sync) => sync());
-          syncTotals();
+          refreshPortion();
         },
       }, '恢复常见搭配')),
     h('p.form-hint.mix-help', null,
       '“+”加入配料，“✓”取消；也可以直接输入每项的克数或毫升数。总量按液体 1ml≈1g 估算。'),
     h('div.mix-grid', null, rows),
+    ingredientPicker,
 
     nodes.preview,
     h('div.field-label', null, '记到哪一餐'),
@@ -812,6 +854,13 @@ function refreshPortion() {
           onclick: () => closeSheet(),
         }, icon('close')))),
 
+    foodBrandOptions(food).length > 0 && h('div', null,
+      h('div.field-label', null, '品牌'),
+      h('div.unit-row', null, foodBrandOptions(food).map(brand => h('button', {
+        type: 'button', class: `chip-btn${brand.id === food.id ? ' active' : ''}`,
+        'aria-pressed': String(brand.id === food.id),
+        onclick: () => { ui.selected = brand; refreshPortion(); },
+      }, brand.brand)))),
     sugarRow && h('div.field-label', null, '糖度'),
     sugarRow,
 

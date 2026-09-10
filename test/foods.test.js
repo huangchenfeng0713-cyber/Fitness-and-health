@@ -397,7 +397,7 @@ test('连锁快餐的份量就是品牌的标准份，不是 100g', () => {
   assert.ok(chain.length >= 50, `只有 ${chain.length} 条连锁快餐`);
   for (const f of chain) {
     const [name, g] = f.s[0];
-    assert.ok(/个|块|只|份|杯|罐|支|中份|大杯|中碗|五块/.test(name),
+    assert.ok(/个|块|片|只|份|杯|罐|支|中份|大杯|中碗|五块/.test(name),
       `${f.name} 的份量名「${name}」不像品牌标准份`);
     assert.ok(g >= 40 && g <= 600, `${f.name} 的份量 ${g}g 不合理`);
   }
