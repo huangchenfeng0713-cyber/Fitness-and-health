@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { energyObservation, completeEnergyDay } from '../js/core/energy-observation.js';
+import { todayKey } from '../js/core/day.js';
 import { dailyTargets, validateProfile, ageFrom, bmi, bmiCategory, proteinTarget, leanBodyMass, sumNutrients } from '../js/core/nutrition.js';
 import { computeBaseline, normalizeValue, parseHealthJson, parseHealthCsv, createAggregator, feedXmlChunk, repairMisscaledEnergy, clearImplausibleValues } from '../js/core/health.js';
 import { nutrientsFor, validateFood } from '../js/data/foods.js';
@@ -53,10 +54,19 @@ test('numeric contracts reject booleans and invalid quantities without hiding or
   assert.equal(merged.issues.some(i=>i.field==='grams'),true);
   assert.equal(original.grams,-5);
 });
+/*
+ * 自然日的两端按**本机时区**算，别写死 +08:00。
+ *
+ * computeBaseline 拿 `new Date(`${today}T00:00:00`)` 当 now，那是本地零点；
+ * 而 completeEnergyDay 要求 `end <= now`。写死 +08:00 的话，在比它更东的时区
+ * （实测 Australia/Sydney）昨天的「+08:00 那天的末尾」落在本地今天零点之后，
+ * 昨天那一行就被判成还没结束 —— 配对日少一天。CI 跑 UTC，所以这条一直没露头。
+ */
 export function fullDay(date, restingEnergy = 1500, activeEnergy = 200) {
-  const end = new Date(`${date}T00:00:00+08:00`); end.setUTCDate(end.getUTCDate() + 1);
+  const start = new Date(`${date}T00:00:00`);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
   return { date, restingEnergy, activeEnergy, energyObservedAt: end.toISOString(),
-    energyCoverage: { status: 'complete', start: new Date(`${date}T00:00:00+08:00`).toISOString(), end: end.toISOString() } };
+    energyCoverage: { status: 'complete', start: start.toISOString(), end: end.toISOString() } };
 }
 
 test('F01: missing, zero, future, suspect and per-field misalignment share a single verdict', () => {
@@ -84,13 +94,73 @@ test('F01/F03: ring and advice use same value, formula plan does not mean no syn
   } finally { Object.assign(state, saved); }
 });
 
+/*
+ * 截止时间要在**任何时区**下都落在这一天里面。
+ *
+ * 原先写的是 `2026-09-06T08:00:00+08:00`，而测试不钉时区：在 UTC 下它正好等于
+ * 当天零点，也就是「日界」而不是「早上八点」—— 这条用例想说的「同步停在早上」
+ * 在 CI 上根本没被表达出来。08:00Z 在 UTC 和 +08:00 下都在日内，也都在末尾一小时之外。
+ */
 test('F02: partial and unknown historical records are excluded; three complete paired days enable baseline', () => {
-  const partial = { date: '2026-09-06', restingEnergy: 600, activeEnergy: 100, energyObservedAt: '2026-09-06T08:00:00+08:00' };
+  const partial = { date: '2026-09-06', restingEnergy: 600, activeEnergy: 100, energyObservedAt: '2026-09-06T08:00:00Z' };
   assert.equal(completeEnergyDay(partial, now), null);
   assert.equal(computeBaseline([fullDay('2026-09-05'), partial], [], today.date).restingEnergy, null);
   const rows = ['04','05','06'].map(d => fullDay(`2026-09-${d}`));
   const b = computeBaseline([...rows, { ...partial, date: '2026-09-03' }], [], today.date);
   assert.equal(b.energyPairedDays, 3); assert.equal(b.restingEnergy, 1500); assert.equal(b.activeEnergy, 200);
+});
+
+/*
+ * 3.15.0 之前存下的消耗记录不许因为「没有 coverage 字段」被整批作废。
+ *
+ * 那次改动把「历史日可用」的判据收成了显式的 `coverage.status === 'complete'`，
+ * 而老行根本没有这个字段（当年还不存在）。结果是用户之前所有的每日消耗一次性消失：
+ * 当日收支、趋势图、近 7 日、14 天基线全空 —— 数字却一条不少地躺在 IndexedDB 里。
+ * 判据当时连「最后样本正好结束于次日零点」和「只同步到早上八点」都分不出，
+ * 两者同样是 unknown-coverage，说明它拦的不是残缺，是「没有元数据」。
+ *
+ * 现在按老行自带的 energyObservedAt（旧聚合器里就是「当天最后一个样本结束于几点」）反推。
+ */
+test('F02: 3.15.0 之前的老记录按自带的截止时间反推覆盖范围，不因为缺字段整批作废', () => {
+  const legacy = (patch) => ({ date: '2026-09-05', restingEnergy: 1650, activeEnergy: 520, ...patch });
+  const dayEnd = new Date('2026-09-05T00:00:00'); dayEnd.setDate(dayEnd.getDate() + 1);
+  const at = (ms) => new Date(dayEnd.getTime() + ms).toISOString();
+  const usable = [
+    ['样本正好结束于次日零点', legacy({ energyObservedAt: at(0) })],
+    ['样本停在 23:58，仍算走完了这一天', legacy({ energyObservedAt: at(-2 * 60000) })],
+    ['来源只给了日期、没给钟点', legacy({ energyObservedAt: new Date('2026-09-05T00:00:00').toISOString() })],
+    ['连截止时间都没有', legacy({})],
+  ];
+  for (const [label, row] of usable) {
+    const o = energyObservation(row, row.date, now);
+    assert.equal(o.status, 'valid', label);
+    assert.equal(o.burnedNow, 2170, label);
+  }
+  // 反推不是无条件信任：真的停在半路、或者时间戳压根不属于这一天，照旧排除
+  const dropped = [
+    ['同步停在这一天的中途', legacy({ energyObservedAt: at(-10 * 3600000) }), 'partial'],
+    // 往前挪：时间戳同样不属于这一天，但别挪到 now 之后去，否则先命中 future 那一档
+    ['时间戳不属于这一天', legacy({ energyObservedAt: at(-3 * 86400000) }), 'unknown-coverage'],
+    ['数值本身不可信', legacy({ activeEnergy: 15000, energyObservedAt: at(0) }), 'suspect'],
+  ];
+  for (const [label, row, status] of dropped) {
+    const o = energyObservation(row, row.date, now);
+    assert.equal(o.status, status, label);
+    assert.equal(o.burnedNow, null, label);
+  }
+  // 今天那一行按定义就还没走完，不许被反推成「完整日」——它照旧走过期 / 缺截止时间那几档。
+  // 日期从 now 自己算，别借文件顶上那个 today 固定值：它写死 2026-09-07，
+  // 在 +08:00 以西够远的时区里那一天还没到，整条断言会变成在量 future。
+  const liveDate = todayKey(now);
+  const live = energyObservation({ ...today, date: liveDate }, liveDate, now);
+  assert.equal(live.dateMode, 'today');
+  assert.equal(live.complete, false);
+  // 整条链路：老记录要能重新撑起 14 天基线
+  const b = computeBaseline(['02','03','04'].map(d => legacy({ date: `2026-09-${d}`, energyObservedAt:
+    new Date(new Date(`2026-09-${d}T00:00:00`).getTime() + 86400000).toISOString() })), [], today.date);
+  assert.equal(b.energyPairedDays, 3);
+  assert.equal(b.restingEnergy, 1650);
+  assert.equal(b.activeEnergy, 520);
 });
 
 test('F02: explicit natural-day windows support 23 and 25 hours without changing raw totals', () => {
