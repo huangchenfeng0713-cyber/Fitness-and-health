@@ -39,8 +39,17 @@ function moreToggle(key, total, shown, rerender) {
 const KIND_COLOR = {
   kcal: 'var(--accent)', protein: 'var(--protein)', fat: 'var(--carb)',
   carb: 'var(--carb)', fiber: 'var(--accent)', sodium: 'var(--muted)',
-  sugar: 'var(--muted)', water: 'var(--water)',
+  sugar: 'var(--muted)',
 };
+/*
+ * 主卡底下**三个**方框，没有饮水。
+ *
+ * 饮水归饮食页那张一行式的卡 —— 记水的时刻是在那儿，主卡这一排回答的是
+ * 「今天这几项吃够没吃超」，而饮水只数次数、压根不画条，混进来是第四种画法。
+ * 它当年还带着数据蓝（`--water`），一排四个格三个说「到了 / 超了」、
+ * 一个说「这是哪一项」—— 两层颜色混着用的代价就是从这儿量出来的。
+ * `KIND_COLOR` 里那条 water 因此一并删掉，别再加回来。
+ */
 const CHIP_KEYS = ['fiber', 'sodium', 'sugar'];
 
 function metricRow(m) {
