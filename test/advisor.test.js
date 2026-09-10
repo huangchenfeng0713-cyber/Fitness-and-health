@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { dailyTargets } from '../js/core/nutrition.js';
 import {
   buildAdvice, currentMeal, mealBudget, deriveTags, MEALS, CAFFEINE_CUTOFF_HOUR, focusFoods,
+  distinctReasons,
 } from '../js/core/advisor.js';
 import { FOOD_BY_ID, FOODS, per100 } from '../js/data/foods.js';
 
@@ -532,4 +533,60 @@ test('「补蛋白 / 补纤维」按每 100 kcal 含量排，且不推调味料�
 
   assert.deepEqual(focusFoods('nope', FOODS), [], '不认识的类别应当返回空表');
   assert.deepEqual(focusFoods('protein', []), [], '空食物库不该炸');
+});
+
+/*
+ * 推荐行下面那两条理由只留能区分彼此的。
+ *
+ * 「适合夜间少量食用」是整批共有的 —— 它解释这一批为什么被挑出来，
+ * 而不是这一条比另一条好在哪。三行各印一遍，等于把卡片顶上那句
+ * 「夜宵 · 227 kcal · 蛋白 25g」抄了三份，真正有区别的那半句反倒被挤淡。
+ */
+test('推荐理由只显示能区分彼此的那几条，reasons 原值不动', () => {
+  const items = [
+    { nutrients: { kcal: 125, protein: 18.2 }, reasons: ['适合夜间少量食用', '+18.2g 蛋白', '每 100 kcal 含 14.6g 蛋白'] },
+    { nutrients: { kcal: 95, protein: 16.5 }, reasons: ['适合夜间少量食用', '+16.5g 蛋白', '每 100 kcal 含 17.4g 蛋白'] },
+    { nutrients: { kcal: 147, protein: 16.7 }, reasons: ['适合夜间少量食用', '+16.7g 蛋白', '每 100 kcal 含 11.4g 蛋白'] },
+  ];
+  const before = JSON.parse(JSON.stringify(items));
+  // 共有的那条删掉；「+18.2g 蛋白」和右边那列的「蛋白 18.2g」是同一个数，也删
+  assert.deepEqual(distinctReasons(items),
+    [['每 100 kcal 含 14.6g 蛋白'], ['每 100 kcal 含 17.4g 蛋白'], ['每 100 kcal 含 11.4g 蛋白']]);
+  // reasons 是「通过了哪道筛选」的证据，显示什么是另一件事，不许就地改掉
+  assert.deepEqual(items, before);
+
+  // 只有一条时「共有」和「独有」是同一件事，删完就什么都不剩了
+  assert.deepEqual(distinctReasons([{ reasons: ['适合加餐，方便少量食用'] }]), [['适合加餐，方便少量食用']]);
+
+  // 全都一样时退回第一条，宁可重复也不留空
+  assert.deepEqual(distinctReasons([{ reasons: ['适合早餐'] }, { reasons: ['适合早餐'] }]),
+    [['适合早餐'], ['适合早餐']]);
+
+  // 没有共有的就一条不删，最多给两条
+  assert.deepEqual(distinctReasons([{ reasons: ['甲', '乙', '丙'] }, { reasons: ['丁', '戊'] }]),
+    [['甲', '乙'], ['丁', '戊']]);
+});
+
+test('整批推荐里，共有的时段理由不会在每一行重复', () => {
+  const a = buildAdvice({ targets: dailyTargets({ sex: 'male', age: 30, heightCm: 175, weightKg: 70,
+    activity: 'light', goal: 'maintain' }), intake: { kcal: 0, protein: 0, fat: 0, carb: 0, fiber: 0, sugar: 0, sodium: 0 },
+    entries: [], profile: { sex: 'male', age: 30, heightCm: 175, weightKg: 70, activity: 'light', goal: 'maintain' },
+    health: {}, baseline: {}, now: new Date('2026-09-10T22:30:00+08:00') });
+  if (a.recommend.length < 2) return;
+  const shown = a.recommend.map(r => r.distinctReasons);
+  assert.ok(shown.every(list => Array.isArray(list) && list.length > 0), '有推荐行一条理由都没剩下');
+  const everywhere = shown[0].filter(r => shown.every(list => list.includes(r)));
+  assert.deepEqual(everywhere, [], `这几条理由每一行都写了一遍：${everywhere.join('、')}`);
+  // 完整依据仍在 reasons 里，时段筛选的证据没被显示逻辑删掉
+  assert.ok(a.recommend.every(r => r.reasons.length >= r.distinctReasons.length));
+});
+
+/* 同一行里不许把右边已经印着的热量 / 蛋白再写一遍 */
+test('推荐行的理由不重复右边那列已经印着的数', () => {
+  const a = buildAdvice({ targets, profile, intake: { ...zero }, entries: [], now: at('22:30') });
+  for (const r of a.recommend) {
+    const printed = [`+${r.nutrients.protein}g 蛋白`, `${r.nutrients.kcal} kcal / ${r.nutrients.protein}g 蛋白`];
+    const dup = (r.distinctReasons || []).filter(x => printed.includes(x));
+    assert.deepEqual(dup, [], `${r.food.name} 把右边那列的数又写了一遍：${dup.join('、')}`);
+  }
 });

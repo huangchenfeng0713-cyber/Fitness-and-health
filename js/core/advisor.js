@@ -389,6 +389,41 @@ function scoreFood(food, ctx) {
   };
 }
 
+/**
+ * 每一行**该显示**哪几条理由：只留下能把它和别的行区分开的那些。
+ *
+ * 「适合夜间少量食用」这类理由是**整批**推荐共有的 —— 它解释的是这一批为什么
+ * 被挑出来，而不是这一条比另一条好在哪。三条推荐各印一遍，等于把卡片顶上那句
+ * 「夜宵 · 227 kcal · 蛋白 25g」又抄了三份，而真正有区别的那半句（`+18.2g 蛋白`）
+ * 反倒被挤淡了。健身页的「主练 XX」在等于筛选条件本身时省掉，是同一条规矩。
+ *
+ * **写进 `distinctReasons`，不动 `reasons`。** 后者是这一条完整的入选依据，
+ * 「每条推荐都带着『适合加餐』」正是「它通过了加餐那道筛选」的证据
+ * （`test/advisor.test.js` 就是这么验时段规则的）。显示什么是另一件事，
+ * 就地删掉原值会把那个证据一起删了。
+ *
+ * 只有一条推荐时不删：那时候「共有」和「独有」是同一件事，删完就什么都不剩了。
+ * 某一条被删光时退回它原来的第一条，宁可重复也不留空。
+ */
+export function distinctReasons(items = []) {
+  const shared = items.length < 2 ? []
+    : items[0].reasons.filter((r) => items.every((it) => it.reasons.includes(r)));
+  return items.map((it) => {
+    const kept = it.reasons.filter((r) => !shared.includes(r) && !restatesHeadline(it, r));
+    return (kept.length ? kept : it.reasons.slice(0, 1)).slice(0, 2);
+  });
+}
+
+/*
+ * 推荐行右边固定印着热量和蛋白，那是这张卡的契约，不是某一次渲染的偶然。
+ * 所以「+18.2g 蛋白」这条理由摆到行里，就是同一个数在同一行写了两遍 ——
+ * 而它挤掉的是「每 100 kcal 含 14.6g 蛋白」，那句在别处一个字都没有。
+ */
+function restatesHeadline(item, reason) {
+  const { kcal, protein } = item.nutrients || {};
+  return reason === `+${protein}g 蛋白` || reason === `${kcal} kcal / ${protein}g 蛋白`;
+}
+
 /** 把蛋白缺口翻译成"相当于多少食物"，让数字更有体感 */
 function proteinEquivalent(grams) {
   if (grams <= 0) return null;
@@ -504,6 +539,8 @@ export function buildAdvice(input) {
     recommend.push(item);
     if (recommend.length >= 6) break;
   }
+  // 该显示哪几条另存一份；`reasons` 保持完整，它还是「通过了哪道筛选」的证据
+  distinctReasons(recommend).forEach((shown, i) => { recommend[i].distinctReasons = shown; });
 
   // ---- 避免 ----
   // ---- 状态判定 ----

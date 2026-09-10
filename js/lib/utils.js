@@ -366,7 +366,7 @@ export { withUnit, unitGap } from '../core/units.js';
  * 小数小时（`6.7 小时`）那个写法已经删掉：它只在图表纵轴上说得通，
  * 摆到卡片上就得让人把 0.7 乘回 60 才知道是多久。
  */
-export { formatDuration } from '../core/duration.js';
+export { formatDuration, durationParts } from '../core/duration.js';
 
 /** 轻量提示条 */
 let toastTimer = null;
