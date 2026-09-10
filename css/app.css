@@ -28,7 +28,6 @@
   --accent-soft: #e5f4ef;
   --action-fill: #087d62;
   --on-action: #ffffff;
-  --touch-target: 44px;
   --ring-eat: #4ca38e;
   --ring-eat-wrap: #2d7d6b;
   --ring-burn: #cbb67a;
@@ -1305,10 +1304,14 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 .exercise-meta-tag.pattern { color: var(--muted); font-weight: var(--w-medium); }
 .exercise-meta-tag.type { color: var(--faint); }
-/* 「上次 60kg × 8,8,6」：比标签还轻一档，扫列表时不该跟动作名抢 */
+/*
+ * 「上次 60kg × 8,8,6」：比标签还轻一档，扫列表时不该跟动作名抢。
+ * 行高 1.5（12px 上正好 18px）和上面那排标签一致 —— 1.4 算出 16.8，
+ * 带这一行的动作行下边缘就落在半个像素上，hairline 会淡掉一半。
+ */
 .ex-last {
   margin-top: var(--space-0); color: var(--faint); font-size: var(--fs-caption);
-  font-variant-numeric: tabular-nums; line-height: 1.4;
+  font-variant-numeric: tabular-nums; line-height: 1.5;
 }
 /* 已经选了高度重合的一对时，把「换掉哪个」直接摆出来 */
 .rec-swap {
@@ -2927,24 +2930,27 @@ h1, h2, h3 { letter-spacing: -.02em; }
 .equip-filter-count { color: var(--muted); font-size: var(--fs-caption); font-variant-numeric: tabular-nums; }
 .equip-filter-check { color: var(--accent); text-align: center; font-weight: var(--w-bold); }
 
-/* 重复原因本来就属于辅助信息：短标签常驻，点一下再看具体和谁冲突。 */
+/*
+ * 重复提示是一行说明，不是胶囊。
+ *
+ * 上一版把它做成了「短标签常驻 + 点一下看和谁冲突」：一枚圆角色块，
+ * 外面还套着 44px 的命中盒。三处都不对 ——
+ *   1. **胶囊留给「可以选的状态」**，这一条点不动也选不了（和它上面那三个
+ *      「水平推 · 复合动作」是同一类说明，那三个早就定成一行文字了）；
+ *   2. 一列十几行，每行多一个色块，比动作名还抢眼；
+ *   3. 藏起来的那半句正是有用的那半句 —— 「模式相近」谁都看得懂，
+ *      「和哪个动作相近」才是要做决定的信息，而它要再点一下才出来。
+ * 现在整句直接写在行里：`与「哑铃卧推」动作模式相近`。
+ */
 .ex-clash-slot.ex-clash {
-  display: inline-flex;
-  width: fit-content;
-  margin-top: var(--space-1);
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  display: block;
+  margin-top: var(--space-0);
   color: var(--warn);
   font-size: var(--fs-caption);
-  font-weight: var(--w-semibold);
-  line-height: 1.35;
-  cursor: pointer;
+  /* 1.5 在 12px 上正好 18px：动作行的下边缘才落在整像素上，hairline 不会隔一条淡一条 */
+  line-height: 1.5;
 }
-.ex-clash-slot.ex-clash.soft {
-  color: var(--muted);
-  background: var(--card-2);
-}
+.ex-clash-slot.ex-clash.soft { color: var(--muted); }
 
 /* 份量面板里的结构行和今日主卡用同一根碳水/脂肪刻度。 */
 .impact-split-row { margin-top: var(--space-2); }
@@ -3147,33 +3153,55 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
   .toast { background: #252b30; }
 }
 
-/* Shared hierarchy and training pilot. Layout follows content; touch targets do not shrink. */
+/*
+ * 共用层级 + 健身页。
+ *
+ * **这一段不许再拿一个新的高度 token 通栏压过阶梯。**
+ * 上一版在这里写了一整排 `min-height: var(--touch-target)`（44px，和
+ * --control-md 是同一个数，等于第五档），把挑法下拉、器械档位、分段控件、
+ * 重复提示、连同卡头上那个 ⓘ 一起撑到 44 —— 实测：一枚 12px 的「模式相近」
+ * 躺在 44px 的盒子里，动作行从 65px 涨到 113px；13px 的「本次训练 / 训练记录」
+ * 撑成 48px 的灰槽；14px 的 ⓘ 记号被拉成 44×44，打开时那块圆底色变成一张大饼。
+ * 读出来就是「文字外框过大」—— 而全应用其余地方这几样分别是 36 / 36 / 14。
+ * 命中尺寸不靠把画出来的东西撑大：ⓘ 用 `::after { inset: -15px }` 撑热区，
+ * 阶梯里最矮的可点元素本来就是 --control-sm 36。
+ */
 .ui-card-heading { margin-bottom: var(--space-3); }
 .ui-card-heading .card-head { align-items: center; margin-bottom: 0; }
-.ui-card-heading .card-head-actions { height: auto; }
 .ui-card-heading .card-desc { margin-top: var(--space-2); }
 .ui-empty-state .empty-hint { line-height: 1.5; }
 .training-view-tabs { flex: none; }
-.training-view-tabs .chip-btn { flex: 1; min-height: var(--touch-target); }
+.training-view-tabs .chip-btn { flex: 1; }
 .training-panel { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; }
-.training-panel .text-btn, .training-panel summary, .training-picker .chip-btn,
-.training-picker .picker-mode-select, .training-picker .equip-filter-btn { min-height: var(--touch-target); }
-.training-panel .text-btn { min-width: var(--touch-target); }
 .training-panel .plan-row { align-items: center; gap: var(--space-2); padding-block: var(--space-3); }
 .training-panel .plan-main .form-hint { display: block; margin-top: var(--space-1); }
-.training-panel .set-editor { padding: 0 0 var(--space-3); }
+/*
+ * 行尾两个动作：「记组」是这一行的主事，「移除」退到中性灰。
+ *
+ * 不用红：一列动作每行挂一个红字，扫下来像一排告警，而移除本来就带撤销。
+ * 按下去那一下才亮成 --danger，说清楚这一下是要删东西。
+ */
+.plan-row-actions { flex: none; display: flex; align-items: center; gap: var(--space-1); }
+.plan-remove { color: var(--muted); font-weight: var(--w-regular); }
+.plan-remove:active { color: var(--danger); }
+/*
+ * 组数编辑器缩在动作名下面（索引圆点 22 + 行内 gap 8），不是顶回卡片左边缘。
+ *
+ * 它是**某一个动作**的展开层，摊平之后和「今日动作」的标题、日期摘要
+ * 起在同一条线上，读出来是卡片自己多长了一段，看不出在编辑哪一行。
+ */
+.training-panel .set-editor { padding: 0 0 var(--space-3) 30px; }
 .training-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
 .training-edit-actions .secondary-btn { margin-top: 0; }
 .training-add { width: 100%; margin-top: var(--space-3); }
 .training-load-note { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); margin-top: var(--space-3); }
 .training-load-note > span { min-width: 0; overflow-wrap: anywhere; }
-.training-panel .info-tip > summary { width: var(--touch-target); height: var(--touch-target); }
 .training-panel .tip-action { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .training-advice > summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); cursor: pointer; }
 .training-advice > summary span { color: var(--muted); font-size: var(--fs-footnote); }
 .training-advice .insight-list { margin-top: var(--space-3); }
 .training-log-day h4 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-body); }
-.training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--touch-target); }
+.training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .training-history-card .log-name { min-width: 0; overflow-wrap: anywhere; }
 .training-history-card .log-meta { white-space: normal; text-align: right; }
 .training-planned { margin-top: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); }
@@ -3184,9 +3212,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-picker .exercise-picker-card { padding: 0; border-radius: 0; background: transparent; }
 .training-picker .picker-card-head:has(.card-head-actions:empty) { display: none; }
 .training-picker .picker-card-head { justify-content: flex-end; margin-bottom: var(--space-2); }
-.training-picker .picker-card-head .card-head-actions { height: auto; }
-.training-picker .exercise-choice-action:disabled { opacity: 1; }
-.training-picker .ex-clash-slot { border: 0; background: transparent; color: var(--muted); cursor: pointer; min-height: var(--touch-target); text-align: left; }
+.training-picker .ex-clash-slot { color: var(--muted); text-align: left; }
 .training-picker .ex-clash-slot:empty { display: none; }
 .training-picker .picker-view-switch { flex-shrink: 0; }
 .training-picker .equip-filter-wrap { max-width: 100%; }
@@ -3202,4 +3228,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 @media (max-width: 380px) {
   .training-picker .picker-scope-row { gap: var(--space-2); }
   .training-panel .set-row { flex-wrap: wrap; }
+  /*
+   * 窄屏上缩进要让位给内容。
+   * 320px 上那一行本来正好放得下（要 270px，有 270px），缩掉 30 就折成两行 ——
+   * 一组占 80px 而不是 36px。「看得出这段属于哪个动作」这时候由展开态本身
+   * （上面那行写着「收起」）说清楚，缩进不值这个价。
+   */
+  .training-panel .set-editor { padding-left: 0; }
 }

@@ -49,11 +49,85 @@ try {
   await page.locator('.training-select-bar .select-bar-go').click();
   await page.waitForFunction(() => !document.querySelector('#app').inert);
   check('确认一次加入并返回记组页面', (await items()).length === batch.length && await page.locator('.plan-row').count() === batch.length);
+  /*
+   * 加错了要拿得下来，而且两条路都得通。
+   *
+   * 上一版两条路都堵着：动作行右边只有「记组」，移除藏在展开层的第三个按钮里；
+   * 挑选弹层里已加入的那一行是一枚 `disabled` 的绿勾，点了没有任何反应 ——
+   * 而「刚加错了想撤掉」正是人回到那一页最常见的理由，读出来就是
+   * 「加进去的动作根本删不掉」。
+   */
+  const removedName = (await page.locator('.plan-row .ex-name').first().textContent()).trim();
+  await page.locator('.plan-remove').first().click();
+  await page.waitForTimeout(250);
+  check('动作行上就能移除，不用先展开记组', (await items()).length === batch.length - 1);
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  await page.waitForTimeout(250);
+  check('移除可撤销，且放回原来的位置', (await items()).length === batch.length
+    && (await page.locator('.plan-row .ex-name').first().textContent()).trim() === removedName);
   await open();
+  await page.fill('.exercise-search-input', removedName);
+  await page.waitForTimeout(200);
+  const chosenPick = page.locator('.exercise-search-results .ex-row.chosen .ex-pick').first();
+  check('弹层里已加入那一行的 ✓ 是能点的，不是个死勾', await chosenPick.isEnabled());
+  await chosenPick.click();
+  await page.waitForTimeout(300);
+  check('在弹层里点 ✓ 就把它移出本次训练', (await items()).length === batch.length - 1);
+  await page.getByRole('button', { name: '撤销', exact: true }).click();
+  await page.waitForTimeout(300);
+  check('弹层里移出同样能撤销', (await items()).length === batch.length);
+  await page.fill('.exercise-search-input', '');
+  await page.waitForTimeout(200);
   await page.locator('.picker-view-switch').getByRole('tab', { name: '推荐', exact: true }).click();
   check('主动重开后，已安排模式不会自动补齐六个', await page.locator('.rec-picks .ex-row').count() === 0);
   await close();
   check('关闭选择器后焦点回到添加入口', await page.locator('.training-add').evaluate(el => el === document.activeElement));
+  /*
+   * 文字外框不许比字大出一截。
+   *
+   * v3.16.0 在样式表末尾拿一个新的 44px token 通栏压过控件高度阶梯，实测：
+   * 13px 的分段控件撑成 44（全应用其余地方 36）、14px 的 ⓘ 记号被拉成 44×44
+   * （其余地方 14，热区靠 ::after 撑，不靠把画出来的东西撑大）、
+   * 一枚 12px 的「模式相近」躺在 44px 的盒子里，带这条提示的动作行
+   * 从 65px 涨到 113px。命中尺寸和视觉体量是两件事，这里逐样量回阶梯。
+   */
+  // 量最高的那一个：同一类控件只要有一处被撑大就算漏了。
+  // 量不到（null）也算漏 —— 那说明这一条根本没测到东西，不是「没问题」。
+  const measure = () => page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const box = (sel) => {
+      const all = [...document.querySelectorAll(sel)].filter((el) => el.getClientRects().length);
+      return all.length ? +Math.max(...all.map((el) => el.getBoundingClientRect().height)).toFixed(1) : null;
+    };
+    const clash = document.querySelector('.ex-clash-slot.ex-clash');
+    return {
+      sm: parseFloat(root.getPropertyValue('--control-sm')),
+      info: parseFloat(root.getPropertyValue('--info-size')),
+      chip: box('.training-picker .picker-scope-switch .chip-btn'),
+      mode: box('.picker-mode-select'),
+      equip: box('.equip-filter-btn'),
+      tip: box('.training-panel .info-tip > summary'),
+      clash: clash && { h: +clash.getBoundingClientRect().height.toFixed(1), line: parseFloat(getComputedStyle(clash).lineHeight) },
+    };
+  });
+  // ⓘ 在「部位训练间隔」那张卡上一定有一个；挑选器的控件要弹层开着才量得到
+  await history();
+  const onPage = await measure();
+  await current();
+  await open();
+  const inSheet = await measure();
+  const over = (got, limit) => got == null || got > limit;
+  const tooBig = [
+    over(inSheet.chip, inSheet.sm + 1) && `分段控件 ${inSheet.chip}（阶梯是 ${inSheet.sm}）`,
+    over(inSheet.mode, inSheet.sm + 1) && `挑法下拉 ${inSheet.mode}`,
+    // 器械档位多一圈描边和一档 padding-block，档位名换行时要撑得开
+    over(inSheet.equip, inSheet.sm + 4) && `器械档位 ${inSheet.equip}`,
+    over(onPage.tip, onPage.info + 1) && `ⓘ 记号 ${onPage.tip}（阶梯是 ${onPage.info}）`,
+    inSheet.clash && inSheet.clash.h > inSheet.clash.line * 1.5
+      && `重复提示 ${inSheet.clash.h}（一行是 ${inSheet.clash.line}）`,
+  ].filter(Boolean);
+  check(`健身页的控件仍在高度阶梯上，文字外框没有被撑大${tooBig.length ? '：' + tooBig.join('，') : ''}`, tooBig.length === 0);
+  await close();
   // Reproduce browsers that do not enumerate a retained exit effect after hiding.
   // Explicit animation handles must release fill:forwards independently of enumeration.
   await page.evaluate(() => {

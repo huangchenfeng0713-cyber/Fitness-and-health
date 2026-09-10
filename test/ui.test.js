@@ -1669,6 +1669,39 @@ test('字号、图标、控件三条阶梯，每档都看得出区别，也不�
 });
 
 /*
+ * 控件高度只有一条阶梯，不许在旁边另起一个同值的 token。
+ *
+ * 上面那条只盯着 --fs-* 和 --icon-*，控件高度是从这个缺口漏出去的：
+ * v3.16.0 加了一个 `--touch-target: 44px`（和 --control-md 一模一样的数），
+ * 然后在样式表末尾拿它给整个健身页写了一排 min-height —— 挑法下拉、器械档位、
+ * 分段控件、连同 14px 的 ⓘ 记号一起撑到 44，而全应用其余地方分别是 36 / 36 / 14。
+ * 读出来就是「健身页的文字外框比别处大一圈」。
+ *
+ * 阶梯本身没有被改，只是被**绕开**了 —— 同一个 44 有两个名字的时候，
+ * 「改样式前先看 app.css 顶部的 token」这句话就不成立了。
+ */
+test('控件高度只有一条阶梯，不许另起一个同值的高度 token', () => {
+  const css = read('css/app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const control = [...css.matchAll(/--control-([a-z]+): *([0-9.]+)px/g)]
+    .map(([, name, px]) => [name, Number(px)]);
+  assert.equal(control.length, 4,
+    `控件高度不是四档：${control.map(([n, px]) => `${n}=${px}`).join(' / ')}`);
+  const steps = control.map(([, px]) => px);
+  for (const [i, px] of steps.entries()) {
+    for (const other of steps.slice(i + 1)) {
+      assert.ok(Math.abs(px - other) >= 2, `${px} 和 ${other} 差不到 2px，分不出层级`);
+    }
+  }
+  // :root 里不许再出现一个和某一档等值、名字却不在阶梯上的长度 token
+  const root = css.slice(css.indexOf(':root'));
+  const strays = [...root.slice(0, root.indexOf('}')).matchAll(/--([a-z0-9-]+): *([0-9.]+)px/g)]
+    .filter(([, name, px]) => !name.startsWith('control-') && steps.includes(Number(px)))
+    .map(([, name, px]) => `--${name}: ${px}px`);
+  assert.deepEqual(strays, [],
+    `又造了一个和 --control-* 等值的高度 token：${strays.join(' / ')}`);
+});
+
+/*
  * 按钮上的字只有三档，而且并排的两个按钮必须同档。
  * 「继续添加 | 记录到午餐」那一行里，次按钮曾比旁边的实心主按钮小一档 ——
  * 两个并排的按钮字不一样大，一眼就看得出没对齐。

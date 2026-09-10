@@ -190,13 +190,20 @@ function clashWith(e) {
   return worst;
 }
 
+/*
+ * 重复提示写成整句，不做成「短标签 + 点开看详情」。
+ *
+ * 「模式相近」这四个字谁都看得懂，可它不构成一个判断 —— 要不要换掉这个动作，
+ * 取决于**和谁**相近。把那半句藏进一次点击里，等于把有用的那半句藏了起来，
+ * 而列表里每一行都多出一个点得动的色块。
+ */
 function clashLine(e) {
   if (picked().includes(e.id) || pending.has(e.id)) return null;
   const clash = clashWith(e);
   if (!clash) return null;
   return clash.level === 'high'
-    ? { cls: 'ex-clash', badge: '模式相近', detail: `与「${clash.other.name}」动作模式相近` }
-    : { cls: 'ex-clash soft', badge: '部分相近', detail: `和「${clash.other.name}」部分重叠` };
+    ? { cls: 'ex-clash', text: `与「${clash.other.name}」动作模式相近` }
+    : { cls: 'ex-clash soft', text: `和「${clash.other.name}」部分重叠` };
 }
 
 function exerciseMeta(tags) {
@@ -220,10 +227,18 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
   const pickNode = h('button.ex-pick.exercise-choice-action', {
     type: 'button',
     'aria-pressed': String(chosen || marked),
-    'aria-label': `${chosen ? '已加入' : marked ? '取消选择' : '选择'} ${e.name}`, disabled: chosen,
+    'aria-label': `${chosen ? `从本次训练移除 ${e.name}` : marked ? `取消选择 ${e.name}` : `选择 ${e.name}`}`,
     onclick: async () => {
-      // 已加入的动作在本次训练中管理，选择面板只维护待选项。
-      if (chosen || committing) return;
+      if (committing) return;
+      /*
+       * 已加入的那一行点一下就是移出去 —— 和饮食页备选里的「＋ 变成 ✓，
+       * 点一下移出去」是同一条规矩。
+       *
+       * 上一版这里是 `disabled: chosen`：一枚绿色的 ✓ 摆在那儿，点了没有任何反应。
+       * 而「刚加错了想撤掉」正是人回到这一页最常见的理由，于是读出来是
+       * 「加进去就拿不下来了」。移除照旧走带撤销的那条路。
+       */
+      if (chosen) { await removeExerciseWithUndo(e); rerender(); return; }
       if (pending.has(e.id)) pending.delete(e.id); else pending.add(e.id);
       const on = pending.has(e.id);
       row.classList.toggle('marked', on);
@@ -236,15 +251,7 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
       if (pickerBar) pickerBar.render();
     },
   }, icon(chosen || marked ? 'check' : 'plus'));
-  const clashNode = h('button.ex-clash-slot', { type: 'button',
-    onclick: (event) => {
-      const detail = clashNode.dataset.detail;
-      if (!detail) return;
-      event.preventDefault();
-      event.stopPropagation();
-      toast(detail, 'info');
-    },
-  });
+  const clashNode = h('div.ex-clash-slot');
   const row = listRow({
     className: `ex-row exercise-choice-row${chosen ? ' chosen' : ''}${marked ? ' marked' : ''}`,
   },
@@ -260,9 +267,7 @@ function exerciseRow(e, rerender, scopeMuscles = null) {
     // 保留 ex-clash-slot：整条 className 覆盖掉的话，提示消失之后
     // `:empty { display: none }` 就不再命中，行里会留一道空白
     clashNode.className = line ? `ex-clash-slot ${line.cls}` : 'ex-clash-slot';
-    clashNode.textContent = line ? line.badge : '';
-    clashNode.dataset.detail = line ? line.detail : '';
-    clashNode.title = line ? line.detail : '';
+    clashNode.textContent = line ? line.text : '';
   };
   row.syncClash();
   return row;
@@ -496,6 +501,14 @@ function setRow(item, index, set) {
     }, icon('close')));
 }
 
+/*
+ * 「移除」写在动作行上，不藏进「记组」展开层里。
+ *
+ * 原先这一行右边只有「记组」，移除是展开之后才出现的第三个按钮 ——
+ * 而挑选弹层里那枚已加入的 ✓ 又是点不动的，于是加错一个动作之后，
+ * 两条路都走不通，读出来就是「加进去的动作根本删不掉」。
+ * 撤销由 removeExerciseWithUndo 给，所以摆在外面也不怕手滑。
+ */
 function planRow(exercise, index) {
   const item = session().items.find(i => i.id === exercise.id);
   const open = expanded === exercise.id;
@@ -505,20 +518,24 @@ function planRow(exercise, index) {
     h('div.plan-row', null,
       h('span.plan-index', null, String(index + 1)),
       h('div.plan-main', null, h('div.ex-name', null, h('strong', null, exercise.name)), h('span.form-hint', null, label)),
-      h('button.text-btn', { type: 'button', 'aria-expanded': String(open),
-        'aria-controls': `sets-${exercise.id}`, onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
-      }, open ? '收起' : '记组')),
+      h('div.plan-row-actions', null,
+        h('button.text-btn', { type: 'button', 'aria-expanded': String(open),
+          'aria-controls': `sets-${exercise.id}`, onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
+        }, open ? '收起' : '记组'),
+        h('button.text-btn.plan-remove', { type: 'button', 'aria-label': `从本次训练移除 ${exercise.name}`,
+          onclick: () => removeExerciseWithUndo(exercise) }, '移除'))),
     open ? h('div.set-editor', { id: `sets-${exercise.id}` },
       h('p.form-hint', null, `${EQUIPMENT[exercise.equipment]} · 主练 ${muscleLine(exercise)}`),
       item.sets.length ? item.sets.map((set, k) => setRow(item, k, set))
         : h('p.form-hint', null, '重量可留空；填写次数后计为已记录组。'),
       h('div.training-edit-actions', null,
-        h('button.secondary-btn', { onclick: () => updateSession(items => items.map(i => {
+        // compact：内边距收窄、宽度跟着文字走。撑满一行的话，这个「某一个动作
+        // 加一组」的次动作会和卡片底下那个「添加动作」印成同样大的一块绿。
+        h('button.secondary-btn.compact', { onclick: () => updateSession(items => items.map(i => {
           if (i.id !== exercise.id) return i;
           const last = i.sets.at(-1);
           return { ...i, sets: [...i.sets, { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null }] };
-        })) }, item.sets.length ? '再加一组' : '加第一组'),
-        h('button.text-btn.danger', { onclick: () => removeExerciseWithUndo(exercise) }, '移除动作'))) : null);
+        })) }, item.sets.length ? '再加一组' : '加第一组'))) : null);
 }
 
 function planCard() {
