@@ -107,13 +107,29 @@ export function weeklySummary({
      * 配对日要求那天既有饮食记录、又有设备记的静息与活动能量。只写「—」的话，
      * 用户不知道该去补记饮食还是去同步手表 —— 这两件事要做的动作完全不同，
      * 而上面那行「饮食记录 N / 7 天」只交代了其中一半。
+     *
+     * **缺的那一半有三种，不是两种。** 少数的那一档是「设备记录在，但那几天
+     * 没走完」：快捷指令当天最后一次自动化跑得早（比如 22:00），
+     * 之后的消耗就没人上传，这些天过不了完整日判据。它和「手表压根没同步」
+     * 要做的动作完全不同 —— 一个是把最后那次自动化挪晚，一个是去连手表 ——
+     * 可原先都落在 `hasSpend` 为假这一边，一律写成「缺设备记录」，
+     * 而设备记录明明一天不少地躺在那儿。
+     *
+     * **两个计数还都数错了边**：原先是 `health.filter(...)`，
+     * 手表一天都没同步时 `health` 是空的，`intakeDays` 跟着归零 ——
+     * 于是「记了七天饮食、一天都没同步」这个最该点名「缺设备记录」的情况，
+     * 反而落到了兜底那句「记录不齐」上。分母要按窗口里的天数各数各的。
      */
-    const intakeDays = health.filter(hasIntake).length;
+    const hasEnergy = hd => presentNumber(hd.restingEnergy) && presentNumber(hd.activeEnergy);
+    const intakeDays = diet.length;
+    const deviceDays = health.filter(hasEnergy).length;
     const spendDays = health.filter(hasSpend).length;
+    const enough = n => n >= MIN_POINTS_FOR_CLAIM;
     rows.push(row('balance', `已配对 ${paired.length}/${days} 日收支`,
-      spendDays >= MIN_POINTS_FOR_CLAIM && intakeDays < MIN_POINTS_FOR_CLAIM ? '缺饮食记录'
-        : intakeDays >= MIN_POINTS_FOR_CLAIM && spendDays < MIN_POINTS_FOR_CLAIM ? '缺设备记录'
-          : '记录不齐'));
+      enough(spendDays) && !enough(intakeDays) ? '缺饮食记录'
+        : enough(intakeDays) && !enough(deviceDays) ? '缺设备记录'
+          : enough(intakeDays) && enough(deviceDays) && !enough(spendDays) ? '同步停在半路'
+            : '记录不齐'));
   }
 
   const avgOf = (key, digits = 0) => {

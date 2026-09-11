@@ -2,6 +2,7 @@ import { completeRow } from './fixtures/review-samples.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { weeklySummary, windowDates } from '../js/core/weekly-summary.js';
+import { mergeApplePartialRows } from '../js/core/health-merge.js';
 import { MIN_POINTS_FOR_CLAIM } from '../js/core/trend-reading.js';
 
 const day = (n, end = '2026-08-28') => new Date(Date.parse(`${end}T00:00:00Z`) - n * 86400000)
@@ -178,6 +179,40 @@ test('配对数据不足时直说不足，不硬凑一个数', () => {
   assert.equal(s.pairedDays, 0);
   // 算不出来时不摆一个哑巴「—」：那样看不出该去补记饮食还是去同步手表
   assert.match(by.balance.value, /记录不齐|缺饮食记录|缺设备记录/);
+});
+
+/*
+ * **缺的那一半有三种，不是两种。**
+ *
+ * 「设备记录在、但那几天没走完」和「手表压根没同步」要做的动作完全不同：
+ * 一个是把快捷指令最后那次自动化挪晚，一个是去连手表。原先两者都写
+ * 「缺设备记录」—— 而前者的设备记录一天不少地躺在那儿。
+ *
+ * 更糟的是两个计数原先都从 `health` 数组里数：手表一天都没同步时它是空的，
+ * `intakeDays` 跟着归零，于是真正该点名「缺设备记录」的那种，
+ * 反而落到了兜底那句「记录不齐」上。分母要按窗口里的天数各数各的。
+ */
+test('配不上对时点名缺的是哪一半：饮食 / 设备 / 只是同步停在半路', () => {
+  const days = [6, 5, 4, 3, 2, 1, 0].map((n) => day(n));
+  const diet = days.map((date) => ({ date, kcal: 2000, protein: 100 }));
+  const value = (opts) => rowOf(weeklySummary({
+    endDate: '2026-08-28', targets: { kcal: 2200, protein: 110 }, ...opts }), 'balance').value;
+
+  // 手表天天同步，只是当天最后一次自动化跑在 22:00 —— 设备记录一天不少
+  const stopped = days.map((date) => mergeApplePartialRows([], [{
+    date, restingEnergy: 1500, activeEnergy: 600,
+    energyObservedAt: new Date(`${date}T22:00:00`).toISOString(),
+  }])[0]);
+  assert.ok(stopped.every((r) => r.restingEnergy === 1500 && r.activeEnergy === 600),
+    '前提：设备记录确实在，这条测试才有意义');
+  assert.equal(value({ dietDaily: diet, healthDays: stopped }), '同步停在半路');
+
+  // 手表一天都没同步：这才是真的缺设备记录
+  assert.equal(value({ dietDaily: diet, healthDays: [] }), '缺设备记录');
+
+  // 反过来：设备齐、一天饮食都没记
+  assert.equal(value({ dietDaily: [], healthDays: days.map((date) =>
+    completeRow({ date, restingEnergy: 1500, activeEnergy: 600 })) }), '缺饮食记录');
 });
 
 /*
