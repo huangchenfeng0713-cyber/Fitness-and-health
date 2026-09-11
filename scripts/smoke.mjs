@@ -442,6 +442,54 @@ try {
   check('指标颜色语义：红色只给真上限', problems.length === 0, problems.join('；'));
 
   /*
+   * 主卡上「标签 → 它下面那条刻度」的距离只许有一档。
+   *
+   * 蛋白条是裸的，碳水:脂肪和三个方框的条包在 `.point-value-trigger` 里。那个按钮
+   * 原先写着 `min-height: var(--control-md)` 加 `margin: -8px 0`，而 `<button>` 会把
+   * 内容垂直居中 —— 6px 的条被顶到 44px 盒子的正中，实测离标签 15~16px，
+   * 而蛋白条只有 4px。同一种关系在同一张卡里三个距离，量渲染结果才拦得住。
+   * 热区现在靠 `::after` 撑，所以还要验一件事：条上方十几像素那种**什么都没画**的
+   * 位置仍然点得中，否则就是把热区一起改没了。
+   */
+  const spacing = await page.evaluate(() => {
+    const r = (el) => el.getBoundingClientRect();
+    const rows = [];
+    const add = (name, label, bar) => {
+      if (!label || !bar) return;
+      const btn = bar.closest('button.point-value-trigger');
+      rows.push({ name, gap: Math.round((r(bar).top - r(label).bottom) * 10) / 10,
+        hit: btn ? Math.round(parseFloat(getComputedStyle(btn, '::after').height) || 0) : null });
+    };
+    const protein = document.querySelector('.metric-row:not(.split-row)');
+    if (protein) add('蛋白质', protein.querySelector('.metric-row-top'), protein.querySelector('.macro-bar'));
+    const split = document.querySelector('.split-row');
+    if (split) add('碳水:脂肪', split.querySelector('.metric-row-top'), split.querySelector('.split-bar'));
+    document.querySelectorAll('.micro-chip').forEach((chip) =>
+      add(chip.querySelector('.micro-label')?.textContent.trim() || '方框',
+        chip.querySelector('.micro-label'), chip.querySelector('.nutrient-scale')));
+    return rows;
+  });
+  const gaps = [...new Set(spacing.map((s) => s.gap))];
+  const shortHit = spacing.filter((s) => s.hit != null && s.hit < 44);
+  check('主卡标签到刻度只有一档距离，热区不占版面',
+    spacing.length >= 5 && gaps.length === 1 && shortHit.length === 0,
+    spacing.length < 5 ? `只量到 ${spacing.length} 行`
+      : gaps.length !== 1 ? `${spacing.map((s) => `${s.name} ${s.gap}`).join('、')} —— 有 ${gaps.length} 种距离`
+        : shortHit.length ? `热区被砍矮：${shortHit.map((s) => `${s.name} ${s.hit}px`).join('、')}`
+          : `五行都是 ${gaps[0]}px，热区 44px`);
+
+  const above = await page.evaluate(async () => {
+    const track = document.querySelector('.micro-chip .nutrient-scale');
+    if (!track) return 'no-track';
+    const box = track.getBoundingClientRect();
+    // 条正上方 15px：画出来的东西一个像素都没有，只有 ::after 撑出来的热区
+    document.elementFromPoint(box.left + box.width / 2, box.top - 15)?.click();
+    await new Promise((r) => setTimeout(r, 250));
+    return document.querySelector('.point-value-tip') ? 'opened' : 'missed';
+  });
+  check('热区靠 ::after 撑出去，条上方空白处仍点得中', above === 'opened', above);
+
+  /*
    * 「你现在看到的数字不对」这几条必须一眼认得出是警告。
    * 一次样式重构里 .data-freshness 被连带删掉，文案还在、颜色和正文一样，
    * 单元测试全绿——这类退化只有量渲染结果才拦得住。

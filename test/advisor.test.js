@@ -6,6 +6,7 @@ import {
   distinctReasons,
 } from '../js/core/advisor.js';
 import { FOOD_BY_ID, FOODS, per100 } from '../js/data/foods.js';
+import { macroSplit } from '../js/core/metrics.js';
 
 const profile = { sex: 'male', age: 30, heightCm: 175, weightKg: 72, bodyFatPct: 18, activity: 'light', goal: 'cut' };
 const targets = dailyTargets(profile);
@@ -180,6 +181,30 @@ test('半天没有饮食记录时不评价“吃得慢”，也不把重分配�
   assert.match(miss.action, /若只是漏记，请先补记；若确实还没进食，下一餐按正常份量安排，不必一次补齐全天缺口。/);
 });
 
+/*
+ * **「吃得够不够多才下结论」这道闸只有一份。**
+ *
+ * `macroSplit` 自己就有（对着碳水+脂肪那块热量算），过不了只会返回 `structure: 'low'`。
+ * 今日提示原先又写了一份硬编码的 `400 / 0.3`，还拿全天总热量当分母 ——
+ * 同一个问题两份口径，中间那一段里主卡写着「偏碳水」而今日提示一个字都没有。
+ */
+test('结构提示跟着主卡那道闸走，不另立一份更严的门槛', () => {
+  // 碳水 110g + 脂肪 4g = 476 kcal：过得了 macroSplit 那道闸（306），过不了原先那份（524）
+  const intake = { ...zero, kcal: 476, carb: 110, fat: 4, protein: 0 };
+  const gaps = Object.fromEntries(Object.keys(zero)
+    .map((k) => [k, { eaten: intake[k], target: targets[k] }]));
+  const split = macroSplit(targets, gaps);
+  assert.ok(['carb', 'fat'].includes(split.structure),
+    `前提：主卡这时候已经在说「偏…」了，实际是 ${split.structure}`);
+  const oldGate = Math.max(400, targets.kcal * 0.3);
+  assert.ok(split.kcal < oldGate,
+    `前提：这一档过不了原先那份 ${Math.round(oldGate)} kcal 的闸（实际 ${split.kcal}）`);
+
+  const a = advise(intake, { entries: [{ foodId: 'x' }] });
+  assert.ok(a.insights.some((i) => /结构偏/.test(i.title)),
+    '主卡已经在说「偏…」，今日提示却一个字都没有 —— 两份口径对着同一个问题');
+});
+
 test('深夜仍无记录时不鼓励一次补完全天缺口', () => {
   const a = advise({}, { now: at('22:30') });
   assert.equal(a.trend.dayComplete, false);
@@ -219,6 +244,20 @@ test('今日提示按优先级排：数据问题在前，结构和习惯在后',
     '结构建议应说明宽泛区间，不能引用不存在的单一计划点');
   assert.doesNotMatch(split.basis, /undefined|计划里是/,
     '结构建议引用了 macroSplit 不存在的计划比例字段');
+  /*
+   * 第二段要说清**偏了意味着什么**，不能把两个百分比再念一遍就完事。
+   * 而能说的只有一句有依据的话：区间两端由成人脂肪 AMDR 反解，
+   * 而 AMDR 说的是长期习惯，不是某一天的达标线。
+   */
+  assert.match(split.basis, /长期习惯/, '没说清这条区间看的是长期习惯，一天落在外面不说明什么');
+  assert.match(split.basis, /AMDR/, '没交代区间两端的来历');
+  assert.match(split.basis, /必需脂肪酸|饱和脂肪/, '没说偏了这一侧具体意味着什么');
+  /*
+   * `carbPct` / `fatPct` 是占**碳水+脂肪那块热量**的比例，AMDR 那个 20%~35%
+   * 是占**全天总热量**。两个分母不一样，不许把前者说成「脂肪供能 X%」。
+   */
+  assert.doesNotMatch(split.basis, /脂肪供能 \d+%|脂肪占总热量/,
+    '把「占碳水+脂肪那块」的比例说成了「占全天总热量」，分母不是一个');
 
   // 三段式：每条都得说清「凭什么这么讲」
   for (const i of a.insights) {
