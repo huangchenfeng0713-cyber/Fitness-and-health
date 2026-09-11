@@ -762,18 +762,41 @@ export function buildInsights({
    * 只在这一天真吃了不少东西之后才说：早饭一碗粥就判「偏碳水」，
    * 说的是那一顿，不是这一天。
    */
+  /*
+   * **「吃得够不够多才下结论」这道闸只有一份。**
+   *
+   * `macroSplit` 自己就有（`MIN_SPLIT_KCAL` / `MIN_SPLIT_SHARE`，对着碳水+脂肪
+   * 那块热量算），过不了它只会返回 `structure: 'low'`。这里原先又写了一份
+   * 硬编码的 `400 / 0.3`，而且拿**全天总热量**当分母 —— 同一个问题两份口径：
+   * 实测 2295 kcal 的计划上，主卡 473 kcal 就下结论，今日提示要等到 689，
+   * **中间那 216 kcal 里主卡写着「偏碳水」，而这儿一个字都没有**。
+   * 删掉这一份，跟着 macroSplit 走。
+   */
   const split = macroSplit(targets, gaps);
   if (split.structure === 'carb' || split.structure === 'fat') {
-    const enough = split.kcal >= Math.max(400, (Number(targets.kcal) || 0) * 0.3);
-    if (enough) {
-      const heavy = split.structure === 'carb' ? '碳水' : '脂肪';
-      const light = split.structure === 'carb' ? '脂肪' : '碳水';
-      add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
-        `碳水：脂肪按热量算是 ${split.carbPct}：${split.fatPct}，`
-        + `碳水参考区间是 ${split.bandLo}–${split.bandHi}%。`,
-        dayComplete ? `两者怎么分有很宽的合理区间；明天可在正常三餐里调整搭配，不必今天额外补吃。`
-          : `不是问题，两者怎么分有很宽的合理区间；想贴近计划，下一餐把${light}多留一点。`);
-    }
+    const heavy = split.structure === 'carb' ? '碳水' : '脂肪';
+    const light = split.structure === 'carb' ? '脂肪' : '碳水';
+    /*
+     * 第二段要说清**偏了意味着什么**，不能把两个百分比再念一遍就完事 ——
+     * 那是第一段已经有的东西，读的人看完还是不知道该不该在意。
+     *
+     * 能说的只有一句有依据的话：这条区间的两端是拿成人脂肪 AMDR（20%~35% 供能）
+     * 反解出来的，而 **AMDR 说的是长期习惯，不是某一天的达标线**。
+     * 两端各自防的是什么也一并交代，否则「参考区间 45–62%」只是个没有来历的数。
+     *
+     * 注意别把 `fatPct` 说成「脂肪供能百分比」：它是脂肪占**碳水+脂肪那块热量**
+     * 的比例，和 AMDR 那个「占全天总热量」不是同一个分母。
+     */
+    const meaning = split.structure === 'carb'
+      ? '脂肪这一侧偏低 —— AMDR 的下沿是为了必需脂肪酸和脂溶性维生素够用'
+      : '脂肪这一侧偏高 —— AMDR 的上沿之外，饱和脂肪和总热量通常跟着涨';
+    add('info', INSIGHT_PRIORITY.split, `今天的结构偏${heavy}`,
+      `碳水：脂肪按热量算是 ${split.carbPct}：${split.fatPct}，碳水参考区间是 ${split.bandLo}–${split.bandHi}%。`
+      + `${meaning}。这条区间由成人脂肪 AMDR 反解，说的是长期习惯，一天落在外面不说明什么。`,
+      dayComplete ? `不必今晚补吃；明天在正常三餐里把${light}多留一点。`
+        : split.structure === 'carb'
+          ? '下一餐主食少一些，加点坚果、蛋或鱼这类带脂肪的食物。'
+          : '下一餐少放油、少一点肥肉，主食或水果多留一些。');
   }
 
   /* ---------------- 5 活动、睡眠、饮水 ---------------- */

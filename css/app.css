@@ -812,11 +812,29 @@ html, body { height: 100%; overflow: hidden; }
 .nutrient-scale .nutrient-point.over { background: var(--danger); }
 @media (max-width: 350px) { .hero-micros { gap: var(--space-2); } }
 
+/*
+ * **命中尺寸和视觉体量是两件事** —— 这条规矩在 v3.16.0 被 `--touch-target` 破过一次，
+ * 这里是它的另一种形态：热区没有把画出来的东西撑大，却在**挤版面**。
+ *
+ * 原先写的是 `min-height: var(--control-md)` 加 `margin: -8px 0`：一个 44px 高的盒子
+ * 里装一条 6px 的刻度。而 `<button>` 会把内容垂直居中（`display: block` 也拦不住，
+ * 那是 UA 给按钮的内部匿名盒），于是条被顶到盒子正中 —— 实测离上面那行标签 15~16px，
+ * 而没有这个按钮包着的蛋白条只有 4px。同一种关系（「这个标签和这条刻度是同一块东西」）
+ * 在同一张卡里长出三个距离：4 / 15 / 16。
+ *
+ * 现在热区靠 `::after` 撑出去，和 `.info-tip > summary` 同一招：按钮本身只占那条
+ * 6px，版面回到 `--space-1`，手指仍然有 `--control-md` 可按。
+ */
 .point-value-trigger {
-  display: block; position: relative; width: 100%; min-height: var(--control-md);
-  margin: calc(-1 * var(--space-2)) 0;
+  display: block; position: relative; width: 100%;
+  margin: 0;
   padding: 0; border: 0; border-radius: var(--r-xs); background: transparent;
   color: inherit; cursor: pointer; touch-action: pan-y;
+}
+/* 以刻度为中心铺一条 --control-md 高的热区；不写高度差，免得跟着条高漂 */
+.point-value-trigger::after {
+  content: ''; position: absolute; left: 0; right: 0;
+  top: 50%; height: var(--control-md); transform: translateY(-50%);
 }
 .point-value-trigger:disabled { cursor: default; opacity: 1; }
 .point-value-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -866,9 +884,11 @@ html, body { height: 100%; overflow: hidden; }
  * 浅色那段是参考区间，三角是今天落在哪儿。
  * 整条不填色 —— 填色会把它读成「完成了多少」，而这里没有完成一说。
  */
+/* 上面那行标签到这条刻度的距离由 `.metric-row-top` 的 margin-bottom 一处给，
+   这里不再补一档 —— 补了它就比蛋白条多 2px，又是一个对不上的距离 */
 .split-bar {
   position: relative; height: 6px; border-radius: 999px;
-  background: var(--track); margin-top: var(--space-0);
+  background: var(--track);
 }
 .split-bar-band {
   position: absolute; top: 0; bottom: 0;

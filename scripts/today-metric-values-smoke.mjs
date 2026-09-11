@@ -35,7 +35,19 @@ const geometry = async key => {
     const arrow = tip.querySelector('.point-value-arrow').getBoundingClientRect();
     return { fits: box.left >= card.left + 7 && box.right <= card.right - 7,
       arrow: Math.abs(arrow.x + arrow.width / 2 - dot.x - dot.width / 2) < 1,
-      above: box.bottom <= dot.top, dotSize: dot.width, triggerHeight: el.getBoundingClientRect().height,
+      above: box.bottom <= dot.top,
+      dotSize: dot.width,
+      /*
+       * 量的是**热区**，不是这个元素自己的盒子。
+       *
+       * 原先写的是 `el.getBoundingClientRect().height`，因为那会儿热区就是
+       * `min-height: var(--control-md)` 撑出来的盒子 —— 可那个 44px 的盒子在挤版面：
+       * `<button>` 会把内容垂直居中，6px 的刻度被顶到正中，离上面那行标签 15~16px，
+       * 而没有按钮包着的蛋白条只有 4px。热区改成 `::after` 之后盒子只剩 6px，
+       * 手指能按的仍然是 44px。卡元素高度等于卡实现形状，这里要卡的是意图。
+       */
+      hitHeight: Math.max(el.getBoundingClientRect().height,
+        parseFloat(getComputedStyle(el, '::after').height) || 0),
       white: getComputedStyle(tip).backgroundColor === 'rgb(255, 255, 255)',
       single: document.querySelectorAll('.point-value-tip').length === 1
         && document.querySelectorAll('.is-value-open').length === 1,
@@ -75,7 +87,7 @@ try {
       check(`${width}px ${key} 精确值与单位`, await panel().textContent() === expected);
       const g = await geometry(key);
       check(`${width}px ${key} 单层、白底、箭头对点、卡内避让与高亮`,
-        g.fits && g.arrow && g.above && g.white && g.single && g.expanded && g.dotSize > 13 && g.triggerHeight >= 44);
+        g.fits && g.arrow && g.above && g.white && g.single && g.expanded && g.dotSize > 13 && g.hitHeight >= 44);
       if (key === 'split' && process.env.ARTIFACT_DIR) {
         await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
         await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/macro-values-${engine}-${width}.png` });
