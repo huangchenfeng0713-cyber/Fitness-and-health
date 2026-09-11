@@ -96,7 +96,22 @@ function rerenderPicker() {
   const scroll = pickerRoot.closest('.sheet-scroll');
   const top = scroll?.scrollTop || 0;
   const active = document.activeElement;
-  const label = active?.getAttribute('aria-label');
+  /*
+   * **不许把焦点还给 `<select>`。**
+   *
+   * 焦点对别的控件是个被动状态，对 `<select>` 是个动作：手机上 `focus()` 一个
+   * select 会把原生选择器**再弹一次**。而这张卡每次重绘都是整棵树拆了重建，
+   * 于是「挑法」和「细分部位」这两个下拉选完一个值，选择器立刻又弹出来 ——
+   * 再选一次同样的值才收得掉，因为第二次值没变、不触发 change，也就不再重绘。
+   *
+   * 更远的一截是：iOS 上点 `<button>` 不夺焦点，焦点会一直滞留在上次动过的那个
+   * select 上。于是接着点部位、点器械、点「推荐」—— 任何一次重绘都会把那个
+   * 下拉重新弹出来一次，而用户压根没碰它。
+   *
+   * 代价是键盘用户改完下拉后焦点落回 body，得 Tab 回去。这一档比「主力平台上
+   * 每次重绘都弹一次选择器」轻得多。
+   */
+  const label = active?.tagName === 'SELECT' ? null : active?.getAttribute('aria-label');
   mount(clearEl(pickerRoot), pickerCard(rerenderPicker));
   if (scroll) scroll.scrollTop = top;
   if (label && !active?.isConnected) [...pickerRoot.querySelectorAll('[aria-label]')]

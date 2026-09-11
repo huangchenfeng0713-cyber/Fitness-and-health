@@ -27,7 +27,25 @@ try {
   check('点击动作行不意外选中', await page.locator('.ex-row.marked').count() === 0);
   await page.keyboard.press('Shift+Tab');
   check('倒序 Tab 焦点仍在弹窗内', await page.evaluate(() => document.querySelector('.sheet').contains(document.activeElement)));
+  /*
+   * 两个下拉（挑法 / 细分部位）选完之后，焦点不许被送回任何一个 `<select>`。
+   *
+   * 焦点对别的控件是个被动状态，对 `<select>` 是个动作：手机上 focus() 一个 select
+   * 会把原生选择器再弹一次 —— 而这张卡每次重绘都是整棵树拆了重建，于是选完一个值
+   * 选择器立刻又弹出来，再选一次同样的才收得掉（值没变、不触发 change、不重绘）。
+   * 第二条更隐蔽：iOS 上点 `<button>` 不夺焦点，焦点会滞留在上次动过的那个 select 上，
+   * 于是接着点部位、点器械、点「推荐」都会把那个下拉重新弹出来一次。
+   */
+  const focusedTag = () => page.evaluate(() => document.activeElement?.tagName || '');
+  await page.locator('.picker-mode-select').focus();
   await page.locator('.picker-mode-select').selectOption('split');
+  await page.waitForTimeout(200);
+  check('改完挑法下拉，焦点没有被送回 select', await focusedTag() !== 'SELECT');
+  await page.locator('.picker-target-select').focus();
+  await page.evaluate(() => document.querySelector('.picker-scope-switch .chip-btn.active')
+    .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await page.waitForTimeout(200);
+  check('焦点滞留在下拉上时，点别的控件也不会把它弹回来', await focusedTag() !== 'SELECT');
   await page.locator('.picker-view-switch').getByRole('tab', { name: '推荐', exact: true }).click();
   const batch = await page.locator('.rec-picks .ex-name').allTextContents();
   check('推荐候选按模式给出并设上限', batch.length > 0 && batch.length <= 6);

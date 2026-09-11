@@ -163,6 +163,52 @@ test('F02: 3.15.0 之前的老记录按自带的截止时间反推覆盖范围�
   assert.equal(b.activeEnergy, 520);
 });
 
+/*
+ * 快捷指令每天同步进来的那些行同样不许被挡在计算外。
+ *
+ * 3.16.2 那次反推只认「一个元数据字段都没有」的老行，可 `stampAppleRow` 给每个
+ * Apple 字段都盖了一个 `coverage: { status: 'unknown' }` 的默认值 —— 而增量同步
+ * （快捷指令 / JSON / CSV）全要经过它。于是反推永远不触发，3.15.0 之后新同步进来的
+ * 每一天照旧判成 unknown-coverage：用户看到的是「以前的记录回来了，昨天的还是没有」。
+ * **「没有声明」和「声明了不知道」是同一件事**，只有 complete / partial 才是声明。
+ */
+test('F02: 增量同步盖上的 coverage:unknown 不算声明，照样按截止时间反推', () => {
+  const date = '2026-09-05';
+  const dayEnd = new Date(`${date}T00:00:00`); dayEnd.setDate(dayEnd.getDate() + 1);
+  const at = (ms) => new Date(dayEnd.getTime() + ms).toISOString();
+  const sync = (stamp) => mergeApplePartialRows([], [{ date, restingEnergy: 1650, activeEnergy: 520,
+    energyObservedAt: stamp }])[0];
+
+  const nightly = sync(at(-20 * 60000));   // 23:40 那次自动化
+  assert.deepEqual(nightly._fieldProvenance.activeEnergy.coverage, { status: 'unknown' },
+    '前提：增量同步确实会盖上 unknown，这条测试才有意义');
+  const usable = energyObservation(nightly, date, now);
+  assert.equal(usable.status, 'valid');
+  assert.equal(usable.burnedNow, 2170);
+
+  // 真停在半路的照旧排除，而且要说清停在几点 —— 用户能动手补的正是那次自动化
+  const halfway = energyObservation(sync(at(-10 * 3600000)), date, now);
+  assert.equal(halfway.status, 'partial');
+  assert.equal(halfway.burnedNow, null);
+  assert.match(halfway.reason, /只同步到 14:00/);
+
+  // 显式声明过的仍然说了算：声明了 partial 就是 partial，不许被反推翻过来
+  assert.equal(energyObservation({ date, restingEnergy: 1650, activeEnergy: 520,
+    energyObservedAt: at(0), energyCoverage: { status: 'partial' } }, date, now).status, 'partial');
+
+  // 整条链路：快捷指令同步的日子要能重新撑起 14 天基线
+  const rows = ['02', '03', '04'].map((d) => {
+    const day = `2026-09-${d}`;
+    const end = new Date(`${day}T00:00:00`); end.setDate(end.getDate() + 1);
+    return mergeApplePartialRows([], [{ date: day, restingEnergy: 1650, activeEnergy: 520,
+      energyObservedAt: end.toISOString() }])[0];
+  });
+  const b = computeBaseline(rows, [], today.date);
+  assert.equal(b.energyPairedDays, 3);
+  assert.equal(b.restingEnergy, 1650);
+  assert.equal(b.activeEnergy, 520);
+});
+
 test('F02: explicit natural-day windows support 23 and 25 hours without changing raw totals', () => {
   for (const [date, start, end, hours] of [
     ['2026-03-08','2026-03-08T00:00:00-05:00','2026-03-09T00:00:00-04:00',23],
