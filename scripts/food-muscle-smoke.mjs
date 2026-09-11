@@ -18,6 +18,25 @@ const openFood = async query => {
   await page.getByRole('button', { name: `选择 ${expected} 的份量`, exact: true }).click();
   await page.locator('.portion-title-line strong').waitFor();
 };
+/*
+ * 等 store，别用 `page.waitForFunction`。
+ *
+ * **它不会 await 回调返回的 Promise** —— async 回调返回的 Promise 对象本身就是个
+ * 真值，于是第一次轮询（实测 130ms）就算「条件成立」了。而要读 store 就得先
+ * `await import()`，这个等待天生是异步的：写成 `waitForFunction(async …)`
+ * 等于压根没等，紧跟着那句 evaluate 直接跟 IndexedDB 的写入赛跑。
+ * 表现是随机红一次，报 `Cannot read properties of undefined (reading 'composition')`
+ * —— 实测同一份代码连跑六次三红三绿，CI 上也是这么红的。
+ * `page.evaluate` 会 await，所以拿它自己轮询。
+ */
+const waitForStore = async (predicate, label, timeout = 10000) => {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await page.evaluate(predicate)) return;
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`等不到：${label}`);
+};
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8137', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector('.tab') && !document.querySelector('.account-data-lock'));
@@ -39,7 +58,8 @@ try {
     assert.ok(await page.locator('.mix-picker').evaluate(el => el.scrollWidth <= el.clientWidth + 1), '配料面板横向溢出');
   }
   await page.locator('.sheet-footer .primary-btn').click();
-  await page.waitForFunction(async () => (await import('/js/lib/store.js')).state.dietEntries.some(e => e.foodId === 'combo_three_dice_stir'));
+  await waitForStore(async () => (await import('/js/lib/store.js')).state.dietEntries
+    .some(e => e.foodId === 'combo_three_dice_stir'), '炒三丁落库');
   await page.evaluate(async () => {
     const s = await import('/js/lib/store.js');
     const row = s.state.dietEntries.find(e => e.foodId === 'combo_three_dice_stir');

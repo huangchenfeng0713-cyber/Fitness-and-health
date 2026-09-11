@@ -1138,6 +1138,16 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
   因为「摆着能改的输入框、算的时候却用设备记录」比锁死更让人困惑。
   取值用 `latestHealthEntry`：称重不是每天都有，当天没有就沿用最近一次，
   并把那天的日期显示出来——别让前几天的数看起来像今天刚称的。
+- **`page.waitForFunction` 不 await 回调返回的 Promise。** 传 `async () => …` 进去，
+  它拿到的是个 **Promise 对象**，而 Promise 对象恒为真值 —— 于是第一次轮询
+  （实测 130ms）就算「条件成立」，这个等待从头到尾没有等过任何东西。
+  而在冒烟脚本里想读 store 就得先 `await import('/js/lib/store.js')`，天生是异步的。
+  `food-muscle-smoke.mjs` 那句「等炒三丁落库」就是这么写的，紧跟着那句 `evaluate`
+  直接跟 IndexedDB 的写入赛跑：**同一份代码连跑六次三红三绿**，报的是
+  `Cannot read properties of undefined (reading 'composition')`。
+  这种红最难办——它看着像刚推的那个提交惹的，其实在 main 上一直是这个概率。
+  **`page.evaluate` 会 await**，所以要等异步条件就拿它自己轮询（`waitForStore`）。
+  `waitForFunction` 只留给同步断言。
 
 ## 约定
 
