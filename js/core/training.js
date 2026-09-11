@@ -607,6 +607,16 @@ export function normalizeSession(raw = {}) {
   return { date: typeof raw.date === 'string' ? raw.date : '', items: clean };
 }
 
+/**
+ * 至少这么多个训练日，才敢说「哪儿空着」。
+ *
+ * 一两次训练说明不了分布 —— 新用户练完一次胸，不代表他「漏了背腿」。
+ * 和摄入类结论那条 `MIN_POINTS_FOR_CLAIM` 同一个道理，样本不够就不下结论。
+ * 覆盖表的 tips 和空状态那两行共用这一个数，否则同一个应用对「几次算够」
+ * 会给出两个答案。
+ */
+export const MIN_TRAINING_DAYS_FOR_GAP = 3;
+
 /** 复用记录语义：记有有效次数的组，或明确完成标记；空计划不计。 */
 export function trainingCoverage(sessions = [], endDate) {
   const validDate = key => typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key)
@@ -634,12 +644,40 @@ export function trainingCoverage(sessions = [], endDate) {
   const tips = [];
   const missing = groups.filter(g => g.count === 0);
   // 新用户的一次训练不能说明遗漏；至少三个训练日才提示分布。
-  if (trainingDays.size >= 3 && missing.length) {
+  if (trainingDays.size >= MIN_TRAINING_DAYS_FOR_GAP && missing.length) {
     tips.push('最近 7 日尚未记录' + missing.map(g => g.label).join('、') + '部位训练。');
     const concentrated = groups.filter(g => g.count >= 3 && g.count / trainingDays.size >= 0.75);
     if (concentrated.length) tips.push('记录较集中于' + concentrated.map(g => g.label).join('、') + '，下次安排可留意尚未覆盖的部位。');
   }
   return { groups, trainingDays: trainingDays.size, tips };
+}
+
+/**
+ * 今天一个动作都没安排时，这一屏该说什么。
+ *
+ * 空状态原先只有一句「今天还没有安排动作。」，占掉一整屏却没回答这一栏的问题。
+ * 而该说的话早就算出来了：`trainingCoverage` 连结论（`tips`）都算了、也测了，
+ * 只是一直没人渲染 —— 覆盖表在「训练记录」那一栏回答「练了多少」，
+ * 结论该落在这一栏回答「今天练什么」，同一件事不在同一屏说两遍。
+ *
+ * 只给两行，都是**记录里有的事实**，不替人开处方：
+ * 上次练是什么时候、练的哪儿；近 7 日哪几个部位没有记录。
+ * 「该练背了」这种话这个程序说不了 —— 它不知道你的计划，也不知道你没记的那几天。
+ *
+ * 一条记录都没有时返回 null：那时候什么都不知道，硬凑一句就是噪音，
+ * 空状态回到原来那一句就对了。
+ */
+export function emptyPlanBrief(sessions = [], endDate) {
+  const { groups, trainingDays } = trainingCoverage(sessions, endDate);
+  const trained = groups.filter(g => Number.isFinite(g.daysSince));
+  if (!trained.length) return null;
+  const soonest = Math.min(...trained.map(g => g.daysSince));
+  const last = trained.filter(g => g.daysSince === soonest);
+  // 「几天前」直接用覆盖表那一份 lastLabel：同一个事实自己再写一遍措辞必然会漂
+  const rows = [{ label: '上次训练', value: `${last[0].lastLabel} · ${last.map(g => g.label).join('、')}` }];
+  const idle = trainingDays >= MIN_TRAINING_DAYS_FOR_GAP ? groups.filter(g => g.count === 0) : [];
+  if (idle.length) rows.push({ label: '近 7 日未记录', value: idle.map(g => g.label).join('、') });
+  return { rows, trainingDays, lastDaysSince: soonest };
 }
 
 /** 这次练了多少：总组数、完成组数、按部位的组数，以及能算出来的总容量 */

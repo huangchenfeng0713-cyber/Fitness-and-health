@@ -239,6 +239,25 @@ export function setSheetFooter(content) {
 }
 
 /**
+ * 底栏收起 / 露出。给「底栏本身常驻、只是有时候整条收起来」的那种用（健身页的多选条）。
+ *
+ * **`has-footer` 说的不是「挂过底栏」，是「底栏此刻正压在屏幕底边上」。**
+ * 安全区只在最下面那一层算一次：底栏露着的时候由 `.sheet-footer` 吃掉，
+ * 正文那层就把 padding 缩回 12px（`.sheet.has-footer .sheet-scroll`）。
+ * 所以底栏一收起，正文必须把安全区接回去 —— 两件事只能一起变，
+ * 各改各的就会漏掉一整条 Home 指示条。
+ *
+ * 健身页原先是直接去改 `footer.hidden`，类还留着：真机上没选动作时
+ * 「展开其余 23 个」离屏幕底只剩 12px，正压在 Home 指示条上（实测 12 对 54）。
+ */
+export function setSheetFooterVisible(visible) {
+  if (!footer || !panel) return;
+  const show = Boolean(visible) && footer.childElementCount > 0;
+  footer.hidden = !show;
+  panel.classList.toggle('has-footer', show);
+}
+
+/**
  * 关掉弹层。
  *
  * @param {object} opts

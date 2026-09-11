@@ -1202,8 +1202,18 @@ test('多选：单项可直接记，多项仍先放清单再一次落库', () =>
    * 选了动作它才出来，那时说的才是有用的话。
    */
   assert.doesNotMatch(training, /alwaysVisible: true/, '健身页的空状态横幅又常驻了');
-  assert.match(training, /pickerBar\.onVisibility = visible =>/,
-    '槽位没有跟着横幅一起收，会留下一道凭空的空白');
+  /*
+   * 槽位要跟着横幅一起收，否则留下一道凭空的空白；而且必须走 sheet 自己的接口。
+   *
+   * 安全区在弹层里只算一次：底栏露着的时候由 `.sheet-footer` 吃掉，正文那层
+   * 就把 padding 缩回 12px。直接改 `footer.hidden` 会把 `has-footer` 留在那儿，
+   * 于是底栏高度归零、正文 padding 仍是 12px，两层谁都没算 ——
+   * 真机上「展开其余 23 个」离屏幕底只剩 12px，正压在 Home 指示条上。
+   */
+  assert.match(training, /pickerBar\.onVisibility = setSheetFooterVisible/,
+    '槽位没有跟着横幅一起收，或者没走 sheet 的接口（安全区会漏算）');
+  assert.doesNotMatch(training, /closest\('\.sheet-footer'\)/,
+    '别在视图里直接够到 sheet 底栏改 hidden —— has-footer 会留下，安全区两层都不算');
   assert.ok(!/alwaysVisible:\s*true/.test(diet), '饮食页空清单仍应收起，不能常驻一条空横幅');
 
   // 饮食：单项是高频路径，可确认份量后直接记；多项仍保留清单批量确认

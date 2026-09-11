@@ -11,11 +11,11 @@ import {
 } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
-import { openSheet, closeSheet, setSheetFooter } from '../lib/sheet.js';
+import { openSheet, closeSheet, setSheetFooter, setSheetFooterVisible } from '../lib/sheet.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
-  sessionVolume, recentTrainingRows, trainingCoverage,
+  sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief,
   overlapScore, overlapLevel, restoreTrainingItems,
 } from '../core/training.js';
 
@@ -96,7 +96,22 @@ function rerenderPicker() {
   const scroll = pickerRoot.closest('.sheet-scroll');
   const top = scroll?.scrollTop || 0;
   const active = document.activeElement;
-  const label = active?.getAttribute('aria-label');
+  /*
+   * **不许把焦点还给 `<select>`。**
+   *
+   * 焦点对别的控件是个被动状态，对 `<select>` 是个动作：手机上 `focus()` 一个
+   * select 会把原生选择器**再弹一次**。而这张卡每次重绘都是整棵树拆了重建，
+   * 于是「挑法」和「细分部位」这两个下拉选完一个值，选择器立刻又弹出来 ——
+   * 再选一次同样的值才收得掉，因为第二次值没变、不触发 change，也就不再重绘。
+   *
+   * 更远的一截是：iOS 上点 `<button>` 不夺焦点，焦点会一直滞留在上次动过的那个
+   * select 上。于是接着点部位、点器械、点「推荐」—— 任何一次重绘都会把那个
+   * 下拉重新弹出来一次，而用户压根没碰它。
+   *
+   * 代价是键盘用户改完下拉后焦点落回 body，得 Tab 回去。这一档比「主力平台上
+   * 每次重绘都弹一次选择器」轻得多。
+   */
+  const label = active?.tagName === 'SELECT' ? null : active?.getAttribute('aria-label');
   mount(clearEl(pickerRoot), pickerCard(rerenderPicker));
   if (scroll) scroll.scrollTop = top;
   if (label && !active?.isConnected) [...pickerRoot.querySelectorAll('[aria-label]')]
@@ -120,7 +135,8 @@ function openPicker() {
     returnFocus: () => document.querySelector('.training-add'),
   });
   setSheetFooter(pickerBar.el);
-  pickerBar.onVisibility = visible => { const footer = pickerBar?.el.closest('.sheet-footer'); if (footer) footer.hidden = !visible; };
+  // 收起底栏要走 sheet 自己的接口：安全区在底栏和正文之间只算一次，得一起改
+  pickerBar.onVisibility = setSheetFooterVisible;
   rerenderPicker();
 }
 
@@ -554,9 +570,29 @@ function planRow(exercise, index) {
 function planCard() {
   const list = pickedExercises();
   const add = () => h('button.secondary-btn.training-add', { onclick: openPicker }, pending.size ? `继续选择 · 待加入 ${pending.size}` : '添加动作');
-  if (!list.length) return h('section.card.training-current-card', null,
-    cardHeader('本次训练', { summary: trainingDay() }),
-    emptyState('今天还没有安排动作。', add()));
+  /*
+   * 一个动作都没安排时，这张卡原先只有一句「今天还没有安排动作。」，
+   * 底下整屏是空的 —— 而这一栏要回答的是「今天练什么」，它一个字都没答。
+   *
+   * 两行都是记录里有的事实（`emptyPlanBrief`），不替人开处方：
+   * 上次练是什么时候、练的哪儿；近 7 日哪几个部位没有记录。
+   * 右边那一栏的覆盖表回答的是「练了多少」，两边不重复。
+   * 一条记录都没有的新用户拿不到这两行，空状态就还是原来那一句。
+   */
+  if (!list.length) {
+    const brief = emptyPlanBrief(state.trainingDays, trainingDay());
+    return h('section.card.training-current-card', null,
+      cardHeader('本次训练', { summary: trainingDay(), actions: brief ? [
+        persistentInfoTip('training-empty-brief', '这两行是怎么来的',
+          '只统计已记录组数或标记完成的动作，按主练部位归类；未记录不代表没有训练。'),
+      ] : [] }),
+      emptyState('今天还没有安排动作。',
+        h('div.training-empty-body', null,
+          brief ? h('div.week-rows.training-brief', null, brief.rows.map(r => h('div.week-row', null,
+            h('span.week-row-label', null, r.label),
+            h('strong.week-row-value', null, r.value)))) : null,
+          add())));
+  }
   const volume = sessionVolume(session());
   return h('section.card.training-current-card', null,
     cardHeader('今日动作', { summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,

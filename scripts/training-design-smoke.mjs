@@ -25,9 +25,53 @@ try {
   check('弹窗隔离背景并将焦点移入', await page.evaluate(() => document.querySelector('#app').inert && document.querySelector('.sheet').contains(document.activeElement)));
   await page.locator('.ex-row').first().click();
   check('点击动作行不意外选中', await page.locator('.ex-row.marked').count() === 0);
+  /*
+   * 一个动作都没选时底栏整条收起，正文必须把 Home 指示条那一截接回来。
+   *
+   * 安全区在弹层里只算一次：底栏露着的时候由 `.sheet-footer` 吃掉，正文那层
+   * 就把 padding 缩回 12px。所以底栏一收起，`has-footer` 必须跟着摘掉 ——
+   * 原先健身页直接去改 `footer.hidden`，类留在那儿，真机上「展开其余 23 个」
+   * 离屏幕底只剩 12px，正压在 Home 指示条上。
+   * Chromium 里 env(safe-area-inset-bottom) 恒为 0，所以这里自己喂一个 34px。
+   */
+  const safeGap = await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = ':root { --safe-bottom: 34px !important; }';
+    document.head.append(style);
+    const scroll = document.querySelector('.sheet-scroll');
+    scroll.scrollTop = scroll.scrollHeight;
+    const last = [...scroll.children].at(-1);
+    const out = {
+      gap: Math.round(innerHeight - last.getBoundingClientRect().bottom),
+      hasFooter: document.querySelector('.sheet').classList.contains('has-footer'),
+      footerHidden: document.querySelector('.sheet-footer').hidden,
+    };
+    style.remove();
+    return out;
+  });
+  check(`底栏收起时正文接回安全区，不贴屏幕底（离底 ${safeGap.gap}px）`,
+    safeGap.footerHidden && !safeGap.hasFooter && safeGap.gap >= 44);
   await page.keyboard.press('Shift+Tab');
   check('倒序 Tab 焦点仍在弹窗内', await page.evaluate(() => document.querySelector('.sheet').contains(document.activeElement)));
+  /*
+   * 两个下拉（挑法 / 细分部位）选完之后，焦点不许被送回任何一个 `<select>`。
+   *
+   * 焦点对别的控件是个被动状态，对 `<select>` 是个动作：手机上 focus() 一个 select
+   * 会把原生选择器再弹一次 —— 而这张卡每次重绘都是整棵树拆了重建，于是选完一个值
+   * 选择器立刻又弹出来，再选一次同样的才收得掉（值没变、不触发 change、不重绘）。
+   * 第二条更隐蔽：iOS 上点 `<button>` 不夺焦点，焦点会滞留在上次动过的那个 select 上，
+   * 于是接着点部位、点器械、点「推荐」都会把那个下拉重新弹出来一次。
+   */
+  const focusedTag = () => page.evaluate(() => document.activeElement?.tagName || '');
+  await page.locator('.picker-mode-select').focus();
   await page.locator('.picker-mode-select').selectOption('split');
+  await page.waitForTimeout(200);
+  check('改完挑法下拉，焦点没有被送回 select', await focusedTag() !== 'SELECT');
+  await page.locator('.picker-target-select').focus();
+  await page.evaluate(() => document.querySelector('.picker-scope-switch .chip-btn.active')
+    .dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  await page.waitForTimeout(200);
+  check('焦点滞留在下拉上时，点别的控件也不会把它弹回来', await focusedTag() !== 'SELECT');
   await page.locator('.picker-view-switch').getByRole('tab', { name: '推荐', exact: true }).click();
   const batch = await page.locator('.rec-picks .ex-name').allTextContents();
   check('推荐候选按模式给出并设上限', batch.length > 0 && batch.length <= 6);
@@ -256,6 +300,16 @@ try {
   await page.clock.setSystemTime(new Date('2026-09-09T12:00:00+08:00'));
   await page.evaluate(async () => (await import('/js/views/training.js')).renderTraining(document.querySelector('#view')));
   check('跨日后待选清空，昨天训练仍保留', !(await page.locator('.training-add').textContent()).includes('待加入') && (await items()).length === 0);
+  /*
+   * 今天空着、昨天有记录时，这一栏不能只剩一句「今天还没有安排动作。」——
+   * 它要回答的是「今天练什么」，而该说的话 trainingCoverage 早就算出来了。
+   * 两行都是记录里的事实，不替人开处方；这里只有一个训练日，够不上
+   * 「哪儿空着」那条门槛（MIN_TRAINING_DAYS_FOR_GAP），所以只该给「上次训练」一行。
+   */
+  const brief = await page.evaluate(() => [...document.querySelectorAll('.training-current-card .training-brief .week-row')]
+    .map(row => [...row.children].map(cell => cell.textContent.trim()).join(' → ')));
+  check(`空计划也答「今天练什么」：${brief.join(' / ') || '（一行都没有）'}`,
+    brief.length === 1 && /^上次训练 → 1 天前 · .+/.test(brief[0]));
   await history();
   check('跨日记录窗口保留昨天记录与日期', /2026-09-08/.test(await page.locator('.training-history-card').textContent()));
   // Nested modal: close the inner sheet first, restore the settings dialog's inert state.
