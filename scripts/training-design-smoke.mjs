@@ -25,6 +25,32 @@ try {
   check('弹窗隔离背景并将焦点移入', await page.evaluate(() => document.querySelector('#app').inert && document.querySelector('.sheet').contains(document.activeElement)));
   await page.locator('.ex-row').first().click();
   check('点击动作行不意外选中', await page.locator('.ex-row.marked').count() === 0);
+  /*
+   * 一个动作都没选时底栏整条收起，正文必须把 Home 指示条那一截接回来。
+   *
+   * 安全区在弹层里只算一次：底栏露着的时候由 `.sheet-footer` 吃掉，正文那层
+   * 就把 padding 缩回 12px。所以底栏一收起，`has-footer` 必须跟着摘掉 ——
+   * 原先健身页直接去改 `footer.hidden`，类留在那儿，真机上「展开其余 23 个」
+   * 离屏幕底只剩 12px，正压在 Home 指示条上。
+   * Chromium 里 env(safe-area-inset-bottom) 恒为 0，所以这里自己喂一个 34px。
+   */
+  const safeGap = await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.textContent = ':root { --safe-bottom: 34px !important; }';
+    document.head.append(style);
+    const scroll = document.querySelector('.sheet-scroll');
+    scroll.scrollTop = scroll.scrollHeight;
+    const last = [...scroll.children].at(-1);
+    const out = {
+      gap: Math.round(innerHeight - last.getBoundingClientRect().bottom),
+      hasFooter: document.querySelector('.sheet').classList.contains('has-footer'),
+      footerHidden: document.querySelector('.sheet-footer').hidden,
+    };
+    style.remove();
+    return out;
+  });
+  check(`底栏收起时正文接回安全区，不贴屏幕底（离底 ${safeGap.gap}px）`,
+    safeGap.footerHidden && !safeGap.hasFooter && safeGap.gap >= 44);
   await page.keyboard.press('Shift+Tab');
   check('倒序 Tab 焦点仍在弹窗内', await page.evaluate(() => document.querySelector('.sheet').contains(document.activeElement)));
   /*

@@ -11,7 +11,7 @@ import {
 } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { selectBar } from '../lib/select-bar.js';
-import { openSheet, closeSheet, setSheetFooter } from '../lib/sheet.js';
+import { openSheet, closeSheet, setSheetFooter, setSheetFooterVisible } from '../lib/sheet.js';
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
@@ -135,7 +135,8 @@ function openPicker() {
     returnFocus: () => document.querySelector('.training-add'),
   });
   setSheetFooter(pickerBar.el);
-  pickerBar.onVisibility = visible => { const footer = pickerBar?.el.closest('.sheet-footer'); if (footer) footer.hidden = !visible; };
+  // 收起底栏要走 sheet 自己的接口：安全区在底栏和正文之间只算一次，得一起改
+  pickerBar.onVisibility = setSheetFooterVisible;
   rerenderPicker();
 }
 

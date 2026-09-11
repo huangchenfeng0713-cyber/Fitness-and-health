@@ -976,6 +976,15 @@ IOM 纤维/AMDR、WHO 钠与游离糖 —— 它们不是回归测试，是防�
   （多选条）再加一遍，真机上就是凭空多出 34px 空白顶在按钮下面。
   只有盖住整个视口的 `.sheet` 才需要它，而且要走 `var(--safe-bottom)` 不是裸 `env()`
   —— iOS 独立运行时首帧 `env()` 常常还是 0。
+  **「算一次」的前提是那一层真的在。** 弹层里安全区归底栏（`.sheet-footer`），
+  正文因此把 padding 缩回 12px（`.sheet.has-footer .sheet-scroll`）——
+  可 `has-footer` 说的不是「挂过底栏」，是「底栏此刻正压在屏幕底边上」。
+  健身页的多选条一个动作都没选时整条收起，原先是直接去改 `footer.hidden`，
+  类还留着：底栏高度归零、正文 padding 仍是 12px，**两层谁都没算安全区**，
+  真机上「展开其余 23 个」离屏幕底只剩 12px，正压在 Home 指示条上（实测 12 对 54）。
+  收起底栏一律走 `setSheetFooterVisible()`，别在视图里自己摘 `hidden`。
+  （量这件事得自己喂一个 `--safe-bottom`：Chromium 里 `env(safe-area-inset-bottom)`
+  恒为 0，而 `--safe-*` 是 app.js 写在 `<html>` 行内的，覆盖它要带 `!important`。）
 - **`hidden` 属性会被元素自己的 `display` 压掉。** 只要写了 `display: flex/grid/block`，
   `hidden` 就不生效 —— 搜索框那个清除键就是这么变成常显的：JS 明明写了
   `hidden: !value`，而 `.search-clear { display: grid }` 让它一直站在那儿。
