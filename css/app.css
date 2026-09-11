@@ -3234,6 +3234,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .ui-card-heading .card-head { align-items: center; margin-bottom: 0; }
 .ui-card-heading .card-desc { margin-top: var(--space-2); }
 .ui-empty-state .empty-hint { line-height: 1.5; }
+/*
+ * 空状态里那两行事实，和「近 7 日速览」共用 .week-rows 那一个两列网格 ——
+ * 同一种「标签靠左、数值靠右」各写一套必然会漂。
+ * 只改一处：那边的值是数字，写着 nowrap；这边是部位名，
+ * 「背、腿、肩臂」窄屏上该在顿号后面折行，但不许在两个汉字中间断开。
+ */
+.training-brief { margin-top: var(--space-3); }
+.training-brief .week-row-value { white-space: normal; word-break: keep-all; }
+.training-empty-body .training-add { margin-top: var(--space-3); }
 .training-view-tabs { flex: none; }
 .training-view-tabs .chip-btn { flex: 1; }
 .training-panel { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; }

@@ -15,7 +15,7 @@ import { openSheet, closeSheet, setSheetFooter, setSheetFooterVisible } from '..
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
-  sessionVolume, recentTrainingRows, trainingCoverage,
+  sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief,
   overlapScore, overlapLevel, restoreTrainingItems,
 } from '../core/training.js';
 
@@ -570,9 +570,29 @@ function planRow(exercise, index) {
 function planCard() {
   const list = pickedExercises();
   const add = () => h('button.secondary-btn.training-add', { onclick: openPicker }, pending.size ? `继续选择 · 待加入 ${pending.size}` : '添加动作');
-  if (!list.length) return h('section.card.training-current-card', null,
-    cardHeader('本次训练', { summary: trainingDay() }),
-    emptyState('今天还没有安排动作。', add()));
+  /*
+   * 一个动作都没安排时，这张卡原先只有一句「今天还没有安排动作。」，
+   * 底下整屏是空的 —— 而这一栏要回答的是「今天练什么」，它一个字都没答。
+   *
+   * 两行都是记录里有的事实（`emptyPlanBrief`），不替人开处方：
+   * 上次练是什么时候、练的哪儿；近 7 日哪几个部位没有记录。
+   * 右边那一栏的覆盖表回答的是「练了多少」，两边不重复。
+   * 一条记录都没有的新用户拿不到这两行，空状态就还是原来那一句。
+   */
+  if (!list.length) {
+    const brief = emptyPlanBrief(state.trainingDays, trainingDay());
+    return h('section.card.training-current-card', null,
+      cardHeader('本次训练', { summary: trainingDay(), actions: brief ? [
+        persistentInfoTip('training-empty-brief', '这两行是怎么来的',
+          '只统计已记录组数或标记完成的动作，按主练部位归类；未记录不代表没有训练。'),
+      ] : [] }),
+      emptyState('今天还没有安排动作。',
+        h('div.training-empty-body', null,
+          brief ? h('div.week-rows.training-brief', null, brief.rows.map(r => h('div.week-row', null,
+            h('span.week-row-label', null, r.label),
+            h('strong.week-row-value', null, r.value)))) : null,
+          add())));
+  }
   const volume = sessionVolume(session());
   return h('section.card.training-current-card', null,
     cardHeader('今日动作', { summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,

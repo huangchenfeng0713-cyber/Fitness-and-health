@@ -300,6 +300,16 @@ try {
   await page.clock.setSystemTime(new Date('2026-09-09T12:00:00+08:00'));
   await page.evaluate(async () => (await import('/js/views/training.js')).renderTraining(document.querySelector('#view')));
   check('跨日后待选清空，昨天训练仍保留', !(await page.locator('.training-add').textContent()).includes('待加入') && (await items()).length === 0);
+  /*
+   * 今天空着、昨天有记录时，这一栏不能只剩一句「今天还没有安排动作。」——
+   * 它要回答的是「今天练什么」，而该说的话 trainingCoverage 早就算出来了。
+   * 两行都是记录里的事实，不替人开处方；这里只有一个训练日，够不上
+   * 「哪儿空着」那条门槛（MIN_TRAINING_DAYS_FOR_GAP），所以只该给「上次训练」一行。
+   */
+  const brief = await page.evaluate(() => [...document.querySelectorAll('.training-current-card .training-brief .week-row')]
+    .map(row => [...row.children].map(cell => cell.textContent.trim()).join(' → ')));
+  check(`空计划也答「今天练什么」：${brief.join(' / ') || '（一行都没有）'}`,
+    brief.length === 1 && /^上次训练 → 1 天前 · .+/.test(brief[0]));
   await history();
   check('跨日记录窗口保留昨天记录与日期', /2026-09-08/.test(await page.locator('.training-history-card').textContent()));
   // Nested modal: close the inner sheet first, restore the settings dialog's inert state.
