@@ -110,6 +110,50 @@ test('减脂掉得比目标多算「快」，不能带符号相减说成「慢�
   assert.ok(!bulk.includes('把热量缺口收小'), '增重时不该建议收小缺口');
 });
 
+/*
+ * **拟合精度不够时，不许用确定语气报那个差。**
+ *
+ * 上游只有一道二值闸（≥4 次称重且跨 7 天），过了就照说「比目标快 0.16 kg/周」——
+ * 而体重的日常波动（水分、糖原、肠内容物）本来就有近一公斤量级，
+ * 4 个点拟合出来的那 0.16 很可能整个都是噪声。这个应用在别处一直守着
+ * 「宁可显示数据不足，不显示假精度」，唯独这一处没落实。
+ */
+test('拟合误差盖过差值时只报数不下结论，并把 ± 写出来', () => {
+  const noisy = trendReading('weight', pts(72.0, 72.9, 71.8, 73.0), {
+    kgPerWeek: 0.46, stdErrKgPerWeek: 0.8, goalRate: 0.3, records: 4, spanDays: 9,
+  });
+  assert.match(noisy, /拟合趋势 \+0\.46 ± 0\.8 kg\/周/, '± 要印出来，让人自己看得见精度');
+  assert.match(noisy, /还分辨不出来/);
+  assert.doesNotMatch(noisy, /比目标快/, '0.16 的差被 0.8 的误差盖住了，不该下结论');
+  /*
+   * 「超过参考范围」那句要过同一道判据。+0.46 ± 0.8 意味着真实斜率
+   * 在 −0.34 到 +1.26 之间都说得通，这时候断言它高于 0.25%–0.5%
+   * 和上面那句「比目标快 0.16」是同一种过度断言，而且带着风险措辞。
+   */
+  assert.doesNotMatch(noisy, /参考范围/, '误差比超出量还大时不该断言超过了参考范围');
+
+  // 同样的差值，精度够了就照旧下结论
+  const sharp = trendReading('weight', pts(72.0, 72.3, 72.6, 72.9), {
+    kgPerWeek: 0.46, stdErrKgPerWeek: 0.05, goalRate: 0.3, records: 12, spanDays: 28,
+  });
+  assert.match(sharp, /拟合趋势 \+0\.46 ± 0\.05 kg\/周/);
+  assert.match(sharp, /比目标快 0\.16 kg\/周/);
+  // 差得出来的时候要说清这个差可能来自哪儿：计划里的消耗本身是设备估算
+  assert.match(sharp, /设备估算/);
+});
+
+test('上游没给标准误时，说话方式一个字都不变', () => {
+  // 老调用方和既有用例都不传这个字段，判据不能因为「拿不到」就凭空变严；
+  // 尤其 `Number(null)` 是 0，只用 isFinite 判断会把「没给」当成「误差为 0」。
+  const base = { kgPerWeek: -0.9, goalRate: -0.5, records: 4, spanDays: 14 };
+  const withoutSe = trendReading('weight', pts(62, 61.4, 60.8, 60.2), base);
+  assert.match(withoutSe, /比目标快 0\.4 kg\/周/);
+  assert.match(withoutSe, /变化超过体重的 1%\/周/);
+  assert.doesNotMatch(withoutSe, /±/, '没有标准误就不该凭空印一个 ±');
+  assert.equal(trendReading('weight', pts(62, 61.4, 60.8, 60.2), { ...base, stdErrKgPerWeek: null }),
+    withoutSe, 'null 和「压根没传」必须一样');
+});
+
 test('体重往目标反方向走时直接点破，而不是报一个「慢多少」', () => {
   const text = trendReading('weight', pts(60, 60.3, 60.6, 61), {
     kgPerWeek: 0.4, goalRate: -0.5, records: 4, spanDays: 14,

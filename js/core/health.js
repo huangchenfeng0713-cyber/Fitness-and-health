@@ -1,5 +1,6 @@
 import { coordinateIntervals } from './source-intervals.js';
 import { completeEnergyDay, ENERGY_POLICY } from './energy-observation.js';
+import { weeklyTrend } from './slope.js';
 /**
  * Apple 健康数据解析与按天聚合
  * 纯逻辑模块（无 DOM / 无 File API），供 Web Worker 与单元测试共用。
@@ -1360,16 +1361,10 @@ export function computeBaseline(healthDays = [], dietDays = [], today = toDayKey
 
   let weightTrend = null;
   if (weights.length >= 4 && dayNumber(weights.at(-1).date) - dayNumber(weights[0].date) >= 7) {
-    // 用最小二乘拟合 kg/天，再换算成 kg/周
+    // 最小二乘只有一份，在 `core/slope.js`：这段原先是从 health-insights.js
+    // 手抄过来的，逐行几乎一样，只是门槛不同，改一处极容易忘掉另一处。
     const t0 = dayNumber(weights[0].date);
-    const xs = weights.map((p) => dayNumber(p.date) - t0);
-    const ys = weights.map((p) => p.w);
-    const n = xs.length;
-    const mx = xs.reduce((a, b) => a + b, 0) / n;
-    const my = ys.reduce((a, b) => a + b, 0) / n;
-    let num = 0; let den = 0;
-    for (let i = 0; i < n; i += 1) { num += (xs[i] - mx) * (ys[i] - my); den += (xs[i] - mx) ** 2; }
-    if (den > 0) weightTrend = Math.round((num / den) * 7 * 100) / 100;
+    weightTrend = weeklyTrend(weights.map((p) => ({ x: dayNumber(p.date) - t0, y: p.w })))?.perWeek ?? null;
   }
 
   /*
