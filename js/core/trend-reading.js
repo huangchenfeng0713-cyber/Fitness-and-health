@@ -129,7 +129,7 @@ function readProtein(points, { target, threshold }) {
 }
 
 /** 体重：只看趋势不看单点，且要和目标速率对照 */
-function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
+function readWeight(points, { kgPerWeek, stdErrKgPerWeek, goalRate, records, spanDays }) {
   const s = analyzeSeries(points, 1);
   if (!s) return INSUFFICIENT_DATA_TEXT;
   // 调用方没给次数时用序列自己的点数，别把「undefined 次记录」印到卡片上
@@ -150,11 +150,43 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
    * 「偏快」的门槛按方向分开：减重 1%/周，增重 0.5%/周。
    * 超过参考范围只提示风险，不从体重数据断言组织成分；短期水分会显著干扰。
    */
-  const pct = latest > 0 ? Math.abs(kgPerWeek) / latest : 0;
-  const tooFastLoss = kgPerWeek < 0 && pct > MAX_LOSS_RATE_PCT;
-  const tooFastGain = kgPerWeek > 0 && pct > MAX_GAIN_RATE_PCT;
+  /*
+   * **「这个差值配不配下结论」由数据自己回答。**
+   *
+   * 上游只有一道二值闸（≥4 次称重且跨 7 天），过了就用确定语气说
+   * 「比目标快 0.32 kg/周」—— 而 4 个点和 30 个点拟合出来的斜率精度
+   * 差着好几倍，体重的日常波动（水分、糖原、肠内容物）本来就有近一公斤量级。
+   * 那 0.32 很可能整个都是噪声，这正是这个应用在别处一直守着的
+   * 「宁可显示数据不足，不显示假精度」在这一处没落实。
+   *
+   * 拟合斜率的标准误已经把「点太少」「跨度太短」「秤上数字本来就跳」
+   * 三件事算进同一个数了，所以判据就是它本身，不用另设阈值。
+   * 上游没给（老调用方、单元测试）时按原样说话，不凭空变严。
+   */
+  // 先剔 null 再转数字：`Number(null)` 是 0 而 `Number.isFinite(0)` 是 true，
+  // 只用后者判断的话「上游没给标准误」会被当成「标准误为 0」，
+  // 于是任何差值都判成分辨得出来 —— 恰好是这条判据要防的反面。
+  const se = stdErrKgPerWeek == null || stdErrKgPerWeek === '' || !Number.isFinite(Number(stdErrKgPerWeek))
+    ? null : Number(stdErrKgPerWeek);
+  const resolvable = diff == null || se == null || Math.abs(diff) > se;
+  /*
+   * 「超过参考范围」也得过同一道判据。
+   *
+   * 拟合出 +0.46 ± 0.8 的时候，真实斜率在 −0.34 到 +1.26 之间都说得通，
+   * 这时候断言「高于 0.25%–0.5% 参考范围」和上面那句「比目标快 0.16」
+   * 是同一种过度断言 —— 而这一句还带着风险措辞，说错的代价更大。
+   * 判据是「超出那条线的幅度本身要大过拟合误差」。
+   */
+  const overBy = (limitPct) => Math.abs(kgPerWeek) - latest * limitPct;
+  // 体重读不出来时那条线本身就无从谈起（原先靠 pct 为 0 兜住，别把它丢了）
+  const beyond = (limitPct) => latest > 0 && overBy(limitPct) > 0
+    && (se == null || overBy(limitPct) > se);
+  const tooFastLoss = kgPerWeek < 0 && beyond(MAX_LOSS_RATE_PCT);
+  const tooFastGain = kgPerWeek > 0 && beyond(MAX_GAIN_RATE_PCT);
   return join([
-    `覆盖 ${spanDays} 个日历日、${n} 次称重，拟合趋势 ${kgPerWeek > 0 ? '+' : ''}${kgPerWeek} kg/周`,
+    `覆盖 ${spanDays} 个日历日、${n} 次称重，拟合趋势 ${kgPerWeek > 0 ? '+' : ''}${kgPerWeek}`,
+    se != null ? ` ± ${se}` : '',
+    ` kg/周`,
     goalRate != null ? `（目标 ${goalRate > 0 ? '+' : ''}${goalRate}）。` : '。',
     diff == null
       // 目标是维持：偏离哪个方向都要说，但不存在快慢
@@ -162,7 +194,19 @@ function readWeight(points, { kgPerWeek, goalRate, records, spanDays }) {
         : `目标是维持，但每周${kgPerWeek > 0 ? '涨' : '掉'}了 ${Math.abs(kgPerWeek)} kg。`)
       : progress < 0 ? `方向反了：目标是${goalRate > 0 ? '增重' : '减重'}，实际在往另一边走。`
         : Math.abs(diff) < 0.1 ? '和目标基本一致，照现在的吃法继续。'
-          : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
+          : !resolvable
+            ? `和目标差 ${Math.abs(diff)} kg/周，但这个精度还分辨不出来 —— 多称几次，或把区间拉长再看。`
+            : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
+    /*
+     * 差得出来的时候补一句它可能来自哪儿。
+     *
+     * 计划热量里的消耗是设备估算，偏差会**原样**落到这个差值上：设备高报两成，
+     * 目标就跟着高两成，人照着吃就会比计划走得快，而程序自己看不出来
+     * （`dailyTargets` 的入参里根本没有体重变化）。用户真正需要知道的是
+     * 「这个差不一定是我吃错了」，而不是再被念一遍数字。
+     */
+    resolvable && diff != null && Math.abs(diff) >= 0.1 && progress >= 0
+      ? '计划里的消耗是设备估算，本身有偏差，这个差里也有它的一份。' : '',
     tooFastLoss ? '变化超过体重的 1%/周；持续过快减重会增加瘦体重流失风险，但短期水分变化也可能放大数值，先复核连续几周趋势。' : '',
     tooFastGain ? '高于增肌期常用的 0.25%–0.5% 体重/周参考范围；更快增重可能提高脂肪增加比例，但体重数据本身不能区分脂肪、肌肉与水分。' : '',
     s.spread >= 2 ? `区间内最高最低差 ${s.spread} kg，水分、糖原和消化道内容物都可能影响单次称重；优先看同条件下的多周趋势。` : '',

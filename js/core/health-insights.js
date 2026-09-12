@@ -9,6 +9,7 @@
  */
 
 import { MAX_LOSS_RATE_PCT, MAX_GAIN_RATE_PCT } from './nutrition.js';
+import { linearFit, weeklyTrend } from './slope.js';
 
 const round = (v, d = 0) => {
   const m = 10 ** d;
@@ -100,22 +101,17 @@ function stdev(arr) {
   return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / (arr.length - 1));
 }
 
-/** 最小二乘斜率（单位/天） */
+/** 把 `{date, value}` 换成 `core/slope.js` 认的天序号坐标 */
+function toDayXY(points) {
+  if (!points.length) return [];
+  const t0 = dayNumber(points[0].date);
+  return points.map((p) => ({ x: dayNumber(p.date) - t0, y: p.value }));
+}
+
+/** 最小二乘斜率（单位/天）。算法在 `core/slope.js`，那儿只有一份。 */
 function slopePerDay(points) {
   if (points.length < 3) return null;
-  const t0 = dayNumber(points[0].date);
-  const xs = points.map((p) => dayNumber(p.date) - t0);
-  const ys = points.map((p) => p.value);
-  const n = xs.length;
-  const mx = avg(xs);
-  const my = avg(ys);
-  let num = 0;
-  let den = 0;
-  for (let i = 0; i < n; i += 1) {
-    num += (xs[i] - mx) * (ys[i] - my);
-    den += (xs[i] - mx) ** 2;
-  }
-  return den > 0 ? num / den : null;
+  return linearFit(toDayXY(points))?.perDay ?? null;
 }
 
 const ZERO_IS_MEASUREMENT = new Set(['steps', 'activeEnergy']);
@@ -133,12 +129,18 @@ function weightTrendStatsFromDays(days) {
   const elapsedDays = Math.max(0, spanDays - 1);
   // 四次连续称重挤在三四天里，换算成“每周变化”会把水分波动放大。
   // 因此点数与首末间隔必须同时满足，所有页面共用这一条门槛。
-  const slope = points.length >= 4 && elapsedDays >= 7 ? slopePerDay(points) : null;
+  const fit = points.length >= 4 && elapsedDays >= 7 ? weeklyTrend(toDayXY(points)) : null;
   return {
     records: points.length,
     spanDays,
     elapsedDays,
-    kgPerWeek: slope != null ? round(slope * 7, 2) : null,
+    kgPerWeek: fit ? fit.perWeek : null,
+    /*
+     * 上面那道门槛是二值的：过了就用确定语气说话，可 4 个点和 30 个点
+     * 拟合出来的斜率精度差着好几倍。把标准误一并交出去，让说话的人
+     * （`trend-reading.js` 的 `readWeight`）自己决定这个差值配不配下结论。
+     */
+    stdErrKgPerWeek: fit ? fit.stdErrPerWeek : null,
   };
 }
 

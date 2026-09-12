@@ -316,7 +316,8 @@ export function trendCharts(rerender) {
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
       note: trendReading('weight', weightSeries, {
-        kgPerWeek: weightStats.kgPerWeek, goalRate: mixedTargets ? null : targets.rateKgPerWeek,
+        kgPerWeek: weightStats.kgPerWeek, stdErrKgPerWeek: weightStats.stdErrKgPerWeek,
+        goalRate: mixedTargets ? null : targets.rateKgPerWeek,
         records: weightStats.records, spanDays: weightStats.spanDays,
       }),
       readout: readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))),
