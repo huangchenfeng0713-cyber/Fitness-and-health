@@ -79,8 +79,8 @@ try {
   await page.getByRole('tab', { name: '本次训练', exact: true }).click();
   await page.locator('.plan-row button').filter({ hasText: '记组' }).click();
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
-  await page.locator('.set-input[placeholder="次数"]').fill('10');
-  await page.locator('.set-input[placeholder="次数"]').blur();
+  await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).fill('10');
+  await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-group="leg"]').textContent.includes('今天'));
   check('填写有效训练组后覆盖立即更新', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('1 次')));

@@ -10,6 +10,7 @@ import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
 import { setIntent } from '../lib/nav.js';
+import { quickWeightCard } from './cards/weight-entry.js';
 
 /*
  * 主卡只有两档。红色那一档（'已超标'）删了 —— `judgeStatus` 从来不返回它，
@@ -152,6 +153,7 @@ function heroCard(advice, targets, derived) {
           energyRingChart({ model: ringModel, animateKey: state.day }),
           ringCenter(ringModel)),
         ringLegend(ringModel))),
+    h('p.form-hint', null, `每日计划 ${num(targets.kcal)} kcal；环心是记录摄入减设备消耗，不代表全天结余。`),
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -211,11 +213,27 @@ function ringLegend(model) {
     h('span.ring-legend-unit', null, 'kcal'))));
 }
 
+function planBasisText(targets) {
+  const b = targets.planBasis;
+  if (!b || typeof b.from !== 'string' || typeof b.to !== 'string'
+    || !Number.isInteger(b.days) || !Number.isInteger(b.windowDays)) {
+    return '旧计划未保存基线窗口与样本数，不能用现在的数据倒推当时依据。';
+  }
+  const window = `本计划参考窗口 ${b.from} 至 ${b.to}（${b.windowDays} 日），设备完整日 ${b.days} 天。`;
+  if (!Number.isFinite(b.restingEnergy) || !Number.isFinite(b.activeEnergy)) return window + '完整日样本不足，未形成设备基线。';
+  let usage = '仅供对照，此计划采用公式。';
+  if (targets.tdeeSource === 'apple') usage = b.activeSource === 'formula-fallback'
+    ? '此计划的活动部分实际采用公式补充，并非上述设备均值。' : '作为此计划的设备参考。';
+  return window + `日均静息 ${num(b.restingEnergy)} + 活动 ${num(b.activeEnergy)} = ${num(b.restingEnergy + b.activeEnergy)} kcal。` + usage;
+}
+
 function heroInfo(derived, targets) {
   const meta = derived.energyData;
   const basis = [
     ['基础代谢', `${num(targets.bmr)} kcal，仅作为能量计算基础，不是需要“吃满”的目标`],
-    ['每日计划', targets.tdeeSource === 'apple' ? '采用近期完整日设备基线' : '采用身体资料与活动系数估算'],
+    ['每日计划', targets.tdeeSource === 'apple'
+      ? targets.planBasis?.activeSource === 'formula-fallback' ? '设备静息基线 + 公式补充活动部分' : '设备参考方案，见基线明细'
+      : '采用身体资料与活动系数估算（含工作、通勤与训练）'],
     ['蛋白质', targets.proteinBasis],
     ['脂肪', `参考上限 ${num(targets.fatUpper || targets.fat)}g，约占总热量 35%`],
     ['膳食纤维', '中国成人参考 25–30g'],
@@ -244,6 +262,10 @@ function heroInfo(derived, targets) {
         : '能规划的只是体重变化的快慢，增减的是肌肉还是脂肪，这里判断不了。'),
     freshness && h('p', null, freshness),
     h('p', null, (targets.context || '按当前设置对照') + ' · ' + targets.referenceDate),
+    h('p', null, targets.effectiveDate ? `本计划自 ${targets.effectiveDate} 生效；今天新增记录不会自动改写已保存计划。` : '此日没有已保存的目标版本，按当前设置作对照。'),
+    h('p', null, planBasisText(targets)),
+    h('p', null, `本计划实际采用 TDEE ${num(targets.tdee)} kcal，结合每日调整后，摄入目标为 ${num(targets.kcal)} kcal。`),
+    h('p', null, '七日速览是另一个统计窗口，不必等于计划参考值。设备热量是估算；本应用不单独加算食物热效应，这不表示已证实 Apple 包含或排除了它。'),
     h('p', null, derived.isToday
       ? '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'
       : '根据所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
@@ -329,6 +351,7 @@ export function renderDashboard(root) {
     targets.status === 'unavailable' ? h('section.card', null, h('h2', null, '暂不能生成个人计划'),
       h('p', null, targets.reason), h('p', null, '已知记录摄入 ' + num(d.intake.kcal) + ' kcal'),
       h('a.secondary-btn', { href: '#settings' }, '完善身体信息')) : heroCard(advice, targets, d),
+    d.isToday ? quickWeightCard() : null,
     trendCard(advice),
     insightsCard(advice, rerender));
 }

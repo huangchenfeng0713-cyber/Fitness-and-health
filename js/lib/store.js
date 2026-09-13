@@ -226,7 +226,7 @@ export function recompute(now = new Date()) {
   const isToday = state.day === todayKey(now);
 
   /*
-   * 身高、体重、体脂只认 Apple 健康，而且是「所选日期之前最近一次」——
+   * 身高、体重、体脂优先取健康日表（设备或手动来源），截至所选日期最近一次——
    * 称重不是每天都有，取不到当天的就一直沿用上一次读到的，直到出现新记录。
    *
    * 原先身高那条写的是 `hcm > 0 && !p.heightCm`：手填过一次之后设备记录就再也
@@ -313,18 +313,24 @@ export function planForProfile(profile, day = todayKey(), now = new Date()) {
   }
   const selected = [...(Array.isArray(profile?.targetVersions) ? profile.targetVersions : [])].filter(v => v && /^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate) && v.effectiveDate <= day && v.targets)
     .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate) || String(a.savedAt || a.id).localeCompare(String(b.savedAt || b.id))).at(-1);
-  if (selected && (selected.targets.status === 'unavailable' || (selected.targets.status === 'ready' && ['kcal','protein','fat','carb','tdee','bmr'].every(k => Number.isFinite(selected.targets[k]) && selected.targets[k] > 0)))) return { ...selected.targets, versionId: selected.id, referenceDate: day, context: '当时计划' };
+  if (selected && (selected.targets.status === 'unavailable' || (selected.targets.status === 'ready' && ['kcal','protein','fat','carb','tdee','bmr'].every(k => Number.isFinite(selected.targets[k]) && selected.targets[k] > 0)))) return { ...selected.targets, versionId: selected.id, effectiveDate: selected.effectiveDate, referenceDate: day, context: '当时计划' };
   const check = validateProfile(profile, reference);
   let planned = null;
+  let planBasis = null;
   if (check.valid) {
     const stat = staticTDEE(profile, reference);
     const baseline = computeBaseline(state.healthDays, state.dietDaily, day);
+    planBasis = { from: shiftDay(day, -baseline.windowDays), to: shiftDay(day, -1),
+      days: baseline.energyPairedDays, windowDays: baseline.windowDays,
+      restingEnergy: baseline.restingEnergy, activeEnergy: baseline.activeEnergy };
     if (profile.useAppleEnergy && baseline.restingEnergy > 0 && baseline.activeEnergy != null) {
       planned = dynamicTDEE({ bmr: stat.bmr, baselineResting: baseline.restingEnergy,
         baselineActive: baseline.activeEnergy, observationFraction: 1, fallbackTDEE: stat.tdee });
+      planBasis.restingSource = planned.basalSource;
+      planBasis.activeSource = planned.activeSource;
     }
   }
-  return { ...dailyTargets(profile, planned, reference), referenceDate: day, context: '按当前设置对照' };
+  return { ...dailyTargets(profile, planned, reference), planBasis, referenceDate: day, context: '按当前设置对照' };
 }
 
 /** 取指定日期当天或之前最近一次的健康指标 */

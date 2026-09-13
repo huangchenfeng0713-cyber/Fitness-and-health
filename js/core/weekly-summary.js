@@ -1,23 +1,8 @@
 import { completeEnergyDay, presentNumber } from './energy-observation.js';
 /**
- * 近 7 日速览：截至昨天的七个完整日。
- *
- * **只有标签和数值两列，数值靠右，一色黑。**
- *
- * 第三列前后长过两茬东西，两茬都删了。头一茬是口径（「按有记录的天算」
- * 「依据 4 个完整日」「08-29 → 09-04，共 5 次称重」）—— 那是维护这个库的人要的。
- * 换成结论（「基本贴着目标」「这一周在往下走」）之后仍然不该留：结论在同一页的
- * 趋势卡下面本来就各有一段，说得比一句话细，而这张卡叫「速览」，
- * 要的是七个数扫一眼就走。留着第三列只会把每一行拉宽，数值悬在中间够不着两边。
- *
- * 数值也不上色。绿色说的是「这一项做到了」，那同样是判断、同样在图下面说过一次；
- * 一列数字里挑两个染绿，读出来是「这两行更要紧」，可它们并不是。
- *
- * 剩下唯一还要交代的是**算不出来的时候为什么算不出来**（说明层明写的例外：
- * 数据不够时要说清还差什么）。现在写进数值本身，不额外开一列：
- * 累计收支配不上对时直接写「缺饮食记录」，不摆一个哑巴「—」。
- * 别的行不用：日均摄入那个「—」的原因正上方那行「饮食记录 2 / 7 天」就是，
- * 体重那个「—」就是没称过。
+ * 近 7 日速览：已结束日窗口内的记录描述，不作组织变化或全天完整性的推断。
+ * 所有记录日均与配对日均分开命名；配对日期和分母供视图帮助核对。
+ * 主表保留标签/数值两列，未达到样本门槛时说明缺项。
  */
 
 import { MIN_POINTS_FOR_CLAIM } from './trend-reading.js';
@@ -62,7 +47,7 @@ export function weeklySummary({
 
   if (diet.length >= MIN_POINTS_FOR_CLAIM) {
     const avgKcal = round(diet.reduce((s, d) => s + (Number(d.kcal) || 0), 0) / diet.length);
-    rows.push(row('kcal', '日均摄入', `${avgKcal} kcal`));
+    rows.push(row('kcal', '已记录日均摄入', `${avgKcal} kcal`));
 
     const proteinGoal = Number(targets?.protein) || 0;
     if (proteinGoal > 0 && !mixedTargets) {
@@ -72,7 +57,7 @@ export function weeklySummary({
     }
   } else {
     // 为什么没有日均，正上方那行「饮食记录 N / 7 天」已经说了
-    rows.push(row('kcal', '日均摄入', '—'));
+    rows.push(row('kcal', '已记录日均摄入', '—'));
   }
 
   /*
@@ -94,11 +79,15 @@ export function weeklySummary({
   const hasSpend = hd => Boolean(completeEnergyDay(hd));
   const paired = health.map((hd) => {
     if (!hasIntake(hd) || !hasSpend(hd)) return null;
-    return Number(byDate.get(hd.date).kcal) - (Number(hd.restingEnergy) + Number(hd.activeEnergy));
+    const intake = Number(byDate.get(hd.date).kcal);
+    const spent = Number(hd.restingEnergy) + Number(hd.activeEnergy);
+    return { date: hd.date, intake, spent, balance: intake - spent };
   }).filter((v) => v != null);
 
   if (paired.length >= MIN_POINTS_FOR_CLAIM) {
-    const total = round(paired.reduce((a, b) => a + b, 0));
+    const total = round(paired.reduce((sum, day) => sum + day.balance, 0));
+    rows.push(row('pairedIntake', '配对日均摄入', `${round(paired.reduce((sum, day) => sum + day.intake, 0) / paired.length)} kcal`));
+    rows.push(row('pairedSpent', '配对日均设备消耗', `${round(paired.reduce((sum, day) => sum + day.spent, 0) / paired.length)} kcal`));
     rows.push(row('balance', `已配对 ${paired.length}/${days} 日收支`, `${total >= 0 ? '盈余' : '缺口'} ${Math.abs(total)} kcal`));
   } else {
     /*
@@ -144,5 +133,6 @@ export function weeklySummary({
   const steps = avgOf('steps');
   if (steps != null) rows.push(row('steps', '日均步数', withUnit(steps, '步')));
 
-  return { from, to, days, loggedDays: diet.length, pairedDays: paired.length, rows };
+  return { from, to, days, loggedDays: diet.length, pairedDays: paired.length,
+    pairedDates: paired.map(day => day.date).sort(), rows };
 }

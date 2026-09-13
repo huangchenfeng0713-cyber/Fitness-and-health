@@ -106,7 +106,7 @@ export function validateImportPayload(payload) {
   }
   validateJsonValue(payload);
   const rows = Object.fromEntries(Object.values(STORES).map((store) => {
-    const value = payload[store] ?? [];
+    const value = Object.hasOwn(payload, store) ? payload[store] : [];
     if (!Array.isArray(value)) throw new Error(`备份中的 ${store} 不是数组`);
     if (value.length > IMPORT_LIMITS[store]) throw new Error(`备份中的 ${store} 记录过多`);
     if (value.some((row) => !row || typeof row !== 'object' || Array.isArray(row))) {
@@ -630,6 +630,7 @@ export async function exportAllWithCloudMetadata() {
         diet: requests.diet.result,
         settings: requests.settings.result,
         customFoods: requests.customFoods.result,
+        training: requests.training.result,
       },
       metadata: metaRequest.result?.value || null,
     });
@@ -656,8 +657,10 @@ export async function importAll(payload, {
     throw new Error('备份来自更新版本的应用，请先升级后再导入');
   }
 
-  const names = Object.values(STORES);
   const rowsByStore = validateImportPayload(payload);
+  // 旧备份没有训练字段，不代表用户选择删除训练。云端调用必须自行明确账号归属。
+  const preserveTraining = source === 'local' && !Object.hasOwn(payload, 'training');
+  const names = Object.values(STORES).filter(store => !(preserveTraining && store === 'training'));
 
   // 所有清空和写入放在同一个事务：任意一条写入失败，IndexedDB 会整体回滚，
   // 不会再留下“健康数据已清空、饮食只恢复一半”的状态。
@@ -691,7 +694,8 @@ export async function importAll(payload, {
     count: names.reduce((total, store) => total + rowsByStore[store].length, 0),
     source,
   });
-  return Object.fromEntries(names.map((store) => [store, rowsByStore[store].length]));
+  return { ...Object.fromEntries(names.map((store) => [store, rowsByStore[store].length])),
+    trainingPreserved: preserveTraining };
 }
 
 /** 原子清空所有业务数据，供安全退出账号和“清除全部数据”共同使用。 */

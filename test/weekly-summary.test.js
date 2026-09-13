@@ -267,3 +267,18 @@ test('配对不足时点名缺的是哪一半', () => {
   });
   assert.equal(noDevice.rows.find((r) => r.key === 'balance').value, '缺设备记录');
 });
+
+test('配对日均和收支严格共用日期：缺活动、部分日和多余饮食日均排除', () => {
+  const dates = windowDates('2026-08-28');
+  const healthDays = dates.slice(0, 5).map(date => completeRow({ date, restingEnergy: 1500, activeEnergy: 500 }));
+  delete healthDays[3].activeEnergy;
+  healthDays[4] = { date: dates[4], restingEnergy: 1500, activeEnergy: 500,
+    energyObservedAt: dates[4] + 'T12:00:00+08:00' };
+  const s = weeklySummary({ endDate: dates.at(-1), healthDays,
+    dietDaily: dates.map((date, i) => ({ date, kcal: i < 3 ? 2100 : 9000 })) });
+  assert.deepEqual(s.pairedDates, dates.slice(0, 3));
+  assert.equal(rowOf(s, 'pairedIntake').value, '2100 kcal');
+  assert.equal(rowOf(s, 'pairedSpent').value, '2000 kcal');
+  assert.match(rowOf(s, 'balance').value, /盈余 300 kcal/);
+  assert.notEqual(rowOf(s, 'kcal').value, rowOf(s, 'pairedIntake').value);
+});

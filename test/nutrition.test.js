@@ -583,3 +583,47 @@ test('填速率时的即时提示：三档说三种话', () => {
   // 体重还没填时不要硬凑一句话出来
   assert.equal(rateGuidance({ weightKg: null, rateKgPerWeek: 0.5 }).text, '');
 });
+
+test('零活动基线是已知零，不用公式虚构额外消耗', () => {
+  for (const baselineActive of [0, '0']) {
+    const result = dynamicTDEE({ bmr: 1500, baselineResting: 1500, baselineActive,
+      observationFraction: 1, fallbackTDEE: 2250 });
+    assert.equal(result.active, 0);
+    assert.equal(result.tdee, 1500);
+    assert.equal(result.activeSource, 'device-baseline');
+  }
+});
+
+test('缺失或非法活动基线不被强制转换成已知零', () => {
+  for (const baselineActive of [null, undefined, '', ' ', false, true, [], [0], {}, NaN, Infinity, -1]) {
+    const result = dynamicTDEE({ bmr: 1500, baselineResting: 1500, baselineActive,
+      observationFraction: 1, fallbackTDEE: 2250 });
+    assert.equal(result.active, 750);
+    assert.equal(result.tdee, 2250);
+    assert.equal(result.activeSource, 'formula-fallback');
+  }
+});
+
+test('空白或非法今天活动不能伪装为零观测', () => {
+  for (const activeSoFar of ['', ' ', false, true, [], [0]]) {
+    const result = dynamicTDEE({ bmr: 1500, activeSoFar, observationFraction: 1, fallbackTDEE: 2250 });
+    assert.equal(result.activeReported, null);
+    assert.equal(result.activeSource, 'formula-fallback');
+    assert.equal(result.active, 750);
+  }
+});
+
+test('零活动基线不覆盖有效观测，异常原值仍保留并隔离', () => {
+  const inputs = { bmr: 1500, baselineResting: 1500, baselineActive: 0,
+    basalSoFar: 750, observationFraction: 0.5, fallbackTDEE: 2250 };
+  const valid = dynamicTDEE({ ...inputs, activeSoFar: 40 });
+  assert.equal(valid.active, 40);
+  assert.equal(valid.activeSource, 'device-today');
+  assert.equal(valid.measured, 790);
+  const suspect = dynamicTDEE({ ...inputs, activeSoFar: 40000 });
+  assert.equal(suspect.activeCapped, true);
+  assert.equal(suspect.activeReported, 40000);
+  assert.equal(suspect.activeSource, 'device-baseline');
+  assert.equal(suspect.active, 0);
+  assert.equal(suspect.measured, 750);
+});

@@ -584,6 +584,7 @@ const MAX_REPS = 500;
 const MAX_WEIGHT_KG = 500;
 
 const clampNum = (value, min, max) => {
+  if (value == null || String(value).trim() === '') return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.min(max, Math.max(min, n));
@@ -794,12 +795,14 @@ export function lastPerformance(sessions = [], exerciseId, { before = null } = {
   for (const raw of ordered) {
     const item = normalizeSession(raw).items.find((x) => x.id === exerciseId);
     if (!item?.sets?.length) continue;
+    if (!item.sets.some(set => set.reps > 0 || set.weightKg > 0)) continue;
     const weightLabel = spanLabel(item.sets.map((x) => x.weightKg), 'kg');
     const repsList = item.sets.map((x) => x.reps).filter((v) => Number.isFinite(v) && v > 0);
     if (!weightLabel && !repsList.length) continue;
     return {
       date: raw.date,
       setCount: item.sets.length,
+      sets: item.sets.map(set => ({ ...set })),
       weightLabel,
       // 次数逐组列出来而不是压成区间：8,8,6 和 6–8 说的不是一回事
       repsLabel: repsList.length ? repsList.join(',') : null,
@@ -810,7 +813,7 @@ export function lastPerformance(sessions = [], exerciseId, { before = null } = {
 
 /** 一组数写成「50kg」或「50–60kg」；一个都没记就不写 */
 function spanLabel(values, unit) {
-  const nums = values.filter((v) => Number.isFinite(v) && v > 0);
+  const nums = values.filter((v) => Number.isFinite(v) && (unit === 'kg' ? v >= 0 : v > 0));
   if (!nums.length) return null;
   const lo = Math.min(...nums);
   const hi = Math.max(...nums);

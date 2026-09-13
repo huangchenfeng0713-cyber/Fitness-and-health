@@ -194,8 +194,8 @@ try {
   await current();
   await page.locator('.plan-row button').first().click();
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
-  await page.locator('.set-input[placeholder="次数"]').fill('8');
-  await page.locator('.set-input[placeholder="次数"]').blur();
+  await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).fill('8');
+  await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.waitForTimeout(250);
   await history();
   check('填写有效组后记录与部位间隔同步', await page.locator('.training-log-day .log-row').count() === 1 && /今天/.test(await page.locator('.training-coverage').textContent()));

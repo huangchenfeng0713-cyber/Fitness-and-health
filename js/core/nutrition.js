@@ -8,6 +8,7 @@
  *  3. 热量 / 蛋白质 / 脂肪 / 碳水 / 纤维 / 钠 / 糖 / 饮水 的每日目标
  *  4. 当日预算的实时再分配（按已过时间、已摄入量）
  */
+import { presentNumber } from './energy-observation.js';
 
 /*
  * 1 kg 脂肪组织约含 7700 kcal（Wishnofsky 1958，英制原文是 3500 kcal/lb）。
@@ -284,8 +285,8 @@ export function activityCurve(dayFraction) {
  *  - observationFraction: 健康快照覆盖到的一天比例 0~1
  *  - dayFraction: 旧调用兼容字段；未提供 observationFraction 时才使用
  *  - baselineActive: 近期平均每日活动能量（用于外推剩余时间），可选
- * Apple 的静息 + 活动能量本身就是设备口径的总消耗拆分；不再额外叠加固定 10% TEF，
- * 避免目标页和趋势页同一天相差 150–250 kcal。
+ * 延用设备静息 + 活动的记录口径，不额外叠加固定 10% 食物热效应。
+ * 这是一致性约定，不证明设备已经包含或排除了食物热效应。
  */
 export function dynamicTDEE({
   bmr,
@@ -300,7 +301,7 @@ export function dynamicTDEE({
   const baseBmr = Number(bmr);
   if (!(baseBmr > 0) || !Number.isFinite(baseBmr)) throw new RangeError('BMR 必须是正数');
   const activeValue = Number(activeSoFar);
-  const hasActiveToday = activeSoFar != null && Number.isFinite(activeValue) && activeValue >= 0;
+  const hasActiveToday = presentNumber(activeSoFar) && activeValue >= 0;
   const activeNow = hasActiveToday ? activeValue : 0;
   // dayFraction 仅为旧调用兼容；新调用必须传健康快照的覆盖时间，而不是页面当前时间。
   const fraction = observationFraction == null ? Number(dayFraction) : Number(observationFraction);
@@ -310,7 +311,8 @@ export function dynamicTDEE({
   const baselineRestingValue = Number(baselineResting);
   const hasBaselineResting = Number.isFinite(baselineRestingValue) && baselineRestingValue > 0;
   const baselineActiveValue = Number(baselineActive);
-  const hasBaselineActive = Number.isFinite(baselineActiveValue) && baselineActiveValue > 0;
+  // 明确的零基线仍是设备证据；空白、null 和布尔值不能经 Number() 变成零证据。
+  const hasBaselineActive = presentNumber(baselineActive) && baselineActiveValue >= 0;
   const fallbackTdeeValue = Number(fallbackTDEE);
   const hasFallbackTdee = Number.isFinite(fallbackTdeeValue) && fallbackTdeeValue > 0;
 
@@ -379,8 +381,8 @@ export function dynamicTDEE({
     activeSource = 'device-today';
   }
 
-  // Apple 的静息能量与活动能量已经是设备的总消耗拆分；固定再加 TEF 会重复计算。
-  // 保留 tef 字段是为了兼容现有调用方，但该口径下恒为 0。
+  // tef = 0 表示本应用未单独加算，不表示人体没有食物热效应。
+  // 没有依据在此对所有设备固定补加 10%，也不据此断言加算必然重复。
   const tef = 0;
   const total = round(basalFullDay + activeFullDay);
 

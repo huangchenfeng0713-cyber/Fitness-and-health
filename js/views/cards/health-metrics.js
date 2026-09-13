@@ -19,6 +19,7 @@ import { infoTip } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
 import { setIntent } from '../../lib/nav.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
+import { weightEntryButton } from './weight-entry.js';
 
 
 /** 缺数据时占位的那道杠。用长破折号，不用连字符——后者太短，像个减号 */
@@ -123,6 +124,7 @@ export function healthMetricsCard() {
     h('div.card-head', null,
       h('h3', null, '今日健康数据'),
       h('div.card-head-actions', null,
+        weightEntryButton(),
         h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
           info.synced ? '已同步' : '未同步'),
         infoTip('查看同步情况',
