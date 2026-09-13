@@ -668,3 +668,17 @@ test('递减组的重量写成区间；没练过的返回 null', () => {
   // before 用来排掉今天自己刚记的那次
   assert.equal(lastPerformance(sessions, 'squat_bb', { before: '2026-08-25' }), null);
 });
+
+test('训练清洗保留未知与显式零，上次逐组记录不压成平均', () => {
+  const raw = { date: '2026-09-10', items: [{ id: 'pushup', sets: [
+    { reps: 12, weightKg: null }, { reps: 10, weightKg: 0 }, { reps: '', weightKg: '' },
+  ] }] };
+  const clean = normalizeSession(raw);
+  assert.equal(clean.items[0].sets[0].weightKg, null);
+  assert.equal(clean.items[0].sets[1].weightKg, 0);
+  assert.deepEqual(clean.items[0].sets[2], { reps: null, weightKg: null });
+  const last = lastPerformance([raw], 'pushup', { before: '2026-09-12' });
+  assert.deepEqual(last.sets, clean.items[0].sets);
+  last.sets[0].reps = 99;
+  assert.equal(raw.items[0].sets[0].reps, 12);
+});

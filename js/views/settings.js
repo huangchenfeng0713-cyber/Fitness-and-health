@@ -178,7 +178,7 @@ function conflictPanel(account) {
   const summary = (label, value) => h('div.account-conflict-version', null,
     h('strong', null, label),
     h('span', null, value
-      ? `${Number(value.healthDays) || 0} 天健康 · ${Number(value.dietEntries) || 0} 条饮食 · ${Number(value.customFoods) || 0} 个自定义食物`
+      ? `${Number(value.healthDays) || 0} 天健康 · ${Number(value.dietEntries) || 0} 条饮食 · ${Number(value.customFoods) || 0} 个自定义食物 · ${value.trainingDays == null ? '训练字段未包含' : `${value.trainingDays} 天训练`}`
       : '没有可读取的数据摘要'));
   const cloudBtn = h('button.secondary-btn', {
     type: 'button',

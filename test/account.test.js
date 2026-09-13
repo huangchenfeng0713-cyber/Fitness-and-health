@@ -1141,3 +1141,62 @@ test('恶意云快照在 revision 比较前先校验，失败时本机数据保�
   assert.equal(db.readCloudMetadata().dirty, true);
   controller.destroy();
 });
+
+const trainingFixture = [{ date: '2026-08-24', items: [{ id: 'pushup', done: false,
+  sets: [{ reps: 12, weightKg: null }, { reps: 10, weightKg: 0 }] }] }];
+
+test('新账号快照上传、另一设备下载保留完整训练数组', async () => {
+  const original = { ...snapshot('training'), training: trainingFixture };
+  const client = fakeClient();
+  const a = createCloudSync({ client, dbApi: fakeDb(original), storage: fakeStorage(), debounceMs: 60_000 });
+  const otherDb = fakeDb({ ...snapshot('empty'), training: [] });
+  const b = createCloudSync({ client, dbApi: otherDb, storage: fakeStorage(), debounceMs: 60_000 });
+  try {
+    await a.setUser({ id: 'u1' });
+    await a.resolveConflict('device');
+    assert.deepEqual(client.rows.get('u1').payload.training, trainingFixture);
+    await b.setUser({ id: 'u1' });
+    assert.deepEqual(otherDb.read().training, trainingFixture);
+  } finally { a.destroy(); b.destroy(); }
+});
+
+for (const revision of [1, 2]) test(`同账号旧快照 revision ${revision} 不丢训练，补传后另一设备可见`, async () => {
+  const db = fakeDb({ ...snapshot('local'), training: trainingFixture }, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({ rows: [remoteRow('u1', revision, snapshot('old-cloud', { diet: 1 }))] });
+  const sync = createCloudSync({ client, dbApi: db, storage: fakeStorage(), debounceMs: 60_000 });
+  try {
+    await sync.setUser({ id: 'u1' });
+    assert.deepEqual(db.read().training, trainingFixture);
+    await sync.syncNow();
+    assert.deepEqual(client.rows.get('u1').payload.training, trainingFixture);
+    assert.equal(sync.state.syncStatus, 'idle');
+  } finally { sync.destroy(); }
+});
+
+test('新版云快照明确 training 空数组仍能同步删除训练', async () => {
+  const db = fakeDb({ ...snapshot('local'), training: trainingFixture }, { owner: 'u1', revision: 1, dirty: false });
+  const client = fakeClient({ rows: [remoteRow('u1', 2, { ...snapshot('empty'), training: [] })] });
+  const sync = createCloudSync({ client, dbApi: db, storage: fakeStorage(), debounceMs: 60_000 });
+  try { await sync.setUser({ id: 'u1' }); assert.deepEqual(db.read().training, []); }
+  finally { sync.destroy(); }
+});
+
+test('未归属设备明确选云端时不把旧设备训练带给新账号', async () => {
+  const db = fakeDb({ ...snapshot('guest'), training: trainingFixture });
+  const client = fakeClient({ rows: [remoteRow('u2', 1, snapshot('legacy-cloud', { settings: 1 }))] });
+  const sync = createCloudSync({ client, dbApi: db, storage: fakeStorage(), debounceMs: 60_000 });
+  try {
+    await sync.setUser({ id: 'u2' });
+    assert.equal(sync.state.syncStatus, 'conflict');
+    await sync.resolveConflict('cloud');
+    assert.equal(db.read().training?.length || 0, 0);
+    assert.equal(client.rows.get('u2').payload.training?.length || 0, 0);
+  } finally { sync.destroy(); }
+});
+
+test('training 字段缺失兼容旧备份，但 null/对象不伪装为空数组', () => {
+  assert.deepEqual(validateImportPayload(snapshot('legacy')).training, []);
+  for (const value of [null, {}, false]) {
+    assert.throws(() => validateImportPayload({ ...snapshot('bad'), training: value }), /training 不是数组/);
+  }
+});

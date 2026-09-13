@@ -184,3 +184,18 @@ RLS 隔离的是不同普通账号，云快照并非端到端加密：Supabase �
 - [Supabase Auth 身份关联](https://supabase.com/docs/guides/auth/auth-identity-linking)
 - [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Supabase Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
+
+## 训练快照兼容（2026-09-12）
+
+`exportAllWithCloudMetadata().snapshot` 现在包含 health、diet、settings、customFoods、training 五个业务数组。账号内部归属信息继续只保存在本机，不能进入导出 JSON。不修改远端表或 Health 快捷指令协议。
+
+| 输入 | 文件恢复 | 账号下载 |
+| --- | --- | --- |
+| training 含记录 | 原子替换训练 | 同其他业务表一起原子替换 |
+| training 是空数组 | 明确清空训练 | 明确同步训练删除 |
+| 旧快照没有 training 键 | 保留本机训练，预览说明旧文件无法恢复缺失历史 | 仅本机已归属同一账号时保留训练并补传；访客选云端或切换账号不隐式合并 |
+| training 为 null/对象/错误类型 | 校验失败，不改数据 | 校验失败，不落地 |
+
+本机与云端 revision 相等但旧云快照漏表时，也会把仍在本机的训练补传。较新旧快照下载后，保留的训练使本机保持 dirty，继续走既有条件更新；上传失败/超限保留本机副本，不能标记完全同步。其它客户端若仍运行旧导出代码，仍可能再次漏表，需要升级。
+
+`test/account.test.js` 用模拟账号验证上传/下载、同账号旧快照、明确空数组和未归属设备边界；`scripts/final-recommendations-smoke.mjs` 使用独立浏览器的真实 IndexedDB 验证备份往返。未操作真实用户快照。

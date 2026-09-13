@@ -10,6 +10,7 @@ import {
   MUSCLE_TARGETS, exerciseTargets, exerciseTargetText, muscleTargetOptions, matchesMuscleTarget,
 } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
+import { subscribeAccount } from '../lib/account.js';
 import { selectBar } from '../lib/select-bar.js';
 import { openSheet, closeSheet, setSheetFooter, setSheetFooterVisible } from '../lib/sheet.js';
 import {
@@ -37,6 +38,10 @@ let pickerBar = null;
 const trainingDay = () => todayKey();
 const session = () => trainingFor(trainingDay());
 const picked = () => session().items.map((i) => i.id);
+// 复制值只存在于编辑草稿；确认后才写入组记录，刷新/换日不会变成已完成训练。
+const setDrafts = new Map();
+const draftKey = (id, date = trainingDay()) => `${date}:${id}`;
+let observingAccount = false;
 
 // Serialize user writes; compute each mutation from the latest state, bound to its original day.
 let writing = Promise.resolve();
@@ -60,6 +65,7 @@ async function removeExerciseWithUndo(exercise) {
   let removed = [];
   const result = await updateSession(items => {
     const index = items.findIndex(item => item.id === exercise.id);
+    setDrafts.delete(draftKey(exercise.id, date));
     if (index >= 0) removed = [{ item: cloneTrainingItem(items[index]), index }];
     return items.filter(item => item.id !== exercise.id);
   }, date);
@@ -529,6 +535,44 @@ function setRow(item, index, set) {
     }, icon('close')));
 }
 
+function setLabel(set) {
+  return `${set.weightKg != null ? set.weightKg + ' kg' : '重量未填'} × ${set.reps > 0 ? set.reps + ' 次' : '次数未填'}`;
+}
+
+function draftSetEditor(item) {
+  const date = trainingDay(), key = draftKey(item.id, date), draft = setDrafts.get(key);
+  if (!draft) return null;
+  const input = (field, label, step) => h('label.form-field', null, h('span', null, label),
+    h('input', { type: 'number', inputmode: 'decimal', min: 0, step,
+      'aria-label': `待确认${label}`, value: draft[field] ?? '',
+      oninput: ev => { draft[field] = ev.target.value.trim() === '' ? null : Number(ev.target.value); } }));
+  return h('div.training-set-draft', null,
+    h('p.form-hint', null, '待确认组 · 预填值仅供参考，确认记录后才计入统计。'),
+    h('div.form-grid', null, input('weightKg', '重量（kg）', '0.5'), input('reps', '次数', '1')),
+    h('div.training-edit-actions', null,
+      h('button.secondary-btn.compact', { type: 'button', onclick: async ev => {
+        if (!Number.isInteger(draft.reps) || draft.reps <= 0 || draft.reps > 500
+          || (draft.weightKg != null && (!Number.isFinite(draft.weightKg) || draft.weightKg < 0 || draft.weightKg > 500))) {
+          toast('次数需为 1–500 的整数；重量可留空或填 0–500 kg', 'warn'); return;
+        }
+        const next = { reps: draft.reps, weightKg: draft.weightKg };
+        ev.currentTarget.disabled = true;
+        const result = await updateSession(items => items.map(i => i.id === item.id && i.sets.length < 20
+          ? { ...i, sets: [...i.sets, next] } : i), date);
+        if (result.ok) setDrafts.delete(key);
+        rerenderTraining();
+      } }, '确认记录这一组'),
+      h('button.text-btn', { type: 'button', onclick: () => { setDrafts.delete(key); rerenderTraining(); } }, '取消')));
+}
+
+function previousSets(exercise) {
+  const last = lastPerformance(state.trainingDays, exercise.id, { before: trainingDay() });
+  if (!last) return null;
+  return h('details.training-last-sets', null,
+    h('summary', null, `上次 ${last.date} · ${last.repsLabel ? last.repsLabel + ' 次' : '次数未填'} · ${last.weightLabel || '重量未填'} · 查看逐组`),
+    last.sets.map((set, n) => h('p.form-hint', null, `第 ${n + 1} 组 · ${setLabel(set)}`)));
+}
+
 /*
  * 「移除」写在动作行上，不藏进「记组」展开层里。
  *
@@ -555,16 +599,20 @@ function planRow(exercise, index) {
     open ? h('div.set-editor', { id: `sets-${exercise.id}` },
       h('p.form-hint', null, `${EQUIPMENT[exercise.equipment]} · 主练 ${muscleLine(exercise)}`),
       exerciseTargets(exercise).note ? h('p.form-hint', null, exerciseTargets(exercise).note) : null,
+      previousSets(exercise),
+      exercise.equipment === 'bodyweight' ? h('p.form-hint', null, '自重动作可只记次数，重量留空。不换算等效公斤；有附加或辅助负重时请沿用自己的记录口径。') : null,
+      item.sets.some(set => set.weightKg === 0) ? h('p.form-hint', null, '旧记录的 0 kg 可能原本未填，不能据此判定自重或附加重量。') : null,
       item.sets.length ? item.sets.map((set, k) => setRow(item, k, set))
         : h('p.form-hint', null, '重量可留空；填写次数后计为已记录组。'),
+      draftSetEditor(item),
       h('div.training-edit-actions', null,
         // compact：内边距收窄、宽度跟着文字走。撑满一行的话，这个「某一个动作
         // 加一组」的次动作会和卡片底下那个「添加动作」印成同样大的一块绿。
-        h('button.secondary-btn.compact', { onclick: () => updateSession(items => items.map(i => {
-          if (i.id !== exercise.id) return i;
-          const last = i.sets.at(-1);
-          return { ...i, sets: [...i.sets, { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null }] };
-        })) }, item.sets.length ? '再加一组' : '加第一组'))) : null);
+        h('button.secondary-btn.compact', { disabled: item.sets.length >= 20 || setDrafts.has(draftKey(item.id)), onclick: () => {
+          const last = item.sets.at(-1) || lastPerformance(state.trainingDays, item.id, { before: trainingDay() })?.sets[0];
+          setDrafts.set(draftKey(item.id), { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null });
+          rerenderTraining();
+        } }, item.sets.length >= 20 ? '已达 20 组记录上限' : item.sets.length ? '再加一组' : '加第一组'))) : null);
 }
 
 function planCard() {
@@ -678,9 +726,9 @@ function weeklyCard() {
         const validSets = r.sets.filter(s => s.reps > 0);
         return h('div.log-item', null,
           h('button.log-row', { type: 'button', 'aria-expanded': String(open), onclick: () => { expandedRow = open ? null : key; rerenderTraining(); } },
-            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组 · ${r.weightLabel || '重量未填'}` : '已标记完成')),
+            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组 · ${r.repsLabel} · ${r.weightLabel || '重量未填'}` : '已标记完成')),
           open ? h('div.log-sets', null, r.sets.map((set, n) => h('div.log-set', null,
-            h('span', null, `第 ${n + 1} 组`), h('span', null, `${set.weightKg > 0 ? set.weightKg + ' kg' : '重量未填'} × ${set.reps > 0 ? set.reps + ' 次' : '次数未填'}`)))) : null);
+            h('span', null, `第 ${n + 1} 组`), h('span', null, setLabel(set))))) : null);
       })))) : emptyState('近 7 日还没有已记录的训练。'),
     planned.length ? h('details.training-planned', { open: plannedOpen, ontoggle: ev => { plannedOpen = ev.currentTarget.open; } },
       h('summary', null, `已安排但未记组数 · ${planned.length} 个动作`),
@@ -719,8 +767,13 @@ document.addEventListener('click', event => {
 });
 
 export function renderTraining(root) {
+  if (!observingAccount) {
+    observingAccount = true;
+    subscribeAccount(account => { if (account.ownershipPending || !account.user) setDrafts.clear(); });
+  }
   const date = trainingDay();
   if (uiDay !== date) {
+    setDrafts.clear();
     uiDay = date; pending.clear(); proposal = null; expanded = null;
     if (pickerRoot?.isConnected) closeSheet({ force: true });
   }

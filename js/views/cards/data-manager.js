@@ -162,27 +162,32 @@ function backupPanel(rerender) {
         if (payload?.app !== 'health-diet-tracker') {
           throw new Error('这不是本应用导出的完整备份；Apple 健康文件请在“同步 Apple 健康”中选择');
         }
-        const healthCount = Array.isArray(payload.health) ? payload.health.length : 0;
-        const dietCount = Array.isArray(payload.diet) ? payload.diet.length : 0;
+        const rows = db.validateImportPayload(payload);
+        const healthCount = rows.health.length;
+        const dietCount = rows.diet.length;
+        const hasTraining = Object.hasOwn(payload, 'training');
+        const trainingScope = hasTraining
+          ? `训练 ${rows.training.length} 天（替换本机训练记录）。`
+          : '旧备份未包含训练：本机现有训练保留，无法从此文件恢复丢失的训练。';
         const cloudWarning = getAccountState().user
           ? '你已登录：恢复后的完整数据还会同步并替换当前账号的云端版本。\n\n'
           : '';
         const ok = confirmAction(
-          `恢复后会替换当前设备里的全部健康、饮食、设置和自定义食物。\n\n`
+          `恢复后会替换当前设备里的健康、饮食、设置和自定义食物。\n\n`
           + cloudWarning
-          + `所选备份：健康 ${healthCount} 天，饮食 ${dietCount} 条。\n\n继续恢复吗？`,
+          + `所选备份：健康 ${healthCount} 天，饮食 ${dietCount} 条，设置 ${rows.settings.length} 项，自定义食物 ${rows.customFoods.length} 条。\n${trainingScope}\n\n继续恢复吗？`,
         );
         if (!ok) return;
         const counts = await db.importAll(payload);
         if (getAccountState().user) {
           try {
             await syncNow();
-            toast(`恢复并同步完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条`, 'ok');
+            toast(`恢复并同步完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条；${counts.trainingPreserved ? '原训练已保留' : `训练 ${counts.training} 天`}`, 'ok');
           } catch (syncError) {
             toast(`本机恢复完成，但云同步尚未完成：${syncError.message}`, 'warn');
           }
         } else {
-          toast(`恢复完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条`, 'ok');
+          toast(`恢复完成：健康 ${counts.health} 天，饮食 ${counts.diet} 条；${counts.trainingPreserved ? '原训练已保留' : `训练 ${counts.training} 天`}`, 'ok');
         }
         setTimeout(() => window.location.reload(), 900);
       } catch (err) {
@@ -212,7 +217,7 @@ function backupPanel(rerender) {
           h('strong', null, '恢复完整备份'),
           h('span', null, connected
             ? '会替换本机数据，并在确认后同步替换当前账号的云端版本。'
-            : '会先确认再整体替换当前本地数据，不与现有数据混合。')),
+            : '先核对替换范围；旧备份未包含训练时保留本机训练。')),
         h('label.secondary-btn.compact', null, '选择备份', restoreInput)),
       h('div.data-action.danger', null,
         h('div.data-action-icon', null, icon('close')),
@@ -714,7 +719,7 @@ export function dataManagerCard(rerender) {
           h('p', null, h('strong', null, '手动补录：'),
             '只保存你填写的当天字段。'),
           h('p', null, h('strong', null, '恢复完整备份：'),
-            '会替换本应用的健康、饮食、设置和自定义食物。'),
+            '替换健康、饮食、设置、自定义食物和文件内的训练；旧文件未包含训练时保留本机训练。'),
           h('p', null, connected
             ? '文件在当前设备读取；解析或恢复后的数据会同步到当前登录账号。'
             : '文件只在当前设备读取；未登录时不会上传个人数据。')))),

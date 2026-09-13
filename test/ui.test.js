@@ -511,9 +511,8 @@ test('可移动的卡片各自成模块，换页只是改一行 import', () => {
 test('Apple 健康同步与完整备份在文案和行为上明确区分', () => {
   const health = page('settings');
   assert.ok(health.includes('只更新身体与活动数据，不会改动饮食记录'));
-  assert.ok(health.includes('会先确认再整体替换当前本地数据，不与现有数据混合'));
   assert.ok(health.includes('payload?.app !== \'health-diet-tracker\''), '恢复入口没有校验应用备份身份');
-  assert.match(health, /confirmAction\([\s\S]*恢复后会替换当前设备里的全部健康、饮食、设置和自定义食物/);
+  // 替换范围与缺训练字段的行为由 final-recommendations-smoke 的实际恢复回归覆盖。
 });
 
 test('长提示在窄屏内换行并限制高度，不再形成溢出的巨型胶囊', () => {

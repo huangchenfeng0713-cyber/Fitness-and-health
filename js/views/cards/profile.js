@@ -161,7 +161,7 @@ export function profileCard(rerender) {
         || field('体重（kg）', numInput('weightKg', '0.1')),
       lockedField('体脂率（%）', 'bodyFatPct', '%')
         || field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
-      field('日常活动量', activity, null, 'span-all'),
+      field('日常活动量', activity, '综合工作、通勤、家务和训练，不只看每周健身次数。', 'span-all'),
       field('目标', goal),
       field('目标速率（kg/周）', rate, rateHint, 'span-all')),
     saveBtn,

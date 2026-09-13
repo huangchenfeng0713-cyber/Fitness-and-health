@@ -1626,6 +1626,9 @@ body.sheet-open {
   text-align: right; font-size: var(--fs-body); font-weight: var(--w-semibold);
   color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
+.weekly-summary-card .week-rows { grid-template-columns: fit-content(48%) minmax(0, 1fr); }
+.weekly-summary-card .week-row-value { white-space: normal; overflow-wrap: anywhere; }
+.weekly-summary-card > .card-head { flex-wrap: wrap; }
 
 /* 「补蛋白 / 补纤维」排在分类前面，用强调色区分：它们回答的是「我现在缺什么」 */
 .chip-focus { color: var(--accent); font-weight: var(--w-semibold); }
@@ -3284,6 +3287,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
  * 起在同一条线上，读出来是卡片自己多长了一段，看不出在编辑哪一行。
  */
 .training-panel .set-editor { padding: 0 0 var(--space-3) 30px; }
+.training-set-draft { padding: var(--space-3); margin-block: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.training-last-sets { margin-block: var(--space-2); overflow-wrap: anywhere; }
+.training-last-sets > summary { min-height: 44px; padding-block: var(--space-2); cursor: pointer; }
+.quick-weight-card p { margin: 0; font-variant-numeric: tabular-nums; }
 .training-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
 .training-edit-actions .secondary-btn { margin-top: 0; }
 .training-add { width: 100%; margin-top: var(--space-3); }

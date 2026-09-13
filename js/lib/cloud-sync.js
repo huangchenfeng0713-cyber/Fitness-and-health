@@ -65,6 +65,7 @@ export function snapshotSummary(snapshot) {
     dietEntries: count('diet'),
     settings: count('settings'),
     customFoods: count('customFoods'),
+    trainingDays: Object.hasOwn(snapshot || {}, 'training') ? count('training') : null,
     exportedAt: snapshot?.exportedAt || null,
   };
 }
@@ -719,16 +720,27 @@ export function createCloudSync({
     const keepLocked = transitionReason === 'safe-signout';
     const advanceEpoch = guard.owner !== userId || (guard.writeLocked && !keepLocked);
     const syncedAt = remote.updated_at || now().toISOString();
+    // 同账号旧快照缺表时保留本机训练；访客/换账号不得隐式带入。
+    // 读取后的并发写由 importAll 的 guard 在同一事务中拦截。
+    let payload = remote.payload;
+    let retainedTraining = false;
+    if (!Object.hasOwn(payload, 'training') && guard.owner === userId) {
+      const local = await dbApi.exportAll();
+      if (local.training?.length) {
+        payload = { ...payload, training: local.training };
+        retainedTraining = true;
+      }
+    }
     try {
       await quiet(async () => {
         assertCurrent(userId, token);
-        await dbApi.importAll(remote.payload, {
+        await dbApi.importAll(payload, {
           source: 'cloud',
           guard,
           cloudMetadata: {
             owner: userId,
             revision: remote.revision,
-            dirty: false,
+            dirty: retainedTraining,
             lastSyncedAt: syncedAt,
             changeSeq: guard.changeSeq,
             epoch: guard.epoch + (advanceEpoch ? 1 : 0),
@@ -741,7 +753,7 @@ export function createCloudSync({
         // implement the atomic cloudMetadata option.
         if (metadata.owner !== userId || metadata.revision < remote.revision) {
           await establishOwner(userId, remote.revision, {
-            dirty: false, syncedAt, unlock: !keepLocked,
+            dirty: retainedTraining, syncedAt, unlock: !keepLocked,
             expectedChangeSeq: guard.changeSeq,
             expectedContext: guard,
           });
@@ -979,7 +991,7 @@ export function createCloudSync({
     }
     const localRevision = metadata.revision;
     if (localRevision === remote.revision) {
-      if (metadata.dirty) await upload(localRevision, user.id, token);
+      if (metadata.dirty || (!Object.hasOwn(remote.payload, 'training') && local.training?.length)) await upload(localRevision, user.id, token);
       else await markSynced(remote, user.id, token, captured);
       return;
     }
@@ -1131,7 +1143,7 @@ export function createCloudSync({
         'remote_stale',
       );
     }
-    if (metadata.dirty) await upload(expectedRevision, userId, token);
+    if (metadata.dirty || (!Object.hasOwn(remote.payload, 'training') && local.training?.length)) await upload(expectedRevision, userId, token);
     else await markSynced(remote, userId, token, captured);
     return publicState();
   }

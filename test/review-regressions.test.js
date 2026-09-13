@@ -358,3 +358,33 @@ test('field provenance survives partial merge without giving an old field a new 
   const manual=stampManualPatch(newer[0],{activeEnergy:20});
   assert.equal(energyObservation(manual,today.date,now).valid,false);
 });
+
+test('完整零活动历史用于新计划，旧目标快照不被重写', () => {
+  const savedState = { ...state };
+  try {
+    const date = '2026-09-07';
+    const rows = ['2026-09-04', '2026-09-05', '2026-09-06'].map(date => ({
+      date, restingEnergy: 1800, activeEnergy: 0,
+      energyObservedAt: new Date(Date.parse(date + 'T00:00:00+08:00') + 86400000).toISOString(),
+      energyCoverage: { status: 'complete', start: date + 'T00:00:00+08:00',
+        end: new Date(Date.parse(date + 'T00:00:00+08:00') + 86400000).toISOString() },
+    }));
+    Object.assign(state, { healthDays: rows, dietDaily: [] });
+    const p = { ...profile, targetVersions: [] };
+    const preview = planForProfile(p, date, now);
+    assert.equal(preview.tdee, 1800);
+    assert.equal(preview.kcal, 1800);
+    assert.equal(preview.planBasis.activeEnergy, 0);
+    assert.equal(preview.planBasis.activeSource, 'device-baseline');
+    const oldTargets = { ...preview, tdee: 2250, kcal: 2250,
+      planBasis: { ...preview.planBasis, activeSource: 'formula-fallback' } };
+    const oldVersion = { id: 'before-fix', effectiveDate: '2026-09-06', targets: oldTargets };
+    const restored = planForProfile({ ...p, targetVersions: [oldVersion] }, date, now);
+    assert.equal(restored.kcal, 2250);
+    assert.equal(restored.planBasis.activeSource, 'formula-fallback');
+    assert.equal(oldVersion.targets.kcal, 2250);
+    // 两个完整日加一个活动缺失日不能构成三个已知零活动日。
+    state.healthDays = rows.map((row, i) => i === 2 ? { ...row, activeEnergy: null } : row);
+    assert.equal(planForProfile(p, date, now).tdeeSource, 'formula');
+  } finally { Object.assign(state, savedState); }
+});
