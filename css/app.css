@@ -3336,3 +3336,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
    */
   .training-panel .set-editor { padding-left: 0; }
 }
+
+/* 记录扩展沿用表单与卡片规范；次要字段按需展开。 */
+.training-set-options, .training-area-details { margin: var(--space-2) 0; }
+.training-set-options > summary, .training-area-details > summary { font-size: var(--fs-footnote); color: var(--muted); cursor: pointer; padding: var(--space-2) 0; min-height: 44px; overflow-wrap: anywhere; }
+.training-last-sets > summary { font-size: var(--fs-body); }
+.training-set-options .form-grid { margin-top: var(--space-2); }
+.training-recorded-set { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
+.training-budget { margin-bottom: var(--space-3); }
+.rec-reason { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }
+.diet-completeness { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
+.diet-completeness .form-field { flex: 1; min-width: 0; }
+.training-week-groups .coverage-row > * { min-width: 0; overflow-wrap: anywhere; }

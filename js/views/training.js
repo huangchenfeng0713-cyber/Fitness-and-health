@@ -1,3 +1,4 @@
+import { SET_TYPES, LOAD_MODES, LOAD_CONVENTIONS, validateTrainingRecord, isRecordedSet, isRecordedItem, trainingSetText } from '../core/training-records.js';
 /** Fitness: today recording and history; action selection is a shared sheet with an explicit commit. */
 import { h, clearEl, mount, num, todayKey, shiftDay, daySeed, toast, runLocalAction, confirmAction } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
@@ -16,7 +17,7 @@ import { openSheet, closeSheet, setSheetFooter, setSheetFooterVisible } from '..
 import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
-  sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief,
+  sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief, weeklyTrainingSummary,
   overlapScore, overlapLevel, restoreTrainingItems,
 } from '../core/training.js';
 
@@ -42,6 +43,15 @@ const picked = () => session().items.map((i) => i.id);
 const setDrafts = new Map();
 const draftKey = (id, date = trainingDay()) => `${date}:${id}`;
 let observingAccount = false;
+const disclosureState = new Map();
+let resetDisclosures = false;
+let accountContext = null;
+const budgetOptions = { minutes: null, setBudget: null, setsPerExercise: 3 };
+function disclosure(key, className, title, ...children) {
+  return h('details.' + className, { 'data-training-disclosure': key, open: disclosureState.get(key) === true,
+    ontoggle: event => { if (event.currentTarget.isConnected) disclosureState.set(key, event.currentTarget.open); } },
+    h('summary', null, title), ...children);
+}
 
 // Serialize user writes; compute each mutation from the latest state, bound to its original day.
 let writing = Promise.resolve();
@@ -88,11 +98,11 @@ let proposalKey = '';
 let committing = false;
 
 function currentProposal() {
-  const key = [pickMode, activeGroup, activeSplit, equipFilter, targetFilter].join(':');
+  const key = [pickMode, activeGroup, activeSplit, equipFilter, targetFilter, budgetOptions.minutes, budgetOptions.setBudget, budgetOptions.setsPerExercise].join(':');
   if (!proposal || key !== proposalKey) {
     proposalKey = key;
     proposal = recommendFor({ mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-      selection: [...picked(), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter });
+      selection: [...picked(), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
   }
   return proposal;
 }
@@ -506,12 +516,12 @@ function setRow(item, index, set) {
         : i)), date);
     },
   });
-  return h('div.set-row', null,
+  const row = h('div.set-row', null,
     h('span.set-index', null, `${index + 1}`),
     numberInput('weightKg', '重量', '0.5'),
     h('span.set-unit', null, 'kg ×'),
-    numberInput('reps', '次数', '1'),
-    h('span.set-unit', null, '次'),
+    set.durationSeconds > 0 ? numberInput('durationSeconds', '计时秒数', '1') : numberInput('reps', '次数', '1'),
+    h('span.set-unit', null, set.durationSeconds > 0 ? '秒' : '次'),
     h('button.text-btn.danger', {
       onclick: async () => {
         let removed;
@@ -533,10 +543,32 @@ function setRow(item, index, set) {
       },
       'aria-label': '删除这一组',
     }, icon('close')));
+  const saveField = (key, value) => updateSession(items => items.map(i => i.id === item.id
+    ? { ...i, sets: i.sets.map((x, k) => k === index ? { ...x, [key]: value } : x) } : i), date);
+  return h('div.training-recorded-set', null, row,
+    extraSetFields(set, `${date}:${item.id}:${index}`, saveField, false));
 }
 
-function setLabel(set) {
-  return `${set.weightKg != null ? set.weightKg + ' kg' : '重量未填'} × ${set.reps > 0 ? set.reps + ' 次' : '次数未填'}`;
+const setLabel = trainingSetText;
+
+function extraSetFields(set, key, change, draft = true) {
+  const select = (field, label, values) => h('label.form-field', null, h('span', null, label),
+    h('select', { 'aria-label': label, onchange: event => change(field, event.target.value) },
+      Object.entries(values).map(([value, text]) => h('option', { value, selected: (set[field] || 'unknown') === value }, text))));
+  const number = (field, label, max) => h('label.form-field', null, h('span', null, label),
+    h('input', { type: 'number', inputmode: 'numeric', min: 0, max, step: 1, value: set[field] ?? '', 'aria-label': label,
+      [draft ? 'oninput' : 'onchange']: event => change(field, event.target.value.trim() === '' ? null : Number(event.target.value)) }));
+  return disclosure(`extra:${key}`, 'training-set-options', '更多记录（可选）',
+    h('div.form-grid', null,
+      select('setType', '组类型', SET_TYPES), number('rir', '剩余次数 RIR', 10), number('durationSeconds', '计时（秒）', 86400),
+      select('loadMode', '重量方式', LOAD_MODES), select('loadConvention', '重量口径', LOAD_CONVENTIONS),
+      !draft ? h('label.form-field', null, h('span', null, '完成状态'), h('select', {
+        'aria-label': '完成状态', onchange: event => change('completed', event.target.value === 'unknown' ? null : event.target.value === 'true'),
+      }, [['unknown','未注明'],['true','已确认完成'],['false','未完成']].map(([value, label]) => h('option', {
+        value, selected: String(set.completed ?? 'unknown') === value,
+      }, label)))) : null),
+    h('div.training-edit-actions', null, persistentInfoTip('training-set-contract', '记录字段说明',
+      'RIR 是这组结束后，估计还能按相同动作标准完成的次数；不确定可留空。计时动作可只填秒数。热身、工作组由你指定；旧记录不自动分类。重量方式和单手／合计口径由你注明，自重不换算公斤，辅助重量不代表相同阻力。旧记录的 0 也可能来自过去未填的重量。')));
 }
 
 function draftSetEditor(item) {
@@ -547,15 +579,16 @@ function draftSetEditor(item) {
       'aria-label': `待确认${label}`, value: draft[field] ?? '',
       oninput: ev => { draft[field] = ev.target.value.trim() === '' ? null : Number(ev.target.value); } }));
   return h('div.training-set-draft', null,
-    h('p.form-hint', null, '待确认组 · 预填值仅供参考，确认记录后才计入统计。'),
+    h('p.form-hint', null, '预填草稿 · 确认后计组'),
     h('div.form-grid', null, input('weightKg', '重量（kg）', '0.5'), input('reps', '次数', '1')),
+    extraSetFields(draft, key, (field, value) => { draft[field] = value; }),
     h('div.training-edit-actions', null,
       h('button.secondary-btn.compact', { type: 'button', onclick: async ev => {
-        if (!Number.isInteger(draft.reps) || draft.reps <= 0 || draft.reps > 500
-          || (draft.weightKg != null && (!Number.isFinite(draft.weightKg) || draft.weightKg < 0 || draft.weightKg > 500))) {
-          toast('次数需为 1–500 的整数；重量可留空或填 0–500 kg', 'warn'); return;
-        }
-        const next = { reps: draft.reps, weightKg: draft.weightKg };
+        const next = { ...draft, completed: true };
+        try {
+          validateTrainingRecord({ date, items: [{ id: item.id, sets: [next] }] });
+          if (!(next.reps > 0 || next.durationSeconds > 0)) throw new Error('请填写次数或计时秒数');
+        } catch (error) { toast(error.message, 'warn'); return; }
         ev.currentTarget.disabled = true;
         const result = await updateSession(items => items.map(i => i.id === item.id && i.sets.length < 20
           ? { ...i, sets: [...i.sets, next] } : i), date);
@@ -568,9 +601,10 @@ function draftSetEditor(item) {
 function previousSets(exercise) {
   const last = lastPerformance(state.trainingDays, exercise.id, { before: trainingDay() });
   if (!last) return null;
-  return h('details.training-last-sets', null,
-    h('summary', null, `上次 ${last.date} · ${last.repsLabel ? last.repsLabel + ' 次' : '次数未填'} · ${last.weightLabel || '重量未填'} · 查看逐组`),
+  return disclosure(`last:${trainingDay()}:${exercise.id}`, 'training-last-sets',
+    `上次 ${last.date} · ${last.setCount} 组 · 查看逐组`,
     last.sets.map((set, n) => h('p.form-hint', null, `第 ${n + 1} 组 · ${setLabel(set)}`)));
+
 }
 
 /*
@@ -584,7 +618,7 @@ function previousSets(exercise) {
 function planRow(exercise, index) {
   const item = session().items.find(i => i.id === exercise.id);
   const open = expanded === exercise.id;
-  const recorded = item.sets.filter(set => set.reps > 0).length;
+  const recorded = item.sets.filter(isRecordedSet).length;
   const label = recorded ? `已记录 ${recorded} 组` : item.done ? '已标记完成' : '尚未记组';
   return h('div.plan-row-wrap', null,
     h('div.plan-row', null,
@@ -600,17 +634,18 @@ function planRow(exercise, index) {
       h('p.form-hint', null, `${EQUIPMENT[exercise.equipment]} · 主练 ${muscleLine(exercise)}`),
       exerciseTargets(exercise).note ? h('p.form-hint', null, exerciseTargets(exercise).note) : null,
       previousSets(exercise),
-      exercise.equipment === 'bodyweight' ? h('p.form-hint', null, '自重动作可只记次数，重量留空。不换算等效公斤；有附加或辅助负重时请沿用自己的记录口径。') : null,
-      item.sets.some(set => set.weightKg === 0) ? h('p.form-hint', null, '旧记录的 0 kg 可能原本未填，不能据此判定自重或附加重量。') : null,
-      item.sets.length ? item.sets.map((set, k) => setRow(item, k, set))
-        : h('p.form-hint', null, '重量可留空；填写次数后计为已记录组。'),
+      !item.sets.length && !setDrafts.has(draftKey(item.id))
+        ? h('p.form-hint', null, '次数或计时二选一，重量可留空。') : null,
+      item.sets.map((set, k) => setRow(item, k, set)),
       draftSetEditor(item),
       h('div.training-edit-actions', null,
         // compact：内边距收窄、宽度跟着文字走。撑满一行的话，这个「某一个动作
         // 加一组」的次动作会和卡片底下那个「添加动作」印成同样大的一块绿。
         h('button.secondary-btn.compact', { disabled: item.sets.length >= 20 || setDrafts.has(draftKey(item.id)), onclick: () => {
           const last = item.sets.at(-1) || lastPerformance(state.trainingDays, item.id, { before: trainingDay() })?.sets[0];
-          setDrafts.set(draftKey(item.id), { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null });
+          setDrafts.set(draftKey(item.id), { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null,
+            durationSeconds: last?.durationSeconds ?? null, rir: null, setType: 'unknown',
+            loadMode: last?.loadMode || 'unknown', loadConvention: last?.loadConvention || 'unknown' });
           rerenderTraining();
         } }, item.sets.length >= 20 ? '已达 20 组记录上限' : item.sets.length ? '再加一组' : '加第一组'))) : null);
 }
@@ -700,7 +735,7 @@ function adviceCard() {
 function coverageCard() {
   const model = trainingCoverage(state.trainingDays, trainingDay());
   return h('section.card.training-coverage', null,
-    cardHeader('部位训练间隔', { summary: '按已记录的有效次数或完成标记统计；未记录不代表没有训练。',
+    cardHeader('部位训练间隔', { summary: '主练部位 · 未记录不代表没有训练',
       actions: [persistentInfoTip('training-coverage-method', '查看训练覆盖统计口径',
         '只统计主练部位，协同肌不另计。同部位同日计一次；近7日含今天及此前6天。空计划不计入。')] }),
     h('div.coverage-table', { role: 'table', 'aria-label': '各部位训练间隔和近7日覆盖' },
@@ -708,14 +743,14 @@ function coverageCard() {
         h('span', { role: 'columnheader' }, '部位'), h('span', { role: 'columnheader' }, '最近记录'), h('span', { role: 'columnheader' }, '近7日')),
       model.groups.map(g => h('div.coverage-row', { role: 'row', 'data-group': g.key },
         h('strong', { role: 'cell' }, g.label), h('span', { role: 'cell', title: g.lastDate || '' }, g.lastLabel),
-        h('span', { role: 'cell' }, `${g.count} 次`)))));
+        h('span', { role: 'cell' }, `${g.count} 天`)))));
 }
 
 let expandedRow = null;
 let plannedOpen = false;
 function weeklyCard() {
   const rows = recentTrainingRows(state.trainingDays, trainingDay());
-  const recorded = rows.filter(r => r.done || r.sets.some(s => s.reps > 0));
+  const recorded = rows.filter(r => isRecordedItem(r));
   const planned = rows.filter(r => !recorded.includes(r));
   const dates = [...new Set(recorded.map(r => r.date))];
   return h('section.card.training-history-card', null,
@@ -723,10 +758,10 @@ function weeklyCard() {
     recorded.length ? dates.map(date => h('div.training-log-day', null,
       h('h4', null, date), h('div.log-list', null, recorded.filter(r => r.date === date).map(r => {
         const key = `${date}:${r.id}`, open = expandedRow === key;
-        const validSets = r.sets.filter(s => s.reps > 0);
+        const validSets = r.sets.filter(isRecordedSet);
         return h('div.log-item', null,
           h('button.log-row', { type: 'button', 'aria-expanded': String(open), onclick: () => { expandedRow = open ? null : key; rerenderTraining(); } },
-            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组 · ${r.repsLabel} · ${r.weightLabel || '重量未填'}` : '已标记完成')),
+            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组 · ${r.repsLabel || (validSets.some(s => s.durationSeconds > 0) ? '计时' : '次数未填')}` : '已标记完成')),
           open ? h('div.log-sets', null, r.sets.map((set, n) => h('div.log-set', null,
             h('span', null, `第 ${n + 1} 组`), h('span', null, setLabel(set))))) : null);
       })))) : emptyState('近 7 日还没有已记录的训练。'),
@@ -735,9 +770,37 @@ function weeklyCard() {
       planned.map(r => h('p', null, `${r.date} · ${r.name} · 未记组数`))) : null);
 }
 
+function weeklyGroupsCard() {
+  const model = weeklyTrainingSummary(state.trainingDays, trainingDay());
+  const row = area => h('div.coverage-row', null, h('strong', null, area.label),
+    h('span', null, `${area.direct} 组`), h('span', null, `${area.secondary} 组`));
+  return h('section.card.training-week-groups', null,
+    cardHeader('近 7 日部位组数', { summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
+      persistentInfoTip('training-week-groups-method', '部位组数统计说明',
+        '主练与协同分列，不将协同固定折半。同一组在同一部位只计一次；多个主练部位可各计一次，因此各部位相加不等于全身总组数。未完成和空白组不计；旧组保留性质未知。近 7 日含今天。'),
+    ] }),
+    h('p.form-hint', null, `工作组 ${model.work} · 热身 ${model.warmup} · 性质未知 ${model.unknown}`),
+    h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '主练'), h('span', null, '协同')),
+    model.areas.filter(area => !['biceps','triceps','forearm'].includes(area.key)).map(area => h('div', null, row(area),
+      disclosure(`area:${area.key}`, 'training-area-details', `${area.label}详情`,
+        h('p.form-hint', null, `主练 ${area.days} 天 · 工作 ${area.work} · 热身 ${area.warmup} · 未知 ${area.unknown}`),
+        area.key === 'arm' ? model.areas.filter(a => ['biceps','triceps','forearm'].includes(a.key)).map(row) : null))));
+}
+
+function recommendationBudget() {
+  const field = (key, label, options) => h('label.form-field', null, h('span', null, label),
+    h('select', { 'aria-label': label, onchange: event => {
+      budgetOptions[key] = event.target.value === '' ? null : Number(event.target.value); proposal = null; rerenderPicker();
+    } }, options.map(([value, text]) => h('option', { value, selected: String(budgetOptions[key] ?? '') === String(value) }, text))));
+  return h('div.form-grid.training-budget', null,
+    field('minutes', '本次可用时间', [['','不限'],[15,'15 分钟'],[30,'30 分钟'],[45,'45 分钟'],[60,'60 分钟'],[90,'90 分钟']]),
+    field('setBudget', '本次组数预算', [['','不限'],[3,'3 组'],[6,'6 组'],[9,'9 组'],[12,'12 组'],[18,'18 组'],[24,'24 组']]),
+    field('setsPerExercise', '每动作预留组数', [[1,'1 组'],[2,'2 组'],[3,'3 组'],[4,'4 组'],[5,'5 组']]));
+}
+
 function recommendTip() {
   return persistentInfoTip('training-recommendation-method', '这几个是怎么挑的',
-    '在当前范围与器械中，按不同动作模式提供可编辑候选。已安排的模式不自动补齐；不是必须完成的清单，也不代表按个人训练目标制定的处方。');
+    '在当前范围与器械中，优先近 28 日常练动作，再参考本周已安排模式。已选和待选都占预算；每组含休息暂按 3 分钟估算，预留组数可改。时间估算不是消耗或处方；确认只加入动作，不生成完成组。');
 }
 
 function recommendBody(rec) {
@@ -745,17 +808,19 @@ function recommendBody(rec) {
   const bulk = h('button.secondary-btn.full', { onclick: () => {
     remaining().forEach(item => pending.add(item.id)); rerenderPicker();
   } });
-  const rows = h('div.rec-picks', null, rec.items.map(item => exerciseRow(EXERCISE_BY_ID.get(item.id), rerenderPicker,
-    pickMode === 'group' ? GROUPS.find(group => group.key === activeGroup)?.muscles : null)));
+  const rows = h('div.rec-picks', null, rec.items.map(item => h('div', null,
+    exerciseRow(EXERCISE_BY_ID.get(item.id), rerenderPicker,
+      pickMode === 'group' ? GROUPS.find(group => group.key === activeGroup)?.muscles : null),
+    h('p.form-hint.rec-reason', null, `${item.reason} · 预留 ${item.suggestedSets} 组`))));
   rows.refreshSelection = () => {
     const count = remaining().length;
     bulk.hidden = count === 0;
     bulk.textContent = `选择本批剩余 ${count} 个`;
   };
   rows.refreshSelection();
-  return [h('p.form-hint', null, '本批候选保持不变，可只选需要的动作。确认加入后返回本次训练。'),
+  return [recommendationBudget(), h('p.form-hint', null, '可只选需要的动作；加入后再记组。'),
     rec.items.length ? rows
-      : emptyState('当前已安排的模式没有可补充候选，可在列表中自行挑选。'),
+      : emptyState(rec.reason || '当前已安排的模式没有可补充候选，可在列表中自行挑选。'),
     bulk];
 }
 
@@ -769,15 +834,26 @@ document.addEventListener('click', event => {
 export function renderTraining(root) {
   if (!observingAccount) {
     observingAccount = true;
-    subscribeAccount(account => { if (account.ownershipPending || !account.user) setDrafts.clear(); });
+    subscribeAccount(account => {
+      const context = `${account.user?.id || 'local'}:${Boolean(account.ownershipPending)}`;
+      if (accountContext !== context) {
+        setDrafts.clear(); disclosureState.clear(); resetDisclosures = true;
+        pending.clear(); proposal = null;
+        accountContext = context;
+      }
+    });
   }
   const date = trainingDay();
   if (uiDay !== date) {
-    setDrafts.clear();
+    setDrafts.clear(); disclosureState.clear(); resetDisclosures = true;
     uiDay = date; pending.clear(); proposal = null; expanded = null;
     if (pickerRoot?.isConnected) closeSheet({ force: true });
   }
   rerenderTraining = () => renderTraining(root);
+  const liveDraftKeys = new Set(session().items.map(item => draftKey(item.id)));
+  for (const key of setDrafts.keys()) if (!liveDraftKeys.has(key)) setDrafts.delete(key);
+  if (!resetDisclosures) root.querySelectorAll('[data-training-disclosure]').forEach(el => disclosureState.set(el.dataset.trainingDisclosure, el.open));
+  resetDisclosures = false;
   clearEl(root);
   const actionSlot = document.getElementById('actionbar');
   if (actionSlot) { clearEl(actionSlot); actionSlot.hidden = true; }
@@ -788,5 +864,5 @@ export function renderTraining(root) {
       onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
     }, label)));
   mount(root, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
-    trainingView === 'current' ? [planCard(), adviceCard()] : [weeklyCard(), coverageCard()]));
+    trainingView === 'current' ? [planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard(), coverageCard()]));
 }

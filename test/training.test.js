@@ -506,7 +506,7 @@ test('动作推荐避开已选动作，也避开和已选高度重合的', async
  * 但换的方式很要紧：不能变成随便抓几个。挑选规则一条都没松 ——
  * 每个模式一个槽、复合优先、彼此不高度重合、器械档位照筛。
  */
-test('推荐每天有变化，但覆盖的动作模式和动作质量不变', async () => {
+test('推荐保持熟悉动作稳定，不因日期轮换但保留模式覆盖', async () => {
   const { recommendFor, overlapScore, overlapLevel } = await import('../js/core/training.js');
   for (const [mode, key, patternMin] of [['group', 'chest', 4], ['group', 'leg', 5], ['split', 'push', 4]]) {
     const combos = [];
@@ -527,7 +527,7 @@ test('推荐每天有变化，但覆盖的动作模式和动作质量不变', as
       }
     }
     const distinct = new Set(combos.map((c) => c.join('|')));
-    assert.ok(distinct.size >= 3, `${key} 六天里只给出了 ${distinct.size} 种组合，等于没变`);
+    assert.equal(distinct.size, 1, `${key} 不应仅因日期变化更换动作`);
     // 同一个 seed 必须给同一套：同一天里翻来翻去、每 60 秒重绘都不能让它自己跳
     const again = recommendFor({ mode, [mode === 'group' ? 'groupKey' : 'splitKey']: key, seed: 2 });
     assert.deepEqual(again.items.map((i) => i.id), combos[2], `${key} 同一个 seed 给出了两套`);

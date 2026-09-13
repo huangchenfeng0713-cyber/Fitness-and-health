@@ -1,6 +1,9 @@
+import { validateTrainingRecord } from '../core/training-records.js';
+import { dietStatusKey, dietRecordSignature, DIET_LOG_STATES } from '../core/diet-quality.js';
 import { nutrientIssues, isNutrientNumber } from '../core/nutrition.js';
 import { validateFood } from '../data/foods.js';
 export function validateNutritionRow(store, value) {
+  if (store === 'training') validateTrainingRecord(value);
   if (store === 'diet' && value.grams != null && !isNutrientNumber(value.grams)) throw new RangeError('diet 条目 ' + (value.id || value.name || '未命名') + '：份量需为非负有限数');
   const errors = store === 'diet' ? nutrientIssues(value).map(e => e.field + ' ' + e.reason)
     : store === 'customFoods' ? validateFood(value).errors : [];
@@ -132,7 +135,7 @@ export function validateImportPayload(payload) {
   assertUnique('settings', 'key', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
   assertUnique('customFoods', 'id', (value) => typeof value === 'string' && value.length > 0 && value.length <= 256);
   assertUnique('training', 'date', validDayKey);
-  for (const store of ['diet', 'customFoods']) for (const value of rows[store]) validateNutritionRow(store, value);
+  for (const store of ['diet', 'customFoods', 'training']) for (const value of rows[store]) validateNutritionRow(store, value);
   return rows;
 }
 
@@ -355,13 +358,24 @@ async function guardedBusinessWrite(action) {
 }
 
 function committedWrite(db, store, operation, action, {
-  notify = true, source = 'local', expectedContext = null,
+  notify = true, source = 'local', expectedContext = null, dietDate = null, dietKey = null,
 } = {}) {
   return new Promise((resolve, reject) => {
-    const transaction = writeTransaction(db, store, {
+    const transaction = writeTransaction(db, store === STORES.diet ? [store, STORES.settings] : store, {
       source, expectedContext, trackCloudDirty: notify && source === 'local',
     });
     const objectStore = transaction.objectStore(store);
+    if (store === STORES.diet) {
+      const invalidate = date => { if (date) transaction.objectStore(STORES.settings).delete(dietStatusKey(date)); };
+      invalidate(dietDate);
+      if (dietKey != null) {
+        const previous = objectStore.get(dietKey);
+        previous.onsuccess = () => invalidate(previous.result?.date);
+      }
+      if (operation === 'clear') {
+        const rows = objectStore.getAll(); rows.onsuccess = () => rows.result.forEach(row => invalidate(row.date));
+      }
+    }
     let result;
     let request;
     try {
@@ -396,13 +410,13 @@ export async function get(store, key) {
 export async function put(store, value) {
   validateNutritionRow(store, value);
   return guardedBusinessWrite((db, expectedContext) => committedWrite(
-    db, store, 'put', (objectStore) => objectStore.put(value), { expectedContext },
+    db, store, 'put', (objectStore) => objectStore.put(value), { expectedContext, dietDate: value?.date, dietKey: value?.id },
   ));
 }
 
 export async function del(store, key) {
   return guardedBusinessWrite((db, expectedContext) => committedWrite(
-    db, store, 'delete', (objectStore) => objectStore.delete(key), { expectedContext },
+    db, store, 'delete', (objectStore) => objectStore.delete(key), { expectedContext, dietKey: key },
   ));
 }
 
@@ -464,6 +478,25 @@ export async function getDietByDate(date) {
   const db = await openDB();
   const idx = db.transaction(STORES.diet, 'readonly').objectStore(STORES.diet).index('date');
   return wrap(idx.getAll(IDBKeyRange.only(date)));
+}
+
+/** 日级确认与所确认条目在同一事务读取；后续编辑签名不符即失效。 */
+export async function confirmDietDay(date, status) {
+  if (!validDayKey(date) || !Object.hasOwn(DIET_LOG_STATES, status)) throw new RangeError('饮食完整度或日期无效');
+  return guardedBusinessWrite((db, expectedContext) => new Promise((resolve, reject) => {
+    const t = writeTransaction(db, [STORES.diet, STORES.settings], { expectedContext });
+    const request = t.objectStore(STORES.diet).index('date').getAll(IDBKeyRange.only(date));
+    let value;
+    request.onsuccess = () => {
+      if (!request.result.length && status !== 'unknown') {
+        t.guardError = new Error('没有饮食条目，不能确认全天完整'); t.abort(); return;
+      }
+      value = { status, confirmedAt: new Date().toISOString(), source: 'manual', signature: dietRecordSignature(request.result) };
+      t.objectStore(STORES.settings).put({ key: dietStatusKey(date), value });
+    };
+    t.oncomplete = () => { notifyWrite({ operation: 'diet-confirm', stores: [STORES.settings], source: 'local' }); resolve(value); };
+    t.onerror = () => reject(t.error); t.onabort = () => reject(t.guardError || t.error);
+  }));
 }
 
 /** 设置项读写（内部用键值对存储） */

@@ -1,3 +1,5 @@
+import { DIET_LOG_STATES } from '../core/diet-quality.js';
+import { todayKey } from '../core/day.js';
 import { sumNutrients, nutrientIssues, NUTRIENT_KEYS } from '../core/nutrition.js';
 /**
  * 饮食记录页
@@ -11,13 +13,13 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
 import {
-  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow,
+  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow, persistentInfoTip,
 } from '../lib/ui.js';
 import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
 import { macroBar, splitBar } from '../lib/charts.js';
 import { openSheet, closeSheet, sheetIsOpen, setSheetFooter } from '../lib/sheet.js';
 import {
-  state, addEntry, removeEntry, updateEntry, copyDay, dayMealCounts,
+  state, addEntry, removeEntry, updateEntry, copyDay, dayMealCounts, dietQualityFor, confirmDietLog,
   restoreEntry, allFoods, findFood, addCustomFood, removeCustomFood, portionMemory,
 } from '../lib/store.js';
 import {
@@ -1240,6 +1242,19 @@ function mergedRow(group) {
     h('div.entry-merged-list', null, group.entries.map((e) => entryRow(e, false))));
 }
 
+function dietCompleteness() {
+  const day = state.day, quality = dietQualityFor(day);
+  if (day > todayKey()) return null;
+  return h('div.diet-completeness', null,
+    h('label.form-field', null, h('span', null, '全天记录'), h('select', { 'aria-label': '全天饮食记录完整度',
+      value: quality.status, onchange: async event => {
+        const result = await runLocalAction(event.currentTarget, () => confirmDietLog(day, event.target.value), '确认饮食记录');
+        if (result.ok) toast('已更新记录完整度', 'ok'); else refreshEntries();
+      } }, Object.entries(DIET_LOG_STATES).map(([value, label]) => h('option', { value, selected: quality.status === value }, label)))),
+    persistentInfoTip('diet-day-completeness', '全天记录完整度说明',
+      '完整表示你确认当天饮食已全部记录，与营养字段是否齐全是两回事。新增、修改、删除后需重新确认；复制餐次不复制完整声明。无记录不算零摄入。此状态暂不自动调整热量目标。'));
+}
+
 function refreshEntries() {
   clearEl(nodes.entries);
   const issues = state.derived?.intake?.issues || [];
@@ -1301,6 +1316,7 @@ function refreshEntries() {
             ],
           },
         ))),
+    dietCompleteness(),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,
         mealIcon(meal),

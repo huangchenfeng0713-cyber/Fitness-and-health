@@ -83,12 +83,12 @@ try {
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-group="leg"]').textContent.includes('今天'));
-  check('填写有效训练组后覆盖立即更新', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('1 次')));
+  check('填写有效训练组后覆盖立即更新', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('1 天')));
   await page.getByRole('tab', { name: '本次训练', exact: true }).click();
   await page.locator('[aria-label="删除这一组"]').click();
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-group="leg"]').textContent.includes('8 天前'));
-  check('删除最后有效组恢复历史间隔', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('0 次')));
+  check('删除最后有效组恢复历史间隔', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('0 天')));
   await page.evaluate(async () => (await import('/js/lib/store.js')).setDay('2026-08-01'));
   check('健身页不随饮食查看日期改变统计窗口', await page.locator('[data-group="chest"]').textContent().then(t => t.includes('2 天前')));
   await tab('今日');

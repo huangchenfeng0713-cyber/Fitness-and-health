@@ -437,7 +437,7 @@ test('高频搜索框、弱标签、信息入口和列表行由统一组件提�
   assert.match(ui, /export function weakTag\(/, '缺少统一弱标签组件');
   assert.match(ui, /export function listRow\(/, '缺少统一列表行组件');
   assert.match(ui, /export \{ infoTip, persistentInfoTip \}/, '信息入口没有从统一 UI 模块导出');
-  assert.match(diet, /listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,[\s\S]{0,40}from '\.\.\/lib\/ui\.js'/,
+  assert.match(diet, /listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps,[\s\S]{0,80}from '\.\.\/lib\/ui\.js'/,
     '添加食物没有接入统一组件');
   assert.match(training, /listRow, persistentInfoTip, searchField,[\s\S]{0,120}from '\.\.\/lib\/ui\.js'/,
     '选择动作没有接入统一组件');
