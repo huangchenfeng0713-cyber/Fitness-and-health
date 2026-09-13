@@ -1200,3 +1200,28 @@ test('training 字段缺失兼容旧备份，但 null/对象不伪装为空数�
     assert.throws(() => validateImportPayload({ ...snapshot('bad'), training: value }), /training 不是数组/);
   }
 });
+
+
+test('组扩展与日级确认随账号快照上传下载保持，旧客户端条目变化使确认失效', async () => {
+  const { dietDayQuality, dietRecordSignature } = await import('../js/core/diet-quality.js');
+  const original = { ...snapshot('quality', { diet: 1 }), training: [{ date: '2026-08-24', items: [{ id: 'pushup', sets: [
+    { reps: 10, weightKg: 0, completed: true, setType: 'work', rir: 0, durationSeconds: null,
+      loadMode: 'external', loadConvention: 'total' },
+  ] }] }] };
+  original.settings.push({ key: 'dietLogStatus:2026-08-24', value: { status: 'complete', source: 'manual',
+    confirmedAt: '2026-08-24T14:00:00Z', signature: dietRecordSignature(original.diet) } });
+  const client = fakeClient();
+  const a = createCloudSync({ client, dbApi: fakeDb(original), storage: fakeStorage(), debounceMs: 60_000 });
+  const other = fakeDb({ ...snapshot('empty'), training: [] });
+  const b = createCloudSync({ client, dbApi: other, storage: fakeStorage(), debounceMs: 60_000 });
+  try {
+    await a.setUser({ id: 'u1' }); await a.resolveConflict('device'); await b.setUser({ id: 'u1' });
+    assert.deepEqual(other.read().training, original.training);
+    const meta = other.read().settings.find(row => row.key.startsWith('dietLogStatus:')).value;
+    assert.deepEqual(meta, original.settings.at(-1).value);
+    if (original.diet.length) {
+      assert.equal(dietDayQuality(original.diet, meta).status, 'complete');
+      assert.equal(dietDayQuality(original.diet.map(row => ({ ...row, kcal: Number(row.kcal || 0) + 1 })), meta).status, 'unknown');
+    }
+  } finally { a.destroy(); b.destroy(); }
+});

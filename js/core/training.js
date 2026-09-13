@@ -3,14 +3,13 @@
  *
  * 纯函数，不碰 DOM，可以在 Node 里单测。
  *
- * 核心问题：同一天同时练杠铃卧推和哑铃卧推，等于把同一件事做了两遍。
- * 判据不是名字像不像，而是「动作模式 + 主要发力肌肉」是否重合——
- * 上斜卧推和平板卧推名字更像，但练的部位不同，不该判成重复；
- * 而窄距卧推和绳索下压名字毫不相干，主动肌都是肱三头肌，反而有真实重叠。
+ * 根据动作模式和主练/协同标签给出相近候选，帮助选择与替换。
+ * 标签重合不能证明训练无效或必须删除，也不代表不同动作刺激完全等价。
  */
 
 import { EXERCISES, EXERCISE_BY_ID, GROUPS, MUSCLES, PATTERNS, EQUIPMENT, exerciseTargetText, matchesMuscleTarget } from '../data/exercises.js';
 import { dayOffset } from './day.js';
+import { isRecordedSet, isRecordedItem, setCategory, validTrainingDate } from './training-records.js';
 
 const jaccard = (a = [], b = []) => {
   const sa = new Set(a);
@@ -350,14 +349,14 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  *
  * 只为尚未安排的模式提供候选；按部位最多 5 个、按模式最多 6 个。
  * 没有可用新模式时返回空列表，不用同模式变式填满。selection 包含已存和待选动作。
- * 此处不读取个人目标、时间或周组数预算，不将候选解释为个体训练处方。
+ * 时间与组数是本次选择预算，历史用于熟悉度排序；不将候选解释为个体训练处方。
  *
  * @returns {{items, replacements, scopeKey}}
  *  - items        [{ id, name, tags }]，tags 是短标签，不写长句
  *  - replacements 已选里有高度重合的一对时，给出「换掉哪个、换成什么」
  */
 export function recommendFor({
-  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0, target = 'all',
+  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0, target = 'all', sessions = [], endDate = null, minutes = null, setBudget = null, setsPerExercise = 3,
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
@@ -382,7 +381,37 @@ export function recommendFor({
   // Already arranged patterns occupy their slots; repeated renders cannot refill them.
   const arranged = new Set(chosen.map(e => e.pattern));
   const missingPatterns = patterns.filter(pattern => !arranged.has(pattern));
-  const combo = comboForPatterns(candidates, missingPatterns, Math.min(size, candidates.length), seed, false);
+  // 每组含休息暂按 3 分钟分配，仅为可编辑排程假设，不估计消耗。
+  const perExercise = Math.max(1, Math.min(10, Math.floor(Number(setsPerExercise) || 3)));
+  const finiteBudget = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  const budget = Math.min(finiteBudget(setBudget) ? Math.floor(setBudget) : Infinity,
+    finiteBudget(minutes) ? Math.floor(minutes / 3) : Infinity);
+  const todayItems = sessions.find(session => session.date === endDate)?.items || [];
+  const reservedSets = chosen.reduce((sum, exercise) => sum + Math.max(perExercise,
+    (todayItems.find(item => item.id === exercise.id)?.sets || []).filter(isRecordedSet).length), 0);
+  let remainingSets = Math.max(0, budget - reservedSets);
+  const histories = new Map();
+  for (const raw of sessions) if (validTrainingDate(endDate) && validTrainingDate(raw?.date) && raw.date < endDate && dayOffset(endDate, raw.date) <= 28) {
+    for (const item of normalizeSession(raw).items.filter(isRecordedItem)) {
+      const old = histories.get(item.id) || { count: 0, lastDate: '' };
+      histories.set(item.id, { count: old.count + 1, lastDate: [old.lastDate, raw.date].sort().at(-1) });
+    }
+  }
+  const weeklyPatterns = new Set(sessions.filter(s => validTrainingDate(endDate) && validTrainingDate(s?.date) && s.date <= endDate && dayOffset(endDate, s.date) < 7)
+    .flatMap(s => normalizeSession(s).items.map(item => EXERCISE_BY_ID.get(item.id).pattern)));
+  // 初始候选保持稳定；同模式优先近期常练动作，不每天机械轮换变式。
+  const combo = [];
+  for (const pattern of [...missingPatterns].sort((a, b) => Number(weeklyPatterns.has(a)) - Number(weeklyPatterns.has(b)))) {
+    if (combo.length >= size || remainingSets <= 0) break;
+    const options = candidates.filter(e => e.pattern === pattern && !combo.some(c => overlapLevel(overlapScore(e, c)) === 'high'))
+      .sort((a, b) => (histories.get(b.id)?.count || 0) - (histories.get(a.id)?.count || 0)
+        || (histories.get(b.id)?.lastDate || '').localeCompare(histories.get(a.id)?.lastDate || ''));
+    if (!options.length) continue;
+    const exercise = options[0];
+    const suggestedSets = Math.min(perExercise, remainingSets);
+    combo.push({ ...exercise, suggestedSets });
+    remainingSets -= suggestedSets;
+  }
 
   /*
    * 已经选了高度重合的一对时，直接把「换掉哪个」摆出来。
@@ -404,13 +433,16 @@ export function recommendFor({
   }
 
   return {
-    scopeKey,
+    scopeKey, budget: Number.isFinite(budget) ? budget : null, reservedSets,
+    reason: remainingSets <= 0 && !combo.length ? '本次时间或组数预算已用完，可调整预算或自行选择。' : null,
     /*
      * 标签和「全部动作」那一列必须一致 —— 两个视图看的是同一批动作，
      * 两个视图都保留细分主练部位，部位筛选不会隐藏动作之间的区域差别。
      */
     items: combo.map((e) => ({
-      id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }),
+      id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }), suggestedSets: e.suggestedSets,
+      reason: histories.has(e.id) ? `近 28 日记录 ${histories.get(e.id).count} 天 · 上次 ${histories.get(e.id).lastDate}`
+        : weeklyPatterns.has(e.pattern) ? '本周已安排此模式，可选另一训练日复用' : '近 7 日未安排此模式，可选参考',
     })),
     replacements,
   };
@@ -575,7 +607,7 @@ export { MUSCLES, PATTERNS, EQUIPMENT, GROUPS };
  * 之前「今日计划」只存在页面内存里（`let picked = []`），刷新就没了——
  * 记不下来的计划等于没记，所以从 v1.7.4 起按天落库。
  *
- * 结构刻意做得很浅：{ date, items: [{ id, sets: [{ reps, weightKg }], done }] }。
+ * 结构沿用 { date, items: [{ id, sets, done }] }，组可选字段见 training-records.js。
  * 组数用数组而不是「组数 × 次数」两个数字，是因为递减组、递增重量这些
  * 真实练法里每组本来就不一样，压成两个数字会逼人取平均，反而失真。
  */
@@ -584,13 +616,13 @@ const MAX_REPS = 500;
 const MAX_WEIGHT_KG = 500;
 
 const clampNum = (value, min, max) => {
-  if (value == null || String(value).trim() === '') return null;
+  if (!['number', 'string'].includes(typeof value) || String(value).trim() === '') return null;
   const n = Number(value);
   if (!Number.isFinite(n)) return null;
   return Math.min(max, Math.max(min, n));
 };
 
-/** 把任意来源（旧备份、云端、手输）的记录清洗成可用结构，坏数据丢掉而不是抛异常 */
+/** 兼容读取旧记录；保留可选字段。新增写入及恢复先经 validateTrainingRecord 校验。 */
 export function normalizeSession(raw = {}) {
   const items = Array.isArray(raw.items) ? raw.items : [];
   const seen = new Set();
@@ -600,12 +632,13 @@ export function normalizeSession(raw = {}) {
     if (!id || seen.has(id) || !EXERCISE_BY_ID.has(id)) continue;
     seen.add(id);
     const sets = (Array.isArray(item.sets) ? item.sets : []).slice(0, MAX_SETS).map((set) => ({
+      ...(set && typeof set === 'object' ? set : {}),
       reps: clampNum(set?.reps, 0, MAX_REPS),
       weightKg: clampNum(set?.weightKg, 0, MAX_WEIGHT_KG),
     }));
-    clean.push({ id, sets, done: item.done === true });
+    clean.push({ ...item, id, sets, done: item.done === true });
   }
-  return { date: typeof raw.date === 'string' ? raw.date : '', items: clean };
+  return { ...raw, date: typeof raw.date === 'string' ? raw.date : '', items: clean };
 }
 
 /**
@@ -618,23 +651,61 @@ export function normalizeSession(raw = {}) {
  */
 export const MIN_TRAINING_DAYS_FOR_GAP = 3;
 
+// 展示分组独立于动作库的旧 group 键，保留 ID、搜索与模式兼容。
+export const TRAINING_AREAS = [
+  ...GROUPS.filter(g => g.key === 'chest' || g.key === 'back'),
+  { key: 'shoulder', label: '肩', muscles: ['delt_front','delt_side','delt_rear'] },
+  { key: 'arm', label: '臂', muscles: ['biceps','triceps','forearm'] },
+  ...GROUPS.filter(g => g.key === 'leg' || g.key === 'core'),
+];
+const ARM_AREAS = [
+  { key: 'biceps', label: '二头', muscles: ['biceps'] },
+  { key: 'triceps', label: '三头', muscles: ['triceps'] },
+  { key: 'forearm', label: '前臂', muscles: ['forearm'] },
+];
+export function weeklyTrainingSummary(sessions = [], endDate) {
+  const areas = [...TRAINING_AREAS, ...ARM_AREAS].map(area => ({ ...area, dates: new Set(), direct: 0, work: 0, warmup: 0, unknown: 0, secondary: 0 }));
+  const dates = new Set();
+  let recorded = 0, work = 0, warmup = 0, unknown = 0;
+  for (const raw of sessions) {
+    if (!validTrainingDate(endDate) || !validTrainingDate(raw?.date) || raw.date > endDate || dayOffset(endDate, raw.date) >= 7) continue;
+    for (const item of normalizeSession(raw).items) {
+      const exercise = EXERCISE_BY_ID.get(item.id);
+      if (isRecordedItem(item)) dates.add(raw.date);
+      for (const set of item.sets) {
+        const category = setCategory(set);
+        if (category === 'draft') continue;
+        recorded++; if (category === 'work') work++; else if (category === 'warmup') warmup++; else unknown++;
+        for (const area of areas) {
+          // 同一组即使涉及多个细分区域，也只在该大部位计一次。
+          if (exercise.primary.some(m => area.muscles.includes(m))) {
+            area.direct++; area[category]++; area.dates.add(raw.date);
+          } else if (exercise.secondary.some(m => area.muscles.includes(m))) area.secondary++;
+        }
+      }
+    }
+  }
+  return { recorded, work, warmup, unknown, days: dates.size,
+    areas: areas.map(({ dates: areaDates, ...area }) => ({ ...area, days: areaDates.size })) };
+}
+
 /** 复用记录语义：记有有效次数的组，或明确完成标记；空计划不计。 */
 export function trainingCoverage(sessions = [], endDate) {
   const validDate = key => typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key)
     && Number.isFinite(Date.parse(key + 'T00:00:00Z'))
     && new Date(key + 'T00:00:00Z').toISOString().slice(0, 10) === key;
-  const dates = new Map(GROUPS.map(g => [g.key, new Set()]));
+  const dates = new Map(TRAINING_AREAS.map(g => [g.key, new Set()]));
   const trainingDays = new Set();
   if (validDate(endDate)) for (const raw of sessions) {
     if (!raw || !validDate(raw.date) || raw.date > endDate) continue;
-    const completed = normalizeSession(raw).items.filter(item => item.done || item.sets.some(set => set.reps > 0));
+    const completed = normalizeSession(raw).items.filter(isRecordedItem);
     if (completed.length && dayOffset(endDate, raw.date) < 7) trainingDays.add(raw.date);
     for (const item of completed) {
       const primary = EXERCISE_BY_ID.get(item.id).primary;
-      for (const group of GROUPS) if (group.muscles.some(m => primary.includes(m))) dates.get(group.key).add(raw.date);
+      for (const group of TRAINING_AREAS) if (group.muscles.some(m => primary.includes(m))) dates.get(group.key).add(raw.date);
     }
   }
-  const groups = GROUPS.map(g => {
+  const groups = TRAINING_AREAS.map(g => {
     const all = [...dates.get(g.key)].sort().reverse();
     const lastDate = all[0] || null;
     const daysSince = lastDate ? dayOffset(endDate, lastDate) : null;
@@ -695,8 +766,8 @@ export function sessionVolume(session) {
     sets += counted;
     byGroup[exercise.group] = (byGroup[exercise.group] || 0) + counted;
     for (const set of item.sets) {
-      if (set.reps > 0) doneSets += 1;
-      if (set.reps > 0 && set.weightKg > 0) {
+      if (isRecordedSet(set)) doneSets += 1;
+      if (isRecordedSet(set) && set.reps > 0 && set.weightKg > 0) {
         tonnage += set.reps * set.weightKg;
         weighed += 1;
       }
@@ -766,8 +837,8 @@ export function recentTrainingRows(sessions = [], endDate, days = 7) {
         id: item.id,
         name: exercise.name,
         setCount: item.sets.length,
-        weightLabel: spanLabel(item.sets.map((x) => x.weightKg), 'kg'),
-        repsLabel: spanLabel(item.sets.map((x) => x.reps), '次'),
+        weightLabel: spanLabel(item.sets.filter(isRecordedSet).map((x) => x.weightKg), 'kg'),
+        repsLabel: spanLabel(item.sets.filter(isRecordedSet).map((x) => x.reps), '次'),
         sets: item.sets,
         done: item.done,
       });
@@ -795,14 +866,15 @@ export function lastPerformance(sessions = [], exerciseId, { before = null } = {
   for (const raw of ordered) {
     const item = normalizeSession(raw).items.find((x) => x.id === exerciseId);
     if (!item?.sets?.length) continue;
-    if (!item.sets.some(set => set.reps > 0 || set.weightKg > 0)) continue;
-    const weightLabel = spanLabel(item.sets.map((x) => x.weightKg), 'kg');
-    const repsList = item.sets.map((x) => x.reps).filter((v) => Number.isFinite(v) && v > 0);
-    if (!weightLabel && !repsList.length) continue;
+    const recorded = item.sets.filter(set => set.completed !== false);
+    if (!recorded.some(set => isRecordedSet(set) || set.weightKg > 0)) continue;
+    const weightLabel = spanLabel(recorded.map((x) => x.weightKg), 'kg');
+    const repsList = recorded.map((x) => x.reps).filter((v) => Number.isFinite(v) && v > 0);
+    if (!weightLabel && !repsList.length && !recorded.some(set => set.durationSeconds > 0)) continue;
     return {
       date: raw.date,
-      setCount: item.sets.length,
-      sets: item.sets.map(set => ({ ...set })),
+      setCount: recorded.length,
+      sets: recorded.map(set => ({ ...set })),
       weightLabel,
       // 次数逐组列出来而不是压成区间：8,8,6 和 6–8 说的不是一回事
       repsLabel: repsList.length ? repsList.join(',') : null,

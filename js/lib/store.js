@@ -1,3 +1,5 @@
+import { dietDayQuality, dietStatusKey } from '../core/diet-quality.js';
+import { validateTrainingRecord } from '../core/training-records.js';
 import { energyObservation } from '../core/energy-observation.js';
 /**
  * 应用状态中心
@@ -53,6 +55,8 @@ export const state = {
   dietEntries: [],       // 当前日期的饮食条目
   dietDaily: [],         // 每日饮食汇总（用于趋势与基线）
   customFoods: [],
+  dietLogStatuses: new Map(),
+  dietRawEntries: [],
   trainingDays: [],      // 每日训练记录，按日期
   portionMemory: {},     // { foodId: { grams, sugarLevel, meal } } —— 用户自己的选择
   lastImport: null,
@@ -119,7 +123,7 @@ export function findFood(id) {
 // ---------------------------------------------------------------- 初始化
 
 async function hydrateStore({ notify = false } = {}) {
-  const [profile, legacyFoodHistory, portionMemory, lastImport, customFoods, healthDays, dietAll, training] = await Promise.all([
+  const [profile, legacyFoodHistory, portionMemory, lastImport, customFoods, healthDays, dietAll, training, allSettings] = await Promise.all([
     db.getSetting('profile', null),
     db.getSetting('favorites', null),
     db.getSetting('portionMemory', {}),
@@ -128,6 +132,7 @@ async function hydrateStore({ notify = false } = {}) {
     db.getAll(db.STORES.health),
     db.getAll(db.STORES.diet),
     db.getAll(db.STORES.training),
+    db.getAll(db.STORES.settings),
   ]);
 
   state.profile = migrateStoredProfile(profile);
@@ -150,6 +155,8 @@ async function hydrateStore({ notify = false } = {}) {
       if (error?.code !== 'account_data_locked') throw error;
     }
   }
+  state.dietRawEntries = dietAll || [];
+  state.dietLogStatuses = new Map(allSettings.filter(row => row.key.startsWith('dietLogStatus:')).map(row => [row.key, row.value]));
   state.portionMemory = portionMemory || {};
   state.lastImport = lastImport;
   state.customFoods = (customFoods || []).map(f => ({ ...f, carbBasis: f.carbBasis || 'unknown' }));
@@ -396,6 +403,7 @@ export async function saveProfile(patch) {
  * 周容量统计会把空白日也算成练过一次。
  */
 export async function saveTraining(date, session) {
+  validateTrainingRecord({ ...session, date });
   const clean = normalizeSession({ ...session, date });
   const rest = state.trainingDays.filter((s) => s.date !== date);
   if (!clean.items.length) {
@@ -567,8 +575,22 @@ export async function copyDay(fromDate, meals = null) {
 }
 
 async function refreshDietDaily() {
-  rebuildDietDaily(cleanEntries(await db.getAll(db.STORES.diet)));
+  state.dietRawEntries = await db.getAll(db.STORES.diet);
+  const settings = await db.getAll(db.STORES.settings);
+  state.dietLogStatuses = new Map(settings.filter(row => row.key.startsWith('dietLogStatus:')).map(row => [row.key, row.value]));
+  rebuildDietDaily(cleanEntries(state.dietRawEntries));
 }
+
+export function dietQualityFor(date = state.day) {
+  return dietDayQuality(state.dietRawEntries.filter(row => row.date === date), state.dietLogStatuses.get(dietStatusKey(date)));
+}
+export async function confirmDietLog(date, status) {
+  if (date > todayKey()) throw new RangeError('未来日期不能确认全天记录');
+  await db.confirmDietDay(date, status);
+  await refreshDietDaily();
+  recompute(); emit();
+}
+
 
 // 记住你自己的碗有多大。判断都在 core/portion.js，这里只管落库。
 export function portionMemory() {
@@ -718,6 +740,9 @@ export async function clearAllData() {
   state.healthByDate = new Map();
   state.dietEntries = [];
   state.dietDaily = [];
+  state.dietRawEntries = [];
+  state.dietLogStatuses = new Map();
+  state.trainingDays = [];
   state.customFoods = [];
   state.portionMemory = {};
   state.lastImport = null;
