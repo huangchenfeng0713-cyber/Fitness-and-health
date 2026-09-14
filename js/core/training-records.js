@@ -1,5 +1,7 @@
 /** 组记录契约。上限为输入护栏，不是训练处方或生理极限。 */
-export const SET_TYPES = { unknown: '性质未注明', warmup: '热身', work: '工作组' };
+import { MUSCLES, MUSCLE_TARGETS, PATTERNS, GROUP_BY_KEY } from '../data/exercises.js';
+
+export const SET_TYPES = { unknown: '性质未注明', warmup: '热身', work: '正式组' };
 export const LOAD_MODES = { unknown: '重量方式未注明', bodyweight: '自重', external: '附加负重', assistance: '辅助重量', machine: '器械标示' };
 export const LOAD_CONVENTIONS = { unknown: '重量口径未注明', single: '单手／单侧', total: '双手合计', scale: '器械刻度' };
 export const SET_LIMITS = { reps: 500, weightKg: 500, rir: 10, durationSeconds: 86400 };
@@ -11,6 +13,21 @@ export function validateTrainingRecord(raw) {
   if (raw?.date != null && !validTrainingDate(raw.date)) throw new RangeError('训练日期无效');
   if (raw?.items != null && !Array.isArray(raw.items)) throw new RangeError(`${raw.date || '训练'}：items 必须为数组`);
   for (const [i, item] of (raw?.items || []).entries()) {
+    if (item?.recordingDefaults != null) {
+      const defaults = item.recordingDefaults;
+      if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)
+        || !Object.hasOwn(LOAD_MODES, defaults.loadMode) || !Object.hasOwn(LOAD_CONVENTIONS, defaults.loadConvention)
+        || !['reps', 'time'].includes(defaults.measure)) throw new RangeError(`${item.id}：动作记录设置无效`);
+    }
+    if (item?.exerciseSnapshot != null) {
+      const s = item.exerciseSnapshot;
+      const validKeys = (keys, labels) => Array.isArray(keys) && keys.length <= 32 && keys.every(key => Object.hasOwn(labels, key));
+      if (!s || s.version !== 1 || typeof s.name !== 'string' || s.name.length > 120
+        || !GROUP_BY_KEY.has(s.group) || !Object.hasOwn(PATTERNS, s.pattern)
+        || !validKeys(s.primary, MUSCLES) || !s.primary.length || !validKeys(s.secondary, MUSCLES)
+        || !s.targets || !validKeys(s.targets.primary, MUSCLE_TARGETS) || !validKeys(s.targets.secondary, MUSCLE_TARGETS)
+        || typeof s.targets.note !== 'string' || s.targets.note.length > 1000) throw new RangeError(`${item.id}：练法记录无效`);
+    }
     if (item?.sets != null && !Array.isArray(item.sets)) throw new RangeError(`${raw.date || '训练'} · ${item?.id || i + 1}：sets 必须为数组`);
     for (const [k, set] of (item?.sets || []).entries()) {
       const fail = field => { throw new RangeError(`${raw.date || '训练'} · ${item.id || i + 1} 第 ${k + 1} 组：${field} 无效`); };
@@ -40,7 +57,7 @@ export function setCategory(set) {
   return set.completed === true && ['work','warmup'].includes(set.setType) ? set.setType : 'unknown';
 }
 export function trainingSetText(set) {
-  const load = set.loadMode === 'bodyweight' ? `自重${set.weightKg > 0 ? `（原记 ${set.weightKg} kg）` : ''}` : `${set.weightKg != null ? set.weightKg + ' kg' : '重量未填'}`;
+  const load = set.loadMode === 'bodyweight' ? `自重${set.weightKg > 0 ? `（原记 ${set.weightKg} kg）` : ''}` : `${set.weightKg != null ? set.weightKg + (set.loadConvention === 'scale' ? ' 刻度' : ' kg') : '重量未填'}`;
   const mode = ['external','assistance','machine'].includes(set.loadMode) ? LOAD_MODES[set.loadMode] + ' ' : '';
   const dose = [set.reps > 0 ? `${set.reps} 次` : '', set.durationSeconds > 0 ? `${set.durationSeconds} 秒` : ''].filter(Boolean).join(' / ') || '次数未填';
   const extras = [set.loadConvention && set.loadConvention !== 'unknown' ? LOAD_CONVENTIONS[set.loadConvention] : '',

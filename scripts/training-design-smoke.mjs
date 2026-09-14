@@ -190,7 +190,7 @@ try {
   });
   await close();
   await history();
-  check('零组计划不算训练记录，单独折叠', await page.locator('.training-log-day').count() === 0 && await page.locator('.training-planned').count() === 1 && !await page.locator('.training-planned').getAttribute('open'));
+  check('零组计划不算训练记录，单独折叠', await page.locator('.training-log-day .log-row').count() === 0 && await page.locator('.training-planned').count() === 1 && !await page.locator('.training-planned').getAttribute('open'));
   await current();
   await page.locator('.plan-row button').first().click();
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
@@ -198,6 +198,7 @@ try {
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.waitForTimeout(250);
   await history();
+  await page.getByRole('button', { name: '间隔', exact: true }).click();
   check('填写有效组后记录与部位间隔同步', await page.locator('.training-log-day .log-row').count() === 1 && /今天/.test(await page.locator('.training-coverage').textContent()));
   await current();
   page.once('dialog', dialog => dialog.dismiss());
@@ -217,7 +218,7 @@ try {
   // Record replacement requires explicit confirmation and preserves the original for undo.
   await page.evaluate(async () => { const s = await import('/js/lib/store.js'); const u = await import('/js/lib/utils.js'); await s.saveTraining(u.todayKey(), { items: [{ id: 'bench_press_bb', sets: [{ reps: 8, weightKg: 40 }], done: false }, { id: 'bench_press_db', sets: [{ reps: 10, weightKg: 20 }], done: false }] }); });
   await current();
-  await page.locator('.training-advice > summary').click();
+  check('训练建议直接可见', await page.locator('.training-advice .insight-text').first().isVisible());
   const beforeReplacement = await items();
   page.once('dialog', dialog => dialog.dismiss());
   await page.locator('.tip-action').first().click();

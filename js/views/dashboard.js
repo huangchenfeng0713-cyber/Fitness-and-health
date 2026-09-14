@@ -10,7 +10,6 @@ import { state } from '../lib/store.js';
 import { GOALS } from '../core/nutrition.js';
 import { FOCUS_LABEL } from '../core/advisor.js';
 import { setIntent } from '../lib/nav.js';
-import { quickWeightCard } from './cards/weight-entry.js';
 
 /*
  * 主卡只有两档。红色那一档（'已超标'）删了 —— `judgeStatus` 从来不返回它，
@@ -351,7 +350,6 @@ export function renderDashboard(root) {
     targets.status === 'unavailable' ? h('section.card', null, h('h2', null, '暂不能生成个人计划'),
       h('p', null, targets.reason), h('p', null, '已知记录摄入 ' + num(d.intake.kcal) + ' kcal'),
       h('a.secondary-btn', { href: '#settings' }, '完善身体信息')) : heroCard(advice, targets, d),
-    d.isToday ? quickWeightCard() : null,
     trendCard(advice),
     insightsCard(advice, rerender));
 }

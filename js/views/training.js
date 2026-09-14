@@ -1,4 +1,4 @@
-import { SET_TYPES, LOAD_MODES, LOAD_CONVENTIONS, validateTrainingRecord, isRecordedSet, isRecordedItem, trainingSetText } from '../core/training-records.js';
+import { isRecordedSet, isRecordedItem, trainingSetText } from '../core/training-records.js';
 /** Fitness: today recording and history; action selection is a shared sheet with an explicit commit. */
 import { h, clearEl, mount, num, todayKey, shiftDay, daySeed, toast, runLocalAction, confirmAction } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
@@ -8,7 +8,7 @@ import {
 } from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
-  MUSCLE_TARGETS, exerciseTargets, exerciseTargetText, muscleTargetOptions, matchesMuscleTarget,
+  MUSCLE_TARGETS, exerciseTargets, exerciseTargetText, muscleTargetOptions, matchesMuscleTarget, exerciseVariants, exerciseForRecord,
 } from '../data/exercises.js';
 import { state, saveTraining, trainingFor } from '../lib/store.js';
 import { subscribeAccount } from '../lib/account.js';
@@ -18,7 +18,7 @@ import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
   sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief, weeklyTrainingSummary,
-  overlapScore, overlapLevel, restoreTrainingItems,
+  overlapScore, overlapLevel, restoreTrainingItems, newTrainingItem, recordingDefaultsFor, createSetDraft, appendConfirmedSets, trainingHistoryDays, trainingAreaDetail,
 } from '../core/training.js';
 
 let activeGroup = 'chest';
@@ -102,7 +102,7 @@ function currentProposal() {
   if (!proposal || key !== proposalKey) {
     proposalKey = key;
     proposal = recommendFor({ mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-      selection: [...picked(), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
+      selection: [...session().items.map(exerciseForRecord), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
   }
   return proposal;
 }
@@ -160,7 +160,7 @@ let equipFilter = 'all';
 // 器械菜单属于纯界面状态：换器械会重绘，但菜单不应因此自动收起。
 let equipMenuOpen = false;
 
-const pickedExercises = () => picked().map((id) => EXERCISE_BY_ID.get(id)).filter(Boolean);
+const pickedExercises = () => session().items.map(exerciseForRecord).filter(Boolean);
 
 function muscleLine(e) {
   const primary = exerciseTargetText(e);
@@ -476,7 +476,7 @@ async function commitPending() {
   committing = true;
   try {
     const result = await updateSession(items => [...items,
-      ...ids.filter(id => !items.some(item => item.id === id)).map(id => ({ id, sets: [], done: false }))], date);
+      ...ids.filter(id => !items.some(item => item.id === id)).map(id => newTrainingItem(id, state.trainingDays, date))], date);
     if (!result.ok) return;
     if (pickerDay === date) ids.forEach(id => pending.delete(id));
     trainingView = 'current';
@@ -502,100 +502,136 @@ function buildPickerBar() {
   return bar;
 }
 
-function setRow(item, index, set) {
-  const date = trainingDay();
-  const numberInput = (key, placeholder, step) => h('input.set-input', {
-    type: 'number', inputmode: 'decimal', step, min: 0,
-    'aria-label': `${EXERCISE_BY_ID.get(item.id)?.name} 第 ${index + 1} 组${placeholder}${key === 'weightKg' ? ' kg' : ''}`,
-    value: set[key] == null ? '' : set[key],
-    placeholder,
-    onchange: (ev) => {
-      const raw = ev.target.value.trim();
-      updateSession((items) => items.map((i) => (i.id === item.id
-        ? { ...i, sets: i.sets.map((x, k) => (k === index ? { ...x, [key]: raw === '' ? null : Number(raw) } : x)) }
-        : i)), date);
-    },
-  });
-  const row = h('div.set-row', null,
-    h('span.set-index', null, `${index + 1}`),
-    numberInput('weightKg', '重量', '0.5'),
-    h('span.set-unit', null, 'kg ×'),
-    set.durationSeconds > 0 ? numberInput('durationSeconds', '计时秒数', '1') : numberInput('reps', '次数', '1'),
-    h('span.set-unit', null, set.durationSeconds > 0 ? '秒' : '次'),
-    h('button.text-btn.danger', {
-      onclick: async () => {
-        let removed;
-        const result = await updateSession((items) => items.map((i) => {
-          if (i.id !== item.id || !i.sets[index]) return i;
-          removed = { ...i.sets[index] };
-          return { ...i, sets: i.sets.filter((_, k) => k !== index) };
-        }), date);
-        if (!result.ok || !removed) return;
-        toast('已删除这一组', 'info', {
-          label: '撤销',
-          onClick: () => updateSession((items) => items.map((i) => {
-            if (i.id !== item.id) return i;
-            const sets = [...i.sets];
-            sets.splice(Math.min(index, sets.length), 0, { ...removed });
-            return { ...i, sets };
-          }), date),
-        });
-      },
-      'aria-label': '删除这一组',
-    }, icon('close')));
-  const saveField = (key, value) => updateSession(items => items.map(i => i.id === item.id
-    ? { ...i, sets: i.sets.map((x, k) => k === index ? { ...x, [key]: value } : x) } : i), date);
-  return h('div.training-recorded-set', null, row,
-    extraSetFields(set, `${date}:${item.id}:${index}`, saveField, false));
+function recordingSettings(item) {
+  const date = trainingDay(), settings = recordingDefaultsFor(item, state.trainingDays, date);
+  const exercise = exerciseForRecord(item), variants = exerciseVariants(item.id);
+  let variantId = item.id;
+  const settingInputs = {};
+  const field = (label, key, values) => {
+    const input = h('select', { 'aria-label': label, onchange: event => { settings[key] = event.target.value; } },
+      values.map(([value, text]) => h('option', { value, selected: settings[key] === value }, text)));
+    settingInputs[key] = input;
+    return h('label.form-field', null, h('span', null, label), input);
+  };
+  const save = h('button.primary-btn', { type: 'button', onclick: async () => {
+    const changedVariant = variantId !== item.id;
+    const result = await updateSession(items => {
+      const current = items.find(i => i.id === item.id);
+      if (!current) return null;
+      if (changedVariant) {
+        if (items.some(i => i.id === variantId)) return items.map(i => i.id === variantId ? { ...i, recordingDefaults: { ...settings } } : i);
+        const next = { ...newTrainingItem(variantId, state.trainingDays, date), recordingDefaults: { ...settings } };
+        // 已记组的动作不改 ID；另一练法从空记录开始。
+        return current.sets.length || current.done ? [...items, next] : items.map(i => i.id === item.id ? next : i);
+      }
+      return items.map(i => i.id === item.id ? { ...i, recordingDefaults: { ...settings } } : i);
+    }, date);
+    if (!result.ok) return;
+    const key = draftKey(item.id, date), draft = setDrafts.get(key);
+    if (changedVariant) { setDrafts.delete(key); expanded = variantId; }
+    else if (draft) {
+      const changedLoad = draft.loadMode !== settings.loadMode || draft.loadConvention !== settings.loadConvention;
+      setDrafts.set(key, { ...draft, ...settings, weightKg: changedLoad ? null : draft.weightKg });
+    }
+    closeSheet({ force: true }); rerenderTraining();
+  } }, '保存设置');
+  const variantNote = h('p.form-hint', null, variants.find(v => v.id === item.id)?.note || '');
+  openSheet(h('div.training-settings-sheet', null,
+    cardHeader(exercise.name, { actions: [h('button.icon-btn', { type: 'button', 'aria-label': '关闭记录设置', onclick: closeSheet }, icon('close'))] }),
+    variants.length ? h('label.form-field', null, h('span', null, '练法'),
+      h('select', { 'aria-label': '练法', onchange: event => { variantId = event.target.value; variantNote.textContent = variants.find(v => v.id === variantId)?.note || '';
+        Object.assign(settings, recordingDefaultsFor(session().items.find(i => i.id === variantId) || newTrainingItem(variantId, state.trainingDays, date), state.trainingDays, date));
+        Object.entries(settingInputs).forEach(([key, input]) => { input.value = settings[key]; }); } },
+        variants.map(v => h('option', { value: v.id, selected: item.id === v.id }, v.label)))) : null,
+    variants.length ? variantNote : null,
+    h('div.training-settings-fields', null,
+      field('记录方式', 'measure', [['reps','按次数'],['time','按时长']]),
+      field('负重方式', 'loadMode', [['bodyweight','自重'],['external','附加负重'],['assistance','辅助重量'],['machine','器械标示']]),
+      field('重量单位与口径', 'loadConvention', [['single','每只／单侧 kg'],['total','合计 kg'],['scale','器械刻度']])),
+    h('p.form-hint', null, '设置用于之后记录的组，下次练这个动作时沿用。已有组的重量和口径保留。'),
+    variants.length ? h('p.form-hint', null, '已有记录时，另一练法会单独加入本次训练。') : null),
+    { label: '动作记录设置' });
+  setSheetFooter(save);
 }
 
 const setLabel = trainingSetText;
-
-function extraSetFields(set, key, change, draft = true) {
-  const select = (field, label, values) => h('label.form-field', null, h('span', null, label),
-    h('select', { 'aria-label': label, onchange: event => change(field, event.target.value) },
-      Object.entries(values).map(([value, text]) => h('option', { value, selected: (set[field] || 'unknown') === value }, text))));
-  const number = (field, label, max) => h('label.form-field', null, h('span', null, label),
-    h('input', { type: 'number', inputmode: 'numeric', min: 0, max, step: 1, value: set[field] ?? '', 'aria-label': label,
-      [draft ? 'oninput' : 'onchange']: event => change(field, event.target.value.trim() === '' ? null : Number(event.target.value)) }));
-  return disclosure(`extra:${key}`, 'training-set-options', '更多记录（可选）',
-    h('div.form-grid', null,
-      select('setType', '组类型', SET_TYPES), number('rir', '剩余次数 RIR', 10), number('durationSeconds', '计时（秒）', 86400),
-      select('loadMode', '重量方式', LOAD_MODES), select('loadConvention', '重量口径', LOAD_CONVENTIONS),
-      !draft ? h('label.form-field', null, h('span', null, '完成状态'), h('select', {
-        'aria-label': '完成状态', onchange: event => change('completed', event.target.value === 'unknown' ? null : event.target.value === 'true'),
-      }, [['unknown','未注明'],['true','已确认完成'],['false','未完成']].map(([value, label]) => h('option', {
-        value, selected: String(set.completed ?? 'unknown') === value,
-      }, label)))) : null),
-    h('div.training-edit-actions', null, persistentInfoTip('training-set-contract', '记录字段说明',
-      'RIR 是这组结束后，估计还能按相同动作标准完成的次数；不确定可留空。计时动作可只填秒数。热身、工作组由你指定；旧记录不自动分类。重量方式和单手／合计口径由你注明，自重不换算公斤，辅助重量不代表相同阻力。旧记录的 0 也可能来自过去未填的重量。')));
+const loadUnit = set => set.loadConvention === 'scale' ? '刻度' : 'kg';
+function setTypeSheet(item, index) {
+  const date = trainingDay(), set = item.sets[index];
+  openSheet(h('div', null, cardHeader(`第 ${index + 1} 组`, { actions: [h('button.icon-btn', {
+    type: 'button', 'aria-label': '关闭组设置', onclick: closeSheet }, icon('close'))] }),
+    h('div.training-edit-actions', null, [['work','正式组'],['warmup','热身组']].map(([value, label]) => h('button.secondary-btn.compact', {
+      type: 'button', onclick: async () => {
+        const result = await updateSession(items => items.map(i => i.id === item.id
+          ? { ...i, sets: i.sets.map((s, k) => k === index ? { ...s, setType: value, completed: true } : s) } : i), date);
+        if (result.ok) closeSheet({ force: true });
+      } }, label))),
+    set.rir != null || set.completed === false ? h('p.form-hint', null, setLabel(set)) : null,
+    h('button.text-btn.danger', { type: 'button', onclick: async () => {
+      let removed;
+      const result = await updateSession(items => items.map(i => {
+        if (i.id !== item.id || !i.sets[index]) return i;
+        removed = { ...i.sets[index] };
+        return { ...i, sets: i.sets.filter((_, k) => k !== index) };
+      }), date);
+      if (result.ok) {
+        closeSheet({ force: true });
+        if (removed) toast('已删除这一组', 'info', { label: '撤销', onClick: () => updateSession(items => items.map(i => {
+          if (i.id !== item.id) return i;
+          const sets = [...i.sets]; sets.splice(Math.min(index, sets.length), 0, removed); return { ...i, sets };
+        }), date) });
+      }
+    } }, '删除这一组')), { label: '组记录设置' });
 }
 
-function draftSetEditor(item) {
+function setValueInput(set, field, label, change, eventName = 'onchange') {
+  return h('label.training-value-cell', null,
+    h('input.set-input', { type: 'number', inputmode: field === 'weightKg' ? 'decimal' : 'numeric',
+      min: 0, step: field === 'weightKg' ? '0.5' : '1', value: set[field] ?? '', 'aria-label': label,
+      [eventName]: event => change(field, event.target.value.trim() === '' ? null : Number(event.target.value)) }),
+    h('span.set-unit', null, field === 'weightKg' ? loadUnit(set) : field === 'durationSeconds' ? '秒' : '次'));
+}
+
+function setRow(item, index, set, showWeight) {
+  const date = trainingDay(), exercise = exerciseForRecord(item);
+  const change = (key, value) => updateSession(items => items.map(i => i.id === item.id
+    ? { ...i, sets: i.sets.map((s, k) => k === index ? { ...s, [key]: value } : s) } : i), date);
+  const recorded = isRecordedSet(set);
+  return h('div.set-row.training-recorded-set' + (showWeight ? '' : '.training-timed-row'), null,
+    h('span.set-index', null, `${index + 1}`),
+    showWeight ? set.loadMode === 'bodyweight' ? h('span.training-bodyweight', null, '自重')
+      : setValueInput(set, 'weightKg', `${exercise.name} 第 ${index + 1} 组重量 ${loadUnit(set)}`, change) : null,
+    setValueInput(set, set.durationSeconds > 0 ? 'durationSeconds' : 'reps', `${exercise.name} 第 ${index + 1} 组${set.durationSeconds > 0 ? '时长' : '次数'}`, change),
+    h('button.training-set-status', { type: 'button', 'aria-label': `第 ${index + 1} 组记录设置`, onclick: () => setTypeSheet(item, index) },
+      set.setType === 'warmup' ? '热身' : recorded ? icon('check') : '未完成'));
+}
+
+function draftSetEditor(item, showWeight) {
   const date = trainingDay(), key = draftKey(item.id, date), draft = setDrafts.get(key);
   if (!draft) return null;
-  const input = (field, label, step) => h('label.form-field', null, h('span', null, label),
-    h('input', { type: 'number', inputmode: 'decimal', min: 0, step,
-      'aria-label': `待确认${label}`, value: draft[field] ?? '',
-      oninput: ev => { draft[field] = ev.target.value.trim() === '' ? null : Number(ev.target.value); } }));
+  const confirm = async event => {
+    try { appendConfirmedSets(item, draft, date); } catch (error) { toast(error.message, 'warn'); return; }
+    event.currentTarget.disabled = true;
+    const result = await updateSession(items => items.map(i => i.id === item.id ? appendConfirmedSets(i, draft, date) : i), date);
+    if (result.ok) setDrafts.delete(key);
+    rerenderTraining();
+  };
+  const change = (field, value) => { draft[field] = value; };
+  const input = (field, label) => setValueInput(draft, field, label, change, 'oninput');
+  const type = h('button.text-btn', { type: 'button', onclick: () => {
+    draft.setType = draft.setType === 'work' ? 'warmup' : 'work'; rerenderTraining();
+  } }, draft.setType === 'warmup' ? '热身组' : '正式组');
+  const count = h('select', { 'aria-label': '本次记录组数', onchange: event => { draft.count = Number(event.target.value); rerenderTraining(); } },
+    Array.from({ length: 20 - item.sets.length }, (_, n) => h('option', { value: n + 1, selected: draft.count === n + 1 }, `${n + 1} 组`)));
   return h('div.training-set-draft', null,
-    h('p.form-hint', null, '预填草稿 · 确认后计组'),
-    h('div.form-grid', null, input('weightKg', '重量（kg）', '0.5'), input('reps', '次数', '1')),
-    extraSetFields(draft, key, (field, value) => { draft[field] = value; }),
-    h('div.training-edit-actions', null,
-      h('button.secondary-btn.compact', { type: 'button', onclick: async ev => {
-        const next = { ...draft, completed: true };
-        try {
-          validateTrainingRecord({ date, items: [{ id: item.id, sets: [next] }] });
-          if (!(next.reps > 0 || next.durationSeconds > 0)) throw new Error('请填写次数或计时秒数');
-        } catch (error) { toast(error.message, 'warn'); return; }
-        ev.currentTarget.disabled = true;
-        const result = await updateSession(items => items.map(i => i.id === item.id && i.sets.length < 20
-          ? { ...i, sets: [...i.sets, next] } : i), date);
-        if (result.ok) setDrafts.delete(key);
-        rerenderTraining();
-      } }, '确认记录这一组'),
-      h('button.text-btn', { type: 'button', onclick: () => { setDrafts.delete(key); rerenderTraining(); } }, '取消')));
+    h('div.set-row' + (showWeight ? '' : '.training-timed-row'), null,
+      h('span.set-index', null, String(item.sets.length + 1)),
+      showWeight ? draft.loadMode === 'bodyweight' ? h('span.training-bodyweight', null, '自重') : input('weightKg', `待确认重量（${loadUnit(draft)}）`) : null,
+      input(draft.measure === 'time' ? 'durationSeconds' : 'reps', draft.measure === 'time' ? '待确认时长（秒）' : '待确认次数'),
+      h('button.training-set-confirm', { type: 'button', 'aria-label': draft.count > 1 ? `确认记录 ${draft.count} 组` : '确认记录这一组', onclick: confirm }, icon('check'))),
+    h('div.training-draft-controls', null, type, h('label.training-batch-count', null, h('span', null, '记录'), count),
+      h('button.text-btn', { type: 'button', onclick: () => { setDrafts.delete(key); rerenderTraining(); } }, '取消')),
+    draft.count > 1 ? h('p.form-hint', null, `确认已完成 ${draft.count} 组相同记录后，点击右侧勾号保存。`) : null);
 }
 
 function previousSets(exercise) {
@@ -630,24 +666,26 @@ function planRow(exercise, index) {
         }, open ? '收起' : '记组'),
         h('button.text-btn.plan-remove', { type: 'button', 'aria-label': `从本次训练移除 ${exercise.name}`,
           onclick: () => removeExerciseWithUndo(exercise) }, '移除'))),
-    open ? h('div.set-editor', { id: `sets-${exercise.id}` },
-      h('p.form-hint', null, `${EQUIPMENT[exercise.equipment]} · 主练 ${muscleLine(exercise)}`),
-      exerciseTargets(exercise).note ? h('p.form-hint', null, exerciseTargets(exercise).note) : null,
-      previousSets(exercise),
-      !item.sets.length && !setDrafts.has(draftKey(item.id))
-        ? h('p.form-hint', null, '次数或计时二选一，重量可留空。') : null,
-      item.sets.map((set, k) => setRow(item, k, set)),
-      draftSetEditor(item),
-      h('div.training-edit-actions', null,
-        // compact：内边距收窄、宽度跟着文字走。撑满一行的话，这个「某一个动作
-        // 加一组」的次动作会和卡片底下那个「添加动作」印成同样大的一块绿。
-        h('button.secondary-btn.compact', { disabled: item.sets.length >= 20 || setDrafts.has(draftKey(item.id)), onclick: () => {
-          const last = item.sets.at(-1) || lastPerformance(state.trainingDays, item.id, { before: trainingDay() })?.sets[0];
-          setDrafts.set(draftKey(item.id), { reps: last?.reps ?? null, weightKg: last?.weightKg ?? null,
-            durationSeconds: last?.durationSeconds ?? null, rir: null, setType: 'unknown',
-            loadMode: last?.loadMode || 'unknown', loadConvention: last?.loadConvention || 'unknown' });
-          rerenderTraining();
-        } }, item.sets.length >= 20 ? '已达 20 组记录上限' : item.sets.length ? '再加一组' : '加第一组'))) : null);
+    open ? (() => {
+      const defaults = recordingDefaultsFor(item, state.trainingDays, trainingDay());
+      const showWeight = defaults.loadMode !== 'bodyweight' || item.sets.some(s => s.loadMode !== 'bodyweight');
+      const variant = exerciseVariants(item.id).find(v => v.id === item.id);
+      const settingsLabel = [variant?.label, defaults.loadMode === 'bodyweight' ? '自重' : defaults.loadConvention === 'single' ? '每只／单侧 kg'
+        : defaults.loadConvention === 'scale' ? '器械刻度' : defaults.loadMode === 'assistance' ? '辅助重量 kg' : '合计 kg',
+        defaults.measure === 'time' ? '按时长' : '按次数'].filter(Boolean).join(' · ');
+      return h('div.set-editor', { id: `sets-${exercise.id}` },
+        h('button.training-settings-trigger', { type: 'button', onclick: () => recordingSettings(item), 'aria-label': `${exercise.name} 记录设置` },
+          h('span', null, settingsLabel), h('span', null, '设置')), previousSets(exercise),
+        h('div.training-sets-table', null,
+          h('div.training-set-head' + (showWeight ? '' : '.training-timed-row'), null, h('span', null, '组'), showWeight ? h('span', null, '重量') : null,
+            h('span', null, defaults.measure === 'time' ? '时长' : '次数'), h('span', null, '完成')),
+          item.sets.map((set, k) => setRow(item, k, set, showWeight)), draftSetEditor(item, showWeight)),
+        h('div.training-edit-actions', null, h('button.secondary-btn.compact', {
+          disabled: item.sets.length >= 20 || setDrafts.has(draftKey(item.id)), onclick: () => {
+            setDrafts.set(draftKey(item.id), createSetDraft(item, state.trainingDays, trainingDay())); rerenderTraining();
+          } }, item.sets.length >= 20 ? '已达 20 组记录上限' : item.sets.length ? '再加一组' : '加第一组')));
+    })() : null);
+
 }
 
 function planCard() {
@@ -678,7 +716,7 @@ function planCard() {
   }
   const volume = sessionVolume(session());
   return h('section.card.training-current-card', null,
-    cardHeader('今日动作', { summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,
+    cardHeader('本次训练', { summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,
       actions: [h('button.text-btn', { onclick: async () => {
         const date = trainingDay();
         let removed;
@@ -708,7 +746,7 @@ async function replaceExercise(action) {
     const live = items.find(i => i.id === old.id);
     if (JSON.stringify(live) !== JSON.stringify(original)) throw Object.assign(new Error('动作已有新修改，请重新查看后替换'), { name: 'TrainingConflictError' });
     inserted = !items.some(i => i.id === action.id);
-    return items.flatMap(i => i.id === old.id ? (inserted ? [{ id: action.id, sets: [], done: false }] : []) : [i]);
+    return items.flatMap(i => i.id === old.id ? (inserted ? [newTrainingItem(action.id, state.trainingDays, date)] : []) : [i]);
   }, date);
   if (result.ok) toast('已替换动作', 'info', { label: '撤销', onClick: () => updateSession(items => {
     if (inserted) {
@@ -719,12 +757,11 @@ async function replaceExercise(action) {
   }, date) });
 }
 
-let adviceOpen = false;
 function adviceCard() {
   const tips = planAdvice(pickedExercises());
   if (!tips.length) return null;
-  return h('details.card.training-advice', { open: adviceOpen, ontoggle: ev => { adviceOpen = ev.currentTarget.open; } },
-    h('summary', null, h('strong', null, '训练建议'), h('span', null, `${tips.length} 项可选参考`)),
+  return h('section.card.training-advice', null,
+    cardHeader('训练建议', { actions: [persistentInfoTip('training-advice-method', '训练建议依据', '根据当前动作的主要肌群、动作模式和顺序提供参考。标签相近不等于刺激相同，不要求删除或替换；未评估个人恢复与动作质量。')] }),
     h('div.insight-list', null, tips.map(t => h('div.insight.info', null,
       h('div.insight-title', null, t.title), h('div.insight-text', null, t.text),
       t.actions?.length ? h('div.tip-actions', null, t.actions.map(a => h('button.chip-btn.tip-action', {
@@ -732,59 +769,73 @@ function adviceCard() {
       }, `替换为：${a.label}`))) : null))));
 }
 
-function coverageCard() {
+function coverageTable() {
   const model = trainingCoverage(state.trainingDays, trainingDay());
-  return h('section.card.training-coverage', null,
-    cardHeader('部位训练间隔', { summary: '主练部位 · 未记录不代表没有训练',
-      actions: [persistentInfoTip('training-coverage-method', '查看训练覆盖统计口径',
-        '只统计主练部位，协同肌不另计。同部位同日计一次；近7日含今天及此前6天。空计划不计入。')] }),
-    h('div.coverage-table', { role: 'table', 'aria-label': '各部位训练间隔和近7日覆盖' },
-      h('div.coverage-row.coverage-heading', { role: 'row' },
-        h('span', { role: 'columnheader' }, '部位'), h('span', { role: 'columnheader' }, '最近记录'), h('span', { role: 'columnheader' }, '近7日')),
-      model.groups.map(g => h('div.coverage-row', { role: 'row', 'data-group': g.key },
-        h('strong', { role: 'cell' }, g.label), h('span', { role: 'cell', title: g.lastDate || '' }, g.lastLabel),
-        h('span', { role: 'cell' }, `${g.count} 天`)))));
+  return h('div.training-coverage', null,
+    h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '最近记录'), h('span', null, '近7日')),
+    model.groups.map(g => h('div.coverage-row', { 'data-group': g.key },
+      h('strong', null, g.label), h('span', { title: g.lastDate || '' }, g.lastLabel), h('span', null, `${g.count} 天`))));
 }
 
 let expandedRow = null;
+let historyDate = null;
+let overviewMode = 'sets';
 let plannedOpen = false;
 function weeklyCard() {
-  const rows = recentTrainingRows(state.trainingDays, trainingDay());
-  const recorded = rows.filter(r => isRecordedItem(r));
-  const planned = rows.filter(r => !recorded.includes(r));
-  const dates = [...new Set(recorded.map(r => r.date))];
+  const model = trainingHistoryDays(state.trainingDays, trainingDay(), historyDate);
+  historyDate = model.selected;
+  const recorded = model.rows.filter(isRecordedItem), planned = model.rows.filter(row => !isRecordedItem(row));
   return h('section.card.training-history-card', null,
-    cardHeader('近 7 日训练记录', { summary: `${shiftDay(trainingDay(), -6)} 至 ${trainingDay()} · ${num(dates.length)} 个记录日 · ${recorded.length} 个已记录动作` }),
-    recorded.length ? dates.map(date => h('div.training-log-day', null,
-      h('h4', null, date), h('div.log-list', null, recorded.filter(r => r.date === date).map(r => {
-        const key = `${date}:${r.id}`, open = expandedRow === key;
-        const validSets = r.sets.filter(isRecordedSet);
+    cardHeader('近 7 日训练记录', { summary: `${shiftDay(trainingDay(), -6)} 至 ${trainingDay()}` }),
+    h('div.training-date-strip', { role: 'group', 'aria-label': '选择训练日期' }, model.days.map(day => h('button.training-date', {
+      type: 'button', 'aria-pressed': String(day.date === historyDate),
+      'aria-label': `${day.date}${day.recorded ? ' 有训练记录' : ' 暂无记录'}`,
+      class: day.date === historyDate ? 'active' : '', onclick: () => { historyDate = day.date; expandedRow = null; plannedOpen = false; rerenderTraining(); },
+    }, h('span', null, day.date === trainingDay() ? '今天' : ['日','一','二','三','四','五','六'][new Date(day.date + 'T12:00:00').getDay()]),
+      h('strong', null, day.date.slice(8)), h('span.training-date-dot', { class: day.recorded ? 'has-records' : '', 'aria-hidden': 'true' })))),
+    h('div.training-log-day', null, h('h4', null, `${historyDate} · ${recorded.length} 个动作`),
+      recorded.length ? h('div.log-list', null, recorded.map(r => {
+        const key = `${historyDate}:${r.id}`, open = expandedRow === key, validSets = r.sets.filter(isRecordedSet);
         return h('div.log-item', null,
           h('button.log-row', { type: 'button', 'aria-expanded': String(open), onclick: () => { expandedRow = open ? null : key; rerenderTraining(); } },
-            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组 · ${r.repsLabel || (validSets.some(s => s.durationSeconds > 0) ? '计时' : '次数未填')}` : '已标记完成')),
+            h('span.log-name', null, r.name), h('span.log-meta', null, validSets.length ? `${validSets.length} 组` : '已标记完成')),
           open ? h('div.log-sets', null, r.sets.map((set, n) => h('div.log-set', null,
             h('span', null, `第 ${n + 1} 组`), h('span', null, setLabel(set))))) : null);
-      })))) : emptyState('近 7 日还没有已记录的训练。'),
+      })) : emptyState('这一天暂无训练记录。')),
     planned.length ? h('details.training-planned', { open: plannedOpen, ontoggle: ev => { plannedOpen = ev.currentTarget.open; } },
-      h('summary', null, `已安排但未记组数 · ${planned.length} 个动作`),
-      planned.map(r => h('p', null, `${r.date} · ${r.name} · 未记组数`))) : null);
+      h('summary', null, `已安排未记录 · ${planned.length} 个动作`), planned.map(r => h('p', null, r.name))) : null);
+}
+
+function showAreaDetail(area) {
+  const detail = trainingAreaDetail(state.trainingDays, trainingDay(), area.key);
+  openSheet(h('div.training-area-sheet', null,
+    cardHeader(`${area.label} · 近7日`, { actions: [h('button.icon-btn', { type: 'button', 'aria-label': '关闭部位详情', onclick: closeSheet }, icon('close'))] }),
+    detail.muscles.length ? [
+      h('div.coverage-row.coverage-heading', null, h('span', null, '肌群'), h('span', null, '主练'), h('span', null, '协同')),
+      detail.muscles.map(m => h('div.coverage-row', null, h('span', null, m.label), h('span', null, `${m.direct} 组`), h('span', null, `${m.secondary} 组`))),
+      h('h3', null, '来自这些动作'),
+      detail.records.map(r => h('div.training-area-source', null, h('span', null, r.name),
+        h('span', null, `${r.date.slice(5)} · ${r.direct ? '主练 ' + r.direct : '协同 ' + r.secondary} 组`))),
+    ] : emptyState('近7日暂无该部位的组数记录。')), { label: `${area.label}训练详情` });
 }
 
 function weeklyGroupsCard() {
   const model = weeklyTrainingSummary(state.trainingDays, trainingDay());
-  const row = area => h('div.coverage-row', null, h('strong', null, area.label),
-    h('span', null, `${area.direct} 组`), h('span', null, `${area.secondary} 组`));
   return h('section.card.training-week-groups', null,
-    cardHeader('近 7 日部位组数', { summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
-      persistentInfoTip('training-week-groups-method', '部位组数统计说明',
-        '主练与协同分列，不将协同固定折半。同一组在同一部位只计一次；多个主练部位可各计一次，因此各部位相加不等于全身总组数。未完成和空白组不计；旧组保留性质未知。近 7 日含今天。'),
+    cardHeader('近 7 日训练概览', { summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
+      persistentInfoTip('training-week-groups-method', '训练统计说明',
+        `已记录 ${model.recorded} 组，其中正式组 ${model.work}、热身 ${model.warmup}、未区分类型 ${model.unknown}。未区分类型的旧记录保留原值，无需补填。主练与协同分别展示，协同不折半；同组同部位只计一次，各部位不能相加为全身组数。间隔只看主练记录，未记录不代表没练。`),
     ] }),
-    h('p.form-hint', null, `工作组 ${model.work} · 热身 ${model.warmup} · 性质未知 ${model.unknown}`),
-    h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '主练'), h('span', null, '协同')),
-    model.areas.filter(area => !['biceps','triceps','forearm'].includes(area.key)).map(area => h('div', null, row(area),
-      disclosure(`area:${area.key}`, 'training-area-details', `${area.label}详情`,
-        h('p.form-hint', null, `主练 ${area.days} 天 · 工作 ${area.work} · 热身 ${area.warmup} · 未知 ${area.unknown}`),
-        area.key === 'arm' ? model.areas.filter(a => ['biceps','triceps','forearm'].includes(a.key)).map(row) : null))));
+    h('div.range-switch.training-overview-switch', { role: 'group', 'aria-label': '训练概览内容' },
+      [['sets','组数'],['interval','间隔']].map(([key, label]) => h('button.chip-btn', {
+        type: 'button', class: overviewMode === key ? 'active' : '', 'aria-pressed': String(overviewMode === key),
+        onclick: () => { overviewMode = key; rerenderTraining(); },
+      }, label))),
+    overviewMode === 'interval' ? coverageTable() : h('div', null,
+      h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '主练'), h('span', null, '协同')),
+      model.areas.filter(area => !['biceps','triceps','forearm'].includes(area.key)).map(area =>
+        h('button.coverage-row.training-area-row', { type: 'button', 'aria-label': `查看${area.label}训练详情`, onclick: () => showAreaDetail(area) },
+          h('strong', null, area.label), h('span', null, `${area.direct} 组`), h('span', null, `${area.secondary} 组`)))));
 }
 
 function recommendationBudget() {
@@ -837,7 +888,7 @@ export function renderTraining(root) {
     subscribeAccount(account => {
       const context = `${account.user?.id || 'local'}:${Boolean(account.ownershipPending)}`;
       if (accountContext !== context) {
-        setDrafts.clear(); disclosureState.clear(); resetDisclosures = true;
+        setDrafts.clear(); disclosureState.clear(); resetDisclosures = true; historyDate = null; expandedRow = null;
         pending.clear(); proposal = null;
         accountContext = context;
       }
@@ -845,7 +896,7 @@ export function renderTraining(root) {
   }
   const date = trainingDay();
   if (uiDay !== date) {
-    setDrafts.clear(); disclosureState.clear(); resetDisclosures = true;
+    setDrafts.clear(); disclosureState.clear(); resetDisclosures = true; historyDate = null; expandedRow = null;
     uiDay = date; pending.clear(); proposal = null; expanded = null;
     if (pickerRoot?.isConnected) closeSheet({ force: true });
   }
@@ -864,5 +915,5 @@ export function renderTraining(root) {
       onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
     }, label)));
   mount(root, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
-    trainingView === 'current' ? [planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard(), coverageCard()]));
+    trainingView === 'current' ? [planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard()]));
 }

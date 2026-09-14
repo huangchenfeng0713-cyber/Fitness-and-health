@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const { chromium, webkit } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
-const browser = await (process.env.BROWSER === 'webkit' ? webkit : chromium).launch();
+const browser = await (process.env.BROWSER === 'webkit' ? webkit : chromium).launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', serviceWorkers: 'block' });
 const page = await context.newPage();
 const errors = []; page.on('pageerror', error => errors.push(error.message));
@@ -37,28 +37,25 @@ try {
     await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/training-compact.png`, fullPage: true });
   }
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
-  await page.locator('.training-set-draft .training-set-options > summary').click();
   const draft = page.locator('.training-set-draft');
-  await draft.getByLabel('组类型', { exact: true }).selectOption('work');
-  await draft.getByLabel('剩余次数 RIR', { exact: true }).fill('0');
-  await draft.getByLabel('重量方式', { exact: true }).selectOption('external');
-  await draft.getByLabel('重量口径', { exact: true }).selectOption('total');
-  check('更多字段编辑仍是草稿', (await saved()).length === 0);
+  check('新组只显示主要输入，未确认不写记录', await draft.getByLabel('组类型', { exact: true }).count() === 0 && (await saved()).length === 0);
+  await draft.getByLabel('待确认次数', { exact: true }).fill('10');
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByText('已记录 1 组', { exact: true }).waitFor();
   const first = (await saved())[0];
-  check('确认落库保留 RIR 0、工作组、完成状态和重量口径', first.rir === 0 && first.completed && first.setType === 'work' && first.loadConvention === 'total' && first.weightKg === 0);
+  check('新确认记录默认正式组，保留自重与完成状态', first.completed && first.setType === 'work' && first.loadMode === 'bodyweight' && first.weightKg === null);
   await page.getByRole('button', { name: '再加一组', exact: true }).click();
-  check('复制不继承上一组 RIR 或组类型', await draft.getByLabel('剩余次数 RIR', { exact: true }).inputValue() === '' && await draft.getByLabel('组类型', { exact: true }).inputValue() === 'unknown');
-  await draft.getByLabel('待确认次数', { exact: true }).fill('');
-  await draft.getByLabel('计时（秒）', { exact: true }).fill('45');
-  await draft.getByLabel('组类型', { exact: true }).selectOption('warmup');
+  await page.getByRole('button', { name: '双杠臂屈伸（前倾） 记录设置', exact: true }).click();
+  await page.getByLabel('记录方式', { exact: true }).selectOption('time');
+  await page.getByRole('button', { name: '保存设置', exact: true }).click();
+  await draft.getByLabel('待确认时长（秒）', { exact: true }).fill('45');
+  await draft.getByRole('button', { name: '正式组', exact: true }).click();
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByText('已记录 2 组', { exact: true }).waitFor();
-  check('只填计时可确认，次数仍未知', (await saved())[1].reps === null && (await saved())[1].durationSeconds === 45);
+  check('只填计时可确认，不污染已记录组', (await saved())[1].reps === null && (await saved())[1].durationSeconds === 45 && (await saved())[0].reps === 10);
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   const week = page.locator('.training-week-groups');
-  check('周回顾分别展示工作、热身和旧未知', (await week.innerText()).includes('工作组 1 · 热身 1 · 性质未知 4'));
+  check('周回顾不重复铺陈性质未知', !(await week.innerText()).includes('性质未知') && await week.locator('.training-area-details').count() === 0);
   check('肩、臂分开显示', await week.getByText('肩', { exact: true }).count() === 1 && await week.getByText('臂', { exact: true }).count() === 1);
   const results = await page.evaluate(async () => {
     const s = await import('/js/lib/store.js'), db = await import('/js/lib/db.js');
@@ -113,9 +110,8 @@ try {
   if (output) { await fs.mkdir(output, { recursive: true }); await page.screenshot({ path: `${output}/recommend-200.png`, fullPage: true }); }
   await page.evaluate(async () => (await import('/js/lib/sheet.js')).closeSheet({ force: true }));
   await page.getByRole('button', { name: '再加一组', exact: true }).click();
-  if (!(await draft.locator('.training-set-options').evaluate(el => el.open))) await draft.locator('.training-set-options > summary').click();
-  await draft.getByLabel('计时（秒）', { exact: true }).scrollIntoViewIfNeeded();
-  check('200% 字号更多训练字段无横向溢出', await draft.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+  await draft.getByLabel('待确认时长（秒）', { exact: true }).scrollIntoViewIfNeeded();
+  check('200% 字号记组表无横向溢出', await draft.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
   if (output) await page.screenshot({ path: `${output}/training-200.png`, fullPage: true });
   const cleared = await page.evaluate(async () => {
     const s = await import('/js/lib/store.js'); await s.clearAllData();

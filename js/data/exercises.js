@@ -131,6 +131,7 @@ export const EXERCISES = [
   X('deadlift', '硬拉', 'yingla deadlift', 'back', 'hinge', ['erector', 'glute'], ['ham', 'lat', 'trap_mid', 'forearm'], 'barbell'),
   X('rack_pull', '架上拉', 'jiashang la rack pull', 'back', 'hinge', ['erector', 'trap_mid'], ['glute', 'lat'], 'barbell'),
   X('back_extension', '山羊挺身', 'shanyang tingshen back extension', 'back', 'hinge', ['erector'], ['glute', 'ham'], 'bodyweight', false),
+  X('back_extension_hip', '山羊挺身（臀腿侧重）', 'shanyang tingshen 臀部 髋伸展 roman chair hip extension', 'leg', 'hinge', ['glute', 'ham'], ['erector'], 'bodyweight', false),
   X('row_machine_seated', '坐姿划船器械', 'zuozi huachuan seated row machine', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'machine'),
   X('iso_lateral_row', '单侧划船器械', 'danze huachuan iso lateral row machine', 'back', 'horizontal_pull', ['lat', 'trap_mid'], ['rhomboid', 'biceps'], 'machine'),
   X('high_row_machine', '高位划船器械', 'gaowei huachuan high row machine', 'back', 'horizontal_pull', ['lat'], ['trap_mid', 'biceps'], 'machine'),
@@ -201,6 +202,38 @@ export const EXERCISES = [
 export const EXERCISE_BY_ID = new Map(EXERCISES.map((e) => [e.id, e]));
 export const GROUP_BY_KEY = new Map(GROUPS.map((g) => [g.key, g]));
 
+// 变式使用独立 ID；同一天可以分别记录，旧 ID 的历史含义不变。
+const EXERCISE_FAMILIES = [
+  [
+    { id: 'back_extension', label: '背部侧重', note: '以背部伸展训练为目的；臀腿仍参与，控制幅度，避免过度后仰。' },
+    { id: 'back_extension_hip', label: '臀腿侧重', note: '以髋部折叠和伸髋为主，躯干保持稳定；背部参与稳定。' },
+  ],
+  [
+    { id: 'dip_chest', label: '前倾 · 胸侧重', note: '躯干适度前倾；胸与肱三头肌共同参与。' },
+    { id: 'dip_triceps', label: '直立 · 三头侧重', note: '躯干相对直立；胸部仍参与，不表示隔离三头肌。' },
+  ],
+  [
+    { id: 'calf_raise_standing', label: '站姿提踵', note: '膝关节保持接近伸直，腓肠肌和比目鱼肌共同参与。' },
+    { id: 'calf_raise_seated', label: '坐姿提踵', note: '屈膝坐姿侧重比目鱼肌；两种练法分别保留重量与次数。' },
+  ],
+];
+export function exerciseVariants(id) {
+  return EXERCISE_FAMILIES.find(family => family.some(variant => variant.id === id)) || [];
+}
+
+export function snapshotExercise(exercise) {
+  const targets = exerciseTargets(exercise);
+  return { version: 1, name: exercise.name, group: exercise.group, pattern: exercise.pattern,
+    primary: [...exercise.primary], secondary: [...exercise.secondary],
+    targets: { primary: [...targets.primary], secondary: [...targets.secondary], note: targets.note } };
+}
+
+/** 新记录保留当时的练法与肌群；旧记录继续按原 ID 读取，不追溯改写。 */
+export function exerciseForRecord(item) {
+  const exercise = EXERCISE_BY_ID.get(item?.id);
+  return exercise ? { ...exercise, ...(item.exerciseSnapshot || {}), id: exercise.id } : null;
+}
+
 /**
  * 细分部位用于显示与筛选，保留原有肌群键参与覆盖和动作重合计算。
  * 腹直肌上下部是同一肌肉的区域；标签描述常见动作侧重，不声称独立隔离。
@@ -242,6 +275,7 @@ const TARGET_OVERRIDES = {
 
 export function exerciseTargets(exercise) {
   if (!exercise) return { primary: [], secondary: [], note: '' };
+  if (exercise.targets) return exercise.targets;
   const detail = TARGET_OVERRIDES[exercise.id] || {};
   return {
     primary: detail.primary || exercise.primary || [],

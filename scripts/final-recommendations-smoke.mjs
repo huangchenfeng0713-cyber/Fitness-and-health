@@ -65,7 +65,7 @@ try {
   check('逐组展示次数，零和未知重量保持区分', (await page.locator('.training-last-sets').innerText()).includes('重量未填 × 12 次') && (await page.locator('.training-last-sets').innerText()).includes('0 kg × 10 次'));
   const todayItems = () => page.evaluate(async () => (await import('/js/lib/store.js')).trainingFor('2026-09-12').items);
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
-  check('首组历史预填不落库、不计完成', (await todayItems())[0].sets.length === 0 && await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).inputValue() === '12');
+  check('沿用上次末组次数，草稿不落库、不计完成', (await todayItems())[0].sets.length === 0 && await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).inputValue() === '10');
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByText('已记录 1 组', { exact: true }).waitFor();
   check('确认后保存次数，未填重量仍为 null', (await todayItems())[0].sets[0].weightKg === null);
@@ -74,17 +74,18 @@ try {
   await page.getByRole('button', { name: '取消', exact: true }).click();
   check('取消草稿不改已记录组', (await todayItems())[0].sets.length === 1);
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
-  check('训练历史摘要含次数', (await page.locator('.training-history-card').innerText()).includes('12次'));
+  check('训练历史只展开选中日期', await page.locator('.training-date').count() === 7 && await page.locator('.training-log-day .log-row').count() === 1);
+  await page.locator('.training-log-day .log-row').click();
+  check('动作详情显示实际次数', (await page.locator('.log-sets').innerText()).includes('10 次'));
   await page.locator('.tab').filter({ hasText: '今日' }).click();
-  await page.getByRole('button', { name: '记体重', exact: true }).click();
-  await page.getByRole('spinbutton', { name: '体重 kg', exact: true }).fill('69.8');
-  await page.getByRole('button', { name: '保存体重', exact: true }).click();
-  await page.locator('.quick-weight-card p').filter({ hasText: '69.8 kg' }).waitFor();
+  check('今日页不再提供记体重入口', await page.getByRole('button', { name: '记体重', exact: true }).count() === 0);
   const weight = await page.evaluate(async () => {
     const s = await import('/js/lib/store.js'); const db = await import('/js/lib/db.js');
-    return { row: await db.get(db.STORES.health, '2026-09-12'), latest: s.latestHealthEntry('weightKg', '2026-09-12') };
+    await db.put(db.STORES.health, { date: '2026-09-12', weightKg: 69.8, steps: 1234, source: 'shortcut' });
+    await s.reloadStoreFromDB();
+    return { latest: s.latestHealthEntry('weightKg', '2026-09-12'), effective: s.state.derived.effectiveProfile.weightKg };
   });
-  check('快捷体重落在原健康日表，手动来源和其余字段保留', weight.row.weightKg === 69.8 && weight.row.steps === 1234 && weight.row._fieldProvenance?.weightKg?.origin === 'manual' && weight.latest.date === '2026-09-12');
+  check('同步体重继续参与身体信息和计算', weight.latest.value === 69.8 && weight.effective === 69.8);
   // New plan evidence is a saved snapshot; later weight updates do not replace it.
   const plan = await page.evaluate(async () => {
     const s = await import('/js/lib/store.js');
@@ -92,12 +93,6 @@ try {
     return { p, before: s.planForProfile(s.state.profile, '2026-09-11') };
   });
   check('目标生效日期与基线窗口可追溯，生效前不套未来版本', plan.p.effectiveDate === '2026-09-12' && plan.p.planBasis.from === '2026-08-29' && !plan.before.versionId);
-  await page.getByRole('button', { name: '记体重', exact: true }).click();
-  await page.getByRole('spinbutton', { name: '体重 kg', exact: true }).fill('');
-  await page.getByRole('button', { name: '保存体重', exact: true }).click();
-  check('空体重被拒绝，不覆盖原值', await page.evaluate(async () => (await import('/js/lib/store.js')).state.healthByDate.get('2026-09-12').weightKg === 69.8));
-  await page.waitForTimeout(800); // shared sheet accidental-dismiss guard
-  await page.getByRole('button', { name: '关闭体重记录', exact: true }).click();
   await page.locator('.topbar-settings-btn').click();
   await page.waitForTimeout(800);
   await page.getByRole('button', { name: /导入与备份/ }).click();
@@ -137,12 +132,6 @@ try {
   await page.locator('.training-set-draft').scrollIntoViewIfNeeded();
   if (process.env.ARTIFACT_DIR) await page.screenshot({ path: process.env.ARTIFACT_DIR + '/draft-200.png' });
   await page.locator('.tab').filter({ hasText: '今日' }).click();
-  await page.getByRole('button', { name: '记体重', exact: true }).click();
-  await page.waitForTimeout(800);
-  check('320px 200% 文字的体重表单无溢出', await page.locator('.sheet-scroll').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
-  if (process.env.ARTIFACT_DIR) await page.screenshot({ path: process.env.ARTIFACT_DIR + '/weight-200.png' });
-  await page.waitForTimeout(800);
-  await page.getByRole('button', { name: '关闭体重记录', exact: true }).click();
   await page.locator('.tab').filter({ hasText: '数据' }).click();
   check('320px 200% 文字的配对统计无溢出', await page.locator('.week-rows').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
   if (process.env.ARTIFACT_DIR) {
