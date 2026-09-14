@@ -47,6 +47,15 @@ try {
   await page.getByRole('button', { name: '哑铃侧平举 记录设置', exact: true }).click();
   await page.getByLabel('重量单位与口径', { exact: true }).selectOption('total');
   await page.getByRole('button', { name: '保存设置', exact: true }).click();
+  /*
+   * 「保存设置」的 onclick 是 async：click() 把事件派出去就返回，落库、改草稿、
+   * 关弹层、重绘全排在它后面。紧接着断言草稿里的重量已经清空，就是在跟 IndexedDB
+   * 赛跑 —— 本地连跑八次红两次，CI 上同一份代码前一个提交是绿的。
+   * 关弹层是这段处理的最后一步（closeSheet 之后紧跟 rerenderTraining），
+   * 所以等弹层消失就等到了重绘。下面那两处 selectOption 之后的按钮各自只在
+   * 重绘后才存在，Playwright 自己会等，不用再加闸。
+   */
+  await page.locator('.sheet-wrap').waitFor({ state: 'hidden' });
   check('更改口径只影响后续草稿，旧组保持原值', (await items())[0].sets.every(s => s.loadConvention === 'single') && await page.getByLabel('待确认重量（kg）', { exact: true }).inputValue() === '');
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await page.locator('.plan-row-wrap').filter({ hasText: '山羊挺身' }).getByRole('button', { name: '记组', exact: true }).click();
