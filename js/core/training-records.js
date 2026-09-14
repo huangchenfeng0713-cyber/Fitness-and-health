@@ -4,7 +4,7 @@ import { MUSCLES, MUSCLE_TARGETS, PATTERNS, GROUP_BY_KEY } from '../data/exercis
 export const SET_TYPES = { unknown: '性质未注明', warmup: '热身', work: '正式组' };
 export const LOAD_MODES = { unknown: '重量方式未注明', bodyweight: '自重', external: '附加负重', assistance: '辅助重量', machine: '器械标示' };
 export const LOAD_CONVENTIONS = { unknown: '重量口径未注明', single: '单手／单侧', total: '双手合计', scale: '器械刻度' };
-export const SET_LIMITS = { reps: 500, weightKg: 500, rir: 10, durationSeconds: 86400 };
+export const SET_LIMITS = { reps: 500, weightKg: 500, durationSeconds: 86400 };
 export function validTrainingDate(date) {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date + 'T00:00:00Z'))
     && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
@@ -36,7 +36,7 @@ export function validateTrainingRecord(raw) {
         if (set[field] != null && !Object.hasOwn(values, set[field])) fail(field);
       }
       if (set.completed != null && typeof set.completed !== 'boolean') fail('completed');
-      const extended = ['completed','rir','durationSeconds','setType','loadMode','loadConvention'].some(field => Object.hasOwn(set, field));
+      const extended = ['completed','durationSeconds','setType','loadMode','loadConvention'].some(field => Object.hasOwn(set, field));
       if (extended) for (const [field, max] of Object.entries(SET_LIMITS)) {
         const value = set[field];
         if (value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max
@@ -61,7 +61,7 @@ export function trainingSetText(set) {
   const mode = ['external','assistance','machine'].includes(set.loadMode) ? LOAD_MODES[set.loadMode] + ' ' : '';
   const dose = [set.reps > 0 ? `${set.reps} 次` : '', set.durationSeconds > 0 ? `${set.durationSeconds} 秒` : ''].filter(Boolean).join(' / ') || '次数未填';
   const extras = [set.loadConvention && set.loadConvention !== 'unknown' ? LOAD_CONVENTIONS[set.loadConvention] : '',
-    set.setType && set.setType !== 'unknown' ? SET_TYPES[set.setType] : '', set.rir != null ? `RIR ${set.rir}` : '',
+    set.setType && set.setType !== 'unknown' ? SET_TYPES[set.setType] : '',
     set.completed === false ? '未完成' : ''].filter(Boolean);
   return `${mode}${load} × ${dose}${extras.length ? ' · ' + extras.join(' · ') : ''}`;
 }

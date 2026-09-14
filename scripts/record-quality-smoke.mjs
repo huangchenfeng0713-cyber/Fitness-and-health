@@ -74,7 +74,7 @@ try {
     await s.restoreEntry(entry); const afterUndo = s.dietQualityFor().status;
     await s.confirmDietLog(s.state.day, 'complete'); await s.copyDay('2026-09-13'); const afterCopy = s.dietQualityFor().status;
     const before = await db.exportAll(); let rejected = false;
-    try { await db.importAll({ ...before, training: [{ date: '2026-09-13', items: [{ id: 'dip_chest', sets: [{ reps: 10, completed: true, rir: -1 }] }] }] }); } catch { rejected = true; }
+    try { await db.importAll({ ...before, training: [{ date: '2026-09-13', items: [{ id: 'dip_chest', sets: [{ reps: 10, completed: true, durationSeconds: -1 }] }] }] }); } catch { rejected = true; }
     const intact = JSON.stringify((await db.exportAll()).training) === JSON.stringify(before.training);
     return { confirmed, roundtrip, restoredStatus, afterEdit, partial, afterDelete, afterUndo, afterCopy, rejected, intact };
   });

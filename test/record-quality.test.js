@@ -7,7 +7,12 @@ import { validateImportPayload } from '../js/lib/db.js';
 
 const date = '2026-09-13';
 const set = (patch = {}) => ({ reps: 10, weightKg: null, completed: true, setType: 'work', rir: null, ...patch });
-test('新组字段清洗和 JSON 恢复保留零、未知、辅助及额外字段', () => {
+/*
+ * `rir` 的输入在 v3.21.0 把每组设置并成按动作记一次时就没了，字段却还留着
+ * —— 只出不进。契约里那一条已经删掉，于是它在这儿降级成一个普通的旧字段：
+ * 这条用例连 `futureField` 一起验的就是「老记录里的它原样躺着，不会被清洗掉」。
+ */
+test('新组字段清洗和 JSON 恢复保留零、未知、辅助及额外字段（含已退役的 rir）', () => {
   const raw = { date, items: [{ id: 'pushup', done: false, sets: [set({ rir: 0, weightKg: 0, durationSeconds: 30,
     loadMode: 'assistance', loadConvention: 'scale', futureField: 'keep' })] }] };
   validateTrainingRecord(raw);
@@ -15,7 +20,7 @@ test('新组字段清洗和 JSON 恢复保留零、未知、辅助及额外字�
   assert.deepEqual(validateImportPayload(JSON.parse(JSON.stringify({ training: [raw] }))).training, [raw]);
 });
 test('新组的负值、非有限数、布尔数字和非法枚举在落库前拒绝', () => {
-  for (const patch of [{ rir: -1 },{ rir: 11 },{ rir: 1.5 },{ reps: true },{ durationSeconds: Infinity },
+  for (const patch of [{ reps: true },{ durationSeconds: Infinity },
     { weightKg: -1 },{ completed: 'true' },{ loadMode: 'estimated-kg' },{ setType: 'hard' }]) {
     assert.throws(() => validateTrainingRecord({ date, items: [{ id: 'pushup', sets: [set(patch)] }] }), /pushup 第 1 组/);
   }
@@ -44,13 +49,48 @@ test('周统计区分直接、协同、肩臂与工作/热身/未知，不重复
   assert.equal(area('biceps').direct, 1); assert.equal(area('triceps').direct, 0);
   assert.equal(area('shoulder').days, 1);
 });
-test('训练选择优先实际常练动作，排除草稿、未来和超过28日的历史', () => {
-  const sessions = [{ date: '2026-09-12', items: [{ id: 'bench_press_db', sets: [set()] }] },
-    { date: '2026-09-14', items: [{ id: 'bench_press_smith', sets: [set()] }] },
-    { date: '2026-08-01', items: [{ id: 'bench_press_smith', sets: [set()] }] }];
-  const rec = recommendFor({ mode: 'split', splitKey: 'push', sessions, endDate: date });
-  assert.ok(rec.items.some(i => i.id === 'bench_press_db' && i.reason.includes('2026-09-12')));
-  assert.ok(!rec.items.some(i => i.id === 'bench_press_bb'));
+/*
+ * **「本周还没练过」先于「你最常练」。**
+ *
+ * 这一栏回答的是「今天练什么」，排序原先只按熟悉度，于是你越常做什么越推什么。
+ * 「本周没练过」代码里本来就算出来了，可它只用来排**模式**的先后，
+ * 挑具体动作时又退回熟悉度：实测腿那一屏，深蹲这个模式因为两天前练过被排到
+ * 后面（对的），可轮到它时第一个仍然是那天练的哈克深蹲本身。
+ */
+test('本周练过的动作让位给没练过的；本周都没练过时才看常练', () => {
+  const future = { date: '2026-09-14', items: [{ id: 'bench_press_smith', sets: [set()] }] };
+  const tooOld = { date: '2026-08-01', items: [{ id: 'bench_press_smith', sets: [set()] }] };
+
+  // 本周练过 bench_press_db → 水平推那个槽位让给没练过的
+  const thisWeek = recommendFor({ mode: 'split', splitKey: 'push', endDate: date,
+    sessions: [{ date: '2026-09-12', items: [{ id: 'bench_press_db', sets: [set()] }] }, future, tooOld] });
+  assert.ok(!thisWeek.items.some(i => i.id === 'bench_press_db'), '本周刚练过的动作又被推了一遍');
+  assert.ok(thisWeek.items.some(i => i.id === 'bench_press_bb'));
+
+  // 同样两次记录但都在 7 日之外 → 熟悉度重新说了算
+  const older = recommendFor({ mode: 'split', splitKey: 'push', endDate: date,
+    sessions: [{ date: '2026-09-01', items: [{ id: 'bench_press_db', sets: [set()] }] },
+      { date: '2026-09-03', items: [{ id: 'bench_press_db', sets: [set()] }] },
+      // 草稿组不算练过
+      { date: '2026-09-12', items: [{ id: 'pushup', sets: [set({ completed: false })] }] }, future, tooOld] });
+  const db = older.items.find(i => i.id === 'bench_press_db');
+  assert.ok(db, '本周没练过时，常练的那个应该拿到槽位');
+  // 未来日和超过 28 日的记录不进历史：smith 一次都不该被算进来
+  assert.equal(db.reason, '近 28 日记录 2 天');
+  assert.equal(db.lastDate, '2026-09-03');
+  assert.ok(!older.items.some(i => i.id === 'bench_press_smith' && i.lastDate));
+});
+
+/*
+ * 「上次是哪天」由视图决定印不印，所以 core 把它单独给出来，不黏进 reason ——
+ * 动作行自己那条 `上次 09-13 · 60–70kg × 12,12,12,15` 已经说过一遍了。
+ */
+test('推荐里的「上次」是独立字段，不重复黏进 reason', () => {
+  const rec = recommendFor({ mode: 'split', splitKey: 'push', endDate: date,
+    sessions: [{ date: '2026-09-01', items: [{ id: 'bench_press_db', sets: [set()] }] }] });
+  const db = rec.items.find(i => i.id === 'bench_press_db');
+  assert.equal(db.lastDate, '2026-09-01');
+  assert.doesNotMatch(db.reason, /上次|2026-/, `reason 里又把日期抄了一遍：${db.reason}`);
 });
 test('时间、已选动作和待选动作共同扣预算，不为填数生成完成组', () => {
   const opts = { mode: 'split', splitKey: 'push', endDate: date, minutes: 15, setBudget: 12, setsPerExercise: 3 };
