@@ -600,7 +600,7 @@ function setRow(item, index, set, showWeight) {
   return h('div.set-row.training-recorded-set' + (showWeight ? '' : '.training-timed-row'), null,
     h('span.set-index', null, `${index + 1}`),
     showWeight ? set.loadMode === 'bodyweight' ? h('span.training-bodyweight', null, '自重')
-      : setValueInput(set, 'weightKg', `${exercise.name} 第 ${index + 1} 组重量 kg`, change) : null,
+      : setValueInput(set, 'weightKg', `${exercise.name} 第 ${index + 1} 组重量 ${loadUnit(set)}`, change) : null,
     setValueInput(set, set.durationSeconds > 0 ? 'durationSeconds' : 'reps', `${exercise.name} 第 ${index + 1} 组${set.durationSeconds > 0 ? '时长' : '次数'}`, change),
     h('button.training-set-status', { type: 'button', 'aria-label': `第 ${index + 1} 组记录设置`, onclick: () => setTypeSheet(item, index) },
       set.setType === 'warmup' ? '热身' : recorded ? icon('check') : '未完成'));
@@ -626,7 +626,7 @@ function draftSetEditor(item, showWeight) {
   return h('div.training-set-draft', null,
     h('div.set-row' + (showWeight ? '' : '.training-timed-row'), null,
       h('span.set-index', null, String(item.sets.length + 1)),
-      showWeight ? draft.loadMode === 'bodyweight' ? h('span.training-bodyweight', null, '自重') : input('weightKg', '待确认重量（kg）') : null,
+      showWeight ? draft.loadMode === 'bodyweight' ? h('span.training-bodyweight', null, '自重') : input('weightKg', `待确认重量（${loadUnit(draft)}）`) : null,
       input(draft.measure === 'time' ? 'durationSeconds' : 'reps', draft.measure === 'time' ? '待确认时长（秒）' : '待确认次数'),
       h('button.training-set-confirm', { type: 'button', 'aria-label': draft.count > 1 ? `确认记录 ${draft.count} 组` : '确认记录这一组', onclick: confirm }, icon('check'))),
     h('div.training-draft-controls', null, type, h('label.training-batch-count', null, h('span', null, '记录'), count),

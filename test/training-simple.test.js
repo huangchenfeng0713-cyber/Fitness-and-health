@@ -82,6 +82,18 @@ test('新记录快照经 JSON 备份保留，动作库修改不追溯覆盖历�
   assert.throws(() => validateTrainingRecord({ date, items: [{ ...item, exerciseSnapshot: { ...item.exerciseSnapshot, primary: ['invented'] } }] }));
 });
 
+test('部位详情按练法细分肌群，保留坐姿提踵协同和锤式弯举标签', () => {
+  const sessions = [{ date, items: [record('calf_raise_standing', 2), record('calf_raise_seated', 3), record('hammer_curl')] }];
+  const leg = trainingAreaDetail(sessions, date, 'leg');
+  assert.deepEqual(leg.muscles.find(m => m.key === 'soleus'), { key: 'soleus', label: '比目鱼肌', direct: 5, secondary: 0 });
+  assert.deepEqual(leg.muscles.find(m => m.key === 'gastrocnemius'), { key: 'gastrocnemius', label: '腓肠肌', direct: 2, secondary: 3 });
+  assert.equal(leg.muscles.some(m => m.key === 'calf'), false);
+  const arm = trainingAreaDetail(sessions, date, 'arm');
+  assert.equal(arm.muscles.find(m => m.key === 'brachialis').direct, 1);
+  assert.equal(arm.muscles.find(m => m.key === 'brachioradialis').direct, 1);
+  assert.equal(arm.muscles.find(m => m.key === 'biceps').secondary, 1);
+});
+
 test('七日默认定位最近记录，手动选择空日期保持空态，跨窗口重置', () => {
   const sessions = [{ date: '2026-09-12', items: [record('pushup')] }, { date, items: [{ id: 'pushup', sets: [] }] }];
   assert.equal(trainingHistoryDays(sessions, date).selected, '2026-09-12');

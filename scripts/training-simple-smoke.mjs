@@ -13,7 +13,7 @@ let checks = 0;
 const check = (message, value) => { assert.ok(value, message); console.log('✓ ' + message); checks++; };
 const output = process.env.ARTIFACT_DIR || '/tmp/training-simple';
 await fs.mkdir(output, { recursive: true });
-const screenshot = name => page.screenshot({ path: `${output}/${process.env.BROWSER || 'chromium'}-${name}.png`, fullPage: true });
+const screenshot = name => page.screenshot({ path: `${output}/${process.env.BROWSER || 'chromium'}-${name}.png`, fullPage: true, animations: 'disabled' });
 const items = () => page.evaluate(async () => (await import('/js/lib/store.js')).trainingFor('2026-09-13').items);
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8080');

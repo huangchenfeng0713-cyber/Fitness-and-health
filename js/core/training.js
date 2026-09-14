@@ -948,6 +948,9 @@ export function trainingHistoryDays(sessions = [], endDate, selectedDate = null)
 export function trainingAreaDetail(sessions, endDate, areaKey) {
   const area = [...TRAINING_AREAS, ...ARM_AREAS].find(a => a.key === areaKey);
   if (!area) return { muscles: [], records: [] };
+  // 有些细分肌群并不以旧肌群键开头，不能只靠字符串前缀还原所属部位。
+  const targetParent = { gastrocnemius: 'calf', soleus: 'calf', brachialis: 'biceps', brachioradialis: 'forearm' };
+  const inArea = target => area.muscles.some(key => target === key || target.startsWith(key + '_') || targetParent[target] === key);
   const muscles = new Map(), records = [];
   for (const raw of sessions) {
     if (!validTrainingDate(raw?.date) || raw.date > endDate || dayOffset(endDate, raw.date) >= 7) continue;
@@ -958,14 +961,10 @@ export function trainingAreaDetail(sessions, endDate, areaKey) {
       const secondary = exercise.secondary.some(key => area.muscles.includes(key));
       if (!direct && !secondary) continue;
       const targets = exerciseTargets(exercise);
-      for (const [role, keys] of Object.entries({ direct: exercise.primary, secondary: exercise.secondary })) {
-        for (const key of new Set(keys.filter(key => area.muscles.includes(key)))) {
-          const mapped = targets[role === 'direct' ? 'primary' : 'secondary'];
-          const details = mapped.filter(target => target === key || target.startsWith(key + '_'));
-          for (const target of details.length ? details : [key]) {
-            const row = muscles.get(target) || { key: target, label: MUSCLE_TARGETS[target] || MUSCLES[key], direct: 0, secondary: 0 };
-            row[role] += count; muscles.set(target, row);
-          }
+      for (const [role, keys] of Object.entries({ direct: targets.primary, secondary: targets.secondary })) {
+        for (const target of new Set(keys.filter(inArea))) {
+          const row = muscles.get(target) || { key: target, label: MUSCLE_TARGETS[target], direct: 0, secondary: 0 };
+          row[role] += count; muscles.set(target, row);
         }
       }
       records.push({ date: raw.date, id: item.id, name: exercise.name, direct: direct ? count : 0, secondary: direct ? 0 : count });
