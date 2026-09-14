@@ -1,5 +1,5 @@
 import { completeEnergyDay } from '../../core/energy-observation.js';
-import { planForProfile } from '../../lib/store.js';
+import { planForProfile, planStepsIn } from '../../lib/store.js';
 /**
  * 趋势图区块。作为卡片模块挂在「数据」页——数据和趋势本来就是一件事，
  * 分成两个栏目要来回切才能把「现在怎么样」和「在往哪走」对上。
@@ -199,22 +199,7 @@ export function trendCharts(rerender) {
    * 那句话既没说变了什么，又把整段解读顶掉了（连「日均 2028 kcal」这种
    * 压根不依赖计划的话都一起没了）。绝大多数时候数字根本没动。
    */
-  /*
-   * 一天之内常常存好几次（改一个数存一次、体重同步再存一次）。
-   * 每天只取最后生效的那份，挑法和 planForProfile 一致；不去重的话
-   * 同一天里 A→B→A 会读成「目标从 2660 改成 2660（区间内改过 2 次）」。
-   */
-  const byDate = new Map();
-  for (const v of (state.profile.targetVersions || [])) {
-    if (!v?.targets || !/^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate)) continue;
-    if (v.effectiveDate <= days[0] || v.effectiveDate > endDay) continue;
-    const prev = byDate.get(v.effectiveDate);
-    if (!prev || String(prev.savedAt || prev.id) <= String(v.savedAt || v.id)) byDate.set(v.effectiveDate, v);
-  }
-  const planSteps = [
-    { date: days[0], ...planForProfile(state.profile, days[0]) },
-    ...[...byDate.keys()].sort().map((date) => ({ date, ...byDate.get(date).targets })),
-  ];
+  const planSteps = planStepsIn(state.profile, days[0], endDay);
   const planUnavailable = targets.status === 'unavailable';
   const kcalShift = planUnavailable ? null : planShift(planSteps, 'kcal');
   const proteinShift = planUnavailable ? null : planShift(planSteps, 'protein');

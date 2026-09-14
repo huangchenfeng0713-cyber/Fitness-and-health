@@ -340,6 +340,33 @@ export function planForProfile(profile, day = todayKey(), now = new Date()) {
   return { ...dailyTargets(profile, planned, reference), planBasis, referenceDate: day, context: '按当前设置对照' };
 }
 
+/**
+ * 一段区间里，计划分成了哪几截：第一项是区间开始时生效的那份，
+ * 后面每一项是区间内某一天起生效的新计划。喂给 `core/trend-reading.js`
+ * 的 `planShift` 判断「数字到底变没变」。
+ *
+ * **一天只取最后生效的那份**，挑法和 planForProfile 一致 —— 改一个数存一次、
+ * 体重同步再存一次是常态，不去重的话同一天里 A→B→A 会被读成
+ * 「目标从 2660 改成 2660（区间内改过 2 次）」。
+ *
+ * 抽出来是因为趋势卡和「近 7 日速览」都要问这件事，而两边原先各写了一份
+ * `targetVersions.some(v => v.effectiveDate > 起点)` —— 那问的是「存过没存过」，
+ * 不是「变没变」，两张卡于是在同一页上一起误报。
+ */
+export function planStepsIn(profile, from, to) {
+  const byDate = new Map();
+  for (const v of (Array.isArray(profile?.targetVersions) ? profile.targetVersions : [])) {
+    if (!v?.targets || !/^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate)) continue;
+    if (v.effectiveDate <= from || v.effectiveDate > to) continue;
+    const prev = byDate.get(v.effectiveDate);
+    if (!prev || String(prev.savedAt || prev.id) <= String(v.savedAt || v.id)) byDate.set(v.effectiveDate, v);
+  }
+  return [
+    { date: from, ...planForProfile(profile, from) },
+    ...[...byDate.keys()].sort().map((date) => ({ date, ...byDate.get(date).targets })),
+  ];
+}
+
 /** 取指定日期当天或之前最近一次的健康指标 */
 export function latestHealthEntry(key, upToDate = state.day) {
   for (let i = state.healthDays.length - 1; i >= 0; i -= 1) {
@@ -630,9 +657,15 @@ export async function mergeHealthDays(days, meta = {}) {
 
   const existing = await db.getAll(db.STORES.health);
   const importId = `health-${Date.now().toString(36)}`;
+  // 一次导入删掉了几天、原样留下了几天，要报出去让界面说得出口 ——
+  // 全量快照会删数据，而「删了什么」是这个操作唯一说不清就不该做的事。
+  let removed = 0;
+  let untouched = 0;
   if (isCompleteSnapshot) {
-    const { upserts, deletes } = replaceAppleSnapshotRows(existing, incomingDays, importId);
-    await db.bulkSync(db.STORES.health, upserts, deletes);
+    const replaced = replaceAppleSnapshotRows(existing, incomingDays, importId);
+    await db.bulkSync(db.STORES.health, replaced.upserts, replaced.deletes);
+    removed = replaced.deletes.length;
+    untouched = replaced.untouched;
   } else {
     const merged = mergeApplePartialRows(existing, incomingDays, importId);
     await db.bulkSync(db.STORES.health, merged);
@@ -641,6 +674,8 @@ export async function mergeHealthDays(days, meta = {}) {
   state.lastImport = {
     at: importedAt.toISOString(),
     days: incomingDays.length,
+    removed,
+    untouched,
     range: incomingDays.length
       ? [incomingDays[0].date, incomingDays[incomingDays.length - 1].date]
       : null,
@@ -649,7 +684,7 @@ export async function mergeHealthDays(days, meta = {}) {
   await db.setSetting('lastImport', state.lastImport);
   recompute();
   emit();
-  return incomingDays.length;
+  return { days: incomingDays.length, removed, untouched };
 }
 
 /** 有多少天的能量数据受早期单位缺陷影响 */

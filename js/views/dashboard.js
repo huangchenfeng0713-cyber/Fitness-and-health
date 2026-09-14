@@ -152,7 +152,12 @@ function heroCard(advice, targets, derived) {
           energyRingChart({ model: ringModel, animateKey: state.day }),
           ringCenter(ringModel)),
         ringLegend(ringModel))),
-    h('p.form-hint', null, `每日计划 ${num(targets.kcal)} kcal；环心是记录摄入减设备消耗，不代表全天结余。`),
+    /*
+     * 环下面原先还有一句「每日计划 2119 kcal；环心是记录摄入减设备消耗，
+     * 不代表全天结余。」—— 两截都是重复：`2119` 就印在紧邻的图例上
+     * （`摄入 0 / 2119 kcal`），后半句卡头那个 ⓘ 里一字不差地已经有了。
+     * **解释「这个数是怎么算出来的」属于说明层**，不占卡面。
+     */
 
     h('div.metric-list', null,
       metricRow(by.protein),
@@ -265,9 +270,10 @@ function heroInfo(derived, targets) {
     h('p', null, planBasisText(targets)),
     h('p', null, `本计划实际采用 TDEE ${num(targets.tdee)} kcal，结合每日调整后，摄入目标为 ${num(targets.kcal)} kcal。`),
     h('p', null, '七日速览是另一个统计窗口，不必等于计划参考值。设备热量是估算；本应用不单独加算食物热效应，这不表示已证实 Apple 包含或排除了它。'),
+    // 环心那个数是什么，只在这儿说一次 —— 环下面曾经还印着同一句
     h('p', null, derived.isToday
-      ? '根据当前已记录摄入与已同步消耗计算，不代表全天最终能量结余。'
-      : '根据所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
+      ? '环心是已记录摄入减去已同步消耗，不代表全天最终能量结余。'
+      : '环心按所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
     targets.clampedByFloor && h('p', null,

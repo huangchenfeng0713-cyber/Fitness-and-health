@@ -54,6 +54,18 @@ function qualityNote(quality) {
   return notes.length ? `；${notes.join('，')}` : '';
 }
 
+/**
+ * 完整导出会**删数据**（用户在健康 App 里删掉的样本要跟着消失），
+ * 所以这一下删了几天、原样留下了几天必须说出来。
+ * 「同步完看着少了很多记录」这件事发生过一次，而当时界面一个字都没提。
+ */
+function touchedNote(applied) {
+  const parts = [];
+  if (applied?.removed) parts.push(`移除了 ${applied.removed} 天已在「健康」里删除的记录`);
+  if (applied?.untouched) parts.push(`这次导出没覆盖到的 ${applied.untouched} 天原样保留`);
+  return parts.length ? `；${parts.join('，')}` : '';
+}
+
 /** 解析结果写入本地库，返回一句可直接展示的结果说明 */
 export async function applyImport(result, meta = {}) {
   const note = ignoredNote(result?.ignoredKeys);
@@ -69,7 +81,7 @@ export async function applyImport(result, meta = {}) {
     };
   }
   const days = result.days || [];
-  await mergeHealthDays(days, {
+  const applied = await mergeHealthDays(days, {
     ...meta,
     records: result.recordCount,
     types: result.types?.length,
@@ -86,13 +98,15 @@ export async function applyImport(result, meta = {}) {
   return {
     ok: true,
     days: days.length,
+    removed: applied?.removed || 0,
+    untouched: applied?.untouched || 0,
     ignoredKeys: result.ignoredKeys || [],
     quality: result.quality || null,
     metadata: result.metadata || null,
     workouts: result.workouts || [],
     message: days.length
-      ? `已导入 ${days.length} 天（${range}）${note}${cleaned}`
-      : `已同步完整 Apple 健康快照（本次没有可用的按日记录）${note}${cleaned}`,
+      ? `已导入 ${days.length} 天（${range}）${note}${cleaned}${touchedNote(applied)}`
+      : `已同步完整 Apple 健康快照（本次没有可用的按日记录）${note}${cleaned}${touchedNote(applied)}`,
   };
 }
 
