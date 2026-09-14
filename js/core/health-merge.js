@@ -71,14 +71,49 @@ export function stampManualPatch(existing, patch) {
   return { ...row, source: sourceLabel(row) };
 }
 
-function stripAppleFields(row) {
+function stripAppleFields(row, fields = APPLE_HEALTH_FIELDS) {
   const clean = { ...row, _fieldProvenance: { ...(row?._fieldProvenance || {}) } };
-  for (const key of APPLE_HEALTH_FIELDS) {
+  for (const key of fields) {
     if (originOf(row, key) !== 'apple') continue;
     delete clean[key];
     delete clean._fieldProvenance[key];
   }
   return clean;
+}
+
+/**
+ * 这份「完整导出」到底证明了什么。
+ *
+ * **快照只能删掉它拿得出证据的东西。** 原先 `replaceAppleSnapshotRows` 把
+ * `fullSnapshot: true` 当成「这份文件说完了全部事实」，于是凡是它没提到的日期
+ * 整行删除、没带的字段逐个抹掉。可解析器给不给得出某一天、某一项，取决于
+ * 文件有多大、读没读完、重叠去重丢了哪些桶、来源优先级筛掉了谁 ——
+ * **「这一项我没解析出来」和「用户在健康 App 里删掉了它」在数据上长得一模一样。**
+ * 实测（`test/health-merge.test.js` 三条）：导出只覆盖最近 10 天，另外 20 天连行
+ * 一起删；导出覆盖 30 天但静息能量一项都没解析出来，30 天的消耗全被抹平；
+ * 一天都没解析出来时 30 天全删 —— 三种都不报一个字。
+ *
+ * 所以证据分两种，各管一维：
+ *  - **日期**：导出自己覆盖到的那一段。这一段之外它什么都没说，不许动。
+ *    Apple 的 export.xml 大体按时间排，截断只会砍掉尾巴，
+ *    于是「读到一半停了」最多影响它真读到的那一段。
+ *  - **字段**：整份导出里至少出现过一次的那些 Apple 字段。
+ *    一次都没出现的，是解析器没给，不是用户删了。
+ *
+ * 代价是「用户把健康 App 里某一项**全部**样本都删了」不再传导过来
+ * （只删了其中几天仍然照删）。这个代价是故意选的：**多留一个旧值，用户看得见、
+ * 删得掉；少删几年记录，用户既看不见也找不回。**
+ */
+export function snapshotAuthority(incomingRows = []) {
+  const dates = incomingRows
+    .map((row) => row?.date)
+    .filter((date) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .sort();
+  const fields = new Set();
+  for (const row of incomingRows) {
+    for (const key of dataKeys(row)) if (APPLE_HEALTH_FIELDS.has(key)) fields.add(key);
+  }
+  return { from: dates[0] || null, to: dates[dates.length - 1] || null, fields };
 }
 
 function hasMeaningfulData(row) {
@@ -88,16 +123,24 @@ function hasMeaningfulData(row) {
 /**
  * 把官方完整导出作为 Apple 字段的全量快照应用。
  * 返回完整 upsert 行和需要删除的日期；调用方可在一个 IndexedDB 事务里落盘。
+ *
+ * 快照的权威范围由 `snapshotAuthority` 划定（见那儿的长注释）：**范围之外一行不碰**，
+ * 连 upsert 都不给 —— `bulkSync` 只写它拿到的、只删它被告知的，没提到的原样躺着。
+ * 返回值里另外报一份 `untouched`，让界面说得出「这次没动多少天」。
  */
 export function replaceAppleSnapshotRows(existingRows = [], incomingRows = [], importId = null) {
+  const authority = snapshotAuthority(incomingRows);
   const existing = new Map(existingRows.map((row) => [row.date, row]));
   const incoming = new Map(incomingRows.map((row) => [row.date, stampAppleRow(row, importId)]));
   const dates = new Set([...existing.keys(), ...incoming.keys()]);
   const upserts = [];
   const deletes = [];
+  let untouched = 0;
 
   for (const date of dates) {
-    const base = stripAppleFields(existing.get(date) || { date });
+    const covered = authority.from != null && date >= authority.from && date <= authority.to;
+    if (!covered) { untouched += 1; continue; }
+    const base = stripAppleFields(existing.get(date) || { date }, authority.fields);
     const fresh = incoming.get(date);
     const merged = { ...base, date, _fieldProvenance: { ...(base._fieldProvenance || {}) } };
     for (const key of dataKeys(fresh)) {
@@ -116,7 +159,7 @@ export function replaceAppleSnapshotRows(existingRows = [], incomingRows = [], i
 
   upserts.sort((a, b) => (a.date < b.date ? -1 : 1));
   deletes.sort();
-  return { upserts, deletes };
+  return { upserts, deletes, untouched, authority };
 }
 
 /** 快捷指令/JSON/CSV 属于增量导入，只覆盖本次实际提供的 Apple 字段。 */

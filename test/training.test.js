@@ -11,12 +11,14 @@ import {
   splitOf, exercisesForSplit, SPLITS,  lastPerformance,
 } from '../js/core/training.js';
 
-test('动作库结构完整：五个部位、id 与名称唯一、肌肉与模式键合法', () => {
-  assert.deepEqual(GROUPS.map((g) => g.label), ['胸', '肩臂', '背', '腿', '腹']);
+test('动作库结构完整：六个部位、id 与名称唯一、肌肉与模式键合法', () => {
+  // 肩和臂是两个部位，不是一个「肩臂」：合起来那一档里躺着 31 个动作，
+  // 练肩得先划过一堆弯举；而统计那头本来就必须分开看，于是曾经有两份定义。
+  assert.deepEqual(GROUPS.map((g) => g.label), ['胸', '肩', '臂', '背', '腿', '腹']);
   assert.equal(new Set(EXERCISES.map((e) => e.id)).size, EXERCISES.length, 'id 有重复');
   assert.equal(new Set(EXERCISES.map((e) => e.name)).size, EXERCISES.length, '名称有重复');
   for (const e of EXERCISES) {
-    assert.ok(GROUPS.some((g) => g.key === e.group), `${e.name} 的部位不在五大块里`);
+    assert.ok(GROUPS.some((g) => g.key === e.group), `${e.name} 的部位不在六大块里`);
     assert.ok(PATTERNS[e.pattern], `${e.name} 的动作模式非法`);
     assert.ok(e.primary.length, `${e.name} 没写主动肌`);
     for (const m of [...e.primary, ...e.secondary]) {
@@ -239,10 +241,16 @@ test('替换建议优先同类：不拿孤立动作换掉复合动作', () => {
     `孤立动作的首选替换不该是复合动作：${forIsolation[0]?.name}`);
 });
 
-test('身体部位推荐给出四至五个互补动作，不会堆同一种模式', () => {
+test('身体部位推荐给出三至五个互补动作，不会堆同一种模式', () => {
   for (const g of GROUPS) {
     const combo = starterCombo(g.key);
-    assert.ok(combo.length >= 4 && combo.length <= 5, `${g.label} 推荐了 ${combo.length} 个动作`);
+    /*
+     * 三个起，不是四个。肩一共就三个模式（前推 / 侧举 / 后束），凑第四个只能
+     * 是同一种刺激再来一遍 —— 臂拆出去之前它正是这么凑的：槽位表里还留着
+     * elbow_flexion / elbow_extension，填不满就补了第二个侧平举。
+     * 本文件的规矩本来写的就是「按部位 3–5 个」，是这条断言比规矩严。
+     */
+    assert.ok(combo.length >= 3 && combo.length <= 5, `${g.label} 推荐了 ${combo.length} 个动作`);
     assert.equal(new Set(combo.map((e) => e.pattern)).size, combo.length,
       `${g.label} 起手组合里有重样的动作模式：${combo.map((e) => e.name).join('、')}`);
     assert.equal(findOverlaps(combo).filter((o) => o.level === 'high').length, 0,

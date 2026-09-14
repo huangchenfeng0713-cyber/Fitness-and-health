@@ -74,6 +74,38 @@ try {
   await page.getByText('已记录 2 组', { exact: true }).waitFor();
   const saved = await items();
   check('同日不同练法分别保留，原记录不被替换', saved.find(i => i.id === 'back_extension').sets.length === 1 && saved.find(i => i.id === 'back_extension_hip').sets.length === 2);
+
+  /*
+   * 「已录负荷量」那个 ⓘ 贴在卡片最底下，它的说明层必须落在**看得见**的地方。
+   *
+   * placeInfoTip 原先只按视口底边夹，而应用外壳底下钉着四栏导航 —— 面板会滑到
+   * 它后面：实测面板 755–816，底栏顶在 779，最后 37px 一个字都读不到。
+   * 这条量的是「和底栏、顶栏都不重叠」，不是「在视口里」，后者当时也是真的。
+   */
+  // 必须把它滚到底栏跟前才复现得出那个几何：卡片短的时候面板落在半空中，
+  // 修不修都是绿的（第一版就是这么写的，撤掉修复照样过）。
+  await page.locator('.training-load-note').scrollIntoViewIfNeeded();
+  await page.evaluate(() => {
+    const view = document.querySelector('.view');
+    const note = document.querySelector('.training-load-note').getBoundingClientRect();
+    const barTop = document.querySelector('.tabbar').getBoundingClientRect().top;
+    view.scrollTop += note.bottom - (barTop - 24);
+  });
+  await page.waitForTimeout(200);
+  await page.locator('.training-load-note .info-tip > summary').click();
+  await page.waitForTimeout(300);
+  const tipBox = await page.evaluate(() => {
+    const p = document.querySelector('.training-load-note .info-tip-panel').getBoundingClientRect();
+    const bar = document.querySelector('.tabbar')?.getBoundingClientRect();
+    const head = document.querySelector('.topbar')?.getBoundingClientRect();
+    return { top: Math.round(p.top), bottom: Math.round(p.bottom), left: Math.round(p.left), right: Math.round(p.right),
+      barTop: bar ? Math.round(bar.top) : null, headBottom: head ? Math.round(head.bottom) : null,
+      vw: document.documentElement.clientWidth, vh: document.documentElement.clientHeight };
+  });
+  check(`底部那条说明不躲到横条后面（面板 ${tipBox.top}–${tipBox.bottom}，底栏顶 ${tipBox.barTop}）`,
+    tipBox.bottom <= tipBox.barTop && tipBox.top >= tipBox.headBottom
+    && tipBox.left >= 0 && tipBox.right <= tipBox.vw && tipBox.top >= 0);
+  await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   check('七个日期只展开当天', await page.locator('.training-date').count() === 7 && await page.locator('.training-log-day').count() === 1 && await page.locator('.log-row').count() === 3);
   await screenshot('history-390');

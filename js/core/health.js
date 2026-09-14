@@ -835,7 +835,18 @@ export function createAggregator(options = {}) {
       // 完整闭合仍不等于“已理解整个 schema”。未来未知顶层容器可能承载支持字段，
       // 此时只能增量合并，不能因为没读懂新结构而删除旧 Apple 数据。
       fullSnapshot: documentStarted && documentComplete && !truncatedXml && unknownXmlElementCount === 0,
-      snapshotFields: [...HEALTH_FIELD_KEYS],
+      /*
+       * **这份导出实际给出了哪几项，不是「解析器理论上认得哪几项」。**
+       * 原先写的是静态的 `[...HEALTH_FIELD_KEYS]` —— 一份一条静息能量都没解析出来的
+       * 导出，照样声称自己覆盖了静息能量。下游拿它当「这一项现在为空 = 用户删了」的
+       * 依据，就会把已有的整段消耗抹平。
+       */
+      snapshotFields: [...out.reduce((keys, day) => {
+        for (const [key, value] of Object.entries(day)) {
+          if (value != null && HEALTH_FIELD_KEYS.has(key)) keys.add(key);
+        }
+        return keys;
+      }, new Set())],
       metadata: { ...exportMetadata, sources },
       quality: {
         duplicateRecords,

@@ -1,5 +1,5 @@
 import { completeEnergyDay } from '../../core/energy-observation.js';
-import { planForProfile } from '../../lib/store.js';
+import { planForProfile, planStepsIn } from '../../lib/store.js';
 /**
  * 趋势图区块。作为卡片模块挂在「数据」页——数据和趋势本来就是一件事，
  * 分成两个栏目要来回切才能把「现在怎么样」和「在往哪走」对上。
@@ -13,7 +13,7 @@ import { infoTip, selectField } from '../../lib/ui.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
-import { trendReading, INSUFFICIENT_DATA_TEXT } from '../../core/trend-reading.js';
+import { trendReading, planShift, planShiftNote, composeReading, INSUFFICIENT_DATA_TEXT } from '../../core/trend-reading.js';
 
 
 /*
@@ -190,8 +190,25 @@ export function trendCharts(rerender) {
   const health = state.healthByDate;
   const dietByDate = new Map(state.dietDaily.map((r) => [r.date, r]));
   const targets = planForProfile(state.profile, endDay);
-  const versions = (state.profile.targetVersions || []).filter(v => v.effectiveDate >= days[0] && v.effectiveDate <= endDay);
-  const mixedTargets = versions.some(v => v.effectiveDate > days[0]) || targets.status === 'unavailable';
+  /*
+   * 区间内计划变没变，看**数字**，不看「存过几次档案」。
+   *
+   * 原先的判据是「区间里有没有生效日晚于起点的版本」，而 saveProfile 每保存一次
+   * 就记一个版本、Apple 健康同步来的体重也会走这条路 —— 于是进过一次设置，
+   * 接下来七天这张图就一直挂着「区间内计划有变更，仅展示记录」：
+   * 那句话既没说变了什么，又把整段解读顶掉了（连「日均 2028 kcal」这种
+   * 压根不依赖计划的话都一起没了）。绝大多数时候数字根本没动。
+   */
+  const planSteps = planStepsIn(state.profile, days[0], endDay);
+  const planUnavailable = targets.status === 'unavailable';
+  const kcalShift = planUnavailable ? null : planShift(planSteps, 'kcal');
+  const proteinShift = planUnavailable ? null : planShift(planSteps, 'protein');
+  // 计划速率带正负、保留一位小数：0 是「维持」，−0.5 和 +0.3 是两个方向
+  const rateShift = planUnavailable ? null
+    : planShift(planSteps, 'rateKgPerWeek', { decimals: 1, signed: true });
+  // 每张图各看各的：热量目标动了不代表蛋白目标也动了
+  const mixedTargets = planUnavailable || Boolean(kcalShift);
+  const noPlanNote = planUnavailable ? '当前无法生成计划，仅展示记录。' : '';
 
   const weightSeries = series(days, (date) => {
     const v = health.get(date)?.weightKg;
@@ -222,9 +239,9 @@ export function trendCharts(rerender) {
   });
 
   // 图上的目标线画的是**现在这套设置**算出来的目标，历史那几天当时未必是这个数
-  const targetContext = targets.status === 'unavailable' ? '当前无法生成计划，仅展示记录' : mixedTargets ? '区间内计划有变更，仅展示记录' : targets.context;
-  const proteinThreshold = mixedTargets ? null : targets.protein;
-  const proteinHit = mixedTargets ? null : proteinSeries.filter((p) => p.y >= proteinThreshold).length;
+  const targetContext = planUnavailable ? '当前无法生成计划，仅展示记录' : targets.context;
+  const proteinThreshold = planUnavailable || proteinShift ? null : targets.protein;
+  const proteinHit = proteinThreshold ? proteinSeries.filter((p) => p.y >= proteinThreshold).length : null;
   const avgKcal = average(kcalSeries);
   const avgActive = average(activeSeries);
   const avgSteps = average(stepsSeries);
@@ -271,26 +288,38 @@ export function trendCharts(rerender) {
       tag: avgKcal != null ? `已结束日平均 ${avgKcal} kcal` : null,
       chart: lineChart({
         data: kcalTimeline, color: 'var(--accent)', target: mixedTargets ? null : targets.kcal,
-        targetLabel: `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
+        // 没画目标线时标签也别拼 —— targets.kcal 这时是空的，`Math.round` 给出 NaN
+        targetLabel: mixedTargets ? '' : `${targetContext} ${Math.round(targets.kcal)}`, unit: 'kcal',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
         overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
-      note: mixedTargets ? targetContext : trendReading('kcal', kcalSeries, { target: targets.kcal }),
+      /*
+       * 计划变过也照样解读，只是不和单一目标对照 —— 日均、波动、走向
+       * 一个字都不依赖计划。变了就说清变成了什么，别只留一句「有变更」。
+       */
+      note: composeReading(noPlanNote, planShiftNote(kcalShift, 'kcal'),
+        trendReading('kcal', kcalSeries, { target: mixedTargets ? null : targets.kcal })),
       readout: readoutRow(kcalAt((dd) => dietByDate.get(dd)?.kcal ?? null)),
-      tip: '单日高于参考线不等于做错。判断要看多日的体重和收支趋势，一天的高低说明不了什么。',
+      // 线都没画就别提「参考线」——那会让人在图上找一条不存在的虚线
+      tip: mixedTargets
+        ? '这段区间里热量目标改过，所以没画参考线；日均、波动和走向仍按实际记录算。'
+        : '单日高于参考线不等于做错。判断要看多日的体重和收支趋势，一天的高低说明不了什么。',
     }),
     protein: () => ({
       title: '每日蛋白摄入',
-      tag: !mixedTargets && proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
+      tag: proteinThreshold && proteinSeries.length ? `达标 ${proteinHit}/${proteinSeries.length} 天` : null,
       chart: lineChart({
         data: proteinTimeline, color: 'var(--protein)', target: proteinThreshold,
-        targetLabel: `达标线 ${Math.round(proteinThreshold)}g`, unit: 'g',
+        targetLabel: proteinThreshold ? `达标线 ${Math.round(proteinThreshold)}g` : '', unit: 'g',
         domain: axisDomain, breakOnMissing: true, showPoints: true, minPoints: 1,
         overIsBad: false, emptyText: INSUFFICIENT_DATA_TEXT, ...pick,
       }),
-      note: mixedTargets ? targetContext : trendReading('protein', proteinSeries, { target: targets.protein, threshold: proteinThreshold }),
+      note: composeReading(noPlanNote, planShiftNote(proteinShift, 'g'),
+        trendReading('protein', proteinSeries, { target: proteinThreshold, threshold: proteinThreshold })),
       readout: readoutRow(valueAt((v) => `${num(v)} g`)((dd) => dietByDate.get(dd)?.protein ?? null)),
-      tip: mixedTargets ? targetContext : `虚线是${targetContext} ${Math.round(proteinThreshold)}g，并非人人适用的最低需求或上限。`,
+      tip: proteinThreshold
+        ? `虚线是${targetContext} ${Math.round(proteinThreshold)}g，并非人人适用的最低需求或上限。`
+        : '这段区间里蛋白目标改过，所以没画达标线；日均和波动仍按实际记录算。',
     }),
     weight: () => ({
       title: '体重',
@@ -299,11 +328,12 @@ export function trendCharts(rerender) {
         data: weightSeries, color: 'var(--text)', decimals: 1, unit: 'kg', domain: axisDomain, ...pick,
         emptyText: INSUFFICIENT_DATA_TEXT,
       }),
-      note: trendReading('weight', weightSeries, {
-        kgPerWeek: weightStats.kgPerWeek, stdErrKgPerWeek: weightStats.stdErrKgPerWeek,
-        goalRate: mixedTargets ? null : targets.rateKgPerWeek,
-        records: weightStats.records, spanDays: weightStats.spanDays,
-      }),
+      note: composeReading(noPlanNote, planShiftNote(rateShift, 'kg/周', { signed: true }),
+        trendReading('weight', weightSeries, {
+          kgPerWeek: weightStats.kgPerWeek, stdErrKgPerWeek: weightStats.stdErrKgPerWeek,
+          goalRate: planUnavailable || rateShift ? null : targets.rateKgPerWeek,
+          records: weightStats.records, spanDays: weightStats.spanDays,
+        })),
       readout: readoutRow(valueAt((v) => `${num(v, 1)} kg`)((dd) => (health.get(dd)?.weightKg > 0 ? health.get(dd).weightKg : null))),
       tip: '看那条趋势线，别看单日的上下：一天里的起伏主要是水分和排空，不是体脂变了。',
     }),
