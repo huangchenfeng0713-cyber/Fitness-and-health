@@ -742,7 +742,25 @@ export function createAggregator(options = {}) {
           const [y, m, d] = key.split('-').map(Number);
           const start = Date.UTC(y, m - 1, d) - offset, end = Date.UTC(y, m - 1, d + 1) - offset;
           const exported = parseAppleDate(exportMetadata.exportDate?.value)?.date?.getTime() || 0;
-          const complete = combined.start === start && combined.end === end && combined.coveredMs >= end - start && exported >= end;
+          /*
+           * **按「差多少」判，不是按「差不差」判。**
+           *
+           * 这里原先要求样本毫秒级地从零点铺到次日零点、且一秒不缺
+           * （`combined.start === start && combined.end === end && coveredMs >= 24h`）。
+           * 真机上没有哪一天长这样：实测**起点晚 7 分钟**就判 partial，
+           * 手表摘下来**充电缺 1 小时**也判 partial —— 而 partial 的日子会被
+           * `completeEnergyDay` 整天排除，当日收支、趋势图、近 7 日、14 天基线
+           * 一起变空。用户看到的是「导入了苹果健康的导出文件，过去的消耗还是不显示」。
+           *
+           * 这道闸真正要拦的是「同步停在早上八点」那种十几个小时的缺口，
+           * 而它和「起点晚了七分钟」在旧判据下是同一个结果。现在两端各给一小时、
+           * 中间总共给两小时，门槛和 `legacyCoverage` 反推老行时共用同一对常量 ——
+           * 同一句「这天算不算走完了」不该在两条链路上给出两个答案。
+           */
+          const tail = ENERGY_POLICY.coverageTailMinutes * 60000;
+          const gap = ENERGY_POLICY.coverageGapMinutes * 60000;
+          const complete = combined.start <= start + tail && combined.end >= end - tail
+            && combined.coveredMs >= (end - start) - gap && exported >= end;
           clean._fieldProvenance ||= {};
           clean._fieldProvenance[metricKey] = { origin: 'apple', source: combined.sources.join('、'),
             observedAt: new Date(combined.end).toISOString(), coverage: { status: complete ? 'complete' : 'partial', start: new Date(start).toISOString(), end: new Date(end).toISOString() } };
