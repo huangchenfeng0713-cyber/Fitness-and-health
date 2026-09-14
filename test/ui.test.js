@@ -671,7 +671,15 @@ test('趋势页的体重门槛、蛋白达标线与当前日统计口径一致',
   assert.match(read('js/core/health-insights.js'),
     /points\.length >= 4 && elapsedDays >= 7/, '体重拟合门槛与解读文案不一致');
   assert.ok(trends.includes('target: proteinThreshold'));
-  assert.ok(trends.includes('targetLabel: `达标线 ${Math.round(proteinThreshold)}g`'));
+  /*
+   * 画出来的那条线和「达标 N/M 天」必须是同一个门槛算的，
+   * 但断言的是「它俩用同一个变量」，不是那一行源码长什么样：
+   * 上一版按整句字面量卡，给 targetLabel 加个条件就红了，而线本身没坏。
+   */
+  assert.match(trends, /targetLabel:[^\n]*Math\.round\(proteinThreshold\)\}g/,
+    '蛋白达标线的数字没有和达标天数用同一个门槛');
+  assert.match(trends, /proteinThreshold\s*&&\s*proteinSeries\.length\s*\?\s*`达标 /,
+    '没有门槛时仍在数达标天数');
   assert.ok(trends.includes('overIsBad: false'), '蛋白超过最低目标不应标红');
   // 当天已经整体不画了，不再需要「半截数据点」处理
   assert.ok(!trends.includes('partialX'), '趋势页不该还留着当天半截数据的处理');

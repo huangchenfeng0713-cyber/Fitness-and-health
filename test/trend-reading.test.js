@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   analyzeSeries, trendReading, MIN_POINTS_FOR_TREND, MIN_POINTS_FOR_CLAIM,
-  INSUFFICIENT_DATA_TEXT,
+  INSUFFICIENT_DATA_TEXT, planShift, planShiftNote, composeReading, PLAN_SAME_RATIO,
 } from '../js/core/trend-reading.js';
 
 const pts = (...ys) => ys.map((y, i) => ({ x: `2026-08-${String(i + 1).padStart(2, '0')}`, y }));
@@ -309,4 +309,158 @@ test('调用方没给体重趋势时按数据不足处理，不把 undefined 印
   const text = trendReading('weight', pts, {});
   assert.doesNotMatch(text, /undefined/, text);
   assert.equal(text, INSUFFICIENT_DATA_TEXT);
+});
+
+/* ------------------------------------------- 区间内计划变没变 ----------- */
+
+test('目标没动就不算变更：存过档案不等于计划变了', () => {
+  /*
+   * `saveProfile` 每保存一次就记一个版本，Apple 健康同步来的体重也走这条路。
+   * 按「有没有版本」判断的话，进过一次设置接下来七天都会挂着「计划有变更」。
+   */
+  assert.equal(planShift([
+    { date: '2026-09-01', kcal: 2660 },
+    { date: '2026-09-04', kcal: 2660 },
+    { date: '2026-09-06', kcal: 2660 },
+  ], 'kcal'), null);
+});
+
+test('体重同步带来的几 kcal 飘移不算变更，真改了才算', () => {
+  const drift = Math.round(2660 * PLAN_SAME_RATIO) - 1; // 容差之内
+  assert.equal(planShift([
+    { date: '2026-09-01', kcal: 2660 },
+    { date: '2026-09-04', kcal: 2660 + drift },
+  ], 'kcal'), null, `${drift} kcal 的飘移不该撤掉目标线`);
+
+  const shift = planShift([
+    { date: '2026-09-01', kcal: 2660 },
+    { date: '2026-09-04', kcal: 2200 },
+  ], 'kcal');
+  assert.deepEqual(shift, { from: 2660, to: 2200, at: '2026-09-04', times: 1 });
+});
+
+test('改过多次时报首尾两个数和次数，中间那些飘移不计入', () => {
+  const shift = planShift([
+    { date: '2026-09-01', kcal: 2660 },
+    { date: '2026-09-02', kcal: 2664 },   // 飘移，不算一次
+    { date: '2026-09-04', kcal: 2200 },
+    { date: '2026-09-06', kcal: 2400 },
+  ], 'kcal');
+  assert.equal(shift.from, 2660);
+  assert.equal(shift.to, 2400);
+  assert.equal(shift.at, '2026-09-06');
+  assert.equal(shift.times, 2);
+});
+
+test('计划速率带正负、保留一位小数：0 是维持，不是缺失', () => {
+  // 热量那条按「非正数当缺失」丢掉，速率不能照抄 —— 0 和负数都是有效计划
+  const turn = planShift([
+    { date: '2026-09-01', rateKgPerWeek: -0.5 },
+    { date: '2026-09-05', rateKgPerWeek: 0.3 },
+  ], 'rateKgPerWeek', { decimals: 1, signed: true });
+  assert.deepEqual(turn, { from: -0.5, to: 0.3, at: '2026-09-05', times: 1 });
+  assert.match(planShiftNote(turn, 'kg/周', { signed: true }), /从 -0\.5 kg\/周 改成 \+0\.3 kg\/周/);
+
+  const stop = planShift([
+    { date: '2026-09-01', rateKgPerWeek: -0.5 },
+    { date: '2026-09-05', rateKgPerWeek: 0 },
+  ], 'rateKgPerWeek', { decimals: 1, signed: true });
+  assert.equal(stop.to, 0, '改成「维持体重」被当成了缺失');
+
+  // 四舍五入之后看不出差别的，就不值得为它撤掉目标线
+  assert.equal(planShift([
+    { date: '2026-09-01', rateKgPerWeek: 0.30 },
+    { date: '2026-09-05', rateKgPerWeek: 0.302 },
+  ], 'rateKgPerWeek', { decimals: 1, signed: true }), null);
+});
+
+test('计划变更这句话要说出变成了什么，不能只说「有变更」', () => {
+  const note = planShiftNote(planShift([
+    { date: '2026-09-01', kcal: 2660 }, { date: '2026-09-04', kcal: 2200 },
+  ], 'kcal'), 'kcal');
+  assert.match(note, /09-04 起/);
+  assert.match(note, /2660 kcal/);
+  assert.match(note, /2200 kcal/);
+  assert.doesNotMatch(note, /次）/, '只改过一次不该写「改过 N 次」');
+  assert.equal(planShiftNote(null, 'kcal'), '', '没变的时候不该冒出一句话');
+});
+
+test('计划变过也照样解读：日均、波动、走向一个字都不依赖目标', () => {
+  /*
+   * 原先是 `note: mixedTargets ? '区间内计划有变更，仅展示记录' : trendReading(...)`，
+   * 连「有记录的 6 天里日均 2028 kcal」这种压根不需要目标的话都一起没了。
+   */
+  const ys = [1500, 1600, 1550, 2400, 2500, 2450];
+  const noTarget = trendReading('kcal', pts(...ys), { target: null });
+  assert.notEqual(noTarget, INSUFFICIENT_DATA_TEXT);
+  assert.match(noTarget, /日均 2000 kcal/);
+  assert.doesNotMatch(noTarget, /目标|NaN|undefined/, noTarget);
+  assert.match(noTarget, /后半段比前半段多记录/, noTarget);
+  assert.match(noTarget, /最多和最少差/, noTarget);
+  /*
+   * 门槛跟着这段自己的均值走，不是一条与摄入量无关的死线。
+   * 日均 700 的人「后半段多记录 300」是翻了一倍，写死 120 的话
+   * 和日均 3500 的人共用同一把尺子。
+   */
+  const small = trendReading('kcal', pts(600, 620, 610, 800, 820, 810), { target: null });
+  assert.match(small, /后半段比前半段多记录/, small);
+  /*
+   * 上游漏传（undefined）时 `target * 0.06` 是 NaN，而任何数 >= NaN 都是
+   * false —— 这两句会一声不响地整句消失，尽管它们不需要目标。
+   */
+  const missing = trendReading('kcal', pts(...ys), {});
+  assert.match(missing, /后半段比前半段多记录/, missing);
+  assert.match(missing, /最多和最少差/, missing);
+});
+
+test('没有单一蛋白门槛时不报达标率，也不印出「目标 0g」', () => {
+  /*
+   * 门槛为 null 时 `y >= null` 就是 `y >= 0`：每一天都「达标」。
+   * 原先印出来的是「达标 6 天，日均 120 g（目标 0 g）。多数记录日达到当前目标，
+   * 继续保持。」——三句话没有一句是真的。
+   */
+  for (const opts of [{ target: null, threshold: null }, {}]) {
+    const text = trendReading('protein', pts(90, 100, 95, 140, 150, 145), opts);
+    assert.doesNotMatch(text, /NaN|undefined|达标|目标/, text);
+    assert.match(text, /日均 120g/);
+    assert.match(text, /后半段比前半段多记录/, text);
+  }
+});
+
+test('样本不足时整段只剩「数据不足」，前面那句计划变更不许挂上去', () => {
+  /*
+   * 卡片靠 `note === INSUFFICIENT_DATA_TEXT` 切到居中的空状态。
+   * 直接把两截拼起来的话，切不过去了，图下面印出来的是
+   * 「09-11 起目标从 +0.3 kg/周 改成 -0.5 kg/周，……。数据不足」。
+   */
+  const shiftNote = planShiftNote(planShift([
+    { date: '2026-09-01', rateKgPerWeek: 0.3 }, { date: '2026-09-11', rateKgPerWeek: -0.5 },
+  ], 'rateKgPerWeek', { decimals: 1, signed: true }), 'kg/周', { signed: true });
+  assert.ok(shiftNote, '前提这一截本身要有内容，否则这条用例什么都没测到');
+  assert.equal(composeReading('', shiftNote, INSUFFICIENT_DATA_TEXT), INSUFFICIENT_DATA_TEXT);
+
+  // 有解读时照旧按顺序拼，空的那几截丢掉、不留双空格
+  assert.equal(composeReading('', shiftNote, '有记录的 6 天里日均 2000 kcal。'),
+    `${shiftNote}有记录的 6 天里日均 2000 kcal。`);
+  assert.equal(composeReading(null, undefined, '只剩解读。'), '只剩解读。');
+});
+
+test('没有单一目标速率时不说「目标是维持」——那和「没有目标」是两件事', () => {
+  /*
+   * 判据原先只有 `goalRate ? … : 0`，null 和 0 都落到「维持」那一边。
+   * 实测：把计划从 +0.3 改成 -0.5 之后，图下面写的是
+   * 「目标是维持，但每周涨了 0.63 kg」——那个人一天都没打算维持。
+   */
+  const base = { kgPerWeek: 0.63, records: 25, spanDays: 25 };
+  const series = pts(60, 60.9, 61.8, 62.7);
+  for (const goalRate of [null, undefined]) {
+    const text = trendReading('weight', series, { ...base, goalRate });
+    assert.doesNotMatch(text, /目标|NaN|undefined/, text);
+    assert.match(text, /拟合趋势 \+0\.63 kg\/周。/, text);
+    // 参考范围那句是绝对安全线，不依赖目标，照旧要说
+    assert.match(text, /0\.25%–0\.5% 体重\/周参考范围/, text);
+  }
+  // 真的把目标设成「维持」时那句话仍然要在
+  assert.match(trendReading('weight', series, { ...base, goalRate: 0 }),
+    /目标是维持，但每周涨了 0\.63 kg/);
 });

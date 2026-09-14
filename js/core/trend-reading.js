@@ -87,22 +87,33 @@ function readKcal(points, { target }) {
   if (s.n < MIN_POINTS_FOR_CLAIM) {
     return INSUFFICIENT_DATA_TEXT;
   }
-  const over = target > 0 ? countDays(points, (y) => y > target * 1.05) : 0;
-  const under = target > 0 ? countDays(points, (y) => y < target * 0.75) : 0;
-  const gap = target > 0 ? round(s.avg - target) : null;
+  const paced = target > 0;
+  const over = paced ? countDays(points, (y) => y > target * 1.05) : 0;
+  const under = paced ? countDays(points, (y) => y < target * 0.75) : 0;
+  const gap = paced ? round(s.avg - target) : null;
+  /*
+   * 没有单一目标时（区间内计划真的改过）拿这段自己的均值当尺子。
+   * 原先写死成 `target * 0.06`：上游漏传（undefined）就算出 NaN，
+   * 而任何数 >= NaN 都是 false —— 「后半段少记了 400 kcal」「最多和最少差 1800」
+   * 这两句会一声不响地整句消失，尽管它们压根不需要目标。
+   * 传 null 则退成一条与摄入量无关的死门槛（120 / 600）：
+   * 日均 700 和日均 3500 的人共用同一把尺子，前者翻了一倍都不会被提一句。
+   */
+  const driftFloor = Math.max(120, (paced ? target : s.avg) * 0.06);
+  const spreadFloor = Math.max(600, (paced ? target : s.avg) * 0.35);
   return join([
-    `有记录的 ${s.n} 天里日均 ${s.avg} kcal`,
-    gap == null ? '。' : gap > 0 ? `，比目标高 ${gap} kcal。` : gap < 0 ? `，比目标低 ${Math.abs(gap)} kcal。` : '，正好贴着目标。',
+    `有记录的 ${s.n} 天里日均 ${withUnit(s.avg, 'kcal')}`,
+    gap == null ? '。' : gap > 0 ? `，比目标高 ${withUnit(gap, 'kcal')}。` : gap < 0 ? `，比目标低 ${withUnit(Math.abs(gap), 'kcal')}。` : '，正好贴着目标。',
     over ? `其中 ${over} 天超出目标 5% 以上。` : '',
     under >= MIN_POINTS_FOR_CLAIM
       ? `另有 ${under} 天不到目标的四分之三；若记录完整且持续如此，可能增加恢复不足和瘦体重流失风险。`
       : under ? `另有 ${under} 天不到目标的四分之三。` : '',
-    s.enoughForTrend && Math.abs(s.drift) >= Math.max(120, target * 0.06)
-      ? (s.drift > 0 ? `后半段比前半段多记录约 ${Math.abs(s.drift)} kcal/天。`
-        : `后半段比前半段少记录约 ${Math.abs(s.drift)} kcal/天；先确认是否漏记，再结合多周体重趋势判断是否需要缩小缺口。`)
+    s.enoughForTrend && Math.abs(s.drift) >= driftFloor
+      ? (s.drift > 0 ? `后半段比前半段多记录约 ${withUnit(Math.abs(s.drift), 'kcal')}/天。`
+        : `后半段比前半段少记录约 ${withUnit(Math.abs(s.drift), 'kcal')}/天；先确认是否漏记，再结合多周体重趋势判断是否需要缩小缺口。`)
       : '',
-    s.n >= 3 && s.spread >= Math.max(600, target * 0.35)
-      ? `最多和最少差 ${s.spread} kcal；先检查漏记、外食估算和训练日差异，再决定是否需要调整餐次安排。` : '',
+    s.n >= 3 && s.spread >= spreadFloor
+      ? `最多和最少差 ${withUnit(s.spread, 'kcal')}；先检查漏记、外食估算和训练日差异，再决定是否需要调整餐次安排。` : '',
   ]);
 }
 
@@ -110,21 +121,38 @@ function readKcal(points, { target }) {
 function readProtein(points, { target, threshold }) {
   const s = analyzeSeries(points);
   if (!s) return INSUFFICIENT_DATA_TEXT;
-  const hit = countDays(points, (y) => y >= threshold);
   // 同上：两天里达标一天不叫「达标率 50%」
   if (s.n < MIN_POINTS_FOR_CLAIM) {
     return INSUFFICIENT_DATA_TEXT;
   }
-  const rate = s.n ? hit / s.n : 0;
+  /*
+   * 没有单一目标时（区间内计划真的改过）照样把话说完 —— 日均、波动、走向
+   * 这几件事一个字都不依赖计划。原先整段被一句「仅展示记录」顶掉，
+   * 而那句话连变了什么都没说。达标率这一条确实要拿掉：它得有个门槛才算得出来。
+   *
+   * **拿掉是要显式拿掉，不能靠传个空值。** 门槛为 null 时 `y >= null` 就是
+   * `y >= 0`，于是每一天都「达标」—— 实测印出来的是
+   * 「达标 6 天，日均 120g（目标 0g）。多数记录日达到当前目标，继续保持。」，
+   * 三句话没有一句是真的。undefined 更直白：`Math.round(undefined)` 把
+   * 「目标 NaN g」印上卡片。
+   */
+  const paced = target > 0 && threshold > 0;
+  const hit = paced ? countDays(points, (y) => y >= threshold) : 0;
+  const rate = paced && s.n ? hit / s.n : 0;
+  const swing = Math.max(10, (paced ? target : s.avg) * 0.08);
   return join([
-    `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${s.avg} g（目标 ${Math.round(target)} g）。`,
-    rate >= 0.8 ? '多数记录日达到当前目标，继续保持。'
+    paced
+      ? `有记录的 ${s.n} 天里达标 ${hit} 天，日均 ${withUnit(s.avg, 'g')}（目标 ${withUnit(Math.round(target), 'g')}）。`
+      : `有记录的 ${s.n} 天里日均 ${withUnit(s.avg, 'g')}。`,
+    !paced ? '' : rate >= 0.8 ? '多数记录日达到当前目标，继续保持。'
       : rate >= 0.5 ? '部分记录日低于目标；可以把全天蛋白更均匀地分到各餐。'
         : '多数记录日低于目标；先确认饮食是否记全，再为常吃的餐次预留稳定蛋白来源。',
-    s.enoughForTrend && s.drift <= -Math.max(10, target * 0.08)
-      ? `后半段比前半段少记录约 ${Math.abs(s.drift)} g/天；结合达标天数并先确认记录完整。` : '',
-    s.enoughForTrend && s.drift >= Math.max(10, target * 0.08)
-      ? `后半段比前半段多记录约 ${s.drift} g/天；是否更接近目标请结合达标天数判断。` : '',
+    s.enoughForTrend && s.drift <= -swing
+      ? `后半段比前半段少记录约 ${withUnit(Math.abs(s.drift), 'g')}/天；${paced ? '结合达标天数并先确认记录完整。' : '先确认记录完整。'}` : '',
+    s.enoughForTrend && s.drift >= swing
+      ? `后半段比前半段多记录约 ${withUnit(s.drift, 'g')}/天；${paced ? '是否更接近目标请结合达标天数判断。' : '先确认记录完整。'}` : '',
+    !paced && s.n >= 3 && s.spread >= Math.max(30, s.avg * 0.5)
+      ? `最多和最少差 ${withUnit(s.spread, 'g')}；先检查漏记，再看是不是某几餐固定缺蛋白。` : '',
   ]);
 }
 
@@ -142,7 +170,15 @@ function readWeight(points, { kgPerWeek, stdErrKgPerWeek, goalRate, records, spa
    * 目标 -0.5、实际 -0.9 是掉得更快，可 -0.9 − (-0.5) = -0.4 会被说成「比目标慢」——
    * 减脂的人本来就最容易掉太快，这句说反了会把人推向更大的缺口。
    */
-  const dir = goalRate ? Math.sign(goalRate) : 0;
+  /*
+   * **「没有目标」和「目标是维持（0）」是两件事。**
+   * 判据原先只有 `goalRate ? … : 0`，两者都落到 0 那一边，于是区间内计划真的
+   * 改过、上游传 null 时，图下面写的是「目标是维持，但每周涨了 0.63 kg」——
+   * 那个人明明刚把计划从 +0.3 改成 -0.5，一天都没打算维持。
+   * 蛋白那条门槛（`y >= null` 就是 `y >= 0`）踩的是同一个坑。
+   */
+  const paced = goalRate != null && Number.isFinite(Number(goalRate));
+  const dir = paced && goalRate ? Math.sign(goalRate) : 0;
   const progress = dir ? round(kgPerWeek * dir, 2) : null;
   const diff = progress == null ? null : round(progress - Math.abs(goalRate), 2);
   const latest = Number(points[points.length - 1].y);
@@ -187,16 +223,17 @@ function readWeight(points, { kgPerWeek, stdErrKgPerWeek, goalRate, records, spa
     `覆盖 ${spanDays} 个日历日、${n} 次称重，拟合趋势 ${kgPerWeek > 0 ? '+' : ''}${kgPerWeek}`,
     se != null ? ` ± ${se}` : '',
     ` kg/周`,
-    goalRate != null ? `（目标 ${goalRate > 0 ? '+' : ''}${goalRate}）。` : '。',
-    diff == null
+    paced ? `（目标 ${goalRate > 0 ? '+' : ''}${goalRate}）。` : '。',
+    // 没有单一目标时只报走势，不拿一个不存在的目标去比
+    !paced ? ''
       // 目标是维持：偏离哪个方向都要说，但不存在快慢
-      ? (Math.abs(kgPerWeek) < 0.1 ? '目标是维持，目前基本稳住了。'
+      : diff == null ? (Math.abs(kgPerWeek) < 0.1 ? '目标是维持，目前基本稳住了。'
         : `目标是维持，但每周${kgPerWeek > 0 ? '涨' : '掉'}了 ${Math.abs(kgPerWeek)} kg。`)
-      : progress < 0 ? `方向反了：目标是${goalRate > 0 ? '增重' : '减重'}，实际在往另一边走。`
-        : Math.abs(diff) < 0.1 ? '和目标基本一致，照现在的吃法继续。'
-          : !resolvable
-            ? `和目标差 ${Math.abs(diff)} kg/周，但这个精度还分辨不出来 —— 多称几次，或把区间拉长再看。`
-            : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
+        : progress < 0 ? `方向反了：目标是${goalRate > 0 ? '增重' : '减重'}，实际在往另一边走。`
+          : Math.abs(diff) < 0.1 ? '和目标基本一致，照现在的吃法继续。'
+            : !resolvable
+              ? `和目标差 ${Math.abs(diff)} kg/周，但这个精度还分辨不出来 —— 多称几次，或把区间拉长再看。`
+              : diff > 0 ? `比目标快 ${Math.abs(diff)} kg/周。` : `比目标慢 ${Math.abs(diff)} kg/周。`,
     /*
      * 差得出来的时候补一句它可能来自哪儿。
      *
@@ -321,6 +358,81 @@ const READERS = {
   active: readActive, sleep: readSleep, restingHR: readRestingHR, balance: readBalance,
   steps: readSteps, exercise: readExercise,
 };
+
+/*
+ * 区间内计划到底变没变，变的话变成了什么。
+ *
+ * **判据是数字变没变，不是「区间里有没有存过档案」。**
+ * `saveProfile` 每保存一次就记一个版本，而 Apple 健康同步来的体重也会走这条路 ——
+ * 于是「区间里有版本」几乎恒真：进过一次设置，接下来七天那张图就一直挂着
+ * 「区间内计划有变更，仅展示记录」。那句话既没说变了什么，
+ * 又把整段解读**整个顶掉**了：连「有记录的 6 天里日均 2028 kcal」这种
+ * 压根不依赖计划的话都一起没了。
+ *
+ * 容差 1%（护栏）：体重同步会让目标飘几 kcal，而本文件自己就写过
+ * 「11 kcal/天远小于食物估算和 TDEE 的误差」。为这点飘移撤掉整条目标线和达标率，
+ * 比多画一条差二十来 kcal 的虚线糟得多。
+ */
+export const PLAN_SAME_RATIO = 0.01;
+
+/**
+ * @param {Array<{date: string}>} plans 按日期升序：区间内每一段计划的起点，
+ *        第一项是区间开始时生效的那份。
+ * @param {string} key 看哪一项（kcal / protein / rateKgPerWeek…）
+ * @param {{decimals?: number, signed?: boolean}} opts
+ *        decimals 是这一项在界面上保留几位小数 —— **比的就是用户看得见的那个数**，
+ *        看不出差别的变化不值得为它撤掉目标线。
+ *        signed 用于计划速率：0 是「维持体重」、负数是减脂，都是有效值，
+ *        不能像热量那样把非正数当成缺失丢掉。
+ * @returns {null|{from:number,to:number,at:string,times:number}} 没变返回 null
+ */
+export function planShift(plans = [], key = 'kcal', { decimals = 0, signed = false } = {}) {
+  const steps = [];
+  for (const plan of plans) {
+    const raw = Number(plan?.[key]);
+    if (!Number.isFinite(raw)) continue;
+    if (!signed && raw <= 0) continue;
+    const value = round(raw, decimals);
+    const last = steps.at(-1);
+    const drift = Math.max(Math.abs(last?.value ?? 0), Math.abs(value)) * PLAN_SAME_RATIO;
+    if (last && Math.abs(last.value - value) <= drift) continue;
+    steps.push({ date: String(plan?.date || ''), value });
+  }
+  if (steps.length < 2) return null;
+  return {
+    from: steps[0].value,
+    to: steps.at(-1).value,
+    at: steps.at(-1).date,
+    times: steps.length - 1,
+  };
+}
+
+/**
+ * 计划真的变了才说，而且要说出变成了什么 —— 只说「有变更」等于没说。
+ * `signed` 时给正数补上加号：`+0.3 kg/周` 和 `0.3 kg/周` 读起来不是一回事。
+ */
+export function planShiftNote(shift, unit = 'kcal', { signed = false } = {}) {
+  if (!shift) return '';
+  const fmt = (v) => withUnit(signed && v > 0 ? `+${v}` : v, unit);
+  const when = shift.at ? `${shift.at.slice(5)} 起` : '';
+  const times = shift.times > 1 ? `（区间内改过 ${shift.times} 次）` : '';
+  return `${when}目标从 ${fmt(shift.from)} 改成 ${fmt(shift.to)}${times}，`
+    + '所以这段不和单一目标对照。';
+}
+
+/**
+ * 把图下面那一段拼起来：前面几截是前提（计划变更、当前算不出计划），
+ * **最后一截永远是解读本身**。空的那几截直接丢掉，别在句子里留下双空格。
+ *
+ * **样本不足时整段就是那三个字，前面什么都不许挂。** 卡片靠
+ * `note === INSUFFICIENT_DATA_TEXT` 切到居中的空状态，拼上一句就切不过去了，
+ * 实测印出来的是「09-11 起目标从 +0.3 kg/周 改成 -0.5 kg/周，所以这段不和
+ * 单一目标对照。数据不足」—— 而「样本不足时不要再解释一长段」正是要挡这个。
+ */
+export function composeReading(...parts) {
+  if (parts[parts.length - 1] === INSUFFICIENT_DATA_TEXT) return INSUFFICIENT_DATA_TEXT;
+  return parts.map((p) => String(p ?? '').trim()).filter(Boolean).join('');
+}
 
 /** 统一入口：metric 决定用哪套说法 */
 export function trendReading(metric, points = [], opts = {}) {
