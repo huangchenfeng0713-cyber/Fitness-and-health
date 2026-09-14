@@ -151,7 +151,17 @@ export function energyObservation(row = {}, day = row.date, now = new Date()) {
   const status = list.find(f => f.status !== 'valid')?.status || (aligned ? 'valid' : 'unaligned');
   const valid = status === 'valid';
   const observedAt = aligned ? list.map(f => f.observedAt).sort()[0] : null;
-  return { fields, dateMode, valid, status, reason: reasonFor(status, observedAt), observedAt,
+  /*
+   * 「停在几点」要报**静息能量**那条线的截止时间，不能只认 `observedAt`。
+   *
+   * `observedAt` 只在两项对得齐时才有值，而 export.xml 里两项天生对不齐：
+   * 静息是连续的（停在 22:00），活动只在人动的时候写（最后一段 20:00 就结束了），
+   * 差两小时。于是导入来的部分日一律退回那句空洞的「仅有部分日记录」——
+   * 而用户动得了手的恰恰是「把那次自动化挪到 22:00 之后」，不说钟点他就不知道该动什么。
+   * 定义这一天覆盖到哪儿的本来就是静息那条连续信号（`energyCoverage` 也取自它）。
+   */
+  const coverageEnd = observedAt || fields.restingEnergy?.observedAt || null;
+  return { fields, dateMode, valid, status, reason: reasonFor(status, coverageEnd), observedAt,
     burnedNow: valid ? list.reduce((sum, f) => sum + f.value, 0) : null,
     complete: valid && list.every(f => f.complete),
     dayFraction: observedAt && end > start ? Math.min(1, Math.max(0, (Date.parse(observedAt) - start) / (end - start))) : null,

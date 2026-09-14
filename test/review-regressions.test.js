@@ -471,3 +471,25 @@ test('F23: 「够到这一天末尾」的容差只有一个，三处共用', () 
   const beyond = new Date(end.getTime() - 5 * 3600000).toISOString();
   assert.equal(completeEnergyDay(declared(beyond), now), null, '差 5 小时仍该拦住');
 });
+
+test('F24: 导入来的部分日要说出停在几点，不能退回那句空洞的「仅有部分日记录」', () => {
+  /*
+   * 「停在几点」原先只在两项对得齐时才说，而 export.xml 里两项天生对不齐：
+   * 静息是连续的（停在 22:00），活动只在人动的时候写（20:00 就结束了）。
+   * 于是导入来的部分日一律退回「仅有部分日记录」—— 而用户动得了手的恰恰是
+   * 「把那次自动化挪到 22:00 之后」，不说钟点他不知道该动什么。
+   *
+   * 钟点按**本机时区**印（`getHours`）。这条用例因此自己钉住时区：
+   * CI 跑 UTC，不钉的话 22:00+0800 会印成 14:00，而真机上是对的。
+   */
+  const tz = process.env.TZ;
+  process.env.TZ = 'Asia/Shanghai';
+  try {
+    const date = '2026-09-09';
+    const now = new Date('2026-09-14T08:30:00+08:00');
+    const row = stampAppleRow(parseApple(basalDay(date, { endHour: 22 })), 'xml');
+    const obs = energyObservation(row, date, now);
+    assert.equal(obs.status, 'partial');
+    assert.match(obs.reason, /只同步到 22:00/, `实际给出的是「${obs.reason}」`);
+  } finally { process.env.TZ = tz; }
+});
