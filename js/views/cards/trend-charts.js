@@ -9,8 +9,7 @@ import { planForProfile } from '../../lib/store.js';
  */
 
 import { h, num, shiftDay, formatDuration, todayKey } from '../../lib/utils.js';
-import { infoTip } from '../../lib/ui.js';
-import { icon } from '../../lib/icons.js';
+import { infoTip, selectField } from '../../lib/ui.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
@@ -92,30 +91,15 @@ const average = (points, decimals = 0) => {
  * 也不用自己处理键盘和无障碍。
  */
 function picker({ label, value, options, onPick }) {
-  const select = h('select.trend-select', {
-    'aria-label': label,
-    onchange: (ev) => onPick(ev.target.value),
-  }, options.map((o) => h('option', { value: String(o.key) }, o.label)));
-  /*
-   * 选中值建完再赋，不要靠 option 的 selected 属性：
-   * h() 把 `selected: ''` 当成假值跳过，结果一个选项都没被标记，
-   * select 会默默落到第一项——下拉显示「热量摄入」而图画的是体重。
-   */
-  select.value = String(value);
   /*
    * 「看什么」「时间段」这两行字不写在界面上：下拉里第一项就写着「热量摄入」
    * 和「7 天」，标签只是把同一件事再说一遍。aria-label 保留，读屏仍念得出来。
-   */
-  /*
-   * 箭头是画出来的，不是打出来的。
    *
-   * 原先这儿是一个 `⌄` 字符 —— 排版字符在三个平台上是三种字形、三种基线，
-   * 粗细跟着字重走，和这一屏其余描边图标（列表行的 ›、返回键）凑不到一块儿。
-   * 用同一个 chevron 转 90°，形只有一份。
+   * 下拉本身（含画出来的箭头、「建完再赋值」那个坑）全在 `lib/ui.js` 的
+   * selectField 里，这儿只挑尺寸和内容。
    */
   return h('div.trend-picker-field', null,
-    h('div.trend-select-wrap', null, select,
-      h('span.trend-select-caret', { 'aria-hidden': 'true' }, icon('chevron'))));
+    selectField(options.map((o) => [String(o.key), o.label]), { label, value, onPick, size: 'md' }));
 }
 
 /*

@@ -50,7 +50,9 @@ export const ABSURD_RATE_PCT = 0.015;
 export const GOALS = {
   cut: { key: 'cut', label: '减脂', defaultRateKgPerWeek: -0.5 },
   maintain: { key: 'maintain', label: '维持', defaultRateKgPerWeek: 0 },
-  bulk: { key: 'bulk', label: '增肌期增重', defaultRateKgPerWeek: 0.25 },
+  // 目标名只说用户想做的事。「增重」那两个字是速率在说的话（「计划体重 +0.3 kg/周」），
+  // 名字里再带一遍，下拉里三档就变成两个字、两个字、五个字，长短差一倍。
+  bulk: { key: 'bulk', label: '增肌', defaultRateKgPerWeek: 0.25 },
 };
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

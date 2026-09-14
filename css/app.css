@@ -485,9 +485,27 @@ html, body { height: 100%; overflow: hidden; }
   padding: var(--card-pad);
   box-shadow: var(--shadow);
 }
+/*
+ * 居中，不是顶对齐。
+ *
+ * 顶对齐那一版里，右边挂了比标题行高的东西（「编辑」是 36px）就会把中心拉下去：
+ * 实测饮食记录、添加食物、本次训练三张卡的状态标签 / 按钮 / ⓘ 全部落在标题中线
+ * 下面 6.5px，而其余卡是 0 —— 同一枚记号在同一屏上有两个落点。
+ *
+ * 走 cardHeader() 的卡本来就不是顶对齐（.ui-card-heading 早就把这一行改成居中了），
+ * 于是同一个 .card-head 在应用里有两种行为，手搓卡头的那十几张各站各的。
+ * 现在只有一种：谁高谁定高度，标题和右边那一格共用同一条中轴。
+ */
 .card-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-2); margin-bottom: var(--space-3);
+  /*
+   * 排不下时整块右侧内容一起下移，而不是把标题挤碎。
+   * 320px 上「饮食记录」这张卡头有四样东西（标题 + 摘要 + 编辑 + ⓘ），
+   * 不许换行的话浏览器只能压标题：实测四个字被折成「饮食记 / 录」，
+   * 而 ⓘ 自己又掉到第三行去了。
+   */
+  flex-wrap: wrap;
 }
 .card-head > div { min-width: 0; }
 .card-head h3 { margin: 0; font-size: var(--fs-headline); line-height: 1.35; font-weight: var(--w-bold); letter-spacing: -.015em; }
@@ -502,9 +520,29 @@ html, body { height: 100%; overflow: hidden; }
  * 高度固定之后，比一行高的按钮上下对称溢出（它没有底色，只有文字，
  * 文字仍然落在标题的中线上），热区不变，而卡头的高度不再被它撑开。
  */
+/*
+ * 高度写死，不写 min-height —— min-height 是地板不是天花板。
+ *
+ * 写成 min-height 的那一版里，「编辑」这种 36px 的按钮照样把这一格撑到 36，
+ * 而 .card-head 顶对齐，于是饮食记录卡头右边那三样（状态标签、编辑、ⓘ）
+ * 的中心又落到了标题中线下面 6.5px —— 正是上面这段注释点名要修的那个数。
+ * 走 cardHeader() 的卡看不出来（.ui-card-heading 把整行改成居中），
+ * 手搓卡头的十几张就会各站各的。旁边 .card-head > .info-tip 用的也是 height。
+ */
 .card-head-actions {
   display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
   min-width: 0; min-height: var(--card-head-line); flex-wrap: wrap;
+  /*
+   * 靠 margin 推到右边，不靠 .card-head 的 space-between —— 卡头换行之后
+   * 这一格独占第二行，space-between 只会把它摆到最左边，而 ⓘ 得始终贴着右边缘。
+   */
+  margin-left: auto;
+  /*
+   * align-content 不能省。开了 flex-wrap 之后 align-items 只管「item 在它那一行里
+   * 怎么站」，行本身是靠 align-content 摆的，默认贴顶 —— 少了这一句，
+   * 320px 上换行的那两行会一起吊在上边。
+   */
+  align-content: center;
 }
 .card-head-actions .card-tag { max-width: 180px; }
 .card-desc { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--fs-footnote); line-height: 1.55; font-weight: var(--w-regular); }
@@ -2698,27 +2736,6 @@ h1, h2, h3 { letter-spacing: -.02em; }
   margin: var(--space-2) 0 var(--space-0);
 }
 .trend-picker-field { min-width: 0; }
-.trend-select-wrap { position: relative; }
-/*
- * 原生 select 收起箭头自己画：各浏览器的默认箭头样式差得太远，
- * 统一之后深浅色和圆角才对得上。
- */
-.trend-select {
-  appearance: none; -webkit-appearance: none;
-  width: 100%; min-height: 40px; padding: 0 30px 0 12px;
-  border: 0; border-radius: var(--r-sm);
-  background: var(--card-2); color: var(--text);
-  font: inherit; font-size: var(--fs-value); font-weight: var(--w-semibold); letter-spacing: -.01em;
-  cursor: pointer;
-}
-.trend-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.trend-select-caret {
-  position: absolute; right: 11px; top: 50%;
-  /* 画出来的 chevron 本身指右，转 90° 朝下；居中靠 translate，不靠视觉微调 */
-  transform: translateY(-50%) rotate(90deg);
-  pointer-events: none; color: var(--faint); display: grid; place-items: center;
-}
-.trend-select-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
 .trend-card .chart-wrap { margin-top: var(--space-1); }
 /* 颜色和字号由下面那条「说明类文字」统一给，别在这儿再写一份 */
 .trend-summary {
@@ -2820,22 +2837,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 和趋势卡那两个下拉用的是同一个形（chevron 转 90°）。
  * 宽度跟着文字走、靠左站：它是「用哪套分类法」，不该像范围那样铺满一整行。
  */
-.picker-mode-field { position: relative; display: inline-flex; justify-self: start; }
-.picker-mode-select {
-  appearance: none; -webkit-appearance: none;
-  min-height: var(--control-sm); padding: 0 30px 0 12px;
-  border: 0; border-radius: var(--r-sm);
-  background: var(--card-2); color: var(--text);
-  font: inherit; font-size: var(--fs-body); font-weight: var(--w-semibold);
-  cursor: pointer;
-}
-.picker-mode-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.picker-mode-caret {
-  position: absolute; right: 10px; top: 50%;
-  transform: translateY(-50%) rotate(90deg);
-  pointer-events: none; color: var(--faint); display: grid; place-items: center;
-}
-.picker-mode-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
+.picker-mode-field { justify-self: start; }
 /*
  * 挑法和范围是父子，贴紧一档；再往下到列表头隔了两档（.picker-list-head 的
  * margin-top）。层级靠形态不同 + 疏密表达，不靠缩进 ——
@@ -3254,9 +3256,41 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
  * 阶梯里最矮的可点元素本来就是 --control-sm 36。
  */
 .ui-card-heading { margin-bottom: var(--space-3); }
-.ui-card-heading .card-head { align-items: center; margin-bottom: 0; }
+/* align-items 已经由 .card-head 自己给了，这儿不再写第二份 */
+.ui-card-heading .card-head { margin-bottom: 0; }
 .ui-card-heading .card-desc { margin-top: var(--space-2); }
 .ui-empty-state .empty-hint { line-height: 1.5; }
+
+/*
+ * 下拉只有这一份（`lib/ui.js` 的 `selectField`）。原生箭头在三个浏览器上差得太远，
+ * 一律 appearance: none 之后自己画一枚 chevron 转 90°。
+ *
+ * 这块原先是 .trend-select 和 .picker-mode-select 两份，逐行几乎一样却漂出了
+ * 两个字号、两个箭头偏移，其中一份的高度还写成裸 40px —— 而 --control-inline 就是 40。
+ * 两档尺寸是两种东西，不是同一个东西的大小：md 是「这张卡的主控件」（满宽），
+ * sm 是「设完就很少再动的偏好」（宽度跟着文字走）。
+ */
+.ui-select-field { position: relative; min-width: 0; }
+.ui-select-field-md { display: block; }
+.ui-select-field-sm { display: inline-flex; }
+.ui-select {
+  appearance: none; -webkit-appearance: none;
+  min-width: 0; max-width: 100%; padding: 0 30px 0 12px;
+  border: 0; border-radius: var(--r-sm);
+  background: var(--card-2); color: var(--text);
+  font: inherit; font-weight: var(--w-semibold);
+  cursor: pointer;
+}
+.ui-select-md { width: 100%; min-height: var(--control-inline); font-size: var(--fs-value); letter-spacing: -.01em; }
+.ui-select-sm { min-height: var(--control-sm); font-size: var(--fs-body); }
+.ui-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ui-select-caret {
+  position: absolute; right: 11px; top: 50%;
+  /* 画出来的 chevron 本身指右，转 90° 朝下；居中靠 translate，不靠视觉微调 */
+  transform: translateY(-50%) rotate(90deg);
+  pointer-events: none; color: var(--faint); display: grid; place-items: center;
+}
+.ui-select-caret svg { width: var(--icon-xs); height: var(--icon-xs); }
 /*
  * 空状态里那两行事实，和「近 7 日速览」共用 .week-rows 那一个两列网格 ——
  * 同一种「标签靠左、数值靠右」各写一套必然会漂。
@@ -3333,8 +3367,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-recorded-set { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
 .training-budget { margin-bottom: var(--space-3); }
 .rec-reason { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }
-.diet-completeness { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
-.diet-completeness .form-field { flex: 1; min-width: 0; }
+/* 标签靠左、下拉靠右：一行两端都有东西，不留半边空 */
+.diet-completeness {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2); margin: 0 0 var(--space-3);
+  color: var(--muted); font-size: var(--fs-footnote);
+}
+.diet-completeness > span { min-width: 0; }
 .training-week-groups .coverage-row > * { min-width: 0; overflow-wrap: anywhere; }
 
 /* 高频记组共享同一张表：草稿和已完成组不再使用两套尺寸。 */

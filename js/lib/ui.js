@@ -148,6 +148,41 @@ export function cardHeader(title, { summary = null, actions = [] } = {}) {
     summary ? h('p.card-desc', null, summary) : null);
 }
 
+/**
+ * 下拉：原生 `<select>` 配一枚自己画的收起箭头。
+ *
+ * 这个件原先有两份 —— 趋势卡的 `.trend-select` 和健身挑法的 `.picker-mode-select`，
+ * 逐行几乎一样，却已经漂出两个字号（15 / 14）、两个箭头偏移（11 / 10），
+ * 其中一份的高度还写成裸 `40px` 而不是 `--control-inline`。第三个下拉
+ * （饮食记录的「全天记录」）要是再抄一遍，下次改箭头就得翻三处。
+ *
+ * **尺寸只有两档，因为它们是两种东西**：`md` 走 `--control-inline`，
+ * 满宽，给「这张卡的主控件」；`sm` 走 `--control-sm`，宽度跟着文字走，
+ * 给「设完就很少再动的偏好」（本文件对健身页挑法下拉立过这条规矩）。
+ *
+ * 箭头用 `icon('chevron')` 转 90°，和列表行的 ›、返回键是同一个形 ——
+ * 打出来的 `⌄` 在三个平台上是三种字形三种基线，这条踩过。
+ *
+ * @param {Array<[string, string]>} options `[值, 文字]`
+ */
+export function selectField(options, { label, value, onPick, size = 'md', className = '' } = {}) {
+  const select = h('select.ui-select', {
+    class: `ui-select-${size}`,
+    'aria-label': label,
+    // 第二个参数是 select 自己：落库期间要禁用它的调用方（runLocalAction）需要拿到它
+    onchange: (ev) => onPick(ev.currentTarget.value, ev.currentTarget),
+  }, options.map(([key, text]) => h('option', { value: String(key) }, text)));
+  /*
+   * 选中项必须等节点建好再设。给还没挂进 `<select>` 的 `<option>` 设 `selected`
+   * 会被浏览器按 selectedIndex 打回第一项 —— 趋势卡踩过：下拉写着「热量摄入」
+   * 而图画的是体重。
+   */
+  select.value = String(value);
+  // className 落在外层：调用方要调的是这一块在版面里怎么站，不是 select 自己长什么样
+  return h('div.ui-select-field', { class: `ui-select-field-${size}${className ? ' ' + className : ''}` }, select,
+    h('span.ui-select-caret', { 'aria-hidden': 'true' }, icon('chevron')));
+}
+
 export function emptyState(message, action = null) {
   return h('div.ui-empty-state', null, h('p.empty-hint', null, message), action);
 }

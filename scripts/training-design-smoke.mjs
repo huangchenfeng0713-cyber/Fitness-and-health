@@ -15,7 +15,8 @@ const current = () => page.getByRole('tab', { name: '本次训练', exact: true 
 const history = () => page.getByRole('tab', { name: '训练记录', exact: true }).click();
 const items = () => page.evaluate(async () => { const s = await import('/js/lib/store.js'); const u = await import('/js/lib/utils.js'); return s.trainingFor(u.todayKey()).items; });
 const open = async () => { await page.locator('.training-add').click(); await page.waitForTimeout(750); };
-const close = async () => { await page.getByRole('button', { name: '关闭动作选择' }).click(); await page.waitForTimeout(300); };
+// 弹层头上那枚关闭叉已经撤掉（下滑、点背景、Esc 三条路都在），这里走 Esc。
+const close = async () => { await page.keyboard.press('Escape'); await page.locator('.sheet-wrap').waitFor({ state: 'hidden' }); };
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8080');
   await page.waitForFunction(() => document.querySelector('.tab') && !document.querySelector('.account-data-lock'));
@@ -63,8 +64,8 @@ try {
    * 于是接着点部位、点器械、点「推荐」都会把那个下拉重新弹出来一次。
    */
   const focusedTag = () => page.evaluate(() => document.activeElement?.tagName || '');
-  await page.locator('.picker-mode-select').focus();
-  await page.locator('.picker-mode-select').selectOption('split');
+  await page.locator('.picker-mode-field select').focus();
+  await page.locator('.picker-mode-field select').selectOption('split');
   await page.waitForTimeout(200);
   check('改完挑法下拉，焦点没有被送回 select', await focusedTag() !== 'SELECT');
   await page.locator('.picker-target-select').focus();
@@ -148,7 +149,7 @@ try {
       sm: parseFloat(root.getPropertyValue('--control-sm')),
       info: parseFloat(root.getPropertyValue('--info-size')),
       chip: box('.training-picker .picker-scope-switch .chip-btn'),
-      mode: box('.picker-mode-select'),
+      mode: box('.picker-mode-field select'),
       equip: box('.equip-filter-btn'),
       tip: box('.training-panel .info-tip > summary'),
       clash: clash && { h: +clash.getBoundingClientRect().height.toFixed(1), line: parseFloat(getComputedStyle(clash).lineHeight) },
