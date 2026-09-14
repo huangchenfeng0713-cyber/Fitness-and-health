@@ -3,13 +3,27 @@ import { todayKey, shiftDay } from './day.js';
 
 export const ENERGY_POLICY = Object.freeze({ staleMinutes: 120, alignmentMinutes: 5, minimumBaselineDays: 3,
   /*
-   * 老行反推覆盖范围时，「够到这一天的末尾」允许差这么多分钟。
+   * 判「这一天覆盖完整了没有」时，两端各允许差这么多分钟。
    *
-   * 它不是一个生理量，是护栏：最后一段样本不一定正好压在零点上，
+   * 它不是一个生理量，是护栏：样本不一定正好压在零点上，
    * 而真正要拦的那种截断（同步停在早上八点）离这个窗口有十几个小时，
    * 差一小时的基础代谢大约 70 kcal，远在设备估算误差里。
+   *
+   * 老行反推（`legacyCoverage`）和 export.xml 解析器（`core/health.js` 声明
+   * `energyCoverage` 那处）**共用这一个数** —— 同一句「这天算不算走完了」
+   * 在两条链路上给出两个答案的话，用户看到的就是「快捷指令同步的能用、
+   * 导入的不能用」，而两者说的是同一天。
    */
-  legacyTailMinutes: 60 });
+  coverageTailMinutes: 60,
+  /*
+   * 一天之内允许空掉多少分钟仍算完整日（护栏）。
+   *
+   * 手表摘下来充电是常态，中间就会缺一段。**这一档放宽不会放过这道闸要拦的东西**：
+   * 「只同步到早上八点」被上面那条「必须够到这一天末尾」拦住，和中间有没有洞无关；
+   * 这一条只影响那些确实跑到了零点、但当中有窟窿的日子。
+   * 两小时的基础代谢约 140 kcal，仍在设备估算误差的量级里。
+   */
+  coverageGapMinutes: 120 });
 export const ENERGY_LIMITS = Object.freeze({ restingEnergy: 5000, activeEnergy: 8000 });
 export const presentNumber = v => ['number', 'string'].includes(typeof v) && String(v).trim() !== '' && Number.isFinite(Number(v));
 
@@ -30,7 +44,7 @@ export const presentNumber = v => ['number', 'string'].includes(typeof v) && Str
  */
 function legacyCoverage(time, start, end) {
   const wholeDay = { status: 'complete', start: new Date(start).toISOString(), end: new Date(end).toISOString() };
-  const tail = ENERGY_POLICY.legacyTailMinutes * 60000;
+  const tail = ENERGY_POLICY.coverageTailMinutes * 60000;
   // 没有时间戳，或者时间戳就是这一天本身（来源只给了日期、没给钟点）：
   // 拿不到「停在几点」这个信息，而那一行本来就是按天汇总出来的一天总量。
   if (!Number.isFinite(time) || time === start) return wholeDay;
@@ -100,10 +114,20 @@ export function energyObservation(row = {}, day = row.date, now = new Date()) {
     const coverage = declared || inferred;
     // 反推出来的「完整」，它的截止时间就是这一天的结束（老行的最后一个样本不一定压在零点上）
     const reach = inferred?.status === 'complete' ? end : time;
-    // A file export or upload finishing does not establish a complete natural day.
+    /*
+     * A file export or upload finishing does not establish a complete natural day.
+     *
+     * **但「够到末尾」这件事只许有一个门槛。** 这里原先要求 `reach >= end` ——
+     * 时间戳必须literally 走到零点，而上游声明 complete 时用的是「差一小时以内就算」
+     * （`coverageTailMinutes`，`legacyCoverage` 反推老行也是这个数）。
+     * 两处判同一件事、门槛却不一样，结果是上游明明写着 complete，
+     * 这儿又把它推翻成 unknown-coverage：实测导入的每一天都停在这上面，
+     * 而声明里写得清清楚楚是完整日。三处共用同一个容差。
+     */
     const complete = natural && coverage?.status === 'complete' && Date.parse(coverage.start) === start
       && Date.parse(coverage.end) === end && end > start
-      && Number.isFinite(reach) && reach >= end && end <= now.getTime();
+      && Number.isFinite(reach) && reach >= end - ENERGY_POLICY.coverageTailMinutes * 60000
+      && end <= now.getTime();
     let status = raw == null || String(raw).trim() === '' ? 'missing'
       : value == null || value < 0 || value > ENERGY_LIMITS[key] || row._excludedFields?.includes(key) ? 'suspect'
         : dateMode === 'future' || time > now.getTime() ? 'future'
@@ -127,7 +151,17 @@ export function energyObservation(row = {}, day = row.date, now = new Date()) {
   const status = list.find(f => f.status !== 'valid')?.status || (aligned ? 'valid' : 'unaligned');
   const valid = status === 'valid';
   const observedAt = aligned ? list.map(f => f.observedAt).sort()[0] : null;
-  return { fields, dateMode, valid, status, reason: reasonFor(status, observedAt), observedAt,
+  /*
+   * 「停在几点」要报**静息能量**那条线的截止时间，不能只认 `observedAt`。
+   *
+   * `observedAt` 只在两项对得齐时才有值，而 export.xml 里两项天生对不齐：
+   * 静息是连续的（停在 22:00），活动只在人动的时候写（最后一段 20:00 就结束了），
+   * 差两小时。于是导入来的部分日一律退回那句空洞的「仅有部分日记录」——
+   * 而用户动得了手的恰恰是「把那次自动化挪到 22:00 之后」，不说钟点他就不知道该动什么。
+   * 定义这一天覆盖到哪儿的本来就是静息那条连续信号（`energyCoverage` 也取自它）。
+   */
+  const coverageEnd = observedAt || fields.restingEnergy?.observedAt || null;
+  return { fields, dateMode, valid, status, reason: reasonFor(status, coverageEnd), observedAt,
     burnedNow: valid ? list.reduce((sum, f) => sum + f.value, 0) : null,
     complete: valid && list.every(f => f.complete),
     dayFraction: observedAt && end > start ? Math.min(1, Math.max(0, (Date.parse(observedAt) - start) / (end - start))) : null,

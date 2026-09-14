@@ -9,7 +9,7 @@ import { weeklySummary } from '../js/core/weekly-summary.js';
 import { weightTrendStats } from '../js/core/health-insights.js';
 import { trendReading } from '../js/core/trend-reading.js';
 import { state, recompute, planForProfile } from '../js/lib/store.js';
-import { mergeApplePartialRows, stampManualPatch } from '../js/core/health-merge.js';
+import { mergeApplePartialRows, stampAppleRow, stampManualPatch } from '../js/core/health-merge.js';
 import { validateNutritionRow } from '../js/lib/db.js';
 import { mergeSameEntries } from '../js/core/diet-log.js';
 import { num } from '../js/lib/utils.js';
@@ -387,4 +387,109 @@ test('完整零活动历史用于新计划，旧目标快照不被重写', () =>
     state.healthDays = rows.map((row, i) => i === 2 ? { ...row, activeEnergy: null } : row);
     assert.equal(planForProfile(p, date, now).tdeeSource, 'formula');
   } finally { Object.assign(state, savedState); }
+});
+
+/*
+ * **导入苹果健康的导出文件之后，过去的消耗必须真的进得了计算。**
+ *
+ * 用户导入完发现「过去的消耗数据还是不显示」。根因是解析器声明覆盖范围时
+ * 要求毫秒级铺满 24 小时（`start === 零点 && end === 次日零点 && coveredMs >= 24h`），
+ * 而真机上没有哪一天长这样：**起点晚 7 分钟**、手表摘下来**充电缺 1 小时**，
+ * 都被判成 partial —— 而 partial 的日子被 completeEnergyDay 整天排除，
+ * 当日收支、趋势图、近 7 日、14 天基线一起变空。
+ *
+ * 这道闸真正要拦的是「同步停在早上八点」那种十几个小时的缺口。
+ */
+function appleXml(rows, exportAt = '2026-09-14 08:00:00 +0800') {
+  return `<?xml version="1.0"?>\n<HealthData locale="zh_CN">\n <ExportDate value="${exportAt}"/>\n${rows.join('\n')}\n</HealthData>`;
+}
+/** 按小时铺基础代谢；startMin 挪起点、endHour 截末尾、gap 在中间挖洞 */
+function basalDay(date, { startMin = 0, endHour = 24, gapFrom = null, gapHours = 0 } = {}) {
+  const p = (n) => String(n).padStart(2, '0');
+  const at = (d, h, m = 0) => `${d} ${p(h)}:${p(m)}:00 +0800`;
+  const next = (d) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); };
+  const rows = [];
+  for (let h = 0; h < endHour; h += 1) {
+    if (gapFrom != null && h >= gapFrom && h < gapFrom + gapHours) continue;
+    const end = h + 1 >= 24 ? at(next(date), 0) : at(date, h + 1);
+    rows.push(` <Record type="HKQuantityTypeIdentifierBasalEnergyBurned" sourceName="Apple Watch" unit="Cal"`
+      + ` creationDate="${end}" startDate="${at(date, h, h === 0 ? startMin : 0)}" endDate="${end}" value="66"/>`);
+  }
+  // 活动能量只在白天几段 —— 它按性质就不可能铺满一天，不该拖累整日判定
+  for (const [a, b] of [[7, 9], [12, 13], [18, 20]]) {
+    rows.push(` <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Apple Watch" unit="Cal"`
+      + ` creationDate="${at(date, b)}" startDate="${at(date, a)}" endDate="${at(date, b)}" value="180"/>`);
+  }
+  return rows;
+}
+function parseApple(rows) {
+  const agg = createAggregator({});
+  agg.finishDocument(feedXmlChunk(appleXml(rows), agg));
+  return agg.result().days[0];
+}
+
+test('F22: 导出里真机常见的那种一天，导入后要进得了计算', () => {
+  const now = new Date('2026-09-14T08:30:00+08:00');
+  const date = '2026-09-09';
+  const usable = (opts) => {
+    const row = stampAppleRow(parseApple(basalDay(date, opts)), 'xml');
+    return { status: energyObservation(row, date, now).status, day: completeEnergyDay(row, now) };
+  };
+
+  // 放行：起点晚几分钟、末尾差一小时以内、中间充电缺一小时
+  for (const [name, opts] of [['毫秒级完美', {}], ['起点晚 7 分钟', { startMin: 7 }],
+    ['末尾停在 23:00', { endHour: 23 }], ['中间充电缺 1 小时', { gapFrom: 14, gapHours: 1 }]]) {
+    const r = usable(opts);
+    assert.equal(r.status, 'valid', `${name} 被判成 ${r.status}`);
+    assert.ok(r.day?.burnedNow > 0, `${name} 没能进入计算`);
+  }
+
+  // 仍然拦住：这道闸就是为它们存在的
+  for (const [name, opts] of [['只同步到早上 8 点', { endHour: 8 }], ['只同步到 22:00', { endHour: 22 }],
+    ['中间缺 4 小时', { gapFrom: 10, gapHours: 4 }]]) {
+    const r = usable(opts);
+    assert.equal(r.status, 'partial', `${name} 应判成 partial，实际 ${r.status}`);
+    assert.equal(r.day, null, `${name} 不该进入计算`);
+  }
+});
+
+test('F23: 「够到这一天末尾」的容差只有一个，三处共用', () => {
+  /*
+   * 上游声明 complete 用的是「差一小时以内就算」，而读的那头原先要求
+   * `reach >= end` —— 时间戳必须 literally 走到零点。两处判同一件事门槛不一样，
+   * 结果是声明里写着 complete、读的时候又被推翻成 unknown-coverage。
+   */
+  const date = '2026-09-09';
+  const now = new Date('2026-09-14T08:30:00+08:00');
+  const start = new Date(`${date}T00:00:00`);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  const declared = (observedAt) => ({ date, restingEnergy: 1500, activeEnergy: 200, energyObservedAt: observedAt,
+    energyCoverage: { status: 'complete', start: start.toISOString(), end: end.toISOString() } });
+
+  const within = new Date(end.getTime() - 40 * 60000).toISOString();
+  assert.ok(completeEnergyDay(declared(within), now), '声明了 complete、只差 40 分钟，却被读的那头推翻');
+  const beyond = new Date(end.getTime() - 5 * 3600000).toISOString();
+  assert.equal(completeEnergyDay(declared(beyond), now), null, '差 5 小时仍该拦住');
+});
+
+test('F24: 导入来的部分日要说出停在几点，不能退回那句空洞的「仅有部分日记录」', () => {
+  /*
+   * 「停在几点」原先只在两项对得齐时才说，而 export.xml 里两项天生对不齐：
+   * 静息是连续的（停在 22:00），活动只在人动的时候写（20:00 就结束了）。
+   * 于是导入来的部分日一律退回「仅有部分日记录」—— 而用户动得了手的恰恰是
+   * 「把那次自动化挪到 22:00 之后」，不说钟点他不知道该动什么。
+   *
+   * 钟点按**本机时区**印（`getHours`）。这条用例因此自己钉住时区：
+   * CI 跑 UTC，不钉的话 22:00+0800 会印成 14:00，而真机上是对的。
+   */
+  const tz = process.env.TZ;
+  process.env.TZ = 'Asia/Shanghai';
+  try {
+    const date = '2026-09-09';
+    const now = new Date('2026-09-14T08:30:00+08:00');
+    const row = stampAppleRow(parseApple(basalDay(date, { endHour: 22 })), 'xml');
+    const obs = energyObservation(row, date, now);
+    assert.equal(obs.status, 'partial');
+    assert.match(obs.reason, /只同步到 22:00/, `实际给出的是「${obs.reason}」`);
+  } finally { process.env.TZ = tz; }
 });
