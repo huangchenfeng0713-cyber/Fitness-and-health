@@ -55,7 +55,32 @@ try {
   await page.getByLabel('黄瓜的克数', { exact: true }).blur();
   for (const width of [320, 393]) {
     await page.setViewportSize({ width, height: 852 });
-    assert.ok(await page.locator('.mix-picker').evaluate(el => el.scrollWidth <= el.clientWidth + 1), '配料面板横向溢出');
+    /*
+     * 量真正会横滚的那一层（`.sheet-scroll`，overflow-x: auto），不是 `.mix-picker` ——
+     * 后者 overflow-x: visible、padding 为 0，量它会把 ⓘ 那圈热区也算成溢出：
+     * `.info-tip > summary::after` 的 `inset: -15px` 是 absolute、不占版面，
+     * 撤掉弹层关闭叉之后 ⓘ 成了这一行最右边那个，那 15px 正好探进弹层自己的
+     * 16px 内边距里，屏幕上一个像素都没多出来（实测 .sheet-scroll 393 == 393）。
+     *
+     * 再逐个量在版面里的元素，这比 scrollWidth 更准：真有内容宽出去照样红，
+     * 而且能直接点出是哪一个。
+     */
+    assert.ok(await page.locator('.sheet-scroll').evaluate(el => el.scrollWidth <= el.clientWidth + 1),
+      `${width}px 弹层横向溢出`);
+    const spill = await page.locator('.mix-picker').evaluate((panel) => {
+      const edge = panel.getBoundingClientRect().right;
+      return [...panel.querySelectorAll('*')].filter((el) => {
+        const cs = getComputedStyle(el);
+        // 只看真正占版面又看得见的：absolute / fixed 的是热区和说明浮层
+        // （ⓘ 的 ::after、info-tip-panel 是 position: fixed 且默认 visibility: hidden），
+        // 它们撑不动布局，也不会让谁横滚。
+        if (!['static', 'relative'].includes(cs.position)) return false;
+        if (cs.visibility === 'hidden' || cs.display === 'none') return false;
+        const b = el.getBoundingClientRect();
+        return b.width > 0 && b.right > edge + 1;
+      }).map((el) => String(el.className) || el.tagName).slice(0, 3);
+    });
+    assert.deepEqual(spill, [], `${width}px 配料面板有内容横向溢出：${spill.join(' / ')}`);
   }
   await page.locator('.sheet-footer .primary-btn').click();
   await waitForStore(async () => (await import('/js/lib/store.js')).state.dietEntries

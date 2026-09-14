@@ -86,8 +86,15 @@ try {
   await screenshot('area-detail');
   // 公共弹层保留 700ms 防误触关闭窗口，与真实用户看完详情再关闭一致。
   await page.waitForTimeout(800);
-  await page.getByRole('button', { name: '关闭部位详情', exact: true }).click();
+  /*
+   * 弹层头上那枚关闭叉已经撤掉（下滑、点背景、Esc 三条路都在）。
+   * 这里改按 Esc，顺带把「撤掉叉之后还出得来」这件事本身钉住 ——
+   * 一个关不掉的弹层会把整个应用堵死。
+   */
+  check('弹层头上没有关闭叉', await page.locator('.sheet').getByRole('button', { name: /关闭|取消/ }).count() === 0);
+  await page.keyboard.press('Escape');
   await page.locator('.sheet-wrap').waitFor({ state: 'hidden' });
+  check('撤掉关闭叉之后 Esc 仍然关得掉弹层', true);
   await page.getByRole('button', { name: '间隔', exact: true }).click();
   check('臀腿练法参与腿部训练间隔', (await page.locator('[data-group="leg"]').innerText()).includes('今天'));
   const roundtrip = await page.evaluate(async () => {

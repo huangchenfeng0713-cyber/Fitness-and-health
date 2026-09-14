@@ -13,7 +13,7 @@ import {
   h, clearEl, num, toast, confirmAction, debounce, shiftDay, mount, runLocalAction, copyText,
 } from '../lib/utils.js';
 import {
-  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow, persistentInfoTip,
+  listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow, selectField,
 } from '../lib/ui.js';
 import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
 import { macroBar, splitBar } from '../lib/charts.js';
@@ -426,6 +426,17 @@ function selectFood(food) {
   refreshPortion();
 }
 
+/*
+ * 弹层头右边那一格：有东西才建。
+ *
+ * 关闭叉撤掉之后它常常只剩一个 ⓘ，而没有估算说明的食物 `foodInfoTip` 返回 null ——
+ * 那时留一个空 div 在 `.portion-head` 里，flex 的 gap 照样算，右边白吃掉一档间距。
+ */
+const portionHeadActions = (...items) => {
+  const kept = items.filter(Boolean);
+  return kept.length ? h('div.portion-head-actions', null, kept) : null;
+};
+
 /**
  * 清补凉一类复合甜品不能只靠一个固定“每 100g”值：椰奶、豆类、芋圆和糖浆
  * 选不选，能让同一碗相差几百千卡。这里把每项原料独立开关和调量，并把最终
@@ -608,12 +619,9 @@ function refreshMixedPortion(food) {
           h('strong', null, food.name),
           estimateTag(food)),
         h('div.portion-per100', null, '营养按所选配料和份量逐项计算。')),
-      h('div.portion-head-actions', null,
-        foodInfoTip(food, { label: '查看估算依据与误差' }),
-        h('button.icon-btn', {
-          'aria-label': '取消',
-          onclick: () => closeSheet(),
-        }, icon('close')))),
+      // 撤掉关闭叉之后这一格可能空着（没有估算的食物 foodInfoTip 返回 null），
+      // 而 .portion-head 带着 gap —— 空 div 会在右边吃掉一档间距，把标题拽偏。
+      portionHeadActions(foodInfoTip(food, { label: '查看估算依据与误差' }))),
 
     h('div.mix-summary', null,
       h('div', null, h('span', null, '当前总量'), totalAmount),
@@ -849,12 +857,7 @@ function refreshPortion() {
           estimateTag(food)),
         h('div.portion-per100', null,
           `每 ${isLiquid ? '100ml' : '100g'}：${p.kcal} kcal · 蛋白 ${p.protein}g · 脂肪 ${p.fat}g · 碳水 ${p.carb}g`)),
-      h('div.portion-head-actions', null,
-        foodInfoTip(food, { label: '查看食物依据与误差' }),
-        h('button.icon-btn', {
-          'aria-label': '取消',
-          onclick: () => closeSheet(),
-        }, icon('close')))),
+      portionHeadActions(foodInfoTip(food, { label: '查看食物依据与误差' }))),
 
     foodBrandOptions(food).length > 0 && h('div', null,
       h('div.field-label', null, '品牌'),
@@ -1145,9 +1148,7 @@ function refreshCustomForm() {
     h('div.portion-head', null,
       h('div.portion-head-main', null,
         h('div.portion-title-line', null, h('strong', null, editing ? '修改自定义食物' : '自定义食物')),
-        basisHint),
-      h('div.portion-head-actions', null,
-        h('button.icon-btn', { type: 'button', 'aria-label': '关闭自定义食物', onclick: () => closeSheet() }, icon('close')))),
+        basisHint)),
     editing ? h('p.form-hint', null, `正在修改「${editing.name}」。之前记过的数值保持不变。`) : null,
     h('div.form-grid', null,
       h('label.form-field.span-all', null, h('span', null, '食物名称'), inputs.name),
@@ -1242,17 +1243,28 @@ function mergedRow(group) {
     h('div.entry-merged-list', null, group.entries.map((e) => entryRow(e, false))));
 }
 
+/*
+ * 「全天记录」是一行，不是一整块。
+ *
+ * 原先是满宽的 form-field（标题一行、下拉一行）外加一个说明按钮，在这张卡最上面
+ * 占掉约 100px —— 而这一栏要看的是下面吃了什么。它本身也不是每天要动的东西：
+ * 一天最多点一次，属于「设完就走」，按本文件的规矩该是紧凑下拉而不是满宽表单项。
+ * 说明并进卡头那个 ⓘ：这张卡只留一个说明入口，这条在饮食记录上已经立过一次。
+ */
 function dietCompleteness() {
   const day = state.day, quality = dietQualityFor(day);
   if (day > todayKey()) return null;
   return h('div.diet-completeness', null,
-    h('label.form-field', null, h('span', null, '全天记录'), h('select', { 'aria-label': '全天饮食记录完整度',
-      value: quality.status, onchange: async event => {
-        const result = await runLocalAction(event.currentTarget, () => confirmDietLog(day, event.target.value), '确认饮食记录');
+    h('span', null, '全天记录'),
+    selectField(Object.entries(DIET_LOG_STATES), {
+      label: '全天饮食记录完整度',
+      value: quality.status,
+      size: 'sm',
+      onPick: async (value, control) => {
+        const result = await runLocalAction(control, () => confirmDietLog(day, value), '确认饮食记录');
         if (result.ok) toast('已更新记录完整度', 'ok'); else refreshEntries();
-      } }, Object.entries(DIET_LOG_STATES).map(([value, label]) => h('option', { value, selected: quality.status === value }, label)))),
-    persistentInfoTip('diet-day-completeness', '全天记录完整度说明',
-      '完整表示你确认当天饮食已全部记录，与营养字段是否齐全是两回事。新增、修改、删除后需重新确认；复制餐次不复制完整声明。无记录不算零摄入。此状态暂不自动调整热量目标。'));
+      },
+    }));
 }
 
 function refreshEntries() {
@@ -1307,6 +1319,12 @@ function refreshEntries() {
           '查看本日记录说明',
           {
             extra: [
+              // 「全天记录」那一行原先自带一个说明按钮。这张卡只留一个说明入口，
+              // 所以它并到这儿来；未来日期没有那一行，这句也就不出现。
+              state.day <= todayKey()
+                ? h('p', null, '「全天记录」是你自己确认当天吃的都记完了，和营养字段齐不齐是两回事；'
+                  + '改动记录之后要重新确认。它只标注记录完整度，不会改动热量目标。')
+                : null,
               h('p', null, '每条记录保存的是记账当时的营养数值；之后食物库更新不会回填已经记下的记录。'),
               entries.some((entry) => !findFood(entry.foodId))
                 ? h('p', null, '标着「食物已删除」的那几条，食物已经不在库里了'

@@ -4,7 +4,7 @@ import { h, clearEl, mount, num, todayKey, shiftDay, daySeed, toast, runLocalAct
 import { icon, setIcon } from '../lib/icons.js';
 import {
   listRow, persistentInfoTip, searchField, cardHeader, emptyState,
-  segmentedGroupProps, segmentedItemProps,
+  segmentedGroupProps, segmentedItemProps, selectField,
 } from '../lib/ui.js';
 import {
   GROUPS, MUSCLES, PATTERNS, EQUIPMENT, EXERCISE_BY_ID, searchExercises,
@@ -144,8 +144,7 @@ function openPicker() {
   exerciseQuery = '';
   pickerRoot = h('div.training-picker-panel');
   pickerBar = buildPickerBar();
-  const header = h('div.training-picker-head', null, h('h2', null, '添加动作'),
-    h('button.icon-btn', { type: 'button', 'aria-label': '关闭动作选择', onclick: () => closeSheet() }, icon('close')));
+  const header = h('div.training-picker-head', null, h('h2', null, '添加动作'));
   openSheet(h('div.training-picker', null, header, pickerRoot), {
     label: '添加训练动作', onClose: () => { pickerRoot = null; pickerBar = null; rerenderTraining(); },
     returnFocus: () => document.querySelector('.training-add'),
@@ -187,16 +186,16 @@ function groupTabs(rerender) {
 }
 
 function modeSelect(rerender) {
-  const select = h('select.picker-mode-select', {
-    'aria-label': '按什么挑动作',
-    onchange: (ev) => { pickMode = ev.currentTarget.value; targetFilter = 'all'; showAllExercises = false; rerender(); },
-  }, [['group', '按身体部位'], ['split', '按动作模式']].map(([key, label]) => h('option', { value: key }, label)));
-  // 选中项要在节点建好之后再设：给还没挂上的 option 设 selected 会被按 selectedIndex 打回第一项
-  select.value = pickMode;
-  return h('div.picker-mode-field', null,
-    select,
-    // 展开箭头是画出来的 chevron 转 90°，和趋势卡、设置页用的是同一个形
-    h('span.picker-mode-caret', { 'aria-hidden': 'true' }, icon('chevron')));
+  // 走共用的 selectField（`lib/ui.js`）：画出来的箭头、焦点圈、
+  // 「选中项要建完再赋」那个坑都在那儿，这儿只说尺寸和内容。
+  // sm 档 = 宽度跟着文字走，因为它是「设一次就很少再动的偏好」，不该铺满一行。
+  return selectField([['group', '按身体部位'], ['split', '按动作模式']], {
+    label: '按什么挑动作',
+    value: pickMode,
+    size: 'sm',
+    className: 'picker-mode-field',
+    onPick: (value) => { pickMode = value; targetFilter = 'all'; showAllExercises = false; rerender(); },
+  });
 }
 
 function splitTabs(rerender) {
@@ -537,7 +536,7 @@ function recordingSettings(item) {
   } }, '保存设置');
   const variantNote = h('p.form-hint', null, variants.find(v => v.id === item.id)?.note || '');
   openSheet(h('div.training-settings-sheet', null,
-    cardHeader(exercise.name, { actions: [h('button.icon-btn', { type: 'button', 'aria-label': '关闭记录设置', onclick: closeSheet }, icon('close'))] }),
+    cardHeader(exercise.name),
     variants.length ? h('label.form-field', null, h('span', null, '练法'),
       h('select', { 'aria-label': '练法', onchange: event => { variantId = event.target.value; variantNote.textContent = variants.find(v => v.id === variantId)?.note || '';
         Object.assign(settings, recordingDefaultsFor(session().items.find(i => i.id === variantId) || newTrainingItem(variantId, state.trainingDays, date), state.trainingDays, date));
@@ -558,8 +557,7 @@ const setLabel = trainingSetText;
 const loadUnit = set => set.loadConvention === 'scale' ? '刻度' : 'kg';
 function setTypeSheet(item, index) {
   const date = trainingDay(), set = item.sets[index];
-  openSheet(h('div', null, cardHeader(`第 ${index + 1} 组`, { actions: [h('button.icon-btn', {
-    type: 'button', 'aria-label': '关闭组设置', onclick: closeSheet }, icon('close'))] }),
+  openSheet(h('div', null, cardHeader(`第 ${index + 1} 组`),
     h('div.training-edit-actions', null, [['work','正式组'],['warmup','热身组']].map(([value, label]) => h('button.secondary-btn.compact', {
       type: 'button', onclick: async () => {
         const result = await updateSession(items => items.map(i => i.id === item.id
@@ -809,7 +807,7 @@ function weeklyCard() {
 function showAreaDetail(area) {
   const detail = trainingAreaDetail(state.trainingDays, trainingDay(), area.key);
   openSheet(h('div.training-area-sheet', null,
-    cardHeader(`${area.label} · 近7日`, { actions: [h('button.icon-btn', { type: 'button', 'aria-label': '关闭部位详情', onclick: closeSheet }, icon('close'))] }),
+    cardHeader(`${area.label} · 近7日`),
     detail.muscles.length ? [
       h('div.coverage-row.coverage-heading', null, h('span', null, '肌群'), h('span', null, '主练'), h('span', null, '协同')),
       detail.muscles.map(m => h('div.coverage-row', null, h('span', null, m.label), h('span', null, `${m.direct} 组`), h('span', null, `${m.secondary} 组`))),

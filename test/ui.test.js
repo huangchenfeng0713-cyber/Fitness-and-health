@@ -1110,7 +1110,11 @@ test('「图上没有今天」收在信息按钮里，不占一整段正文', ()
 test('区间与图表改用下拉，不再铺一屏按钮', () => {
   // 九张图加四个区间铺开就占掉大半屏，而每次只看其中一个。
   const health = page('health');
-  assert.match(health, /h\('select\.trend-select'/, '没有改成原生下拉');
+  /*
+   * 断言「是个满宽下拉」，不是它当年那个 class 名 —— 下拉已经收进
+   * `lib/ui.js` 的 selectField（健身挑法、饮食完整度共用同一份）。
+   */
+  assert.match(health, /selectField\(options\.map[\s\S]{0,120}size: 'md'/, '没有改成原生下拉');
   assert.ok(!health.includes("h('div.chart-switch'"), '还留着一排图表按钮');
   assert.ok(!health.includes("h('div.range-switch'"), '还留着一排区间按钮');
   // 没数据的图仍可选，点进去会说明缺什么

@@ -19,7 +19,13 @@ test('选择动作是三种形态，不是三排一样的灰槽', () => {
    * 层级由形态 + 疏密表达，不靠三块一样的灰槽比谁在上面。
    */
   assert.doesNotMatch(training, /picker-mode-switch/, '挑法又变回分段控件了');
-  assert.match(training, /h\('select\.picker-mode-select'/, '挑法应当是个下拉');
+  /*
+   * 断言的是「挑法是个跟着文字宽的下拉」，不是它当年那个 class 名。
+   * 下拉本身已经收进 `lib/ui.js` 的 selectField（趋势卡、饮食完整度共用同一份），
+   * 按 `h('select.picker-mode-select'` 去卡的话，改的是共用件、红的是这一条。
+   */
+  assert.match(training, /selectField\(\[\['group'/, '挑法应当是个下拉');
+  assert.match(training, /size: 'sm'/, '挑法那个下拉应当是跟着文字宽的那一档，不铺满一行');
   assert.match(training, /picker-scope-switch/);
   assert.match(training, /byGroup \? groupTabs\(rerender\) : splitTabs\(rerender\),\s*targetSelect\);/,
     '范围后应提供细分部位筛选');
