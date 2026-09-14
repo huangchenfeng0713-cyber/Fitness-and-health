@@ -70,7 +70,10 @@ try {
   await page.getByRole('button', { name: '查看腿训练详情', exact: true }).click();
   check('部位详情列出肌群和真实动作来源', await page.locator('.training-area-sheet').getByText('臀大肌', { exact: true }).isVisible() && await page.locator('.training-area-sheet').getByText('山羊挺身（臀腿侧重）', { exact: true }).isVisible());
   await screenshot('area-detail');
+  // 公共弹层保留 700ms 防误触关闭窗口，与真实用户看完详情再关闭一致。
+  await page.waitForTimeout(800);
   await page.getByRole('button', { name: '关闭部位详情', exact: true }).click();
+  await page.locator('.sheet-wrap').waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: '间隔', exact: true }).click();
   check('臀腿练法参与腿部训练间隔', (await page.locator('[data-group="leg"]').innerText()).includes('今天'));
   const roundtrip = await page.evaluate(async () => {

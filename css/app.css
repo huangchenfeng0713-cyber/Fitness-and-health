@@ -3280,25 +3280,17 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .plan-row-actions { flex: none; display: flex; align-items: center; gap: var(--space-1); }
 .plan-remove { color: var(--muted); font-weight: var(--w-regular); }
 .plan-remove:active { color: var(--danger); }
-/*
- * 组数编辑器缩在动作名下面（索引圆点 22 + 行内 gap 8），不是顶回卡片左边缘。
- *
- * 它是**某一个动作**的展开层，摊平之后和「今日动作」的标题、日期摘要
- * 起在同一条线上，读出来是卡片自己多长了一段，看不出在编辑哪一行。
- */
+/* 组表使用动作卡片的完整宽度，共享设置行交代归属，避免窄屏重复缩进。 */
 .training-panel .set-editor { padding: 0 0 var(--space-3); }
 .training-set-draft { padding: var(--space-3); margin-block: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 .training-last-sets { margin-block: var(--space-2); overflow-wrap: anywhere; }
 .training-last-sets > summary { min-height: 44px; padding-block: var(--space-2); cursor: pointer; }
-.quick-weight-card p { margin: 0; font-variant-numeric: tabular-nums; }
 .training-edit-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
 .training-edit-actions .secondary-btn { margin-top: 0; }
 .training-add { width: 100%; margin-top: var(--space-3); }
 .training-load-note { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); margin-top: var(--space-3); }
 .training-load-note > span { min-width: 0; overflow-wrap: anywhere; }
 .training-panel .tip-action { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
-.training-advice > summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); cursor: pointer; }
-.training-advice > summary span { color: var(--muted); font-size: var(--fs-footnote); }
 .training-advice .insight-list { margin-top: var(--space-3); }
 .training-log-day h4 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-body); }
 .training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
@@ -3337,11 +3329,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
   .training-panel .set-editor { padding-left: 0; }
 }
 
-/* 记录扩展沿用表单与卡片规范；次要字段按需展开。 */
-.training-set-options, .training-area-details { margin: var(--space-2) 0; }
-.training-set-options > summary, .training-area-details > summary { font-size: var(--fs-footnote); color: var(--muted); cursor: pointer; padding: var(--space-2) 0; min-height: 44px; overflow-wrap: anywhere; }
 .training-last-sets > summary { font-size: var(--fs-body); }
-.training-set-options .form-grid { margin-top: var(--space-2); }
 .training-recorded-set { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
 .training-budget { margin-bottom: var(--space-3); }
 .rec-reason { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }

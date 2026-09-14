@@ -45,7 +45,7 @@ try {
   const first = (await saved())[0];
   check('新确认记录默认正式组，保留自重与完成状态', first.completed && first.setType === 'work' && first.loadMode === 'bodyweight' && first.weightKg === null);
   await page.getByRole('button', { name: '再加一组', exact: true }).click();
-  await page.getByRole('button', { name: /记录设置$/ }).click();
+  await page.getByRole('button', { name: '双杠臂屈伸（前倾） 记录设置', exact: true }).click();
   await page.getByLabel('记录方式', { exact: true }).selectOption('time');
   await page.getByRole('button', { name: '保存设置', exact: true }).click();
   await draft.getByLabel('待确认时长（秒）', { exact: true }).fill('45');
