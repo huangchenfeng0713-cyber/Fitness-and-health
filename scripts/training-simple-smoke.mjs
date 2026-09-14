@@ -15,6 +15,11 @@ const output = process.env.ARTIFACT_DIR || '/tmp/training-simple';
 await fs.mkdir(output, { recursive: true });
 const screenshot = name => page.screenshot({ path: `${output}/${process.env.BROWSER || 'chromium'}-${name}.png`, fullPage: true, animations: 'disabled' });
 const items = () => page.evaluate(async () => (await import('/js/lib/store.js')).trainingFor('2026-09-13').items);
+const readableValues = () => page.locator('.training-value-cell input').evaluateAll(inputs => inputs.every(input => {
+  const style = getComputedStyle(input), canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+  ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  return ctx.measureText(input.value).width <= input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) + 1;
+}));
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8080');
   await page.waitForSelector('.tab');
@@ -88,10 +93,15 @@ try {
   check('数据页不提供手动记体重', await page.getByRole('button', { name: '记体重', exact: true }).count() === 0);
   await page.locator('.tab').filter({ hasText: '健身' }).click();
   await page.getByRole('tab', { name: '本次训练', exact: true }).click();
+  await lateral.getByRole('button', { name: '记组', exact: true }).click();
   await page.getByRole('button', { name: '再加一组', exact: true }).click();
+  await page.getByLabel('待确认重量（kg）', { exact: true }).fill('120.5');
+  await page.getByLabel('待确认次数', { exact: true }).fill('120');
   for (const width of [320,390,430]) {
     await page.setViewportSize({ width, height: 844 });
     check(`${width}px 组表与输入框没有横向溢出`, await page.locator('.training-sets-table').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+    check(`${width}px 重量和次数文字完整显示`, await readableValues());
+    await page.locator('.training-set-draft').scrollIntoViewIfNeeded();
     await screenshot(`sets-${width}`);
   }
   await page.setViewportSize({ width: 320, height: 844 });
@@ -103,6 +113,7 @@ try {
   });
   check('200% 字号组表保持可操作', await page.locator('.training-sets-table').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
   await page.locator('.training-set-draft').scrollIntoViewIfNeeded();
+  check('200% 字号重量和次数文字完整显示', await readableValues());
   await screenshot('sets-200');
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   check('200% 字号日期与统计没有横向溢出', await page.evaluate(() => [...document.querySelectorAll('.training-date-strip,.training-week-groups')].every(el => el.scrollWidth <= el.clientWidth + 1)));

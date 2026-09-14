@@ -110,6 +110,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('.account-data-lock'));
   await tab('健身');
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
+  await page.getByRole('button', { name: '间隔', exact: true }).click();
   check('刷新后训练记录和统计保留', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('8 天前')));
   check('运行时无JS错误', errors.length === 0);
   console.log(checks + '/' + checks + ' passed');

@@ -3343,7 +3343,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-settings-trigger > span:last-child { flex: none; color: var(--accent); }
 .training-settings-fields { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
 .training-settings-sheet .form-field select { white-space: normal; }
-.training-sets-table { margin-top: var(--space-2); }
+.training-sets-table { margin-top: var(--space-2); container-type: inline-size; }
 .training-panel .set-row, .training-set-head { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 44px; gap: var(--space-2); align-items: center; margin: 0; padding: var(--space-2) 0; }
 .training-panel .training-timed-row { grid-template-columns: 24px minmax(0, 1fr) 44px; }
 .training-set-head { color: var(--muted); font-size: var(--fs-caption); text-align: center; padding-block: var(--space-1); }
@@ -3383,4 +3383,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 @media (max-width: 380px) {
   .training-panel .set-row, .training-set-head { gap: var(--space-1); }
   .training-date-strip { gap: var(--space-0); }
+}
+
+/* 以当前字号衡量可用宽度：放大文字时两项数值上下排列，保留完整数字。 */
+@container (width < 18em) {
+  .training-set-head { display: none; }
+  .training-panel .set-row { grid-template-columns: 24px minmax(0, 1fr) 44px; }
+  .set-row > .training-value-cell, .set-row > .training-bodyweight { grid-column: 2; }
+  .set-row > .set-index { grid-column: 1; grid-row: 1 / span 2; }
+  .set-row > .training-set-status, .set-row > .training-set-confirm { grid-column: 3; grid-row: 1 / span 2; }
 }

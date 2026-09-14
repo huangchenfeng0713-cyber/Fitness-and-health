@@ -2065,10 +2065,10 @@ test('同一个选择器不许把同一个属性写两遍', () => {
    */
   const css = read('css/app.css');
   const noComment = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  // 把 @media / @supports 整段跳过
+  // 条件式响应布局允许覆写：把 @media / @supports / @container 整段跳过
   let rest = '';
   for (let i = 0; i < noComment.length;) {
-    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i) || noComment.startsWith('@keyframes', i)) {
+    if (noComment.startsWith('@media', i) || noComment.startsWith('@supports', i) || noComment.startsWith('@container', i) || noComment.startsWith('@keyframes', i)) {
       let depth = 0;
       let j = i;
       for (; j < noComment.length; j += 1) {

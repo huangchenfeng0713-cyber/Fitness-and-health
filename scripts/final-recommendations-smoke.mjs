@@ -65,7 +65,7 @@ try {
   check('逐组展示次数，零和未知重量保持区分', (await page.locator('.training-last-sets').innerText()).includes('重量未填 × 12 次') && (await page.locator('.training-last-sets').innerText()).includes('0 kg × 10 次'));
   const todayItems = () => page.evaluate(async () => (await import('/js/lib/store.js')).trainingFor('2026-09-12').items);
   await page.getByRole('button', { name: '加第一组', exact: true }).click();
-  check('首组历史预填不落库、不计完成', (await todayItems())[0].sets.length === 0 && await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).inputValue() === '12');
+  check('沿用上次末组次数，草稿不落库、不计完成', (await todayItems())[0].sets.length === 0 && await page.getByRole('spinbutton', { name: '待确认次数', exact: true }).inputValue() === '10');
   await page.getByRole('button', { name: '确认记录这一组', exact: true }).click();
   await page.getByText('已记录 1 组', { exact: true }).waitFor();
   check('确认后保存次数，未填重量仍为 null', (await todayItems())[0].sets[0].weightKg === null);
@@ -76,7 +76,7 @@ try {
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   check('训练历史只展开选中日期', await page.locator('.training-date').count() === 7 && await page.locator('.training-log-day .log-row').count() === 1);
   await page.locator('.training-log-day .log-row').click();
-  check('动作详情显示实际次数', (await page.locator('.log-sets').innerText()).includes('12 次'));
+  check('动作详情显示实际次数', (await page.locator('.log-sets').innerText()).includes('10 次'));
   await page.locator('.tab').filter({ hasText: '今日' }).click();
   check('今日页不再提供记体重入口', await page.getByRole('button', { name: '记体重', exact: true }).count() === 0);
   const weight = await page.evaluate(async () => {
