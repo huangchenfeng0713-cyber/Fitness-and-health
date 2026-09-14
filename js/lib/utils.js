@@ -162,10 +162,27 @@ function placeInfoTip(details) {
   const margin = 12;
   const gap = 8;
   const sheet = details.closest('.sheet')?.getBoundingClientRect();
+  /*
+   * 「看得见的区域」不等于视口。
+   *
+   * 应用外壳上下各钉着一根横条（顶栏、底部四栏，以及健身页选动作时那条多选条），
+   * 它们盖在内容上面。只按视口底边夹的话，靠近页面底部的说明层会滑到底栏**后面** ——
+   * 实测「已录负荷量」那条：面板 755–816，而底栏顶在 779，最后 37px 读不到。
+   * 弹层里的说明层不受这条影响（`.sheet` 自己就把边界收窄了），所以只在没有弹层
+   * 祖先时才去量这几根横条。
+   */
+  const barTop = sheet ? Infinity : Math.min(...['#actionbar', '.tabbar']
+    .map((sel) => document.querySelector(sel))
+    .filter((el) => el && !el.hidden && el.getBoundingClientRect().height > 0)
+    .map((el) => el.getBoundingClientRect().top), Infinity);
+  const headBottom = sheet ? -Infinity : Math.max(...['.topbar']
+    .map((sel) => document.querySelector(sel))
+    .filter((el) => el && el.getBoundingClientRect().height > 0)
+    .map((el) => el.getBoundingClientRect().bottom), -Infinity);
   const leftEdge = Math.max(viewport.left, sheet?.left ?? viewport.left) + margin;
-  const topEdge = Math.max(viewport.top, sheet?.top ?? viewport.top) + margin;
+  const topEdge = Math.max(viewport.top, sheet?.top ?? viewport.top, headBottom) + margin;
   const rightEdge = Math.min(viewport.left + viewport.width, sheet?.right ?? Infinity) - margin;
-  const bottomEdge = Math.min(viewport.top + viewport.height, sheet?.bottom ?? Infinity) - margin;
+  const bottomEdge = Math.min(viewport.top + viewport.height, sheet?.bottom ?? Infinity, barTop) - margin;
   const anchor = summary.getBoundingClientRect();
 
   /*

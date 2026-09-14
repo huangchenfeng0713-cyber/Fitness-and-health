@@ -1032,6 +1032,7 @@ export const FOODS = [
   { id: 'wugu_daochang', name: '五谷道场 非油炸面', alias: 'wugudaochang feiyouzha', cat: 'staple', n: [340, 10.0, 3.0, 68.0, 3.0, 3.0, 1400], s: [['一份', 100]], f: ['quick', 'refined', 'processed', 'est', 'instant'] },
   { id: 'lamian_shuo', name: '拉面说 日式豚骨拉面', alias: 'lamianshuo', cat: 'staple', n: [188, 6.7, 5.8, 26.7, 1.2, 2.1, 792], s: [['一份', 240]], f: ['quick', 'refined', 'processed', 'est', 'instant'] },
   { id: 'ksf_bowl_noodle', name: '康师傅 面霸/大食桶', alias: 'kangshifu mianba dashitong', cat: 'staple', n: [462, 9.1, 18.2, 64.3, 2.1, 4.2, 1748], s: [['一桶', 143]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
+  { id: 'ksf_banmian', name: '康师傅 拌面', alias: 'kangshifu banmian 干拌面 拌面', cat: 'staple', n: [490, 9.0, 22.0, 63.0, 2.0, 5.0, 1500], s: [['一袋', 125]], note: '按康师傅袋装干拌面的通用配方估算，没有指定具体口味；酱包用量不同，脂肪和钠会明显差开', f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
   { id: 'suanlafen_bag', name: '嗨吃家 酸辣粉（桶装）', alias: 'haichijia suanlafen', cat: 'staple', n: [311, 4.4, 7.4, 56.3, 1.5, 4.4, 1407], s: [['一桶', 135]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
   { id: 'luosifen_bag', name: '螺蛳粉（袋装）', alias: 'luosifen daizhuang', cat: 'staple', n: [160, 3.7, 4.7, 26.0, 1.3, 1.7, 700], s: [['一袋', 300]], f: ['quick', 'fried', 'refined', 'processed', 'est', 'instant'] },
 

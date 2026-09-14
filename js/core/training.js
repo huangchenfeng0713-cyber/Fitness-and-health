@@ -215,7 +215,14 @@ export function exercisesForGroup(groupKey) {
  */
 const GROUP_STARTER_PATTERNS = Object.freeze({
   chest: ['horizontal_push', 'incline_push', 'chest_fly', 'dip'],
-  shoulder: ['vertical_push', 'lateral_raise', 'rear_delt', 'elbow_flexion', 'elbow_extension'],
+  /*
+   * 肩只有三个模式，就给三个。臂拆出去之后这儿原先还留着 elbow_flexion /
+   * elbow_extension 两个槽 —— 动作已经不在这一组里，槽填不满，`comboForPatterns`
+   * 就拿侧平举把它凑满了：一份推荐里出现两个 lateral_raise。
+   * 而前推 + 侧举 + 后束本来就是肩的全部，凑第四个只会是同一种刺激再来一遍。
+   */
+  shoulder: ['vertical_push', 'lateral_raise', 'rear_delt'],
+  arm: ['elbow_flexion', 'elbow_extension', 'dip', 'horizontal_push'],
   back: ['vertical_pull', 'horizontal_pull', 'hinge', 'pullover'],
   leg: ['squat', 'hinge', 'lunge', 'leg_curl', 'calf_raise'],
   core: ['anti_extension', 'trunk_flexion', 'anti_lateral', 'anti_rotation'],
@@ -699,12 +706,14 @@ export function appendConfirmedSets(item, draft, date) {
 export const MIN_TRAINING_DAYS_FOR_GAP = 3;
 
 // 展示分组独立于动作库的旧 group 键，保留 ID、搜索与模式兼容。
-export const TRAINING_AREAS = [
-  ...GROUPS.filter(g => g.key === 'chest' || g.key === 'back'),
-  { key: 'shoulder', label: '肩', muscles: ['delt_front','delt_side','delt_rear'] },
-  { key: 'arm', label: '臂', muscles: ['biceps','triceps','forearm'] },
-  ...GROUPS.filter(g => g.key === 'leg' || g.key === 'core'),
-];
+/*
+ * 统计用的部位就是挑动作用的那六个，一份定义。
+ *
+ * 这儿原先手写了一份把肩和臂拆开的表，而 GROUPS 里还合成一个「肩臂」——
+ * 同一套部位两份定义，只在「臂算不算独立部位」上不一致，于是挑动作时看到的
+ * 是五档、看统计时是六档。GROUPS 拆开之后这份就没有存在的理由了。
+ */
+export const TRAINING_AREAS = GROUPS;
 const ARM_AREAS = [
   { key: 'biceps', label: '二头', muscles: ['biceps'] },
   { key: 'triceps', label: '三头', muscles: ['triceps'] },

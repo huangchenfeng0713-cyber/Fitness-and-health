@@ -40,10 +40,23 @@ export const PATTERNS = {
   lateral_flexion: '躯干侧屈',
 };
 
-/** 五大部位。臂并进肩，和用户的分法一致 */
+/*
+ * 六大部位。**肩和臂是分开的两个部位。**
+ *
+ * 原先合成一个「肩臂」，代价在两头都疼：挑动作时那一档里躺着 31 个动作
+ * （13 个肩 + 18 个臂），练肩得先划过一堆弯举；统计那头又必须分开看
+ * ——「今天练了肩」和「今天练了臂」不是同一件事，所以 `core/training.js`
+ * 另手写了一份拆开的 `TRAINING_AREAS`。同一套部位在应用里有两份定义，
+ * 而它们只在「臂算不算独立部位」这一点上不一致。现在只有这一份，
+ * `TRAINING_AREAS` 直接就是它。
+ *
+ * 拆得干净：31 个动作里没有一个的主动肌同时落在三角肌和臂上
+ * （`test/training.test.js` 那条「group 必须包含至少一块主动肌」照旧管着）。
+ */
 export const GROUPS = [
   { key: 'chest', label: '胸', muscles: ['pec_upper', 'pec_mid', 'pec_lower'] },
-  { key: 'shoulder', label: '肩臂', muscles: ['delt_front', 'delt_side', 'delt_rear', 'triceps', 'biceps', 'forearm'] },
+  { key: 'shoulder', label: '肩', muscles: ['delt_front', 'delt_side', 'delt_rear'] },
+  { key: 'arm', label: '臂', muscles: ['biceps', 'triceps', 'forearm'] },
   { key: 'back', label: '背', muscles: ['lat', 'trap_mid', 'rhomboid', 'trap_upper', 'erector'] },
   { key: 'leg', label: '腿', muscles: ['quad', 'ham', 'glute', 'adductor', 'abductor', 'calf'] },
   { key: 'core', label: '腹', muscles: ['abs', 'oblique', 'deep_core', 'hip_flexor'] },
@@ -78,7 +91,7 @@ export const EXERCISES = [
   X('assisted_dip_machine', '助力双杠臂屈伸器械', 'zhuli shuanggang biqushen assisted dip machine', 'chest', 'dip', ['pec_lower'], ['triceps', 'delt_front'], 'machine'),
   X('cable_crossover_high', '高位绳索交叉夹胸', 'gaowei shengsuo jiaocha jiaxiong cable crossover', 'chest', 'chest_fly', ['pec_lower'], ['pec_mid'], 'cable', false),
 
-  // ---------------- 肩（臂） ----------------
+  // ---------------- 肩 / 臂 ----------------
   X('ohp_bb', '杠铃站姿推举', 'gangling zhanzi tuiju overhead press', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps', 'deep_core'], 'barbell'),
   X('ohp_db', '哑铃坐姿推举', 'yaling zuozi tuiju dumbbell press', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps'], 'dumbbell'),
   X('shoulder_press_machine', '坐姿推肩器械', 'zuozi tuijian machine', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps'], 'machine'),
@@ -90,29 +103,29 @@ export const EXERCISES = [
   X('reverse_pec_deck', '反向蝴蝶机', 'fanxiang hudieji reverse pec deck', 'shoulder', 'rear_delt', ['delt_rear'], ['trap_mid'], 'machine', false),
   X('face_pull', '绳索面拉', 'shengsuo mianla face pull', 'shoulder', 'rear_delt', ['delt_rear'], ['trap_mid', 'rhomboid'], 'cable', false),
   X('front_raise', '哑铃前平举', 'yaling qianpingju front raise', 'shoulder', 'lateral_raise', ['delt_front'], [], 'dumbbell', false),
-  X('triceps_pushdown', '绳索下压', 'shengsuo xiaya triceps pushdown', 'shoulder', 'elbow_extension', ['triceps'], [], 'cable', false),
-  X('skull_crusher', '仰卧臂屈伸', 'yangwo biqushen skull crusher', 'shoulder', 'elbow_extension', ['triceps'], [], 'barbell', false),
-  X('overhead_triceps', '过顶臂屈伸', 'guoding biqushen overhead extension', 'shoulder', 'elbow_extension', ['triceps'], [], 'dumbbell', false),
-  X('dip_triceps', '双杠臂屈伸（直立）', 'shuanggang biqushen zhili dip', 'shoulder', 'dip', ['triceps'], ['pec_lower', 'delt_front'], 'bodyweight'),
-  X('close_grip_bench', '窄距卧推', 'zhaiju wotui close grip', 'shoulder', 'horizontal_push', ['triceps'], ['pec_mid', 'delt_front'], 'barbell'),
-  X('curl_bb', '杠铃弯举', 'gangling wanju barbell curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'barbell', false),
-  X('curl_db', '哑铃弯举', 'yaling wanju dumbbell curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
-  X('hammer_curl', '锤式弯举', 'chuishi wanju hammer curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
-  X('preacher_curl', '牧师凳弯举', 'mushideng wanju preacher curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'barbell', false),
-  X('incline_curl', '上斜哑铃弯举', 'shangxie yaling wanju incline curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
+  X('triceps_pushdown', '绳索下压', 'shengsuo xiaya triceps pushdown', 'arm', 'elbow_extension', ['triceps'], [], 'cable', false),
+  X('skull_crusher', '仰卧臂屈伸', 'yangwo biqushen skull crusher', 'arm', 'elbow_extension', ['triceps'], [], 'barbell', false),
+  X('overhead_triceps', '过顶臂屈伸', 'guoding biqushen overhead extension', 'arm', 'elbow_extension', ['triceps'], [], 'dumbbell', false),
+  X('dip_triceps', '双杠臂屈伸（直立）', 'shuanggang biqushen zhili dip', 'arm', 'dip', ['triceps'], ['pec_lower', 'delt_front'], 'bodyweight'),
+  X('close_grip_bench', '窄距卧推', 'zhaiju wotui close grip', 'arm', 'horizontal_push', ['triceps'], ['pec_mid', 'delt_front'], 'barbell'),
+  X('curl_bb', '杠铃弯举', 'gangling wanju barbell curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'barbell', false),
+  X('curl_db', '哑铃弯举', 'yaling wanju dumbbell curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
+  X('hammer_curl', '锤式弯举', 'chuishi wanju hammer curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
+  X('preacher_curl', '牧师凳弯举', 'mushideng wanju preacher curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'barbell', false),
+  X('incline_curl', '上斜哑铃弯举', 'shangxie yaling wanju incline curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'dumbbell', false),
   X('shrug_db', '哑铃耸肩', 'yaling songjian shrug', 'back', 'shrug', ['trap_upper'], [], 'dumbbell', false),
-  X('wrist_curl', '腕弯举', 'wan wanju wrist curl', 'shoulder', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
+  X('wrist_curl', '腕弯举', 'wan wanju wrist curl', 'arm', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
   X('smith_ohp', '史密斯推肩', 'shimisi tuijian smith shoulder press', 'shoulder', 'vertical_push', ['delt_front'], ['delt_side', 'triceps'], 'machine'),
   X('shrug_machine', '器械耸肩', 'qixie songjian shrug machine', 'back', 'shrug', ['trap_upper'], [], 'machine', false),
   X('shrug_bb', '杠铃耸肩', 'gangling songjian barbell shrug', 'back', 'shrug', ['trap_upper'], ['forearm'], 'barbell', false),
-  X('triceps_extension_machine', '坐姿臂屈伸器械', 'zuozi biqushen triceps extension machine', 'shoulder', 'elbow_extension', ['triceps'], [], 'machine', false),
-  X('curl_machine', '坐姿弯举器械', 'zuozi wanju biceps curl machine', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
-  X('preacher_curl_machine', '器械牧师凳弯举', 'qixie mushideng wanju preacher curl machine', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
-  X('cable_curl', '绳索弯举', 'shengsuo wanju cable curl', 'shoulder', 'elbow_flexion', ['biceps'], ['forearm'], 'cable', false),
-  X('overhead_triceps_cable', '绳索过顶臂屈伸', 'shengsuo guoding biqushen overhead cable extension', 'shoulder', 'elbow_extension', ['triceps'], [], 'cable', false),
+  X('triceps_extension_machine', '坐姿臂屈伸器械', 'zuozi biqushen triceps extension machine', 'arm', 'elbow_extension', ['triceps'], [], 'machine', false),
+  X('curl_machine', '坐姿弯举器械', 'zuozi wanju biceps curl machine', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
+  X('preacher_curl_machine', '器械牧师凳弯举', 'qixie mushideng wanju preacher curl machine', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'machine', false),
+  X('cable_curl', '绳索弯举', 'shengsuo wanju cable curl', 'arm', 'elbow_flexion', ['biceps'], ['forearm'], 'cable', false),
+  X('overhead_triceps_cable', '绳索过顶臂屈伸', 'shengsuo guoding biqushen overhead cable extension', 'arm', 'elbow_extension', ['triceps'], [], 'cable', false),
   X('upright_row_cable', '绳索直立划船', 'shengsuo zhili huachuan upright row', 'shoulder', 'lateral_raise', ['delt_side'], ['trap_upper', 'biceps'], 'cable', false),
-  X('reverse_curl', '反握弯举', 'fanwo wanju reverse curl', 'shoulder', 'elbow_flexion', ['forearm'], ['biceps'], 'barbell', false),
-  X('wrist_curl_reverse', '反向腕弯举', 'fanxiang wan wanju reverse wrist curl', 'shoulder', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
+  X('reverse_curl', '反握弯举', 'fanwo wanju reverse curl', 'arm', 'elbow_flexion', ['forearm'], ['biceps'], 'barbell', false),
+  X('wrist_curl_reverse', '反向腕弯举', 'fanxiang wan wanju reverse wrist curl', 'arm', 'elbow_flexion', ['forearm'], [], 'dumbbell', false),
 
   // ---------------- 背 ----------------
   X('pullup', '引体向上', 'yintixiangshang pullup', 'back', 'vertical_pull', ['lat'], ['biceps', 'rhomboid', 'forearm'], 'bodyweight'),
