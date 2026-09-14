@@ -363,7 +363,7 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  *  - replacements 已选里有高度重合的一对时，给出「换掉哪个、换成什么」
  */
 export function recommendFor({
-  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', seed = 0, target = 'all', sessions = [], endDate = null, minutes = null, setBudget = null, setsPerExercise = 3,
+  mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', target = 'all', sessions = [], endDate = null, minutes = null, setBudget = null, setsPerExercise = 3,
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
@@ -404,14 +404,28 @@ export function recommendFor({
       histories.set(item.id, { count: old.count + 1, lastDate: [old.lastDate, raw.date].sort().at(-1) });
     }
   }
-  const weeklyPatterns = new Set(sessions.filter(s => validTrainingDate(endDate) && validTrainingDate(s?.date) && s.date <= endDate && dayOffset(endDate, s.date) < 7)
-    .flatMap(s => normalizeSession(s).items.map(item => exerciseForRecord(item).pattern)));
-  // 初始候选保持稳定；同模式优先近期常练动作，不每天机械轮换变式。
+  const thisWeek = sessions.filter(s => validTrainingDate(endDate) && validTrainingDate(s?.date)
+    && s.date <= endDate && dayOffset(endDate, s.date) < 7);
+  const weeklyPatterns = new Set(thisWeek.flatMap(s => normalizeSession(s).items.map(item => exerciseForRecord(item).pattern)));
+  // 本周已经练过的**具体动作**，不只是模式
+  const weeklyExercises = new Set(thisWeek.flatMap(s => normalizeSession(s).items.filter(isRecordedItem).map(item => item.id)));
   const combo = [];
   for (const pattern of [...missingPatterns].sort((a, b) => Number(weeklyPatterns.has(a)) - Number(weeklyPatterns.has(b)))) {
     if (combo.length >= size || remainingSets <= 0) break;
+    /*
+     * **「本周还没练过」先于「你最常练」。**
+     *
+     * 这一栏回答的是「今天练什么」，而排序原先只按熟悉度（近 28 日记录天数），
+     * 于是越常做什么越推什么 —— 你越常做什么越推什么，等于把这栏变成习惯的回声。
+     * 「本周没练过」这件事代码里本来就算出来了（`weeklyPatterns`），
+     * 可它只用来排**模式**的先后，挑具体动作时又退回了熟悉度：
+     * 实测「腿」那一屏，深蹲这个模式因为两天前练过被排到后面（对的），
+     * 可轮到它的时候第一个仍然是那天练的哈克深蹲本身。
+     * 现在按动作也过一遍同一把尺子，熟悉度退为同档之内的次序。
+     */
     const options = candidates.filter(e => e.pattern === pattern && !combo.some(c => overlapLevel(overlapScore(e, c)) === 'high'))
-      .sort((a, b) => (histories.get(b.id)?.count || 0) - (histories.get(a.id)?.count || 0)
+      .sort((a, b) => Number(weeklyExercises.has(a.id)) - Number(weeklyExercises.has(b.id))
+        || (histories.get(b.id)?.count || 0) - (histories.get(a.id)?.count || 0)
         || (histories.get(b.id)?.lastDate || '').localeCompare(histories.get(a.id)?.lastDate || ''));
     if (!options.length) continue;
     const exercise = options[0];
@@ -446,9 +460,20 @@ export function recommendFor({
      * 标签和「全部动作」那一列必须一致 —— 两个视图看的是同一批动作，
      * 两个视图都保留细分主练部位，部位筛选不会隐藏动作之间的区域差别。
      */
+    /*
+     * **「上次是哪天」这句由视图决定印不印，core 不把它黏进 reason。**
+     *
+     * 动作行自己就有一条 `上次 09-13 · 60–70kg × 12,12,12,15`（`lastLine`），
+     * 而 reason 原先写成「近 28 日记录 1 天 · 上次 2026-09-13」—— 同一行里
+     * 日期印两遍，还是两种格式，而上面那条信息严格更多（带重量次数）。
+     * 但也不能在这儿一删了事：动作标了完成却一组都没记时 `lastPerformance`
+     * 返回 null，上面那条不出现，日期就只剩这一处了。
+     * 所以 core 给事实（`lastDate`），视图看自己印没印过再决定。
+     */
     items: combo.map((e) => ({
       id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }), suggestedSets: e.suggestedSets,
-      reason: histories.has(e.id) ? `近 28 日记录 ${histories.get(e.id).count} 天 · 上次 ${histories.get(e.id).lastDate}`
+      lastDate: histories.get(e.id)?.lastDate || null,
+      reason: histories.has(e.id) ? `近 28 日记录 ${histories.get(e.id).count} 天`
         : weeklyPatterns.has(e.pattern) ? '本周已安排此模式，可选另一训练日复用' : '近 7 日未安排此模式，可选参考',
     })),
     replacements,

@@ -1,6 +1,6 @@
 import { isRecordedSet, isRecordedItem, trainingSetText } from '../core/training-records.js';
 /** Fitness: today recording and history; action selection is a shared sheet with an explicit commit. */
-import { h, clearEl, mount, num, todayKey, shiftDay, daySeed, toast, runLocalAction, confirmAction } from '../lib/utils.js';
+import { h, clearEl, mount, num, todayKey, shiftDay, toast, runLocalAction, confirmAction } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
 import {
   listRow, persistentInfoTip, searchField, cardHeader, emptyState,
@@ -102,7 +102,7 @@ function currentProposal() {
   if (!proposal || key !== proposalKey) {
     proposalKey = key;
     proposal = recommendFor({ mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-      selection: [...session().items.map(exerciseForRecord), ...pending], equip: equipFilter, seed: daySeed(trainingDay()), target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
+      selection: [...session().items.map(exerciseForRecord), ...pending], equip: equipFilter, target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
   }
   return proposal;
 }
@@ -564,7 +564,7 @@ function setTypeSheet(item, index) {
           ? { ...i, sets: i.sets.map((s, k) => k === index ? { ...s, setType: value, completed: true } : s) } : i), date);
         if (result.ok) closeSheet({ force: true });
       } }, label))),
-    set.rir != null || set.completed === false ? h('p.form-hint', null, setLabel(set)) : null,
+    set.completed === false ? h('p.form-hint', null, setLabel(set)) : null,
     h('button.text-btn.danger', { type: 'button', onclick: async () => {
       let removed;
       const result = await updateSession(items => items.map(i => {
@@ -857,10 +857,19 @@ function recommendBody(rec) {
   const bulk = h('button.secondary-btn.full', { onclick: () => {
     remaining().forEach(item => pending.add(item.id)); rerenderPicker();
   } });
-  const rows = h('div.rec-picks', null, rec.items.map(item => h('div', null,
-    exerciseRow(EXERCISE_BY_ID.get(item.id), rerenderPicker,
-      pickMode === 'group' ? GROUPS.find(group => group.key === activeGroup)?.muscles : null),
-    h('p.form-hint.rec-reason', null, `${item.reason} · 预留 ${item.suggestedSets} 组`))));
+  /*
+   * 动作行自己那条 `上次 09-13 · 60–70kg × 12,12,12,15` 已经把日期说了，
+   * 所以这一句只在它没出现时才补「上次 X」—— 同一行不印两遍同一个日期。
+   */
+  const rows = h('div.rec-picks', null, rec.items.map(item => {
+    const exercise = EXERCISE_BY_ID.get(item.id);
+    const shownAbove = Boolean(lastPerformance(state.trainingDays, item.id, { before: todayKey() }));
+    const last = item.lastDate && !shownAbove ? ` · 上次 ${item.lastDate.slice(5)}` : '';
+    return h('div', null,
+      exerciseRow(exercise, rerenderPicker,
+        pickMode === 'group' ? GROUPS.find(group => group.key === activeGroup)?.muscles : null),
+      h('p.form-hint.rec-reason', null, `${item.reason}${last} · 预留 ${item.suggestedSets} 组`));
+  }));
   rows.refreshSelection = () => {
     const count = remaining().length;
     bulk.hidden = count === 0;
