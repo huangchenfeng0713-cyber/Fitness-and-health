@@ -614,7 +614,6 @@ function manualPanel(rerender) {
     ['activeEnergy', '活动能量', 'kcal'],
     ['exerciseMinutes', '锻炼时间', '分钟'],
     ['sleepMinutes', '睡眠', '小时', 60],
-    ['weightKg', '体重', 'kg'],
     ['bodyFatPct', '体脂率', '%'],
     ['waterMl', '饮水', 'ml'],
   ];

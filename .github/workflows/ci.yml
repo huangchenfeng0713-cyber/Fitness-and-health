@@ -60,7 +60,7 @@ jobs:
       - name: 装 Chromium
         run: |
           npm i --no-save playwright@1.56.0
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
 
       # 页面必须走 http(s)：ES 模块和 Module Worker 在 file:// 下加载不了
       - name: 起静态服务器
@@ -72,7 +72,12 @@ jobs:
           done
 
       - name: 冒烟
+        env:
+          ARTIFACT_DIR: /tmp/training-review
         run: |
+          mkdir -p /tmp/training-review
+          node scripts/training-simple-smoke.mjs http://127.0.0.1:8137
+          BROWSER=webkit node scripts/training-simple-smoke.mjs http://127.0.0.1:8137
           node scripts/smoke.mjs http://127.0.0.1:8137
           node scripts/pwa-upgrade-smoke.mjs http://127.0.0.1:8137
           node scripts/diet-today-smoke.mjs http://127.0.0.1:8137
@@ -84,3 +89,11 @@ jobs:
           node scripts/food-muscle-smoke.mjs http://127.0.0.1:8137
           node scripts/final-recommendations-smoke.mjs http://127.0.0.1:8137
           node scripts/record-quality-smoke.mjs http://127.0.0.1:8137
+
+      - name: 保存训练界面验收截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-review
+          path: /tmp/training-review
+          retention-days: 7

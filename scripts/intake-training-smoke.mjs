@@ -69,6 +69,7 @@ try {
   });
   await tab('健身');
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
+  await page.getByRole('button', { name: '间隔', exact: true }).click();
   check('胸背腿间隔来自记录且空计划不计', await page.locator('.training-coverage').textContent().then(t => t.includes('2 天前') && t.includes('4 天前') && t.includes('8 天前')));
   for (const width of [320, 393, 430]) {
     await page.setViewportSize({ width, height: 852 });
@@ -85,7 +86,8 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-group="leg"]').textContent.includes('今天'));
   check('填写有效训练组后覆盖立即更新', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('1 天')));
   await page.getByRole('tab', { name: '本次训练', exact: true }).click();
-  await page.locator('[aria-label="删除这一组"]').click();
+  await page.getByRole('button', { name: '第 1 组记录设置', exact: true }).click();
+  await page.getByRole('button', { name: '删除这一组', exact: true }).click();
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('[data-group="leg"]').textContent.includes('8 天前'));
   check('删除最后有效组恢复历史间隔', await page.locator('[data-group="leg"]').textContent().then(t => t.includes('0 天')));

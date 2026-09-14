@@ -3286,7 +3286,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
  * 它是**某一个动作**的展开层，摊平之后和「今日动作」的标题、日期摘要
  * 起在同一条线上，读出来是卡片自己多长了一段，看不出在编辑哪一行。
  */
-.training-panel .set-editor { padding: 0 0 var(--space-3) 30px; }
+.training-panel .set-editor { padding: 0 0 var(--space-3); }
 .training-set-draft { padding: var(--space-3); margin-block: var(--space-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 .training-last-sets { margin-block: var(--space-2); overflow-wrap: anywhere; }
 .training-last-sets > summary { min-height: 44px; padding-block: var(--space-2); cursor: pointer; }
@@ -3302,7 +3302,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-advice .insight-list { margin-top: var(--space-3); }
 .training-log-day h4 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-body); }
 .training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-.training-history-card .log-name { min-width: 0; overflow-wrap: anywhere; }
+.training-history-card .log-name { min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .training-history-card .log-meta { white-space: normal; text-align: right; }
 .training-planned { margin-top: var(--space-3); color: var(--muted); font-size: var(--fs-footnote); }
 .training-planned summary { cursor: pointer; display: flex; align-items: center; }
@@ -3348,3 +3348,51 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .diet-completeness { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; }
 .diet-completeness .form-field { flex: 1; min-width: 0; }
 .training-week-groups .coverage-row > * { min-width: 0; overflow-wrap: anywhere; }
+
+/* 高频记组共享同一张表：草稿和已完成组不再使用两套尺寸。 */
+.training-settings-trigger { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-2) 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: var(--fs-footnote); text-align: left; cursor: pointer; }
+.training-settings-trigger > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.training-settings-trigger > span:last-child { flex: none; color: var(--accent); }
+.training-settings-fields { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.training-settings-sheet .form-field select { white-space: normal; }
+.training-sets-table { margin-top: var(--space-2); }
+.training-panel .set-row, .training-set-head { display: grid; grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 44px; gap: var(--space-2); align-items: center; margin: 0; padding: var(--space-2) 0; }
+.training-panel .training-timed-row { grid-template-columns: 24px minmax(0, 1fr) 44px; }
+.training-set-head { color: var(--muted); font-size: var(--fs-caption); text-align: center; padding-block: var(--space-1); }
+.training-value-cell { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; gap: var(--space-0); min-width: 0; }
+.training-value-cell .set-input { width: 100%; min-width: 0; max-width: 100%; min-height: var(--control-inline); box-sizing: border-box; padding: 7px 4px; appearance: textfield; -moz-appearance: textfield; }
+.training-value-cell .set-input::-webkit-inner-spin-button, .training-value-cell .set-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.training-value-cell .set-unit { font-size: var(--fs-caption); line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+.training-bodyweight { text-align: center; color: var(--muted); font-size: var(--fs-footnote); }
+.training-set-status, .training-set-confirm { display: grid; place-items: center; min-width: 0; width: 44px; min-height: 44px; padding: 4px; border: 0; border-radius: var(--r-sm); font: inherit; font-size: var(--fs-caption); cursor: pointer; overflow-wrap: anywhere; }
+.training-set-status svg, .training-set-confirm svg { width: var(--icon-sm); height: var(--icon-sm); }
+.training-set-status { color: var(--accent); background: none; }
+.training-set-confirm { background: var(--accent); color: white; }
+.training-panel .training-set-draft { margin: 0; padding: 0; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+.training-draft-controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-2); padding-bottom: var(--space-2); }
+.training-batch-count { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--muted); font-size: var(--fs-footnote); }
+.training-batch-count select { min-width: 0; max-width: 100%; padding: var(--space-1); font: inherit; font-size: var(--fs-headline); color: var(--text); background: var(--card-2); border: 1px solid var(--border); border-radius: var(--r-sm); }
+.training-history-card .log-meta { flex: 0 0 auto; }
+.training-history-card .log-sets { padding-left: 0; }
+.training-history-card .log-set > span:first-child { flex: none; }
+.training-history-card .log-set > span:last-child { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.training-date-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+.training-date { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2) 0; border: 1px solid transparent; border-radius: var(--r-sm); background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.training-date > span:first-child { font-size: var(--fs-caption); overflow-wrap: anywhere; }
+.training-date strong { font-size: var(--fs-body); }
+.training-date.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.training-date-dot { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+.training-date-dot.has-records { background: currentColor; }
+.training-overview-switch { margin-bottom: var(--space-3); }
+.training-overview-switch .chip-btn { flex: 1; }
+.training-week-groups .coverage-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.training-area-row { width: 100%; background: none; color: var(--text); border: 0; border-bottom: 1px solid var(--border); text-align: left; cursor: pointer; min-height: 44px; }
+.training-area-row > span, .training-week-groups .coverage-heading > span:not(:first-child) { text-align: right; }
+.training-area-sheet .coverage-row { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.training-area-sheet .coverage-row > * { min-width: 0; overflow-wrap: anywhere; }
+.training-area-source { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.training-area-source > span:last-child { color: var(--muted); font-size: var(--fs-footnote); }
+@media (max-width: 380px) {
+  .training-panel .set-row, .training-set-head { gap: var(--space-1); }
+  .training-date-strip { gap: var(--space-0); }
+}
