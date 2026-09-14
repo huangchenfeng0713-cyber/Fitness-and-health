@@ -1,5 +1,6 @@
-import { MUSCLES, MUSCLE_TARGETS, PATTERNS, GROUP_BY_KEY } from '../data/exercises.js';
 /** 组记录契约。上限为输入护栏，不是训练处方或生理极限。 */
+import { MUSCLES, MUSCLE_TARGETS, PATTERNS, GROUP_BY_KEY } from '../data/exercises.js';
+
 export const SET_TYPES = { unknown: '性质未注明', warmup: '热身', work: '正式组' };
 export const LOAD_MODES = { unknown: '重量方式未注明', bodyweight: '自重', external: '附加负重', assistance: '辅助重量', machine: '器械标示' };
 export const LOAD_CONVENTIONS = { unknown: '重量口径未注明', single: '单手／单侧', total: '双手合计', scale: '器械刻度' };

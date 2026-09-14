@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 const { chromium, webkit } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
-const browser = await (process.env.BROWSER === 'webkit' ? webkit : chromium).launch();
+const browser = await (process.env.BROWSER === 'webkit' ? webkit : chromium).launch({ executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Shanghai', locale: 'zh-CN', serviceWorkers: 'block' });
 const page = await context.newPage();
 const errors = []; page.on('pageerror', error => errors.push(error.message));

@@ -85,18 +85,8 @@ jobs:
           exit "$result"
 
       # 只包含脚本创建的合成数据；用于没有本地环境时查看移动端视觉结果。
-      - name: 训练截图预览
-        if: always()
-        run: |
-          python3 - <<'PY'
-          import base64, pathlib
-          root = pathlib.Path('/tmp/training-review')
-          for name in ['chromium-variant-settings', 'chromium-area-detail', 'chromium-sets-320', 'chromium-sets-200', 'webkit-sets-200', 'chromium-history-200']:
-              path = root / (name + '.png')
-              if path.exists():
-                  print('REVIEW_IMAGE:' + name + ':' + base64.b64encode(path.read_bytes()).decode())
-          PY
-
+      # 截图只走 artifact，不往日志里打 base64：六张图 base64 出来是几 MB，
+      # 每次 run 的日志都被它撑满、还会被 GitHub 截断，而 artifact 本来就能下载。
       - name: 保存训练界面验收截图
         if: always()
         uses: actions/upload-artifact@v4
