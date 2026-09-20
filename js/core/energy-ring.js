@@ -102,6 +102,7 @@ function centerOf(ate, burn) {
  */
 export function energyRing({
   eaten = 0, burned = null, target = null, scale = null,
+  balanceAvailable = true, intakeComplete = true, intakeKnown = true, historical = false,
 } = {}) {
   const ate = Math.max(0, n(eaten) || 0);
   const burnRaw = n(burned);
@@ -135,11 +136,11 @@ export function energyRing({
    * 这样「颜色变深了」在环上和图例上说的是同一件事。
    */
   const legend = [
-    { key: 'eaten', track: 'intake', label: '摄入', kcal: Math.round(ate), deep: eatLap.laps >= 1 },
+    { key: 'eaten', track: 'intake', label: intakeComplete ? '摄入' : '已知摄入', kcal: intakeKnown ? Math.round(ate) : null, deep: eatLap.laps >= 1 },
   ];
   if (hasBurn) {
     legend.push({
-      key: 'burned', track: 'burn', label: '当前消耗', kcal: Math.round(burn), deep: burnLap.laps >= 1,
+      key: 'burned', track: 'burn', label: !balanceAvailable ? '已知消耗' : historical ? '当日消耗' : '当前消耗', kcal: Math.round(burn), deep: burnLap.laps >= 1,
     });
   }
 
@@ -152,7 +153,12 @@ export function energyRing({
     segments,
     legend,
     laps: { eaten: eatLap, burned: burnLap },
-    center: centerOf(ate, hasBurn ? burn : null),
+    center: !intakeKnown || !intakeComplete
+      ? { key: 'intake', label: '已知摄入', kcal: intakeKnown ? Math.round(ate) : null }
+      : !balanceAvailable
+        ? goal > 0 ? { key: 'plan', label: '较计划', kcal: Math.round(ate - goal) }
+          : { key: 'intake', label: '已记录摄入', kcal: Math.round(ate) }
+        : { ...centerOf(ate, hasBurn ? burn : null), label: historical ? '当日收支' : '当前收支' },
     /** 相对今日目标还剩多少（负数表示已经超出计划）。界面用圈心，这个数留给测试和提示层 */
     remaining: goal != null ? Math.round(goal - ate) : null,
   };

@@ -637,7 +637,9 @@ export function computeGaps(targets = {}, intake = {}) {
     const known = intake[k] != null && intake[k] !== '' && Number.isFinite(Number(intake[k])) && Number(intake[k]) >= 0;
     const eaten = known ? Number(intake[k]) : 0;
     const complete = known && intake.coverage?.[k]?.complete !== false;
-    out[k] = { target, eaten: round(eaten,1), complete,
+    // 全部缺失的零是累加器初值，不能画成已知的零摄入。
+    const hasKnown = known && (complete || !intake.coverage?.[k] || intake.coverage[k].known > 0);
+    out[k] = { target, eaten: round(eaten,1), complete, known: hasKnown,
       remaining: complete && target != null ? round(target-eaten,1) : null,
       pct: complete && target > 0 ? round(eaten/target*100) : null };
     if (k === 'fat') {

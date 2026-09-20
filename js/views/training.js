@@ -1,5 +1,5 @@
 import { isRecordedSet, isRecordedItem, trainingSetText } from '../core/training-records.js';
-/** Fitness: today recording and history; action selection is a shared sheet with an explicit commit. */
+/** 健身记录可选择补记日期；历史统计仍以真实今天为终点。 */
 import { h, clearEl, mount, num, todayKey, shiftDay, toast, runLocalAction, confirmAction } from '../lib/utils.js';
 import { icon, setIcon } from '../lib/icons.js';
 import {
@@ -36,7 +36,9 @@ let exerciseQuery = '';
 let pending = new Set();
 let pickerBar = null;
 
-const trainingDay = () => todayKey();
+// 补记日期独立于今日/饮食页日期；null 表示持续跟随真实今天。
+let recordingDate = null;
+const trainingDay = () => recordingDate || todayKey();
 const session = () => trainingFor(trainingDay());
 const picked = () => session().items.map((i) => i.id);
 // 复制值只存在于编辑草稿；确认后才写入组记录，刷新/换日不会变成已完成训练。
@@ -179,7 +181,7 @@ function groupTabs(rerender) {
         class: `chip-btn${activeGroup === g.key ? ' active' : ''}`,
         ...segmentedItemProps(activeGroup === g.key),
         // 点是纯装饰，读屏软件按这句话来
-        'aria-label': done ? `${g.label}（今日已安排）` : g.label,
+        'aria-label': done ? `${g.label}（当日已安排）` : g.label,
         onclick: () => { activeGroup = g.key; targetFilter = 'all'; showAllExercises = false; rerender(); },
       }, g.label, done ? h('span.tab-dot', { 'aria-hidden': 'true' }) : null);
     }));
@@ -248,7 +250,7 @@ function exerciseMeta(tags) {
 }
 
 function lastLine(exercise) {
-  const last = lastPerformance(state.trainingDays, exercise.id, { before: todayKey() });
+  const last = lastPerformance(state.trainingDays, exercise.id, { before: trainingDay() });
   if (!last) return null;
   const parts = [last.weightLabel, last.repsLabel && `× ${last.repsLabel}`].filter(Boolean);
   return h('div.ex-last', null, `上次 ${last.date.slice(5)} · ${parts.join(' ')}`);
@@ -686,6 +688,27 @@ function planRow(exercise, index) {
 
 }
 
+function selectTrainingDate(date) {
+  // 原生日期控件之外也做校验，防止空值、未来日期写入记录。
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || shiftDay(date, 0) !== date || date > todayKey()) {
+    toast('请选择今天或过去的日期', 'warn');
+    rerenderTraining();
+    return;
+  }
+  recordingDate = date === todayKey() ? null : date;
+  trainingView = 'current';
+  rerenderTraining();
+}
+
+function trainingDateControl() {
+  const historical = trainingDay() !== todayKey();
+  return h('div.training-recording-date', null,
+    h('label.form-field', null, h('span', null, historical ? '补记日期' : '训练日期'),
+      h('input', { type: 'date', value: trainingDay(), max: todayKey(), 'aria-label': '训练日期',
+        onchange: event => selectTrainingDate(event.currentTarget.value) })),
+    historical ? h('button.text-btn', { type: 'button', onclick: () => selectTrainingDate(todayKey()) }, '回到今天') : null);
+}
+
 function planCard() {
   const list = pickedExercises();
   const add = () => h('button.secondary-btn.training-add', { onclick: openPicker }, pending.size ? `继续选择 · 待加入 ${pending.size}` : '添加动作');
@@ -705,7 +728,7 @@ function planCard() {
         persistentInfoTip('training-empty-brief', '这两行是怎么来的',
           '只统计已记录组数或标记完成的动作，按主练部位归类；未记录不代表没有训练。'),
       ] : [] }),
-      emptyState('今天还没有安排动作。',
+      emptyState(trainingDay() === todayKey() ? '今天还没有安排动作。' : '这一天还没有安排动作。',
         h('div.training-empty-body', null,
           brief ? h('div.week-rows.training-brief', null, brief.rows.map(r => h('div.week-row', null,
             h('span.week-row-label', null, r.label),
@@ -723,7 +746,7 @@ function planCard() {
           removed = items.map((item, index) => ({ item: cloneTrainingItem(item), index }));
           return [];
         }, date);
-        if (result.ok && removed) toast('已清空今日动作', 'info', { label: '撤销', onClick: () => restoreRemoved(removed, date) });
+        if (result.ok && removed) toast(`已清空 ${date} 的动作`, 'info', { label: '撤销', onClick: () => restoreRemoved(removed, date) });
       } }, '清空')] }),
     h('div.plan-list', null, list.map((e, i) => planRow(e, i))),
     add(),
@@ -749,7 +772,7 @@ async function replaceExercise(action) {
   if (result.ok) toast('已替换动作', 'info', { label: '撤销', onClick: () => updateSession(items => {
     if (inserted) {
       const added = items.find(i => i.id === action.id);
-      if (added?.sets.length || added?.done) throw Object.assign(new Error('新动作已有记录，未覆盖。请在今日动作中核对。'), { name: 'TrainingConflictError' });
+      if (added?.sets.length || added?.done) throw Object.assign(new Error('新动作已有记录，未覆盖。请在对应日期的动作中核对。'), { name: 'TrainingConflictError' });
     }
     return restoreTrainingItems(inserted ? items.filter(i => i.id !== action.id) : items, [{ item: original, index }]);
   }, date) });
@@ -768,7 +791,7 @@ function adviceCard() {
 }
 
 function coverageTable() {
-  const model = trainingCoverage(state.trainingDays, trainingDay());
+  const model = trainingCoverage(state.trainingDays, todayKey());
   return h('div.training-coverage', null,
     h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '最近记录'), h('span', null, '近7日')),
     model.groups.map(g => h('div.coverage-row', { 'data-group': g.key },
@@ -780,18 +803,19 @@ let historyDate = null;
 let overviewMode = 'sets';
 let plannedOpen = false;
 function weeklyCard() {
-  const model = trainingHistoryDays(state.trainingDays, trainingDay(), historyDate);
+  const model = trainingHistoryDays(state.trainingDays, todayKey(), historyDate);
   historyDate = model.selected;
   const recorded = model.rows.filter(isRecordedItem), planned = model.rows.filter(row => !isRecordedItem(row));
   return h('section.card.training-history-card', null,
-    cardHeader('近 7 日训练记录', { summary: `${shiftDay(trainingDay(), -6)} 至 ${trainingDay()}` }),
+    cardHeader('近 7 日训练记录', { summary: `${shiftDay(todayKey(), -6)} 至 ${todayKey()}` }),
     h('div.training-date-strip', { role: 'group', 'aria-label': '选择训练日期' }, model.days.map(day => h('button.training-date', {
       type: 'button', 'aria-pressed': String(day.date === historyDate),
       'aria-label': `${day.date}${day.recorded ? ' 有训练记录' : ' 暂无记录'}`,
       class: day.date === historyDate ? 'active' : '', onclick: () => { historyDate = day.date; expandedRow = null; plannedOpen = false; rerenderTraining(); },
-    }, h('span', null, day.date === trainingDay() ? '今天' : ['日','一','二','三','四','五','六'][new Date(day.date + 'T12:00:00').getDay()]),
+    }, h('span', null, day.date === todayKey() ? '今天' : ['日','一','二','三','四','五','六'][new Date(day.date + 'T12:00:00').getDay()]),
       h('strong', null, day.date.slice(8)), h('span.training-date-dot', { class: day.recorded ? 'has-records' : '', 'aria-hidden': 'true' })))),
     h('div.training-log-day', null, h('h4', null, `${historyDate} · ${recorded.length} 个动作`),
+      h('button.text-btn', { type: 'button', onclick: () => selectTrainingDate(historyDate) }, '补记 / 编辑这一天'),
       recorded.length ? h('div.log-list', null, recorded.map(r => {
         const key = `${historyDate}:${r.id}`, open = expandedRow === key, validSets = r.sets.filter(isRecordedSet);
         return h('div.log-item', null,
@@ -805,7 +829,7 @@ function weeklyCard() {
 }
 
 function showAreaDetail(area) {
-  const detail = trainingAreaDetail(state.trainingDays, trainingDay(), area.key);
+  const detail = trainingAreaDetail(state.trainingDays, todayKey(), area.key);
   openSheet(h('div.training-area-sheet', null,
     cardHeader(`${area.label} · 近7日`),
     detail.muscles.length ? [
@@ -818,7 +842,7 @@ function showAreaDetail(area) {
 }
 
 function weeklyGroupsCard() {
-  const model = weeklyTrainingSummary(state.trainingDays, trainingDay());
+  const model = weeklyTrainingSummary(state.trainingDays, todayKey());
   return h('section.card.training-week-groups', null,
     cardHeader('近 7 日训练概览', { summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
       persistentInfoTip('training-week-groups-method', '训练统计说明',
@@ -863,7 +887,7 @@ function recommendBody(rec) {
    */
   const rows = h('div.rec-picks', null, rec.items.map(item => {
     const exercise = EXERCISE_BY_ID.get(item.id);
-    const shownAbove = Boolean(lastPerformance(state.trainingDays, item.id, { before: todayKey() }));
+    const shownAbove = Boolean(lastPerformance(state.trainingDays, item.id, { before: trainingDay() }));
     const last = item.lastDate && !shownAbove ? ` · 上次 ${item.lastDate.slice(5)}` : '';
     return h('div', null,
       exerciseRow(exercise, rerenderPicker,
@@ -896,20 +920,20 @@ export function renderTraining(root) {
       const context = `${account.user?.id || 'local'}:${Boolean(account.ownershipPending)}`;
       if (accountContext !== context) {
         setDrafts.clear(); disclosureState.clear(); resetDisclosures = true; historyDate = null; expandedRow = null;
-        pending.clear(); proposal = null;
+        pending.clear(); proposal = null; recordingDate = null;
         accountContext = context;
       }
     });
   }
   const date = trainingDay();
   if (uiDay !== date) {
-    setDrafts.clear(); disclosureState.clear(); resetDisclosures = true; historyDate = null; expandedRow = null;
+    disclosureState.clear(); resetDisclosures = true; historyDate = null; expandedRow = null;
     uiDay = date; pending.clear(); proposal = null; expanded = null;
     if (pickerRoot?.isConnected) closeSheet({ force: true });
   }
   rerenderTraining = () => renderTraining(root);
   const liveDraftKeys = new Set(session().items.map(item => draftKey(item.id)));
-  for (const key of setDrafts.keys()) if (!liveDraftKeys.has(key)) setDrafts.delete(key);
+  for (const key of setDrafts.keys()) if (key.startsWith(`${date}:`) && !liveDraftKeys.has(key)) setDrafts.delete(key);
   if (!resetDisclosures) root.querySelectorAll('[data-training-disclosure]').forEach(el => disclosureState.set(el.dataset.trainingDisclosure, el.open));
   resetDisclosures = false;
   clearEl(root);
@@ -922,5 +946,5 @@ export function renderTraining(root) {
       onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
     }, label)));
   mount(root, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
-    trainingView === 'current' ? [planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard()]));
+    trainingView === 'current' ? [trainingDateControl(), planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard()]));
 }

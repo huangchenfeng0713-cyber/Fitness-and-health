@@ -161,7 +161,11 @@ export function energyObservation(row = {}, day = row.date, now = new Date()) {
    * 定义这一天覆盖到哪儿的本来就是静息那条连续信号（`energyCoverage` 也取自它）。
    */
   const coverageEnd = observedAt || fields.restingEnergy?.observedAt || null;
+  // 展示允许保留部分日、过期或截止时间不齐的已知值；建议与基线仍只用 valid。
+  const displayFields = list.filter(f => f.value != null &&
+    ['valid', 'partial', 'stale', 'missing-time', 'unknown-coverage'].includes(f.status));
   return { fields, dateMode, valid, status, reason: reasonFor(status, coverageEnd), observedAt,
+    knownBurnedNow: displayFields.length ? displayFields.reduce((sum, f) => sum + f.value, 0) : null,
     burnedNow: valid ? list.reduce((sum, f) => sum + f.value, 0) : null,
     complete: valid && list.every(f => f.complete),
     dayFraction: observedAt && end > start ? Math.min(1, Math.max(0, (Date.parse(observedAt) - start) / (end - start))) : null,
