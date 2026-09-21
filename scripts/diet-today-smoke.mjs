@@ -69,6 +69,7 @@ try {
     Object.assign(state.derived.advice.gaps.kcal, { eaten, target: 2400, remaining: 2400 - eaten, pct: eaten / 24 });
     ['fiber', 'sodium', 'sugar'].forEach((k, i) => { state.derived.advice.gaps[k].eaten = nutrients[i]; });
     state.derived.liveEnergy = burned == null ? null : { burnedNow: burned };
+    state.derived.energyData = { valid: burned != null, knownBurnedNow: burned };
     state.derived.advice.status = judgeStatus({ gaps: state.derived.advice.gaps, kcalLeft: 2400 - eaten,
       hour: 18, targets: state.derived.targets, budget: state.derived.advice.budget, hasIntake: eaten > 0 });
     renderDashboard(document.querySelector('#view'));
@@ -103,7 +104,7 @@ try {
   check('超两圈仍显示真实差值，只有原来的两条轨道', await page.locator('.ring-value').textContent() === '−2000' && await page.locator('.ring-seg-intake').count() === 2 && await page.locator('.ring-seg-burn').count() === 2);
   check('纤维高值不标红；钠糖超量标红且标记封顶', await page.locator('[data-nutrient="fiber"] .nutrient-point.plain').count() === 1 && await page.locator('.nutrient-point.over').count() === 2 && await page.locator('.nutrient-point').evaluateAll(els => els.every(el => el.style.left === '100%')));
   await render(2000, null);
-  check('设备消耗缺失保持未知，不伪造零或估算黄环', await page.locator('.ring-value').textContent() === '—' && await page.locator('.ring-seg-burn').count() === 0);
+  check('设备消耗缺失时显示计划差额，不伪造零或估算黄环', await page.locator('.ring-caption').textContent() === '较计划' && await page.locator('.ring-value').textContent() === '−400' && await page.locator('.ring-seg-burn').count() === 0);
 
   await page.setViewportSize({ width: 393, height: 852 });
   const cdp = engine === 'chromium' ? await context.newCDPSession(page) : null;

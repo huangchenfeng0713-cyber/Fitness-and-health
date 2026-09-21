@@ -40,7 +40,13 @@ try {
   await page.keyboard.press('Escape');
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    assert.ok(await page.locator('.hero').evaluate(el => el.scrollWidth <= el.clientWidth));
+    const layout = await page.locator('.hero').evaluate(el => {
+      const bounds = el.getBoundingClientRect();
+      return { client: el.clientWidth, scroll: el.scrollWidth,
+        overflowing: [...el.querySelectorAll('*')].filter(node => node.getBoundingClientRect().right > bounds.right + 1)
+          .map(node => ({ tag: node.tagName, class: node.className, right: node.getBoundingClientRect().right, text: node.textContent.slice(0,100) })) };
+    });
+    assert.ok(layout.scroll <= layout.client, `${width}px: ${JSON.stringify(layout)}`);
   }
   if (process.env.ARTIFACT_DIR) {
     await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
