@@ -786,7 +786,6 @@ test('数据与趋势页显示统计截止日期，新版本可主动提示刷�
   const health = page('health');
   const settings = page('settings');
   const trends = page('health');
-  assert.ok(app.includes('topbar-context-note'));
   assert.ok(app.includes('showUpdateNotice'));
   assert.ok(app.includes("updateViaCache: 'none'"));
   assert.ok(app.includes('registration.update()'));

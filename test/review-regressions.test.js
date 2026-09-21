@@ -272,7 +272,7 @@ test('F10: available and total carbs normalize consistently while label energy r
   const food = { custom: true, carbBasis: 'available', n: [99,2,3,4,10,1,0] };
   assert.equal(validateFood(food).valid, true); assert.equal(nutrientsFor(food,100).carb,4); assert.equal(nutrientsFor(food,100).kcal,99);
   assert.equal(validateFood({ ...food, carbBasis: 'total' }).valid, false);
-  assert.equal(nutrientsFor({ ...food, carbBasis: 'unknown' },100).carb,null);
+  assert.equal(nutrientsFor({ ...food, carbBasis: 'unknown' },100).carb,4);
 });
 
 test('F09/F10: aggregation retains known subtotal, unknown coverage and locatable invalid entries', () => {
@@ -492,4 +492,28 @@ test('F24: 导入来的部分日要说出停在几点，不能退回那句空洞
     assert.equal(obs.status, 'partial');
     assert.match(obs.reason, /只同步到 22:00/, `实际给出的是「${obs.reason}」`);
   } finally { process.env.TZ = tz; }
+});
+
+ test('unspecified custom carbohydrate basis preserves available values and genuine missingness', () => {
+  const food = { custom: true, n: [120, 5, 2, 18, 3, null, null] };
+  const values = nutrientsFor(food, 150);
+  assert.equal(values.carb, 27);
+  const sum = sumNutrients([{ ...values, nutritionSchema: 2, carbBasis: 'unknown' }]);
+  assert.equal(sum.coverage.carb.complete, true);
+  assert.equal(sum.coverage.protein.complete, true);
+  assert.equal(nutrientsFor({ ...food, carbBasis: 'total' }, 150).carb, 22.5);
+  assert.equal(nutrientsFor({ ...food, n: [120, 5, 2, null, 3, null, null] }, 150).carb, null);
+  assert.equal(nutrientsFor({ ...food, n: [120, 5, 2, 0, 0, null, null] }, 150).carb, 0);
+});
+
+test('legacy positive macros survive unspecified basis without inventing missing values', () => {
+  const row = { foodId: 'custom_old', kcal: 200, protein: 10, fat: 6, carb: 25, fiber: 0, sugar: 8 };
+  const total = sumNutrients([row]);
+  assert.equal(total.carb, 25);
+  assert.equal(total.coverage.carb.complete, true);
+  assert.equal(total.coverage.protein.complete, true);
+  assert.equal(total.coverage.fat.complete, true);
+  assert.equal(total.coverage.fiber.complete, false);
+  assert.equal(total.coverage.sugar.complete, false);
+  assert.equal(row.carb, 25);
 });
