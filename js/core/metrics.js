@@ -81,14 +81,19 @@ export function metricState({
   attention = target,
   // 区间是谁定的：热量那条是「你的计划」（目标 ±10%），
   // 脂肪是成人 AMDR 参考，碳水是计划范围。
-  rangeWord = '计划', complete = true,
+  rangeWord = '计划', complete = true, known = true,
 }) {
   /*
    * 先把进来的数收干净再用。目标一旦是 NaN 或负数，措辞里就会直接印出
    * 「还差 NaNg」「上限 -100g」—— 用户看到的是乱码，而不是「这项没数据」。
    * dailyTargets 自己不会产出这种值，但恢复备份和云端同步能把它写进来。
    */
-  if (!complete || target == null) return { level: LEVEL.plain, note: '已知部分合计 · 数据未齐', fillPct: 0, markerPct: null };
+  if (!known) return { level: LEVEL.plain, note: '未提供', fillPct: 0, markerPct: null };
+  if (!complete || target == null) return {
+    level: kind === KIND.ceiling && target > 0 && eaten > target ? LEVEL.over : LEVEL.plain,
+    note: !complete ? '已知部分合计 · 数据未齐' : '暂无目标',
+    fillPct: Math.min(100, Math.max(0, pctOf(eaten, target))), markerPct: null,
+  };
   const num = (v) => (Number.isFinite(Number(v)) ? Math.max(0, Number(v)) : 0);
   eaten = num(eaten);
   target = num(target);
@@ -236,8 +241,9 @@ export function macroSplit(targets = {}, gaps = {}) {
 
   const band = referenceBand(targets);
   if (gaps.carb?.complete === false || gaps.fat?.complete === false) return {
-    carbG, fatG, kcal: null, carbPct: null, fatPct: null, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null,
-    structure: 'none', label: '碳水或脂肪数据未齐', level: LEVEL.plain, note: '仅有已知部分合计',
+    carbG: gaps.carb?.known === false ? null : carbG, fatG: gaps.fat?.known === false ? null : fatG,
+    kcal: null, carbPct: null, fatPct: null, bandLo: band?.lo ?? null, bandHi: band?.hi ?? null,
+    structure: 'none', label: '部分记录', level: LEVEL.plain, note: '仅有已知部分合计',
   };
   const note = band ? `碳水参考 ${band.lo}–${band.hi}%` : '';
   const base = {
@@ -366,8 +372,9 @@ export function dailyMetrics(targets, gaps, water = null) {
     },
   ].map((m) => ({
     ...m,
+    known: gaps[m.key]?.known !== false,
     complete: gaps[m.key]?.complete !== false,
-    state: metricState({ ...m, complete: gaps[m.key]?.complete !== false }),
+    state: metricState({ ...m, complete: gaps[m.key]?.complete !== false, known: gaps[m.key]?.known !== false }),
     /*
      * 显示值由这里给，视图别再各自 round 一遍。
      * 上限类（游离糖）向上取整 —— 把已经吃进去的量说少了比说多了糟糕；
@@ -381,7 +388,7 @@ export function dailyMetrics(targets, gaps, water = null) {
 
 /** 三个短刻度只映射读数，不缩放真实数据。最高建议量在 78% 处。 */
 export function nutrientScale(m) {
-  if (m.complete === false) return { markerPct: 0, zoneStart: null, zoneEnd: null, limitPct: null, level: LEVEL.plain };
+  if (m.known === false) return { markerPct: null, zoneStart: null, zoneEnd: null, limitPct: null, level: LEVEL.plain };
   const value = Math.max(0, Number(m.eaten) || 0);
   const fiber = m.key === 'fiber';
   const axisMax = fiber ? 50 : m.target / 0.78;
@@ -391,7 +398,7 @@ export function nutrientScale(m) {
     zoneStart: fiber ? (m.recommendedLo ?? 25) / axisMax * 100 : null,
     zoneEnd: fiber ? (m.recommendedHi ?? 30) / axisMax * 100 : null,
     limitPct: fiber ? null : 78,
-    level: fiber ? (value < (m.recommendedLo ?? 25) ? LEVEL.near : LEVEL.plain)
+    level: fiber ? (m.complete !== false && value < (m.recommendedLo ?? 25) ? LEVEL.near : LEVEL.plain)
       : ceilingLevel(value, m.target, m.attention),
   };
 }

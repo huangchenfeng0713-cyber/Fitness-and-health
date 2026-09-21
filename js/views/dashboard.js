@@ -60,7 +60,7 @@ function metricRow(m) {
   return h('div', { class: `metric-row ${st.level}` },
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, m.label),
-      h('strong.metric-row-value', null, `${value}${m.unit}`),
+      h('strong.metric-row-value', null, m.known === false ? '未提供' : `${value}${m.unit}`),
       h('span.metric-row-note', null, st.range ? `${note} · ${st.range}` : note)),
     m.kind === KIND.log ? null
       : st.zoneStart != null
@@ -80,6 +80,8 @@ function splitRow(split) {
     h('div.metric-row-top', null,
       h('span.metric-row-label', null, '碳水:脂肪'),
       h('span.metric-row-note', null, split.label)),
+    !known ? h('p.form-hint.split-known-values', null,
+      `碳水 ${split.carbG == null ? '未提供' : num(split.carbG, 1).replace(/\.0$/, '') + ' g'} · 脂肪 ${split.fatG == null ? '未提供' : num(split.fatG, 1).replace(/\.0$/, '') + ' g'}`) : null,
     pointValueTrack({
       key: `${state.day}:macro-split`, label: '碳水/脂肪',
       value: known ? `碳水 ${split.carbPct}% / 脂肪 ${split.fatPct}%\n碳水 ${num(split.carbG, 1).replace(/\.0$/, '')} g / 脂肪 ${num(split.fatG, 1).replace(/\.0$/, '')} g` : null,
@@ -98,15 +100,16 @@ function metricChip(m) {
   return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
     pointValueTrack({
-      key: `${state.day}:${m.key}`, label: m.label, value: `${value} ${m.unit.trim()}${m.complete === false ? ' · 已知部分，数据未齐' : ''}`,
+      key: `${state.day}:${m.key}`, label: m.label, value: m.known === false ? null : `${value} ${m.unit.trim()}${m.complete === false ? ' · 已知部分，数据未齐' : ''}`,
       track: h('div.nutrient-scale', null,
         scale.zoneStart == null ? null : h('span.nutrient-zone', {
           style: { left: scale.zoneStart + '%', width: (scale.zoneEnd - scale.zoneStart) + '%' },
         }),
         scale.limitPct == null ? null : h('span.nutrient-limit', { style: { left: scale.limitPct + '%' } }),
-        h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
+        scale.markerPct == null ? null : h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
           style: { left: scale.markerPct + '%' } })),
-    }));
+    }),
+    m.known === false ? h('span.micro-label', null, '未提供') : null);
 }
 
 function heroCard(advice, targets, derived) {
@@ -125,7 +128,11 @@ function heroCard(advice, targets, derived) {
   const ringScale = lockTrackScale(state.day, targets.kcal);
   const ringModel = energyRing({
     eaten: gaps.kcal.eaten,
-    burned: derived.liveEnergy?.burnedNow ?? null,
+    burned: derived.energyData?.knownBurnedNow ?? derived.liveEnergy?.burnedNow ?? null,
+    balanceAvailable: derived.energyData?.valid === true,
+    intakeComplete: gaps.kcal.complete !== false,
+    intakeKnown: gaps.kcal.known !== false,
+    historical: !derived.isToday,
     target: targets.kcal,
     scale: ringScale,
   });
@@ -191,10 +198,10 @@ function heroCard(advice, targets, derived) {
 function ringCenter(model) {
   const c = model.center;
   if (!c) return null;
-  const value = c.kcal == null ? '—' : c.kcal > 0 ? '+' + c.kcal
+  const value = c.kcal == null ? '—' : c.key === 'intake' ? String(c.kcal) : c.kcal > 0 ? '+' + c.kcal
     : c.kcal < 0 ? `−${Math.abs(c.kcal)}` : '0';
   return h('div.ring-center', null,
-    h('span.ring-caption', null, state.derived.isToday ? c.label : '当日收支'),
+    h('span.ring-caption', null, c.label),
     h('strong.ring-value', null, value),
     h('span.ring-unit', null, 'kcal'));
 }
@@ -213,7 +220,7 @@ function ringLegend(model) {
     }),
     h('span.ring-legend-k', null, item.label),
     h('span.ring-legend-v', null, item.track === 'intake'
-      ? `${item.kcal} / ${model.target ?? '—'}` : String(item.kcal)),
+      ? `${item.kcal ?? '—'} / ${model.target ?? '—'}` : String(item.kcal)),
     h('span.ring-legend-unit', null, 'kcal'))));
 }
 
@@ -271,9 +278,7 @@ function heroInfo(derived, targets) {
     h('p', null, `本计划实际采用 TDEE ${num(targets.tdee)} kcal，结合每日调整后，摄入目标为 ${num(targets.kcal)} kcal。`),
     h('p', null, '七日速览是另一个统计窗口，不必等于计划参考值。设备热量是估算；本应用不单独加算食物热效应，这不表示已证实 Apple 包含或排除了它。'),
     // 环心那个数是什么，只在这儿说一次 —— 环下面曾经还印着同一句
-    h('p', null, derived.isToday
-      ? '环心是已记录摄入减去已同步消耗，不代表全天最终能量结余。'
-      : '环心按所选日期的摄入与消耗记录回顾；记录可能不完整，对照目标使用现有设置。'),
+    h('p', null, '收支是已记录摄入减去可对照的消耗。消耗不完整时，环心改为摄入较计划的差额；摄入数据也有缺失时，只显示已知摄入。已知消耗仍显示在环上，不补算缺失时段。'),
     h('ul', null, basis.map(([name, note]) => h('li', null,
       h('strong', null, `${name}：`), note))),
     targets.clampedByFloor && h('p', null,

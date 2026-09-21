@@ -1540,7 +1540,12 @@ test('数据页、趋势和健身页都不跟所选日期走', () => {
   }
   // 近 7 日速览统计到昨天：今天还没过完，算进来会把日均拉低
   assert.match(strip(read('js/views/cards/weekly-summary.js')), /const endDate = shiftDay\(todayKey\(\), -1\)/);
-  assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => todayKey\(\)/);
+  assert.match(strip(read('js/views/training.js')), /const trainingDay = \(\) => recordingDate \|\| todayKey\(\)/);
+  const training = strip(read('js/views/training.js'));
+  assert.match(training, /trainingHistoryDays\(state.trainingDays, todayKey\(\), historyDate\)/);
+  assert.match(training, /weeklyTrainingSummary\(state.trainingDays, todayKey\(\)\)/);
+  assert.match(training, /max: todayKey\(\), 'aria-label': '训练日期'/);
+  assert.match(training, /selectTrainingDate\(historyDate\)/);
 });
 
 /*
@@ -1914,7 +1919,7 @@ test('饮食与训练的轻量删除都能原样撤销', () => {
     '训练动作移除没有统一撤销路径');
   assert.match(training, /已删除这一组[\s\S]*?label: '撤销'/,
     '删除训练组后没有撤销入口');
-  assert.match(training, /已清空今日动作[\s\S]*?label: '撤销'/,
+  assert.match(training, /已清空.*?的动作[\s\S]*?label: '撤销'/,
     '清空今日动作后没有撤销入口');
 });
 
