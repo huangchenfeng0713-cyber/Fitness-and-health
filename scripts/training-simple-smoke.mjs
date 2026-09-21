@@ -152,6 +152,25 @@ try {
     await page.locator('.training-set-draft').scrollIntoViewIfNeeded();
     await screenshot(`sets-${width}`);
   }
+  // 长组表上确认、继续添加和改组数不能因整页重绘跳回顶部。
+  await page.getByLabel('本次记录组数', { exact: true }).selectOption('8');
+  await page.getByRole('button', { name: '确认记录 8 组', exact: true }).click();
+  await page.locator('.training-set-draft').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: '再加一组', exact: true }).waitFor();
+  await page.getByRole('button', { name: '再加一组', exact: true }).scrollIntoViewIfNeeded();
+  const beforeAdd = await page.locator('#view').evaluate(el => el.scrollTop);
+  await page.getByRole('button', { name: '再加一组', exact: true }).click();
+  check('添加草稿保持滚动位置', Math.abs(await page.locator('#view').evaluate(el => el.scrollTop) - beforeAdd) < 2);
+  await page.getByLabel('本次记录组数', { exact: true }).scrollIntoViewIfNeeded();
+  const beforeCount = await page.locator('#view').evaluate(el => el.scrollTop);
+  await page.getByLabel('本次记录组数', { exact: true }).selectOption('2');
+  check('修改组数保持滚动位置', Math.abs(await page.locator('#view').evaluate(el => el.scrollTop) - beforeCount) < 2);
+  await page.getByRole('button', { name: '确认记录 2 组', exact: true }).scrollIntoViewIfNeeded();
+  const beforeSave = await page.locator('#view').evaluate(el => el.scrollTop);
+  await page.getByRole('button', { name: '确认记录 2 组', exact: true }).click();
+  await page.locator('.training-set-draft').waitFor({ state: 'hidden' });
+  check('确认落库保持滚动位置', Math.abs(await page.locator('#view').evaluate(el => el.scrollTop) - beforeSave) < 2);
+  await page.getByRole('button', { name: '再加一组', exact: true }).click();
   await page.setViewportSize({ width: 320, height: 844 });
   await page.evaluate(() => {
     const root = document.documentElement, style = getComputedStyle(root);

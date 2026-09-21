@@ -43,7 +43,7 @@ try {
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   assert.match(await page.locator('.training-history-card').innerText(), /2026-09-14 至 2026-09-20/);
   await page.getByRole('button', { name: '2026-09-19 有训练记录', exact: true }).click();
-  await page.getByRole('button', { name: '补记 / 编辑这一天', exact: true }).click();
+  await page.getByRole('button', { name: '编辑', exact: true }).click();
   assert.equal(await page.getByLabel('训练日期', { exact: true }).inputValue(), '2026-09-19');
   await selectDate('2026-09-21');
   assert.equal(await page.getByLabel('训练日期', { exact: true }).inputValue(), '2026-09-19');

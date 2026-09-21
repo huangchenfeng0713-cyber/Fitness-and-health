@@ -814,8 +814,9 @@ function weeklyCard() {
       class: day.date === historyDate ? 'active' : '', onclick: () => { historyDate = day.date; expandedRow = null; plannedOpen = false; rerenderTraining(); },
     }, h('span', null, day.date === todayKey() ? '今天' : ['日','一','二','三','四','五','六'][new Date(day.date + 'T12:00:00').getDay()]),
       h('strong', null, day.date.slice(8)), h('span.training-date-dot', { class: day.recorded ? 'has-records' : '', 'aria-hidden': 'true' })))),
-    h('div.training-log-day', null, h('h4', null, `${historyDate} · ${recorded.length} 个动作`),
-      h('button.text-btn', { type: 'button', onclick: () => selectTrainingDate(historyDate) }, '补记 / 编辑这一天'),
+    h('div.training-log-day', null, h('div.training-log-heading', null,
+      h('h4', null, `${historyDate} · ${recorded.length} 个动作`),
+      h('button.text-btn', { type: 'button', onclick: () => selectTrainingDate(historyDate) }, '编辑')),
       recorded.length ? h('div.log-list', null, recorded.map(r => {
         const key = `${historyDate}:${r.id}`, open = expandedRow === key, validSets = r.sets.filter(isRecordedSet);
         return h('div.log-item', null,
@@ -936,7 +937,8 @@ export function renderTraining(root) {
   for (const key of setDrafts.keys()) if (key.startsWith(`${date}:`) && !liveDraftKeys.has(key)) setDrafts.delete(key);
   if (!resetDisclosures) root.querySelectorAll('[data-training-disclosure]').forEach(el => disclosureState.set(el.dataset.trainingDisclosure, el.open));
   resetDisclosures = false;
-  clearEl(root);
+  const scrollTop = root.scrollTop;
+  const content = document.createDocumentFragment();
   const actionSlot = document.getElementById('actionbar');
   if (actionSlot) { clearEl(actionSlot); actionSlot.hidden = true; }
   const tabs = h('div.range-switch.training-view-tabs', segmentedGroupProps('健身视图'),
@@ -945,6 +947,9 @@ export function renderTraining(root) {
       id: `training-tab-${key}`, 'aria-controls': `training-panel-${key}`,
       onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
     }, label)));
-  mount(root, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
+  mount(content, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
     trainingView === 'current' ? [trainingDateControl(), planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard()]));
+  // Build off-screen and replace atomically: an empty scroll container clamps to zero.
+  root.replaceChildren(content);
+  root.scrollTop = scrollTop;
 }

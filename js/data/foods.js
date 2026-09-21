@@ -2396,7 +2396,8 @@ export function nutrientsFor(food, grams, levelKey) {
   const k = Number(grams) / 100;
   const r = v => v == null || v === '' || !Number.isFinite(Number(v)) || Number(v) < 0 ? null : Math.round(v * k * 10) / 10;
   const carbBasis = food.carbBasis || (food.custom ? 'unknown' : 'total');
-  const available = carbBasis === 'available' ? p.carb
+  // 未注明口径的用户食物按可利用碳水使用已有值，不猜测或扣除纤维。
+  const available = ['available', 'unknown'].includes(carbBasis) ? p.carb
     : carbBasis === 'total' && p.carb != null && p.fiber != null ? Math.max(0, p.carb - p.fiber) : null;
   return {
     kcal: r(p.kcal) == null ? null : Math.round(p.kcal * k),

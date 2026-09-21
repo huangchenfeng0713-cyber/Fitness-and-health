@@ -3326,7 +3326,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-load-note > span { min-width: 0; overflow-wrap: anywhere; }
 .training-panel .tip-action { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .training-advice .insight-list { margin-top: var(--space-3); }
-.training-log-day h4 { margin: var(--space-4) 0 var(--space-1); font-size: var(--fs-body); }
+.training-log-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-4); }
+.training-log-heading h4 { margin: 0; font-size: var(--fs-body); min-width: 0; }
+.training-log-heading > button { flex-shrink: 0; }
 .training-history-card .log-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .training-history-card .log-name { min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .training-history-card .log-meta { white-space: normal; text-align: right; }

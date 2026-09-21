@@ -594,13 +594,16 @@ export function nutrientReferences(profile = {}, kcal = 2000) {
 /** 汇总一组饮食条目的营养 */
 export const NUTRIENT_KEYS = ['kcal', 'protein', 'fat', 'carb', 'fiber', 'sugar', 'totalSugar', 'sodium'];
 /** Read-time migration only. Old custom forms converted blanks to zero and did not
- * specify carbohydrate/free-sugar semantics. Keep that snapshot for review. */
+ * specify carbohydrate/free-sugar semantics. Keep that snapshot for review.
+ * Positive legacy values remain usable; ambiguous legacy zeros and free sugar
+ * stay unknown. Unspecified carbohydrate basis uses available carbohydrate. */
 export function normalizeDietEntry(entry) {
   if (!entry || typeof entry !== 'object') return entry;
   if (entry.nutritionSchema >= 2 || !(entry.custom || String(entry.foodId || '').startsWith('custom_'))) return entry;
   const raw = entry.legacyNutrition || Object.fromEntries(NUTRIENT_KEYS.map(k => [k, entry[k] ?? null]));
   return { ...entry, legacyNutrition: raw, nutritionReview: true, carbBasis: 'unknown',
-    ...Object.fromEntries(NUTRIENT_KEYS.filter(k => k !== 'kcal').map(k => [k,null])) };
+    ...Object.fromEntries(NUTRIENT_KEYS.filter(k => k !== 'kcal').map(k =>
+      [k, k !== 'sugar' && isNutrientNumber(raw[k]) && Number(raw[k]) > 0 ? Number(raw[k]) : null])) };
 }
 export const isNutrientNumber = v => (typeof v === 'number' || typeof v === 'string') && v !== '' && String(v).trim() !== '' && Number.isFinite(Number(v)) && Number(v) >= 0;
 export function nutrientIssues(entry = {}, index = null) {

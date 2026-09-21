@@ -110,12 +110,6 @@ function closeSettings({ restoreHash = true } = {}) {
 }
 
 
-function trainingContextNote() {
-  const row = state.trainingDays?.find((day) => day.date === todayKey());
-  const count = Array.isArray(row?.items) ? row.items.length : 0;
-  return count ? `今日 ${count} 个动作` : '今日未记录';
-}
-
 /**
  * 顶栏。
  *
@@ -137,21 +131,7 @@ function renderTopbar() {
 
   if (!tab.dated) {
     context.classList.add('topbar-page-context');
-    /*
-     * 这两页都不跟今日 / 饮食的日期走，所以副标题里不许出现「数据截至 X」——
-     * 那句话会让人以为翻回昨天，数据页和健身页也跟着翻。
-     */
-    /*
-     * 数据页不写副标题：同步状态在「今日健康数据」卡的右上角已经有一条，
-     * 顶栏再印一遍就是同一句话在一屏里说两次。
-     * （原先照写不误，再靠一条 .ux-health-page 的 CSS 把它藏起来 ——
-     * 副标题的措辞因此每次都要改两个地方才生效。）
-     */
-    const noteText = tab.key === 'training' ? trainingContextNote() : '';
-    context.append(
-      h('h1', null, tab.label),
-      noteText && h('span.topbar-context-note', null, noteText),
-    );
+    context.append(h('h1', null, tab.label));
     bar.append(context, settingsButton);
     return;
   }

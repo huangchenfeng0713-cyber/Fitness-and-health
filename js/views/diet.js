@@ -1103,7 +1103,7 @@ function refreshCustomForm() {
   inputs.carbBasis = h('select', null,
     h('option', { value: 'available', selected: editing?.carbBasis === 'available' }, '可利用碳水（不含纤维）'),
     h('option', { value: 'total', selected: editing?.carbBasis === 'total' }, '总碳水（含纤维）'),
-    h('option', { value: 'unknown', selected: !editing?.carbBasis || editing.carbBasis === 'unknown' }, '口径未确认'));
+    h('option', { value: 'unknown', selected: !editing?.carbBasis || editing.carbBasis === 'unknown' }, '未注明（按可利用碳水）'));
   inputs.freeSugar = h('input', { type: 'number', min: '0', step: '0.1', placeholder: '未知可留空', value: editing?.freeSugar ?? '' });
   const save = async () => {
     const name = inputs.name.value.trim();
