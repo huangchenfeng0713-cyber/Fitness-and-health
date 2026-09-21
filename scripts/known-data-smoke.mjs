@@ -24,6 +24,7 @@ try {
       { kcal: 2000, protein: 84, carb: 180, fat: 60, fiber: 12, sodium: 2100, sugar: null },
       { kcal: 254, protein: null, carb: 20, fat: null, fiber: null, sodium: null, sugar: null },
     ]));
+    d.advice.status.detail = '已知记录合计 2254 kcal。当时计划：2119 kcal。';
     d.energyData = energyObservation({ date: '2026-09-19', restingEnergy: 1400, activeEnergy: 350,
       energyObservedAt: '2026-09-19T22:30:00+08:00', energyCoverage: { status: 'partial' } }, '2026-09-19', new Date());
     (await import('/js/views/dashboard.js')).renderDashboard(document.querySelector('#view'));
@@ -40,13 +41,18 @@ try {
   await page.keyboard.press('Escape');
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
+    assert.ok(await page.locator('.nutrient-scale').evaluateAll(nodes => {
+      const tops = nodes.map(node => node.getBoundingClientRect().top);
+      return Math.max(...tops) - Math.min(...tops) < 1;
+    }), `${width}px: 部分已知与完全未知的三条刻度必须对齐`);
     const layout = await page.locator('.hero').evaluate(el => {
       const bounds = el.getBoundingClientRect();
       return { client: el.clientWidth, scroll: el.scrollWidth,
         overflowing: [...el.querySelectorAll('*')].filter(node => node.getBoundingClientRect().right > bounds.right + 1)
           .map(node => ({ tag: node.tagName, class: node.className, right: node.getBoundingClientRect().right, text: node.textContent.slice(0,100) })) };
     });
-    assert.ok(layout.scroll <= layout.client, `${width}px: ${JSON.stringify(layout)}`);
+    // scrollWidth 与 clientWidth 分别取整，允许 1px 舍入差，不放过实际布局溢出。
+    assert.ok(layout.scroll <= layout.client + 1, `${width}px: ${JSON.stringify(layout)}`);
   }
   if (process.env.ARTIFACT_DIR) {
     await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });

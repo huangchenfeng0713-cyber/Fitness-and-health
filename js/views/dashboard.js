@@ -99,7 +99,6 @@ function metricChip(m) {
   const value = m.display ?? num(m.eaten, m.decimals || 0);
   return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
-    m.known === false ? h('span.form-hint', null, '未提供') : null,
     pointValueTrack({
       key: `${state.day}:${m.key}`, label: m.label, value: m.known === false ? null : `${value} ${m.unit.trim()}${m.complete === false ? ' · 已知部分，数据未齐' : ''}`,
       track: h('div.nutrient-scale', null,
@@ -109,7 +108,8 @@ function metricChip(m) {
         scale.limitPct == null ? null : h('span.nutrient-limit', { style: { left: scale.limitPct + '%' } }),
         scale.markerPct == null ? null : h('span', { class: 'split-bar-point nutrient-point ' + scale.level,
           style: { left: scale.markerPct + '%' } })),
-    }));
+    }),
+    m.known === false ? h('span.micro-label', null, '未提供') : null);
 }
 
 function heroCard(advice, targets, derived) {
