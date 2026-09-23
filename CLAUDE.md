@@ -673,7 +673,20 @@ app.js 收紧过一次而 settings.js 没有，于是首页已经能用了、设
 代价要知道：另一台设备刚改过数据时，头一两秒看到的是本机旧数据，
 这时动手记一笔会走现有的冲突选择 —— 这个窗口在设置页里本来就存在。
 `scripts/startup-account-smoke.mjs` 用注入的假 Supabase（`cloud-auth.js` 优先用
-`globalThis.supabase.createClient`）把快照拖到 6 秒来量，换账号那一路必须一直锁着。
+`globalThis.supabase.createClient`）把云端每个请求都拖到 6 秒来量，换账号那一路必须一直锁着。
+**只拖慢整份快照那一次是不够的**：本机一脏就走「只问版本号 → 直接上传」，整份快照根本不下，
+旧闸门也照样很快放行 —— 那条检查第一版就这么漏过，撤掉修复照样是绿的。
+
+**放行之后人已经在用了，启动收尾不能再默认「同步跑完之前屏幕上是锁卡」。**
+这一改连带出三处，合并前自查时才发现：
+await 之后那次收尾渲染原先直接 `renderCurrent()` —— 同步跑完时人可能正在改克数、填重量，
+输入框被连根换掉，所以要走 `renderCurrentSafely({ force: accountDataLocked() })`；
+苹果健康那次拉取撞上「正在输入」被跳过后没人补（今天的消耗要等五分钟轮询），
+所以跳过要记一笔、`focusout` / `pointerup` 后补上，和 `renderPending` 同一个规矩；
+账号订阅提前挂上后，启动那几秒里**没有用户**的中间状态不接 —— `handleAuthUser(null)`
+为稳妥会先把 `ownershipPending` 置 true 再放下，接了的话从没登录过的人每次打开都闪一下锁卡。
+还有一条现在成立、以后别打破：**渲染本身不许写库**（圆环尺子锁写的是 localStorage，
+不进云端变更计数）。放行之后、同步跑完之前页面已经在渲染，云端较新时本机一脏就判成冲突。
 
 **云端版本号没变时不下载整份快照**（`cloud-sync.js` 的 `syncByRevisionOnly`）。
 启动和每次本机改动后的同步都先只问版本号（`REMOTE_WRITE_FIELDS`，不含 payload）：

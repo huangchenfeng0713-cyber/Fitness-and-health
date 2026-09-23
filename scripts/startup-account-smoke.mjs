@@ -5,10 +5,12 @@
  * `globalThis.supabase.createClient`，不走 CDN），把云端快照那次读取人为拖到 6 秒 ——
  * 手机网络上下一份几 MB 的快照本来就是这个量级。只用合成数据，不连真实账号。
  *
- * 守的是三件事：
+ * 守的是这几件事：
  *  1. 同一账号：快照还在路上时首页就已经露出来（原先要等这 6 秒全部走完）；
  *  2. 版本号没变：第二次启动只问版本号，不再下载整份快照；本机改一笔也是直接上传；
- *  3. 换账号：这 6 秒里锁卡一直在 —— 隐私闸门没有跟着放松。
+ *  3. 换账号：这 6 秒里锁卡一直在 —— 隐私闸门没有跟着放松；
+ *  4. 放行之后人已经在用了：同步跑完那一刻正在输入，不许整页重绘，被跳过的健康拉取
+ *     在输入结束后补上；从没登录过的人启动时不许闪一下锁卡。
  */
 import assert from 'node:assert/strict';
 const { chromium } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
@@ -22,8 +24,22 @@ const check = (name, value) => { assert.ok(value, name); console.log('✓ ' + na
 function installFakeCloud() {
   const KEY = 'smoke.fake-cloud';
   const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };
-  const log = { selects: [], payloadDone: 0, updates: 0 };
+  const log = { selects: [], payloadDone: 0, updates: 0, tables: [] };
   window.__fakeCloud = log;
+  /*
+   * 锁卡出现过没有。看 addedNodes 而不是回调里 querySelector：
+   * 插进去又在同一个任务里被换掉的话，回调跑的时候它已经不在了。
+   */
+  window.__lockSeen = false;
+  new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node.nodeType === 1 && (node.matches('.account-data-lock') || node.querySelector('.account-data-lock'))) {
+          window.__lockSeen = true;
+        }
+      }
+    }
+  }).observe(document, { childList: true, subtree: true });
   const head = (row) => ({
     user_id: row.user_id, schema_version: row.schema_version, revision: row.revision, updated_at: row.updated_at,
   });
@@ -42,14 +58,17 @@ function installFakeCloud() {
     single() { return this.run(); }
     then(resolve, reject) { return this.run().then(resolve, reject); }
     async run() {
-      // 健康数据、设备列表这些与本条无关，一律空
+      log.tables.push(this.table);
+      // 健康数据、设备列表只记一下查过没有，内容一律空
       if (this.table !== 'user_snapshots') return { data: [], error: null };
       const cloud = read();
       const row = cloud?.row?.user_id === this.filters.user_id ? cloud.row : null;
       if (this.action === 'select') {
         log.selects.push(this.fields);
-        if (this.fields.includes('payload')) await new Promise((resolve) => setTimeout(resolve, cloud?.delayMs || 0));
-        if (this.fields.includes('payload')) log.payloadDone += 1;
+        const full = this.fields.includes('payload');
+        const delay = full ? cloud?.delayMs : cloud?.headDelayMs;
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        if (full) log.payloadDone += 1;
         if (!row) return { data: null, error: null };
         const fields = this.fields.split(',').map((field) => field.trim());
         return { data: Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]])), error: null };
@@ -121,6 +140,10 @@ const accountSettled = async () => {
 async function seedSignedInDevice(page, { owner, sessionUser }) {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(unlocked);
+  // 这一趟本身就是「从没登录过的设备启动」：假云端在、没有会话，等它走到 signedOut
+  await waitUntil(page, async () => (await import('/js/lib/account.js')).getAccountState().status === 'signedOut',
+    '没登录过的设备启动走完');
+  const lockSeen = await page.evaluate(() => window.__lockSeen);
   await page.evaluate(async ({ owner, sessionUser, delayMs }) => {
     const store = await import('/js/lib/store.js');
     const db = await import('/js/lib/db.js');
@@ -133,32 +156,42 @@ async function seedSignedInDevice(page, { owner, sessionUser }) {
       owner, revision: 3, dirty: false, changeSeq, epoch: epoch + 1,
       writeLocked: false, lastSyncedAt: '2026-09-20T00:00:00.000Z',
     }, { allowClearDirty: true, expectedContext: { owner: current.owner || null, epoch, changeSeq } });
+    // 只问版本号那次也一起拖慢：否则本机一脏就走「直接上传」，整份快照根本不下，
+    // 旧闸门也照样很快放行，这条检查就分不出新旧了（第一版就是这么漏的）
     localStorage.setItem('smoke.fake-cloud', JSON.stringify({
-      userId: sessionUser, delayMs,
+      userId: sessionUser, delayMs, headDelayMs: delayMs,
       row: { user_id: sessionUser, schema_version: 1, revision: 3, payload: snapshot, updated_at: '2026-09-20T00:00:00.000Z' },
     }));
     localStorage.setItem('sb-smoke-auth-token', '{}');
   }, { owner, sessionUser, delayMs: DELAY_MS });
+  return { lockSeen };
 }
 
 try {
-  /* 1. 同一账号：快照还在路上，首页已经能用 */
+  /* 0. 从没登录过：启动那几秒里不接「没有用户」的中间状态，锁卡一次都不能出现 */
   const page = await newPage();
-  await seedSignedInDevice(page, { owner: 'u1', sessionUser: 'u1' });
+  const seeded = await seedSignedInDevice(page, { owner: 'u1', sessionUser: 'u1' });
+  check('没登录过的设备启动时一次都不闪锁卡', seeded.lockSeen === false);
+
+  /* 1. 同一账号：快照还在路上，首页已经能用 */
   const started = Date.now();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(unlocked, null, { timeout: DELAY_MS * 3 });
   const unlockedAfter = Date.now() - started;
-  const payloadDoneAtUnlock = await page.evaluate(() => window.__fakeCloud.payloadDone);
-  console.log(`  同一账号：${unlockedAfter}ms 露出首页，此时整份快照已下完 ${payloadDoneAtUnlock} 份`);
-  check('同一账号启动不等云端快照下载完就露出首页', payloadDoneAtUnlock === 0);
-  check(`露出首页远早于快照那 ${DELAY_MS}ms`, unlockedAfter < DELAY_MS / 2);
+  const syncDoneAtUnlock = await page.evaluate(accountSettled);
+  console.log(`  同一账号：${unlockedAfter}ms 露出首页，此时后台同步${syncDoneAtUnlock ? '已经' : '还没'}跑完`);
+  check('同一账号启动不等后台同步跑完就露出首页', !syncDoneAtUnlock);
+  check(`露出首页远早于云端那 ${DELAY_MS}ms`, unlockedAfter < DELAY_MS / 2);
 
   // 「升级后第一次启动仍完整核对一遍」在 test/account.test.js 里验：这里第一次打开
   // 往往会先落一笔当天的设置（圆环尺子锁在当天），本机一脏就走「直接上传」那一支了
   await waitUntil(page, accountSettled, '第一次启动的后台同步走完', null, DELAY_MS * 3);
 
-  /* 2. 版本号没变：只问版本号；改一笔也不先下载整份 */
+  /* 2. 版本号没变：只问版本号；改一笔也不先下载整份（这一段不拖慢版本号，只看下没下整份） */
+  await page.evaluate(() => {
+    const cloud = JSON.parse(localStorage.getItem('smoke.fake-cloud'));
+    localStorage.setItem('smoke.fake-cloud', JSON.stringify({ ...cloud, headDelayMs: 0 }));
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(unlocked);
   await waitUntil(page, accountSettled, '第二次启动的后台同步走完', null, DELAY_MS * 3);
@@ -180,6 +213,42 @@ try {
   }));
   check('本机改一笔：版本号对上就直接上传，不先下载整份快照',
     afterEdit.revision === before + 1 && afterEdit.selects.every((fields) => !fields.includes('payload')));
+
+  /*
+   * 4. 放行之后人已经在用了。版本号那次读取拖 3 秒，这期间切到饮食页、聚焦搜索框 ——
+   * 同步跑完那一刻：页面不许整页重绘（输入框会被连根换掉、键盘收起），
+   * 苹果健康那次拉取被跳过也不能就这么算了，失焦之后要补上。
+   */
+  await page.evaluate(() => {
+    const cloud = JSON.parse(localStorage.getItem('smoke.fake-cloud'));
+    localStorage.setItem('smoke.fake-cloud', JSON.stringify({ ...cloud, headDelayMs: 3000 }));
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(unlocked);
+  await page.locator('.tab').filter({ hasText: '饮食' }).click();
+  const search = page.getByLabel('搜索食物，支持中文或拼音');
+  await search.focus();
+  await page.waitForTimeout(300);
+  await page.evaluate(() => {
+    document.activeElement.dataset.smokeFocus = '1';
+    window.__viewMutations = 0;
+    new MutationObserver((records) => { window.__viewMutations += records.length; })
+      .observe(document.querySelector('#view'), { childList: true, subtree: true });
+  });
+  check('这时后台同步还没跑完', !(await page.evaluate(accountSettled)));
+  await waitUntil(page, accountSettled, '拖慢的那次同步走完', null, 10000);
+  await page.waitForTimeout(300);
+  const whileTyping = await page.evaluate(() => ({
+    mutations: window.__viewMutations,
+    sameInput: document.activeElement?.dataset.smokeFocus === '1',
+  }));
+  console.log(`  同步跑完时正在输入：#view 变动 ${whileTyping.mutations} 次，输入框仍在：${whileTyping.sameInput}`);
+  check('同步跑完那一刻正在输入：不整页重绘，输入框还是原来那个、焦点还在',
+    whileTyping.mutations === 0 && whileTyping.sameInput);
+  await page.evaluate(() => document.activeElement.blur());
+  await waitUntil(page, () => window.__fakeCloud.tables.includes('health_daily'), '失焦之后补上健康数据拉取', null, 5000);
+  check('被跳过的苹果健康拉取在输入结束后补上',
+    await page.evaluate(() => window.__fakeCloud.tables.includes('health_daily')));
   check('同一账号那一路没有页面错误', page.errors.length === 0);
   if (page.errors.length) console.log(page.errors);
   await page.context().close();

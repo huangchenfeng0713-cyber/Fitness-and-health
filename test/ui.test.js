@@ -972,6 +972,13 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
   const bootBody = app.slice(app.indexOf('async function boot()'));
   assert.ok(bootBody.indexOf('subscribeAccount(') < bootBody.indexOf('await cloudInitialization;'),
     '账号订阅排在等云端后面：归属确认那一刻没人重绘，锁卡照样停到同步结束');
+  /*
+   * 放行之后人已经在用了：同步跑完那一刻的收尾渲染不能再默认「屏幕上还是锁卡」。
+   * 直接 renderCurrent() 会把正在编辑的克数 / 重量输入框连根换掉。
+   */
+  const afterInit = bootBody.slice(bootBody.indexOf('await cloudInitialization;'), bootBody.indexOf('runUrlImport();'));
+  assert.ok(!/\brenderCurrent\(\);/.test(afterInit), '同步跑完后的收尾渲染不看 busy()，会打断正在进行的输入');
+  assert.match(afterInit, /renderCurrentSafely\(/, '同步跑完后的收尾渲染没有走 renderCurrentSafely');
 });
 
 test('账号归属检查先于可交互首屏，暂时离线后可自动重连', () => {
