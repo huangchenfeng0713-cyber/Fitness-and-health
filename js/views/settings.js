@@ -532,7 +532,7 @@ function sectionRow(section, account, rerender) {
     type: 'button',
     onclick: () => { openSection = section.key; rerender(); },
   },
-  icon(section.key, 'set-icon'),
+  h('span.set-icon-tile', null, icon(section.key, 'set-icon')),
   h('span.set-title', null, section.label),
   h('span.set-status', null, sectionStatus(section.key, account)),
   h('span.set-chevron', { html: iconSvg('chevron') }));

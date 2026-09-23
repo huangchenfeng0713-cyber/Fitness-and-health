@@ -36,6 +36,8 @@ import { takeIntent } from '../lib/nav.js';
 import { APP_VERSION } from '../core/feedback.js';
 import { recommendCard, waterCard } from './cards/meal-advice.js';
 import { estimateTag, foodInfoTip, estimateGroupInfoTip } from './cards/food-estimate.js';
+import { describeLabelResult } from '../core/nutrition-label.js';
+import { recognizeNutritionLabel, FIRST_USE_DOWNLOAD_MB } from '../lib/label-ocr.js';
 
 const ui = {
   query: '',
@@ -90,6 +92,7 @@ function buildShell(root) {
 
   const search = searchField({
     ariaLabel: '搜索食物，支持中文或拼音',
+    placeholder: '搜索食物，拼音首字母也行',
     // 只刷新结果区，绝不重建这个 input 本身
     oninput: debounce((e) => {
       // 切页后旧 input 的防抖回调不得写回新一轮搜索。
@@ -1002,10 +1005,83 @@ const customDraft = { id: null, energyUnit: 'kcal', portionUnit: 'g' };
 /* 标签上写 kJ 的比写 kcal 的多。1 kcal = 4.184 kJ（GB 28050 用的就是这个数）。 */
 const KJ_PER_KCAL = 4.184;
 
+/*
+ * 拍营养成分表的状态。和 customDraft 一样放在模块级：识别要好几秒，
+ * 这期间任何一次 renderDiet 都不该让进度条和结果消失。
+ * `render` / `apply` 指向**最新一次**建出来的表单 —— 识别回来时，
+ * 发起它的那个表单节点可能已经被重建过了。
+ */
+const labelScan = { status: 'idle', stage: null, progress: 0, summary: null, thumb: null, token: null, render: null, apply: null };
+
+function resetLabelScan() {
+  if (labelScan.thumb) URL.revokeObjectURL(labelScan.thumb);
+  Object.assign(labelScan, { status: 'idle', stage: null, progress: 0, summary: null, thumb: null, token: null });
+}
+
 function resetCustomDraft() {
   customDraft.id = null;
   customDraft.energyUnit = 'kcal';
   customDraft.portionUnit = 'g';
+  resetLabelScan();
+}
+
+/* 识别进行到哪一步，用人话说 */
+function labelScanStageText() {
+  if (labelScan.stage === 'recognize') return `正在识别… ${Math.round(labelScan.progress * 100)}%`;
+  if (labelScan.stage === 'load') return `正在准备识别组件（首次使用约 ${FIRST_USE_DOWNLOAD_MB} MB，之后一般不用再下）`;
+  return '正在处理图片…';
+}
+
+async function scanNutritionLabel(file) {
+  if (!file) return;
+  const token = {};
+  resetLabelScan();
+  Object.assign(labelScan, { status: 'working', stage: 'prepare', token, thumb: URL.createObjectURL(file) });
+  labelScan.render?.();
+  try {
+    const { parsed } = await recognizeNutritionLabel(file, {
+      onProgress: ({ stage, progress = 0 }) => {
+        if (labelScan.token !== token) return;
+        labelScan.stage = stage;
+        labelScan.progress = progress;
+        labelScan.render?.();
+      },
+    });
+    if (labelScan.token !== token) return;
+    if (parsed.keys.length) labelScan.apply?.(parsed);
+    labelScan.status = parsed.keys.length ? 'done' : 'failed';
+    labelScan.summary = describeLabelResult(parsed);
+  } catch (error) {
+    console.warn('营养成分表识别失败', error);
+    if (labelScan.token !== token) return;
+    labelScan.status = 'failed';
+    labelScan.summary = {
+      ok: false,
+      title: '识别没能完成',
+      detail: navigator.onLine === false
+        ? '第一次识别需要联网下载识别组件。联网后再试，或者直接手动填写。'
+        : '识别组件没有加载成功，稍后再试，或者直接手动填写。',
+    };
+  }
+  labelScan.render?.();
+}
+
+/*
+ * 拍照 / 从相册选。file input 藏在 label 里，点 label 就是点 input ——
+ * iOS 上这比「按钮 onclick 里调 input.click()」可靠，也不用 display:none
+ * （有的 WebKit 版本对 display:none 的 file input 不响应 label）。
+ */
+function labelScanPicker(iconName, text, capture) {
+  const input = h('input.label-scan-input', {
+    type: 'file', accept: 'image/*', ...(capture ? { capture: 'environment' } : {}),
+    'aria-label': text,
+    onchange: (ev) => {
+      const file = ev.target.files?.[0];
+      ev.target.value = '';   // 同一张图再选一次也要能触发
+      void scanNutritionLabel(file);
+    },
+  });
+  return h('label.label-scan-btn', null, icon(iconName), h('span', null, text), input);
 }
 
 const CUSTOM_NUM_FIELDS = [
@@ -1105,6 +1181,84 @@ function refreshCustomForm() {
     h('option', { value: 'total', selected: editing?.carbBasis === 'total' }, '总碳水（含纤维）'),
     h('option', { value: 'unknown', selected: !editing?.carbBasis || editing.carbBasis === 'unknown' }, '未注明（按可利用碳水）'));
   inputs.freeSugar = h('input', { type: 'number', min: '0', step: '0.1', placeholder: '未知可留空', value: editing?.freeSugar ?? '' });
+
+  /*
+   * 识别出来的数填进去之后要看得出「这是机器填的」：浅绿底。推断出来的（能量单位、
+   * 「—糖」那一行、食盐换算的钠）是浅橙底 —— 那几格最可能错，得先看它们。
+   * 人一改那一格，底色就退掉：从那一刻起它是人确认过的数。
+   */
+  const markFilled = (input, guessed) => {
+    const field = input.closest('.form-field');
+    if (!field) return;
+    field.classList.add('is-autofilled');
+    field.classList.toggle('is-guessed', Boolean(guessed));
+    input.addEventListener('input', () => field.classList.remove('is-autofilled', 'is-guessed'), { once: true });
+  };
+  const fill = (input, value, guessed) => {
+    input.value = String(value);
+    markFilled(input, guessed);
+  };
+  labelScan.apply = (parsed) => {
+    const guessed = new Set(parsed.guessed);
+    if (parsed.energyLabel) {
+      // 标签上印的是 kJ 就照 kJ 填，方便对着包装一个数一个数核对；存的时候照旧换算
+      customDraft.energyUnit = parsed.energyLabel.unit === 'kj' ? 'kj' : 'kcal';
+      fill(inputs.energy, parsed.energyLabel.value, guessed.has('energy'));
+    } else if (parsed.values.energy != null) {
+      customDraft.energyUnit = 'kcal';
+      fill(inputs.energy, parsed.values.energy, guessed.has('energy'));
+    }
+    unitBtn.textContent = customDraft.energyUnit === 'kj' ? 'kJ' : 'kcal';
+    for (const [key] of CUSTOM_NUM_FIELDS) {
+      if (parsed.values[key] != null) fill(inputs[key], parsed.values[key], guessed.has(key));
+    }
+    customDraft.portionUnit = parsed.basis === '100ml' ? 'ml' : 'g';
+    portionUnitBtn.textContent = customDraft.portionUnit;
+    updateBasisHint();
+    if (parsed.serving && inputs.portionGrams.value.trim() === '') {
+      fill(inputs.portionGrams, Math.round(parsed.serving.size), false);
+    }
+    if (parsed.carbBasis) {
+      inputs.carbBasis.value = parsed.carbBasis;
+      markFilled(inputs.carbBasis, false);
+    }
+  };
+
+  const scanStatus = h('div.label-scan-status', { role: 'status', 'aria-live': 'polite' });
+  labelScan.render = () => {
+    const thumb = labelScan.thumb ? h('img.label-scan-thumb', { src: labelScan.thumb, alt: '' }) : null;
+    if (labelScan.status === 'working') {
+      const pct = labelScan.stage === 'recognize' ? Math.max(4, Math.round(labelScan.progress * 100)) : null;
+      mount(clearEl(scanStatus), h('div.label-scan-result', { class: 'is-working' },
+        thumb,
+        h('div.label-scan-copy', null,
+          h('strong', null, labelScanStageText()),
+          h('div.label-scan-progress', { class: pct == null ? 'is-indeterminate' : '' },
+            h('span', { style: pct == null ? null : { width: `${pct}%` } })))));
+      return;
+    }
+    if (labelScan.summary) {
+      mount(clearEl(scanStatus), h('div.label-scan-result', { class: labelScan.summary.ok ? 'is-done' : 'is-failed' },
+        thumb,
+        h('div.label-scan-copy', null,
+          h('strong', null, labelScan.summary.title),
+          labelScan.summary.detail ? h('p', null, labelScan.summary.detail) : null)));
+      return;
+    }
+    clearEl(scanStatus);
+  };
+  labelScan.render();
+  const scanPanel = h('section.label-scan', { 'aria-label': '识别营养成分表' },
+    h('div.label-scan-head', null,
+      h('span.label-scan-mark', null, icon('camera')),
+      h('div', null,
+        h('strong', null, '拍营养成分表，自动填写'),
+        h('p', null, '能量和六项营养会自动填进下面，再对照包装核对一遍。'))),
+    h('div.label-scan-actions', null,
+      labelScanPicker('camera', '拍照', true),
+      labelScanPicker('photo', '从相册选', false)),
+    scanStatus);
+
   const save = async () => {
     const name = inputs.name.value.trim();
     const kcal = energyValue();
@@ -1150,6 +1304,7 @@ function refreshCustomForm() {
         h('div.portion-title-line', null, h('strong', null, editing ? '修改自定义食物' : '自定义食物')),
         basisHint)),
     editing ? h('p.form-hint', null, `正在修改「${editing.name}」。之前记过的数值保持不变。`) : null,
+    scanPanel,
     h('div.form-grid', null,
       h('label.form-field.span-all', null, h('span', null, '食物名称'), inputs.name),
       h('label.form-field', null, h('span', null, '分类'), inputs.cat),

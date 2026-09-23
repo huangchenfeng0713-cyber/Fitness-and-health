@@ -15,7 +15,35 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
  * 提上来之后左边留白必须跟着算（axisPad）：38px 装不下 11px 的五位数，
  * 「13048」会被切成「l3048」。
  */
-const AXIS_FONT = 11;
+const AXIS_FONT = 12;
+
+/*
+ * viewBox 按图真正画出来的尺寸取，不是一个写死的 640 × 200。
+ *
+ * SVG 用的是 preserveAspectRatio="none"（横轴要铺满卡片宽度），而卡片在手机上
+ * 只有 330 左右宽、图高 190 —— 原先 640 × 200 的 viewBox 被横向压到一半：
+ * 11 号的刻度字实际只有 5~6px 宽、窄得像压扁的等宽字，圆点画成竖着的椭圆，
+ * 折线的竖段也比横段细一半。「图上的字不小于 12px」那条下限在这儿从来没成立过。
+ *
+ * 卡片宽 = 视口 − 页面两侧留白（16 × 2）− 卡片内边距（16 × 2），最宽 720 的壳子。
+ * 估得差一点也没关系：差 10% 以内肉眼看不出变形，差到一倍才是原先那样。
+ */
+const CHART_HEIGHT = 190;
+
+/*
+ * 一个「09-16」在轴字号下大约多宽（数字按 0.6em 算，5 个字符）。
+ * viewBox 不再横向压扁之后，日期是真的 12px 宽了 —— 7 天视图在窄屏上
+ * 每天只分到 40 来像素，首末两个又靠边对齐，就和旁边那天叠成「09-1609-17」。
+ */
+const DATE_LABEL_W = Math.ceil(5 * AXIS_FONT * 0.6);
+/* 放不下时隔几天标一个。从最后一天往回数，「最近那天」总有日期 */
+function dateLabelStep(spacing) {
+  return Math.max(1, Math.ceil((DATE_LABEL_W + 6) / Math.max(1, spacing)));
+}
+function chartWidth() {
+  const viewport = Number(globalThis.innerWidth) || 390;
+  return Math.round(Math.max(240, Math.min(720, viewport) - 64));
+}
 
 /**
  * 纵轴刻度要留多宽。
@@ -150,6 +178,23 @@ function attachHits({ svg, pad, width, height, items, onPick }) {
   });
 }
 
+/*
+ * 折线下面那片从线的颜色淡到透明。平涂 12% 的那一版在折线起伏大时
+ * 是一块边缘生硬的色块，低谷那几天反而被涂得最满；渐变让视线留在线上。
+ * id 每张图各取一个：同一页有好几张图，重名的话后面几张会借用第一张的颜色。
+ */
+let gradientSeq = 0;
+function areaGradient(svg, color) {
+  const id = `chart-area-${++gradientSeq}`;
+  const defs = el('defs');
+  const grad = el('linearGradient', { id, x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.append(el('stop', { offset: '0%', 'stop-color': color, 'stop-opacity': 0.22 }));
+  grad.append(el('stop', { offset: '100%', 'stop-color': color, 'stop-opacity': 0.02 }));
+  defs.append(grad);
+  svg.prepend(defs);
+  return id;
+}
+
 function el(tag, attrs = {}) {
   const node = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -278,7 +323,7 @@ export function macroBar({
  *  - color / fill
  */
 export function lineChart({
-  data = [], width = 640, height = 200, color = 'var(--accent)',
+  data = [], width = chartWidth(), height = CHART_HEIGHT, color = 'var(--accent)',
   target = null, targetLabel = '', unit = '', area = true, decimals = null,
   domain = null, showAllDates = false, interactive = false,
   selectedX = null, onPick = null,
@@ -286,6 +331,8 @@ export function lineChart({
   emptyText = '数据不足',
 }) {
   const pad = { l: 38, r: 12, t: 14, b: 22 };
+  // 逐日标注时每个日期都居中在自己那天上，最后一天右边要留出半个日期宽，否则被 SVG 边界切掉
+  if (showAllDates) pad.r = Math.max(pad.r, Math.ceil(DATE_LABEL_W / 2) + 2);
   const svg = el('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart', preserveAspectRatio: 'none' });
   /*
    * 先剔掉 null 再转数字。
@@ -404,9 +451,9 @@ export function lineChart({
     const d = line.map((point, i) => `${i ? 'L' : 'M'}${pointX(point).toFixed(1)},${py(Number(point.y)).toFixed(1)}`).join(' ');
     if (area) {
       const areaPath = `${d} L${pointX(line.at(-1)).toFixed(1)},${height - pad.b} L${pointX(line[0]).toFixed(1)},${height - pad.b} Z`;
-      svg.append(el('path', { d: areaPath, fill: color, opacity: 0.12, stroke: 'none' }));
+      svg.append(el('path', { d: areaPath, fill: `url(#${areaGradient(svg, color)})`, stroke: 'none' }));
     }
-    svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+    svg.append(el('path', { d, fill: 'none', stroke: color, 'stroke-width': 2.25, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
   }
 
   const last = points[points.length - 1];
@@ -417,6 +464,8 @@ export function lineChart({
     svg.append(el('circle', {
       cx: pointX(point), cy: py(Number(point.y)), r: radius,
       fill: high ? 'var(--danger)' : color,
+      // 一圈卡片底色的描边，点压在线上时读作「这一天」，而不是线上鼓起的一个包
+      stroke: 'var(--card)', 'stroke-width': 1.5,
     }));
   }
 
@@ -434,14 +483,18 @@ export function lineChart({
     } else {
       points.forEach((pt, i) => labelDays.push({ ms: dayXs[i], x: px(i) }));
     }
+    const spacing = labelDays.length > 1
+      ? (labelDays.at(-1).x - labelDays[0].x) / (labelDays.length - 1) : Infinity;
+    const step = dateLabelStep(spacing);
     labelDays.forEach((day, i) => {
+      if ((labelDays.length - 1 - i) % step) return;
       /*
-       * 首末两个日期改成靠边对齐。居中的话有一半会落到绘图区外，
-       * 而右边距只有 12px —— 最后一天的「20」会被 SVG 边界切掉半个字。
+       * 一律居中在自己那天上。原先首末两个靠边对齐（怕被 SVG 边界切掉），
+       * 可那样第一个日期整个落在第二天的地盘里，两个日期叠在一起；
+       * 左边本来有纵轴留白，右边已经在上面留出了半个日期宽。
        */
-      const anchor = i === 0 ? 'start' : i === labelDays.length - 1 ? 'end' : 'middle';
       const t = el('text', {
-        x: day.x, y: height - 6, 'text-anchor': anchor, class: 'axis', 'font-size': AXIS_FONT,
+        x: day.x, y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': AXIS_FONT,
       });
       t.textContent = new Date(day.ms).toISOString().slice(5, 10);
       svg.append(t);
@@ -492,7 +545,7 @@ export function lineChart({
 
 /** 柱状图：摄入 vs 目标（超标柱染红） */
 export function barChart({
-  data = [], width = 640, height = 200, target = null, unit = '',
+  data = [], width = chartWidth(), height = CHART_HEIGHT, target = null, unit = '',
   targetLabel = '目标', overIsBad = true, partialX = null,
   showAllDates = false, interactive = false, selectedX = null, onPick = null,
 }) {
@@ -544,7 +597,9 @@ export function barChart({
   const barCx = (i) => pad.l + (i + 0.5) * (innerW / data.length);
 
   if (showAllDates) {
+    const step = dateLabelStep(innerW / data.length);
     data.forEach((d, i) => {
+      if ((data.length - 1 - i) % step) return;
       const t = el('text', {
         x: barCx(i), y: height - 6, 'text-anchor': 'middle', class: 'axis', 'font-size': AXIS_FONT,
       });

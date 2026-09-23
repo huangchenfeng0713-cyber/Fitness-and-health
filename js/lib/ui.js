@@ -73,7 +73,12 @@ export function searchField({
     clear,
     // 调用方改了 input.value 之后要能把叉的显隐补上（它只跟着 input 事件走）
     sync: syncClear,
-    el: h('div.search-row.search-row-full.ui-search-field', { class: className }, input, clear),
+    /*
+     * 左边一枚放大镜。原先这一格只是一块灰底，和旁边的输入框、下拉长得一样，
+     * 要读完占位文字才知道它是搜的；图标是装饰，读屏靠 aria-label。
+     */
+    el: h('div.search-row.search-row-full.ui-search-field', { class: className },
+      h('span.search-glyph', { 'aria-hidden': 'true' }, icon('search')), input, clear),
   };
 }
 

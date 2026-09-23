@@ -78,7 +78,7 @@ jobs:
           mkdir -p /tmp/training-review
           # 收集每条既有门禁的结果，一条失败也仍然使整项检查失败。
           result=0
-          for script in known-data-smoke training-backfill-smoke training-simple-smoke smoke pwa-upgrade-smoke diet-today-smoke today-metric-values-smoke intake-training-smoke training-design-smoke diet-interactions-smoke meal-advice-food-smoke food-muscle-smoke final-recommendations-smoke record-quality-smoke startup-account-smoke; do
+          for script in known-data-smoke training-backfill-smoke training-simple-smoke smoke pwa-upgrade-smoke diet-today-smoke today-metric-values-smoke intake-training-smoke training-design-smoke diet-interactions-smoke meal-advice-food-smoke food-muscle-smoke final-recommendations-smoke record-quality-smoke startup-account-smoke label-scan-smoke; do
             node "scripts/$script.mjs" http://127.0.0.1:8137 || result=1
           done
           BROWSER=webkit node scripts/training-simple-smoke.mjs http://127.0.0.1:8137 || result=1

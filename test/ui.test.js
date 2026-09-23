@@ -1031,11 +1031,18 @@ test('生产页面只在应用启动前注入 Supabase 浏览器公开配置', (
   assert.ok(config.includes("/^sb_(?:secret|service_role)_/i"), '配置校验必须继续拒绝高权限密钥');
 });
 
-test('7 天视图首末日期靠边对齐，最后一天不会被 SVG 边界切掉', () => {
-  // 右边距只有 12px，居中的「08-20」有一半落在绘图区外
+test('逐日标注的日期既不被 SVG 边界切掉，也不互相叠在一起', () => {
+  /*
+   * 原先右边距只有 12px，所以首末两个日期靠边对齐。viewBox 按真实宽度取之后，
+   * 日期真的有 12px 宽了，靠边对齐的第一天整个落进第二天的地盘，印成「09-1609-17」。
+   * 现在一律居中：右边留出半个日期宽，窄屏上放不下就隔天标（最后一天总有）。
+   */
   const charts = read('js/lib/charts.js');
-  assert.match(charts, /const anchor = i === 0 \? 'start' : i === labelDays\.length - 1 \? 'end' : 'middle'/);
-  assert.match(charts, /'text-anchor': anchor/);
+  assert.match(charts, /if \(showAllDates\) pad\.r = Math\.max\(pad\.r, Math\.ceil\(DATE_LABEL_W \/ 2\)/,
+    '逐日标注时右边没有留出半个日期宽，最后一天会被切掉');
+  assert.doesNotMatch(charts, /i === 0 \? 'start'/, '首个日期又靠边对齐了，会和第二天叠在一起');
+  const thinned = (charts.match(/dateLabelStep\(/g) || []).length;
+  assert.equal(thinned, 3, `折线图和柱状图都要在放不下时隔天标注，实际 ${thinned - 1} 处`);
 });
 
 test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', () => {
@@ -2171,7 +2178,10 @@ test('图上的字不小于全应用的可读下限', () => {
   // --fs-caption 12px 是写死的下限，而趋势图的日期和刻度曾经是 9.5 / 10px，
   // 是全屏最小的字。提上来之后左边留白要跟着算，否则五位数会被切掉第一位。
   const charts = read('js/lib/charts.js');
-  assert.match(charts, /const AXIS_FONT = 11;/, '轴字号没有收进一个常量');
+  assert.match(charts, /const AXIS_FONT = 12;/, '轴字号没有收进一个常量');
+  // 12 只有在 viewBox 和画出来的尺寸一致时才是 12px：原先 640 宽的 viewBox 被压到 330，
+  // 字横向只剩一半宽。viewBox 的宽度必须按卡片宽度取，不许再写死
+  assert.doesNotMatch(charts, /width = 640/, 'viewBox 又写死成 640 宽，图上的字会被横向压扁');
   assert.doesNotMatch(charts, /'font-size': (9\.5|10)\b/, '图上还有小于 11px 的字');
   assert.match(charts, /function axisPad\(/, '纵轴留白没有按最长刻度算');
   const uses = (charts.match(/pad\.l = axisPad\(/g) || []).length;
