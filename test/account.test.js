@@ -4,7 +4,7 @@ import { createCloudAuth } from '../js/lib/cloud-auth.js';
 import {
   CloudConflictError, createCloudSync,
 } from '../js/lib/cloud-sync.js';
-import { createAccountController } from '../js/lib/account.js';
+import { createAccountController, accountOwnershipUncertain } from '../js/lib/account.js';
 import { isBrowserSafeSupabaseKey } from '../js/config/cloud.js';
 import { validateImportPayload } from '../js/lib/db.js';
 
@@ -219,7 +219,7 @@ class FakeQuery {
     if (this.client.failQueries) return { data: null, error: { code: 'network', message: 'offline' } };
     if (this.action === 'select') {
       const selected = clone(this.client.rows.get(userId) || null);
-      if (this.client.onSelect) await this.client.onSelect({ userId, selected });
+      if (this.client.onSelect) await this.client.onSelect({ userId, selected, fields: this.selectedFields });
       return { data: this.project(selected), error: null };
     }
     if (this.action === 'insert') {
@@ -725,6 +725,123 @@ test('账号快照写入后只回传 revision 元数据，不把整份 payload �
   assert.equal(db.readCloudMetadata().revision, 2);
   assert.equal(db.readCloudMetadata().dirty, false);
   controller.destroy();
+});
+
+/*
+ * 「每次启动要同步很久」：同一账号时，归属在同步刚开头就定了，
+ * 首页不该陪着一整份快照的下载一起等（app.js 的 accountDataLocked 只走这个共用判断）。
+ */
+test('同一账号启动：云端快照还在路上时归属就已确认，数据可以先露出来', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 2, dirty: false });
+  const client = fakeClient({ session: { user: accountUser('u1') }, rows: [remoteRow('u1', 2, local)] });
+  let release;
+  const slowPayload = new Promise((resolve) => { release = resolve; });
+  client.onSelect = async ({ fields }) => { if (String(fields).includes('payload')) await slowPayload; };
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+  const initializing = controller.initialize();
+  await waitFor(() => client.selectFields.some((call) => String(call.fields).includes('payload')),
+    '整份快照的读取已经发出');
+  assert.equal(controller.state.user?.id, 'u1');
+  assert.equal(controller.state.ownershipPending, false);
+  assert.equal(accountOwnershipUncertain(controller.state), false, '快照没下完，首页不该还锁着');
+  release();
+  await initializing;
+  assert.equal(controller.state.status, 'signedIn');
+  controller.destroy();
+});
+
+test('同一账号启动：换账号时快照没下完之前一直锁着', async () => {
+  const db = fakeDb(snapshot('device', { diet: 1 }), { owner: 'u0', revision: 2, dirty: false });
+  const client = fakeClient({
+    session: { user: accountUser('u1') }, rows: [remoteRow('u1', 1, snapshot('cloud', { diet: 2 }))],
+  });
+  let release;
+  const slowPayload = new Promise((resolve) => { release = resolve; });
+  client.onSelect = async ({ fields }) => { if (String(fields).includes('payload')) await slowPayload; };
+  const controller = createAccountController({
+    client, dbApi: db, storage: fakeStorage(), afterLocalReplace: async () => {}, debounceMs: 60_000,
+  });
+  const initializing = controller.initialize();
+  await waitFor(() => client.selectFields.some((call) => String(call.fields).includes('payload')),
+    '整份快照的读取已经发出');
+  assert.equal(accountOwnershipUncertain(controller.state), true);
+  release();
+  await initializing;
+  controller.destroy();
+});
+
+/*
+ * 版本号对上时不下载整份快照。第一次仍完整核对一遍（整份路径里有条旧训练修复非看 payload 不可），
+ * 之后只问版本号。两个 createCloudSync 共用一份 storage / db / client，就是同一台设备的两次启动。
+ */
+test('版本号没变：第一次启动核对整份，之后只问版本号，本机改一笔也直接上传', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 2, dirty: false });
+  const client = fakeClient({ rows: [remoteRow('u1', 2, local)] });
+  const storage = fakeStorage();
+  const fieldsSince = (from) => client.selectFields.slice(from)
+    .filter((call) => call.action === 'select').map((call) => call.fields);
+
+  const first = createCloudSync({ client, dbApi: db, storage, debounceMs: 60_000 });
+  await first.setUser({ id: 'u1' });
+  assert.ok(fieldsSince(0).some((fields) => fields.includes('payload')), '升级后第一次启动要完整核对一遍');
+  assert.equal(first.state.syncStatus, 'idle');
+  first.destroy();
+
+  const mark = client.selectFields.length;
+  const second = createCloudSync({ client, dbApi: db, storage, debounceMs: 60_000 });
+  await second.setUser({ id: 'u1' });
+  assert.ok(fieldsSince(mark).length > 0);
+  assert.ok(fieldsSince(mark).every((fields) => !fields.includes('payload')), '版本号没变不该再下载整份');
+  assert.equal(second.state.syncStatus, 'idle');
+  assert.equal(db.readCloudMetadata().revision, 2);
+  assert.equal(db.readCloudMetadata().dirty, false);
+
+  const beforeEdit = client.selectFields.length;
+  db.mutate((data) => data.diet.push({ id: 2, date: '2026-08-24', name: 'lunch' }));
+  await second.syncNow();
+  assert.ok(fieldsSince(beforeEdit).every((fields) => !fields.includes('payload')), '改一笔不该先下载整份');
+  assert.equal(client.rows.get('u1').revision, 3);
+  assert.equal(client.rows.get('u1').payload.diet.at(-1).name, 'lunch');
+  assert.equal(db.readCloudMetadata().dirty, false);
+  second.destroy();
+});
+
+test('版本号对上且本机有改动：启动时直接上传，不先下载整份', async () => {
+  const local = snapshot('device', { diet: 2 });
+  const db = fakeDb(local, { owner: 'u1', revision: 2, dirty: true, changeSeq: 3 });
+  const client = fakeClient({ rows: [remoteRow('u1', 2, snapshot('device', { diet: 1 }))] });
+  const sync = createCloudSync({ client, dbApi: db, storage: fakeStorage(), debounceMs: 60_000 });
+  try {
+    await sync.setUser({ id: 'u1' });
+    const selects = client.selectFields.filter((call) => call.action === 'select');
+    assert.ok(selects.every((call) => !call.fields.includes('payload')));
+    assert.equal(client.rows.get('u1').revision, 3);
+    assert.equal(client.rows.get('u1').payload.diet.length, 2);
+    assert.equal(db.readCloudMetadata().dirty, false);
+  } finally { sync.destroy(); }
+});
+
+test('只问版本号之后云端又更新了：照样下载整份并落地', async () => {
+  const local = snapshot('device', { diet: 1 });
+  const db = fakeDb(local, { owner: 'u1', revision: 2, dirty: false });
+  const client = fakeClient({ rows: [remoteRow('u1', 2, local)] });
+  const storage = fakeStorage();
+  const first = createCloudSync({ client, dbApi: db, storage, debounceMs: 60_000 });
+  await first.setUser({ id: 'u1' });
+  first.destroy();
+
+  client.rows.set('u1', remoteRow('u1', 3, snapshot('other-device', { diet: 3 })));
+  const second = createCloudSync({ client, dbApi: db, storage, afterLocalReplace: async () => {}, debounceMs: 60_000 });
+  try {
+    await second.setUser({ id: 'u1' });
+    assert.equal(db.read().diet.length, 3);
+    assert.equal(db.read().diet[0].name, 'other-device');
+    assert.equal(db.readCloudMetadata().revision, 3);
+  } finally { second.destroy(); }
 });
 
 test('服务器已收下上次上传但客户端未记 revision 时自动恢复而不制造冲突', async () => {

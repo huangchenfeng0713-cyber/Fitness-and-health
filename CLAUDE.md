@@ -660,6 +660,29 @@ app.js 收紧过一次而 settings.js 没有，于是首页已经能用了、设
 已经按这句话改过一次，重绘这条当时漏了。`scripts/smoke.mjs` 里那条
 「刚起来就落库，屏幕立刻跟上」专门趁早跑，就是为了落在那个窗口里。
 
+**启动闸门只等「这份数据归谁」，不等整轮云同步**（`app.js` 的 `accountDataLocked`
+只调 `accountOwnershipUncertain`）。它原先还或着一个 `accountBootstrapPending`，
+而那个标记要等 `await cloudInitialization` 整个跑完才清 —— 那是一整轮同步：
+导出本机整库、下载整份云端快照（最多 8MB）、逐项校验、比较、可能再整份上传。
+可同一账号的归属在这一轮**刚开头**就定了（`cloud-sync.js` bootstrap 里
+`previousOwner === user.id` 那一支），设置抽屉那一刻已经能用，只有首页陪着
+整轮网络一起锁：实测快照慢 6 秒首页就多锁 6 秒（6348ms → 302ms），
+这就是用户说的「每次启动要同步很久」。`accountBootstrapPending` 现在只决定
+锁卡的措辞。**`subscribeAccount` 同样要挂在 await 之前**：归属确认那一刻
+只有账号状态变了、没有落库，没人重绘的话锁卡照样停到同步结束。
+代价要知道：另一台设备刚改过数据时，头一两秒看到的是本机旧数据，
+这时动手记一笔会走现有的冲突选择 —— 这个窗口在设置页里本来就存在。
+`scripts/startup-account-smoke.mjs` 用注入的假 Supabase（`cloud-auth.js` 优先用
+`globalThis.supabase.createClient`）把快照拖到 6 秒来量，换账号那一路必须一直锁着。
+
+**云端版本号没变时不下载整份快照**（`cloud-sync.js` 的 `syncByRevisionOnly`）。
+启动和每次本机改动后的同步都先只问版本号（`REMOTE_WRITE_FIELDS`，不含 payload）：
+对上且本机有改动 → 直接上传（上传本来就按版本号做条件更新）；对上且没改动 → 记为已同步；
+其余一律走原来的整份路径。「没改动」那一支还要求这台设备**亲眼见过**这个版本的
+整份快照（localStorage 里的 `full-revision` 提示，只影响要不要下载，不参与归属判断）：
+整份路径里有条旧训练修复（云端缺 `training` 键、本机有训练 → 补传）非看 payload 不可，
+每台设备升级后第一次仍走整份路径把它跑一遍。
+
 整页重绘会打断 iOS 输入（收键盘、日期选择器被当场提交），有两道现成的防线，新代码要沿用：
 
 - `app.js` 的 `isEditing()`：焦点在输入控件里时，跳过定时器与可见性触发的重绘。
