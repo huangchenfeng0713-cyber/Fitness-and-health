@@ -115,7 +115,8 @@ try {
   check('新建数值为空，碳水口径未知，提示允许保留未知', await page.locator('.custom-form').evaluate(el =>
     [...el.querySelectorAll('input,select')].every(e => (e.value === '' || (e.tagName === 'SELECT' && e.value === 'unknown')) && (!e.placeholder || e.placeholder === '未知可留空')) && !el.querySelector('[type=checkbox]')));
   check('字段名称符合要求，说明跟随每100g口径', /食物名称[\s\S]*常用分量单位[\s\S]*每份克重\/体积/.test(await page.locator('.custom-form').textContent()));
-  check('每个输入都有可见边框', await page.locator('.custom-form').evaluate(el => [...el.querySelectorAll('input')].every(e => {
+  // 拍营养成分表那两个 <input type=file> 是透明地铺在按钮上的，看得见的是按钮本身，不算输入框
+  check('每个输入都有可见边框', await page.locator('.custom-form').evaluate(el => [...el.querySelectorAll('input:not([type=file])')].every(e => {
     const c = getComputedStyle(e); return parseFloat(c.borderTopWidth) >= 1 && c.borderTopColor !== 'rgba(0, 0, 0, 0)';
   })));
   await screenshot('.sheet', 'custom-food-blank');
