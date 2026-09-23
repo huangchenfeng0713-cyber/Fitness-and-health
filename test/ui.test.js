@@ -957,7 +957,28 @@ test('账号 SDK 固定版本，应用外壳按整版原子切换并支持离线
   assert.ok(app.indexOf('void registerServiceWorker({ waitForControl: false })')
     < app.indexOf('const cloudInitialization = initCloud()'),
   '缓存更新与账号初始化应并行，不能把首屏卡在等待控制器上');
-  assert.ok(app.includes('accountBootstrapPending'), '并行初始化时仍须锁住未确认归属的个人数据');
+  assert.ok(app.includes('accountBootstrapPending'), '启动这几秒的锁卡措辞要和「正在保护账号数据」分开');
+  /*
+   * **闸门只等「这份数据归谁」，不等整轮云同步。**
+   *
+   * 原先是 `accountBootstrapPending || accountOwnershipUncertain(account)`，而前者要等
+   * `await cloudInitialization` 整个跑完才清 —— 下载整份云端快照、校验、比较、可能再上传。
+   * 同一账号的归属在同步刚开头就定了，首页却陪着那一整轮一起锁：实测快照慢 6 秒，
+   * 首页就多锁 6 秒（scripts/startup-account-smoke.mjs 量这件事）。
+   */
+  const lockFn = app.slice(app.indexOf('function accountDataLocked('), app.indexOf('function renderAccountLock('));
+  assert.match(lockFn, /return accountOwnershipUncertain\(account\);/, '启动闸门没有只走共用判断');
+  assert.ok(!/return[^;]*accountBootstrapPending/.test(lockFn), '启动闸门又在等整轮云同步跑完');
+  const bootBody = app.slice(app.indexOf('async function boot()'));
+  assert.ok(bootBody.indexOf('subscribeAccount(') < bootBody.indexOf('await cloudInitialization;'),
+    '账号订阅排在等云端后面：归属确认那一刻没人重绘，锁卡照样停到同步结束');
+  /*
+   * 放行之后人已经在用了：同步跑完那一刻的收尾渲染不能再默认「屏幕上还是锁卡」。
+   * 直接 renderCurrent() 会把正在编辑的克数 / 重量输入框连根换掉。
+   */
+  const afterInit = bootBody.slice(bootBody.indexOf('await cloudInitialization;'), bootBody.indexOf('runUrlImport();'));
+  assert.ok(!/\brenderCurrent\(\);/.test(afterInit), '同步跑完后的收尾渲染不看 busy()，会打断正在进行的输入');
+  assert.match(afterInit, /renderCurrentSafely\(/, '同步跑完后的收尾渲染没有走 renderCurrentSafely');
 });
 
 test('账号归属检查先于可交互首屏，暂时离线后可自动重连', () => {

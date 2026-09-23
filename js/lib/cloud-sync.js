@@ -99,6 +99,8 @@ function createMetadata(storage, dbApi) {
     revision: `${META_PREFIX}.revision`,
     dirty: `${META_PREFIX}.dirty`,
     lastSyncedAt: `${META_PREFIX}.last-synced-at`,
+    // 不属于 cache / mirror；clear() 按 keys 逐个删，所以放在这里一起删掉
+    fullRevision: `${META_PREFIX}.full-revision`,
   };
   const read = (key) => {
     try { return storage.getItem(keys[key]); } catch { return null; }
@@ -249,6 +251,23 @@ function createMetadata(storage, dbApi) {
     },
     get writeLocked() { return cache.writeLocked; },
     set writeLocked(value) { cache.writeLocked = value === true; queuePersist(); },
+    /*
+     * 这台设备最近一次**亲眼见过整份快照**的是哪个账号的哪个版本。
+     * 用途只有一个：决定版本号对上时能不能省掉下载（见 syncByRevisionOnly）。
+     * 它是个提示不是凭据 —— 丢了（无痕模式、被清）就多下载一次，不参与任何归属判断，
+     * 所以放在 localStorage 而不是和 owner / epoch 一起走 IndexedDB 的 CAS。
+     */
+    sawFullRevision(owner, revision) {
+      try {
+        const seen = JSON.parse(read('fullRevision') || 'null');
+        return Boolean(owner) && seen?.owner === owner && seen?.revision === revision;
+      } catch {
+        return false;
+      }
+    },
+    rememberFullRevision(owner, revision) {
+      write('fullRevision', owner && revision > 0 ? JSON.stringify({ owner, revision }) : null);
+    },
     async clear({ keepLocked = false } = {}) {
       const expectedContext = {
         owner: cache.owner,
@@ -280,7 +299,7 @@ function createMetadata(storage, dbApi) {
   };
 }
 
-function normalizeRemote(row) {
+function normalizeRemote(row, { requirePayload = true } = {}) {
   if (!row) return null;
   const value = Array.isArray(row) ? row[0] : row;
   if (!value) return null;
@@ -295,7 +314,8 @@ function normalizeRemote(row) {
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new CloudSyncError('云端数据版本无效，已停止覆盖本机数据', 'invalid_remote');
   }
-  if (!value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload)) {
+  if (requirePayload
+    && (!value.payload || typeof value.payload !== 'object' || Array.isArray(value.payload))) {
     throw new CloudSyncError('云端数据格式无效，已停止覆盖本机数据', 'invalid_remote');
   }
   return { ...value, schema_version: schemaVersion, revision };
@@ -639,6 +659,55 @@ export function createCloudSync({
     );
   }
 
+  /* 只问版本号：几十个字节。payload 不在里面，所以也不做 payload 的大小和结构校验。 */
+  async function fetchRemoteHead(userId) {
+    const result = await runRemoteQuery(
+      client.from(table).select(REMOTE_WRITE_FIELDS).eq('user_id', userId),
+      { maybe: true, operation: '读取云端版本' },
+    );
+    throwQueryError(result?.error, '读取云端版本失败');
+    return normalizeRemote(result?.data, { requirePayload: false });
+  }
+
+  /**
+   * 版本号对上时不下载整份快照。
+   *
+   * 原先每次启动、以及每次本机改动后的那次同步，都先把整份云端快照（最多 8MB）
+   * 下下来、逐项校验、再和本机导出的整库比一遍 —— 而最常见的情况是云端根本没变：
+   * 只用一台设备的人，云端的版本号永远就是本机上次写上去的那个。
+   * 手机网络上这一下动辄好几秒，排在它后面的苹果健康拉取也跟着晚到。
+   *
+   * 所以先只问版本号：
+   *  - 对上、本机有改动 → 直接上传。上传本来就按版本号做条件更新，
+   *    期间别的设备抢先写了会拿到空结果、进冲突流程，不需要先下载来比；
+   *  - 对上、本机没改动 → 直接记为已同步；
+   *  - 其余（云端更新了、云端没这一行、归属变了）→ 返回 false，走原来的整份路径，逻辑一个字不改。
+   *
+   * 「本机没改动」那一支还多要一个条件：这台设备**亲眼见过**这个版本的整份快照。
+   * 整份路径里有一条旧数据修复（云端快照缺 `training` 键、本机却有训练记录 → 补传），
+   * 它非看 payload 不可。每台设备升级后第一次仍走整份路径把它跑一遍，之后才省。
+   */
+  async function syncByRevisionOnly(userId, token) {
+    await metadata.load({ refresh: true });
+    await metadata.flush();
+    const context = { owner: metadata.owner, epoch: metadata.epoch, changeSeq: metadata.changeSeq };
+    if (context.owner !== userId || metadata.revision < 1) return false;
+    const head = await fetchRemoteHead(userId);
+    assertCurrent(userId, token);
+    await metadata.load({ refresh: true });
+    if (metadata.owner !== context.owner || metadata.epoch !== context.epoch) {
+      throw accountBoundaryError('账号数据边界已在其它标签页变更');
+    }
+    if (!head || head.revision !== metadata.revision) return false;
+    if (metadata.dirty) {
+      await upload(metadata.revision, userId, token);
+      return true;
+    }
+    if (!metadata.sawFullRevision(userId, head.revision)) return false;
+    await markSynced(head, userId, token, context);
+    return true;
+  }
+
   async function beginTransition(reason) {
     await metadata.load({ refresh: true });
     await metadata.flush();
@@ -781,6 +850,8 @@ export function createCloudSync({
     }
     assertCurrent(userId, token);
     await metadata.load({ refresh: true });
+    // 缺训练表的旧快照在上面已经标了 dirty，下一次同步会补传，不靠这个提示
+    metadata.rememberFullRevision(userId, remote.revision);
     pendingConflict = null;
     patchState({
       syncStatus: metadata.dirty ? 'dirty' : 'idle',
@@ -838,6 +909,8 @@ export function createCloudSync({
       expectedContext,
     });
     await metadata.load({ refresh: true });
+    // 只凭版本号记为已同步时（syncByRevisionOnly）手里没有 payload，那个提示本来就对得上
+    if (remote?.payload) metadata.rememberFullRevision(userId, metadata.revision);
     pendingConflict = null;
     patchState({
       syncStatus: metadata.dirty ? 'dirty' : 'idle',
@@ -891,6 +964,8 @@ export function createCloudSync({
       expectedContext: captured,
     });
     await metadata.load({ refresh: true });
+    // 刚上传的这份就是本机整库导出，每张表都在
+    metadata.rememberFullRevision(userId, remote.revision);
     pendingConflict = null;
     patchState({
       syncStatus: metadata.dirty ? 'dirty' : 'idle',
@@ -937,6 +1012,8 @@ export function createCloudSync({
       }
       transitionReason = null;
       patchState({ ownershipPending: false, transitionReason: null });
+      // 归属已经定了，首页这时已经放行；剩下的只是同步，版本号对上就不必下载整份
+      if (await syncByRevisionOnly(user.id, token)) return;
     } else {
       // Freeze both an existing account realm and an unowned guest realm while
       // ownership/remote revision is being checked. A timeout therefore cannot
@@ -1109,6 +1186,7 @@ export function createCloudSync({
       return publicState();
     }
     patchState({ syncStatus: 'syncing', error: null });
+    if (await syncByRevisionOnly(userId, token)) return publicState();
     let captured = await captureLocalSnapshot();
     let local = captured.snapshot;
     assertCurrent(userId, token);

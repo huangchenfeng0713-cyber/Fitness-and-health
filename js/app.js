@@ -263,13 +263,27 @@ for (const type of ['pointerup', 'pointercancel']) {
   });
 }
 
-/* 判断本身在 lib/account.js，设置页用的是同一个 —— 别在这儿另写一份。 */
+/*
+ * 判断本身在 lib/account.js，设置页用的是同一个 —— 别在这儿另写一份。
+ *
+ * **这里不许再或上 `accountBootstrapPending`。** 它原先就是这么写的，而那个标记要等
+ * `await cloudInitialization` 整个跑完才清掉 —— 那是一整轮云同步：导出本机数据库、
+ * 下载整份云端快照（最多 8MB）、逐项校验、比较、可能再整份上传。
+ * 同一账号的情况下，归属在这一轮刚开头就确认了（cloud-sync.js 的 bootstrap 里
+ * `previousOwner === user.id` 那一支），共用判断那一刻已经放行，设置抽屉也已经能用，
+ * 只有首页被这个标记多挡了一整轮网络。实测快照慢 6 秒，首页就多锁 6 秒 ——
+ * 这就是「每次启动要同步很久」。
+ * 加载阶段两者本来就等价（loading、没有 user、本机存过会话 → 共用判断同样锁），
+ * 差别只在「归属已定、同步还在跑」这一段，而这一段正该放行。
+ * 换账号、无主数据、离线且有主这几种，共用判断照旧锁着。
+ */
 function accountDataLocked(account = getAccountState()) {
-  return accountBootstrapPending || accountOwnershipUncertain(account);
+  return accountOwnershipUncertain(account);
 }
 
 function renderAccountLock() {
   const account = getAccountState();
+  // 启动这几秒只决定锁卡怎么措辞：正常打开不该读到「正在保护账号数据」这种警告
   if (accountBootstrapPending) {
     clearEl(viewRoot).append(h('section.card.account-data-lock', {
       role: 'status', 'aria-live': 'polite',
@@ -616,41 +630,66 @@ async function boot() {
     if (settingsOpen && !busy()) renderSettings(settingsRoot);
   });
 
-  // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
-  try {
-    await cloudInitialization;
-  } catch (err) {
-    console.warn('云账号初始化失败，已保留本地模式', err);
-  } finally {
-    accountBootstrapPending = false;
-  }
-
-  renderTabs();
-  renderTopbar();
-  syncOnboarding();
-  renderCurrent();
-  if (openSettingsOnBoot) openSettings();
-  window.__HEALTH_DIET_BOOT__?.ready?.();
-
-  runUrlImport();
-
+  /*
+   * 苹果健康那次拉取撞上「正在输入 / 正在手势」会被跳过 —— 跳过的那次要记一笔，结束了补上，
+   * 和整页重绘（renderPending）同一个规矩。
+   *
+   * 原先不记也没事：账号就绪那一刻就是锁卡刚撤下的那一刻，谁也不可能在打字。
+   * 首页提前放行之后，后台同步跑完、账号就绪时人可能正在饮食页搜索框里打字 ——
+   * 这一下被跳过又没人补，今天的消耗要等五分钟后的轮询或切一次后台才进来。
+   */
+  let pendingHealthPull = null;
   const refreshAccountHealth = async ({ minIntervalMs = 0 } = {}) => {
-    if (busy()) return { skipped: true };
+    if (busy()) {
+      pendingHealthPull = { minIntervalMs: Math.min(minIntervalMs, pendingHealthPull?.minIntervalMs ?? minIntervalMs) };
+      return { skipped: true };
+    }
+    pendingHealthPull = null;
     try {
       const outcome = await pullAccountHealth({ minIntervalMs });
       // 有新健康行时 mergeHealthDays 会自己触发 store 重绘；没有新行时补一次，
       // 让数据页的设备状态和“最近读取”时间也及时更新。
-      if (!outcome.skipped && !outcome.importedDays && current === 'health') renderCurrent();
+      // 走 Safely：拉取要一个往返，回来时人可能正在数据页的下拉里
+      if (!outcome.skipped && !outcome.importedDays && current === 'health') renderCurrentSafely();
       return outcome;
     } catch (error) {
       console.warn('账号健康数据读取失败', error);
-      if (current === 'health') renderCurrent();
+      if (current === 'health') renderCurrentSafely();
       return { skipped: false, error };
     }
   };
+  // 等一拍再判断，理由同 renderPending 那条：在两个格子之间跳时 focusout 先于下一个 focusin
+  for (const type of ['focusout', 'pointerup', 'pointercancel']) {
+    document.addEventListener(type, () => {
+      if (!pendingHealthPull) return;
+      setTimeout(() => {
+        if (pendingHealthPull && !busy()) void refreshAccountHealth(pendingHealthPull);
+      }, 0);
+    });
+  }
 
+  /*
+   * **账号订阅同样要在等云端之前挂上**，理由和上面那个 store 订阅一模一样。
+   *
+   * 首页的闸门现在只等「这份数据归谁」（见 accountDataLocked），而同一账号的归属
+   * 在云同步刚开头就确认了 —— 可那一刻只有账号状态变了、没有落库，
+   * 挂在 await 之后的话没人重绘，锁卡照样停到整轮同步结束。
+   * 苹果健康那次拉取仍由下面的 `ready` 把关（status 还是 loading 就不拉），
+   * 不会和后台同步抢着写库。
+   */
   let healthAccountUserId = null;
+  let cloudInitSettled = false;
   subscribeAccount((account) => {
+    /*
+     * 但启动那几秒里，**没有用户的中间状态一律不接**。
+     *
+     * 提前挂上是为了「同一账号的归属一确认就放行」，而那一下一定带着 user。
+     * 没有 user 的只会来自「本来就没登录」：handleAuthUser(null) 为稳妥先把
+     * ownershipPending 置 true，查完本机没有归属数据再放下，中间隔着两次 IndexedDB 读 ——
+     * 接了的话，从没登录过的人每次打开都先闪一下「正在保护账号数据」的锁卡再闪回来。
+     * 这几下原先本来就没人接（订阅挂在 await 之后），await 之后那次收尾渲染照旧兜底。
+     */
+    if (!cloudInitSettled && !account.user) return;
     syncOnboarding();
     // 账号归属变为不确定时必须立即移除旧资料，即使焦点仍在体重/生日输入框里。
     // 只有普通状态刷新才为了保留键盘和草稿而跳过重绘。
@@ -672,6 +711,32 @@ async function boot() {
       void refreshAccountHealth();
     }
   });
+
+  // 账号功能是可选增强：配置缺失、离线或云服务不可用时继续使用本地模式。
+  try {
+    await cloudInitialization;
+  } catch (err) {
+    console.warn('云账号初始化失败，已保留本地模式', err);
+  } finally {
+    accountBootstrapPending = false;
+    cloudInitSettled = true;
+  }
+
+  renderTabs();
+  renderTopbar();
+  syncOnboarding();
+  /*
+   * **这里不能直接 renderCurrent()。** 原先这一刻屏幕上还是锁卡，没人在打字；
+   * 首页提前放行之后，后台同步跑完时人可能正在饮食记录里改克数、在健身页填重量 ——
+   * 整页重绘会把输入框连根换掉，键盘收起，敲了一半的数字也没了。
+   * 还锁着（换账号、无主数据、离线且有主）就强制换成最终措辞的锁卡；
+   * 已经放行的，人在输入就记一笔，这次输入结束再补。
+   */
+  renderCurrentSafely({ force: accountDataLocked() });
+  if (openSettingsOnBoot) openSettings();
+  window.__HEALTH_DIET_BOOT__?.ready?.();
+
+  runUrlImport();
 
   // 时间在走，“下一餐”仍要刷新；热量外推使用健康快照时间，不再跟当前时钟漂移。
   // 只在用户原本跟随“今天”时自动跨日，避免把正在查看历史日期的人强行拉走。
