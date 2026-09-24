@@ -104,10 +104,28 @@ try {
   await render(2000, 1680);
   check('正负收支文字均为同一中性色', await page.locator('.ring-value').textContent() === '+320' && await color() === negativeColor);
   await render(7000, 9000, [90, 5000, 120]);
-  check('超两圈仍显示真实差值，只有原来的两条轨道', await page.locator('.ring-value').textContent() === '−2000' && await page.locator('.ring-seg-intake').count() === 2 && await page.locator('.ring-seg-burn').count() === 2);
+  await page.waitForTimeout(600);
+  const ringColors = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas.energy-ring');
+    const ctx = canvas?.getContext('2d');
+    const palette = ['intake', 'burn'].map((track, index) => {
+      // 精确端点落在圆头的抗锯齿边沿，取端点内侧 6° 的实色像素。
+      const angle = (260 * Math.PI) / 180;
+      const radius = index ? 55 : 69;
+      const ratio = canvas.width / 164;
+      const x = Math.round((82 + Math.cos(angle) * radius) * ratio);
+      const y = Math.round((82 + Math.sin(angle) * radius) * ratio);
+      const pixel = [...ctx.getImageData(x, y, 1, 1).data];
+      const swatch = getComputedStyle(document.querySelector(`.ring-swatch-${track}`)).color;
+      const rgb = [...swatch.matchAll(/\d+/g)].slice(0, 3).map(match => Number(match[0]));
+      return { pixel, rgb, matches: pixel[3] > 200 && rgb.every((channel, i) => Math.abs(channel - pixel[i]) < 24) };
+    });
+    return { tracks: palette, count: document.querySelectorAll('canvas.energy-ring').length };
+  });
+  check('超两圈仍显示真实差值，两条轨道的弧尖与图例同色', await page.locator('.ring-value').textContent() === '−2000' && ringColors.count === 1 && ringColors.tracks.every(track => track.matches));
   check('纤维高值不标红；钠糖超量标红且标记封顶', await page.locator('[data-nutrient="fiber"] .nutrient-point.plain').count() === 1 && await page.locator('.nutrient-point.over').count() === 2 && await page.locator('.nutrient-point').evaluateAll(els => els.every(el => el.style.left === '100%')));
   await render(2000, null);
-  check('设备消耗缺失时显示计划差额，不伪造零或估算黄环', await page.locator('.ring-caption').textContent() === '还可摄入' && await page.locator('.ring-value').textContent() === '400' && await page.locator('.ring-seg-burn').count() === 0);
+  check('设备消耗缺失时显示计划差额，不伪造零或估算黄环', await page.locator('.ring-caption').textContent() === '还可摄入' && await page.locator('.ring-value').textContent() === '400' && await page.locator('.ring-swatch-burn').count() === 0);
 
   await page.setViewportSize({ width: 393, height: 852 });
   const cdp = engine === 'chromium' ? await context.newCDPSession(page) : null;

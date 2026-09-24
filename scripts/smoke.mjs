@@ -346,7 +346,7 @@ try {
     }));
     const chipText = [...document.querySelectorAll('.micro-chip')]
       .map((c) => c.innerText.replace(/\n/g, ' ')).join('｜');
-    const ring = document.querySelector('.ring circle:nth-of-type(2)');
+    const ring = document.querySelector('.ring-swatch-intake');
     const foot = document.querySelector('.hero-ring-note')?.textContent || '';
     /*
      * 碳水和脂肪合用的那一条：整条永远是满的，有意义的是分界线在哪。
@@ -394,7 +394,7 @@ try {
       abovePlan: state.derived.intake.kcal > state.derived.targets.kcal,
       heroText: document.querySelector('.hero')?.innerText.replace(/\n/g, ' ') || '',
       splitCount: document.querySelectorAll('.split-row').length,
-      ringStroke: ring ? getComputedStyle(ring).stroke : null,
+      ringStroke: ring ? getComputedStyle(ring).color : null,
     };
   });
   const { split } = semantics;

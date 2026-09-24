@@ -1059,19 +1059,20 @@ test('今日圆环只画弧，字交给 HTML，底下不再重复热量数字', 
    */
   assert.doesNotMatch(chart, /ring-tick|ring-origin/, '环上还刻着线 / 还浮着起点方块');
   assert.doesNotMatch(css, /\.ring-tick|\.ring-origin/, 'CSS 里还留着刻度 / 起点方块的样式');
-  // 弧和灰轨的端头都要圆：一圈圆头的弧躺在方切的槽里，两端对不上
-  assert.match(css, /\.ring-track, \.ring-burn-track, \.ring-seg \{ stroke-linecap: round; \}/,
-    '端头还有方切的');
+  // Canvas 的轨道端头与弧端头共用圆形，内部色片只在交接处用方切。
+  assert.match(chart, /ctx\.lineCap = 'round'/, '圆环外端头不是圆的');
+  assert.match(chart, /ctx\.lineCap = 'butt'/, '渐变内部色片仍会鼓出接缝');
   assert.match(chart, /insetOf = \(l\) => Math\.min\(width \/ 2/,
     '圆头没有做长度补偿，两端各鼓出半个描边会把 12 点那道缺口糊上');
-  assert.match(css, /\.ring-burn-track \{[^}]*var\(--track\)/, '黄环空着的时候不是灰色轨');
+  assert.match(chart, /if \(model\.hasBurn\) trackArc/, '消耗未知时仍画了内轨');
   /*
    * 环两侧那两列文字（当前摄入 / 当前消耗）已删：一屏上左、右、圈心三处
    * 在说同一件事，两侧留白还把环挤小了。现在环居中，下面一行图例。
    */
   assert.doesNotMatch(dash, /ring-side/, '环两侧的两列文字应已删掉');
   assert.match(dash, /function ringLegend/, '环下没有图例');
-  assert.match(css, /\.ring-swatch-intake\.is-deep/, '图例色块没有跟着轨道跑第二圈加深');
+  assert.match(dash, /ringTipColor\(model, item\.track, palette\)/,
+    '图例色块没有取本轨当前弧尖颜色');
   assert.doesNotMatch(chart, /当前摄入|当前消耗/, '环上不要再写当前摄入 / 当前消耗');
   /*
    * 圈心两行，而且是 HTML —— 和图例同一个理由：SVG 里的字跟着环缩放，
@@ -2074,8 +2075,8 @@ test('动画只在真的变了的时候跑，且都躲开「减少动态效果�
    */
   const ring = read('js/lib/energy-ring-chart.js');
   assert.match(ring, /prefers-reduced-motion: reduce/, '弧长动画没有躲开减少动态效果');
-  assert.match(ring, /Math\.abs\(prev - len\) < 0\.5/, '值没变也要动一下的话，每 60 秒的定时重绘都会闪');
-  assert.match(ring, /`\$\{animateKey\}\|\$\{model\.scale\}\|\$\{memoKey\}`/,
+  assert.match(ring, /Math\.abs\(prev - len\) >= \.5/, '值没变也要动一下的话，每 60 秒的定时重绘都会闪');
+  assert.match(ring, /`\$\{animateKey\}\|\$\{model\.scale\}\|\$\{seg\.key\}`/,
     '换了日期或换了尺子还接着动画，等于把两份数据说成「长了一截」');
   const dash = read('js/views/dashboard.js');
   assert.match(dash, /animateKey: state\.day/, '主卡没有把日期交给环，环会跨日期动画');

@@ -21,43 +21,32 @@ const check = (name, value) => {
 };
 const active = () => page.locator('.tab[aria-current="page"]').getAttribute('aria-label');
 const settled = () => page.waitForFunction(() => !document.querySelector('.tab-swipe-ghost')
-  && !document.querySelector('#view')?.getAnimations().length);
-const swipe = (dx, dy = 0, selector = '#view', freeze = false) => page.evaluate(({ dx, dy, selector, freeze }) => {
+  && !document.querySelector('#view')?.getAnimations().length
+  && !document.querySelector('.tab-indicator')?.getAnimations().length);
+const swipe = (dx, dy = 0, selector = '#view', options = {}) => page.evaluate(({ dx, dy, selector, options }) => {
   const target = document.querySelector(selector);
   if (!target) throw new Error(`找不到手势目标：${selector}`);
   const box = target.getBoundingClientRect();
   const start = selector === '#view'
-    ? { x: 220, y: 380 }
+    ? { x: options.startX ?? 220, y: 380 }
     : { x: box.left + box.width / 2, y: box.top + box.height / 2 };
   const send = (type, x, y) => target.dispatchEvent(new PointerEvent(type, {
     bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 23,
     isPrimary: true, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y,
   }));
   send('pointerdown', start.x, start.y);
-  send('pointermove', start.x + dx / 2, start.y + dy / 2);
-  send('pointermove', start.x + dx, start.y + dy);
-  const drag = document.querySelector('#view').style.transform;
-  send('pointerup', start.x + dx, start.y + dy);
-  const ghost = document.querySelector('.tab-swipe-ghost');
-  const incoming = document.querySelector('#view.tab-swipe-transitioning');
-  if (freeze) {
-    for (const animation of [...(ghost?.getAnimations() || []), ...(incoming?.getAnimations() || [])]) {
-      animation.pause();
-      animation.currentTime = 0;
-    }
+  const frames = [];
+  for (const offset of options.offsets || [dx / 2, dx]) {
+    send('pointermove', start.x + offset, start.y + dy * offset / dx);
+    const view = document.querySelector('#view');
+    frames.push({ offset, tab: document.querySelector('.tab.active')?.getAttribute('aria-label'),
+      transform: view.style.transform, stage: document.querySelector('#app').classList.contains('tab-swipe-stage'),
+      markerX: document.querySelector('.tab-indicator').getBoundingClientRect().left,
+      hash: location.hash });
   }
-  return {
-    ghost: Boolean(ghost), incoming: Boolean(incoming), drag,
-    stage: document.querySelector('#app').classList.contains('tab-swipe-stage'),
-    outgoingEnd: ghost?.getAnimations()[0]?.effect?.getKeyframes().at(-1)?.transform,
-    incomingStart: incoming?.getAnimations()[0]?.effect?.getKeyframes()[0]?.transform,
-    faceSwap: Boolean(ghost?.getAnimations()[0]?.effect?.getKeyframes().some(frame =>
-      frame.transform === `rotateY(${dx > 0 ? 90 : -90}deg)` && Number(frame.opacity) === 0))
-      && Boolean(incoming?.getAnimations()[0]?.effect?.getKeyframes().some(frame =>
-        frame.transform === `rotateY(${dx > 0 ? -90 : 90}deg)` && Number(frame.opacity) === 1)),
-    backface: ghost && getComputedStyle(ghost).backfaceVisibility,
-  };
-}, { dx, dy, selector, freeze });
+  send('pointerup', start.x + dx, start.y + dy);
+  return { frames, hash: location.hash };
+}, { dx, dy, selector, options });
 
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8137', { waitUntil: 'domcontentloaded' });
@@ -68,30 +57,14 @@ try {
   check('主视图允许纵向原生滚动，同时接收横向手势',
     await page.locator('#view').evaluate(el => getComputedStyle(el).touchAction === 'pan-y'));
 
-  const firstSwipe = await swipe(135, 0, '#view', Boolean(process.env.ARTIFACT_DIR));
-  check('右滑时页面沿纵向中轴旋转，正反面同时在场',
-    firstSwipe.ghost && firstSwipe.incoming && firstSwipe.stage
-      && firstSwipe.drag.startsWith('rotateY(') && firstSwipe.outgoingEnd === 'rotateY(180deg)'
-      && firstSwipe.incomingStart?.startsWith('rotateY(-') && firstSwipe.backface === 'hidden'
-      && firstSwipe.faceSwap);
-  if (process.env.ARTIFACT_DIR) {
-    await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-    for (const percent of [25, 50, 75]) {
-      await page.evaluate((progress) => {
-        for (const selector of ['.tab-swipe-ghost', '#view.tab-swipe-transitioning']) {
-          for (const animation of document.querySelector(selector)?.getAnimations() || []) {
-            animation.currentTime = animation.effect.getTiming().duration * progress / 100;
-          }
-        }
-      }, percent);
-      await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-flip-${percent}-${engine}.png` });
-    }
-    await page.evaluate(() => {
-      for (const selector of ['.tab-swipe-ghost', '#view.tab-swipe-transitioning']) {
-        for (const animation of document.querySelector(selector)?.getAnimations() || []) animation.play();
-      }
-    });
-  }
+  const firstSwipe = await swipe(135, 0, '#view', { offsets: [25, 75, 135] });
+  check('翻转角度跟手，越过半圈才显出背面的饮食页',
+    firstSwipe.frames[0].tab === '今日' && firstSwipe.frames[0].transform.startsWith('rotateY(4')
+      && firstSwipe.frames[1].tab === '饮食' && firstSwipe.frames[1].transform.startsWith('rotateY(-')
+      && firstSwipe.frames.every(frame => frame.stage)
+      && firstSwipe.frames[0].markerX < firstSwipe.frames[1].markerX
+      && firstSwipe.frames[1].markerX < firstSwipe.frames[2].markerX
+      && firstSwipe.frames[0].hash === firstSwipe.frames[1].hash);
   await settled();
   check('今日右滑进入饮食且动画清理完成', await active() === '饮食'
     && await page.locator('#view').evaluate(el => !el.style.transform && !el.closest('#app').classList.contains('tab-swipe-stage')));
@@ -102,6 +75,33 @@ try {
   await swipe(10, 125);
   await settled();
   check('以纵向为主的滑动不误切栏目', await active() === '饮食');
+
+  await page.locator('.tab[aria-label="今日"]').click();
+  await settled();
+  const across = await swipe(330, 0, '#view', {
+    startX: 40, offsets: [35, 80, 115, 160, 215, 275, 330],
+  });
+  check('一次右滑持续翻过饮食、数据到健身',
+    ['今日', '饮食', '饮食', '饮食', '数据', '健身', '健身']
+      .every((tab, index) => across.frames[index].tab === tab)
+      && across.frames[0].transform.startsWith('rotateY(')
+      && across.frames[5].transform.startsWith('rotateY(-')
+      && across.frames.every((frame, index) => index === 0 || frame.markerX > across.frames[index - 1].markerX));
+  await settled();
+  check('跨三栏后只提交最终 URL', await active() === '健身'
+    && await page.evaluate(() => location.hash === '#training'));
+  const reverse = await swipe(-330, 0, '#view', {
+    startX: 355, offsets: [-35, -80, -115, -160, -215, -275, -330],
+  });
+  check('反向同一手势可翻回今日，角度随手指反向',
+    reverse.frames.some(frame => frame.tab === '数据')
+      && reverse.frames.some(frame => frame.tab === '饮食')
+      && reverse.frames[0].transform.startsWith('rotateY(-'));
+  await settled();
+  check('反向跨三栏落在今日', await active() === '今日');
+
+  await page.locator('.tab[aria-label="饮食"]').click();
+  await settled();
 
   await swipe(135);
   await settled();
@@ -144,9 +144,9 @@ try {
   await settled();
   check('末栏继续右滑会回弹，不越界', await active() === '健身'
     && await page.locator('#app').evaluate(el => !el.classList.contains('tab-swipe-stage')));
-  const backSwipe = await swipe(-140);
-  check('反向左滑时翻转方向相反', backSwipe.outgoingEnd === 'rotateY(-180deg)'
-    && backSwipe.incomingStart?.startsWith('rotateY(1'));
+  const backSwipe = await swipe(-140, 0, '#view', { offsets: [-25, -75, -140] });
+  check('反向左滑时翻转方向相反', backSwipe.frames[0].transform.startsWith('rotateY(-')
+    && backSwipe.frames[1].transform.startsWith('rotateY('));
   await settled();
   check('左滑返回相邻栏目', await active() === '数据');
   await swipe(-120, 0, '.tab.active');
