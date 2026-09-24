@@ -10,7 +10,7 @@ import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderDiet } from './views/diet.js';
 import { renderHealth } from './views/health.js';
-import { renderTraining, trainingViewControl } from './views/training.js';
+import { renderTraining } from './views/training.js';
 import { renderSettings, resetSettingsExpand } from './views/settings.js';
 import { APP_VERSION, buildDiagnostics, formatDiagnostics } from './core/feedback.js';
 import {
@@ -21,10 +21,9 @@ import { pullAccountHealth, resetHealthCloudState } from './lib/health-cloud-syn
 import { inspectCloudConfig } from './config/cloud.js';
 import { iconSvg } from './lib/icons.js';
 import { containModalFocus } from './lib/modal-focus.js';
-import { healthCardState } from './core/health-card.js';
 
 const TABS = [
-  // dated: 该页按天查看，顶栏放日期导航；其他页面显示可操作的上下文。
+  // dated: 该页按天查看，顶栏直接放日期导航；其余页顶栏只显示页名
   { key: 'today', label: '今日', icon: 'today', render: renderDashboard, dated: true },
   { key: 'diet', label: '饮食', icon: 'diet', render: renderDiet, dated: true },
   { key: 'health', label: '数据', icon: 'pulse', render: renderHealth },
@@ -116,14 +115,18 @@ function closeSettings({ restoreHash = true } = {}) {
 }
 
 
-/** 底栏说明页面身份；等高的顶栏只放日期、同步状态或训练视图，以及设置。 */
+/**
+ * 顶栏。
+ *
+ * 原本是「应用名 + 副标题」一整行，下面再压一张独立的日期卡 ——
+ * 两者都是「当前上下文」，加起来吃掉首屏 23% 的高度。合成一行：
+ * 按天看的页面直接把日期切换放这儿，其余页面显示页名。
+ */
 function renderTopbar() {
   const bar = $('#topbar-inner');
   if (!bar) return;
   clearEl(bar);
-  // 视觉上交给底栏说明栏目，读屏仍保留页面标题。
-  bar.append(h('h1.topbar-screen-reader-title', null,
-    (TABS.find((tab) => tab.key === current) || TABS[0]).label));
+  const tab = TABS.find((t) => t.key === current) || TABS[0];
   const context = h('div.topbar-context');
   const settingsButton = h('button.topbar-settings-btn', {
     onclick: openSettings,
@@ -131,23 +134,19 @@ function renderTopbar() {
     title: '设置',
   }, h('span', { html: iconSvg('settings') }));
 
-  if (current === 'health') {
-    const today = todayKey();
-    const { synced } = healthCardState({ lastImport: state.lastImport, today });
-    context.append(h('span.topbar-status', { 'aria-label': `今日健康数据${synced ? '已同步' : '未同步'}` },
-      `${today.slice(5)} · ${synced ? '已同步' : '未同步'}`));
-    bar.append(context, settingsButton);
-    return;
-  }
-  if (current === 'training') {
-    context.append(trainingViewControl(viewRoot));
+  if (!tab.dated) {
+    context.classList.add('topbar-page-context');
+    context.append(h('h1', null, tab.label));
     bar.append(context, settingsButton);
     return;
   }
 
+  /*
+   * 标题和副标题不许说同一件事。原先大标题写「昨天」，下面又写
+   * 「08-28 · 回今天」—— 日期上下各印一遍，而「回今天」在标题已经点明
+   * 是哪天的时候才有用。措辞判断在 core/day.js，这里只负责摆。
+   */
   const heading = dayHeading(state.day, todayKey());
-  const dateLabel = (heading.isToday ? `${heading.sub.slice(0, 2)}月${heading.sub.slice(3)}日` : heading.title)
-    .replace(/(^|年)0(\d)月/, '$1$2月').replace(/月0(\d)日/, '月$1日');
   context.append(
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, -1)),
@@ -156,12 +155,11 @@ function renderTopbar() {
     h('button.topbar-day', {
       onclick: () => !heading.isToday && setDay(todayKey()),
       title: heading.isToday ? '' : '回到今天',
-      'aria-label': heading.isToday ? `${dateLabel}，今天` : `${dateLabel}，回到今天`,
     },
-    h('strong', null, dateLabel),
-    heading.backToToday ? h('span.topbar-date.back', null,
-      h('span.topbar-back-icon', { html: iconSvg('return') }),
-      h('span.topbar-back-text', null, '回今天')) : null),
+    h('strong', null, heading.title),
+    h('span.topbar-date', { class: heading.backToToday ? 'topbar-date back' : 'topbar-date' },
+      heading.sub,
+      heading.backToToday ? h('span.topbar-back-icon', { html: iconSvg('return') }) : null)),
     h('button.nav-arrow', {
       onclick: () => setDay(shiftDay(state.day, 1)),
       disabled: heading.isToday,
@@ -227,8 +225,7 @@ function bindTabbarGesture(nav) {
   dragGesture(nav, {
     axis: 'x',
     threshold: 12,
-    canStart: (event) => !settingsOpen && !accountDataLocked() && !tabSwipe?.isAnimating()
-      && Boolean(event.target.closest?.('.tab')),
+    canStart: () => !settingsOpen && !accountDataLocked() && !tabSwipe?.isAnimating(),
     onStart: () => {
       tabSwipe?.beginDrag();
       nav.classList.remove('tabbar-ready');

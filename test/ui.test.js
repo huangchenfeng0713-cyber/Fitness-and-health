@@ -1614,8 +1614,7 @@ test('图标是画出来的，不是打出来的，而且只有一套', () => {
   const app = strip(read('js/app.js'));
   const icons = read('js/lib/icons.js');
   assert.match(icons, /return: path\('M/, '返回箭头没有做成图标');
-  assert.match(app, /heading\.backToToday \? h\('span\.topbar-date\.back'[\s\S]*h\('span\.topbar-back-icon'/,
-    '历史日期的回今天图标没有挂到顶栏上');
+  assert.match(app, /heading\.backToToday \? h\('span\.topbar-back-icon'/, '图标没有挂到顶栏上');
   // 文案里不许再夹着箭头字符
   assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(strip(read('js/core/day.js'))), '措辞里还夹着打出来的箭头');
   assert.ok(!/回今天 ?[↩←⟲↺⬅]/.test(app));

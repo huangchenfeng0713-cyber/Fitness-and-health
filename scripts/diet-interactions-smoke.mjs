@@ -138,6 +138,7 @@ try {
   const healthWater = await page.locator('.card').first().evaluate(el => {
     const cell = [...el.querySelectorAll('.metric-cell')].find(node => node.querySelector('.metric-label')?.textContent === '饮水');
     return {
+      date: el.querySelector('.card-tag')?.textContent,
       value: cell?.querySelector('.metric-value')?.textContent,
       hasDevice: el.textContent.includes('设备饮水'),
       metricIcon: cell?.querySelector('.metric-icon path')?.getAttribute('d'),
@@ -147,8 +148,8 @@ try {
     const { ICON_SHAPES } = await import('/js/lib/icons.js');
     return ICON_SHAPES.waterCount === ICON_SHAPES.waterMl;
   });
-  check('数据页顶栏标明当天日期，饮水次数与饮食页同日记录一致',
-    (await page.locator('.topbar-status').textContent())?.includes('09-06') && healthWater.value === '16次'
+  check('数据页标明当天日期，喝水次数与饮食页同日记录一致',
+    healthWater.date?.includes('09-06') && healthWater.value === '16次'
       && !healthWater.hasDevice && Boolean(healthWater.metricIcon) && sharedWaterIcon);
   await screenshot('.metric-grid', 'health-water-metrics');
   await tab('饮食');

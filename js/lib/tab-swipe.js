@@ -1,9 +1,6 @@
-/** 主栏目横滑：向右依次前进，页面绕纵向中轴翻面。 */
-import { dragGesture } from './gesture.js';
+/** 底部导航横滑：向右依次前进，页面绕纵向中轴翻面。 */
 
 const EASE = 'cubic-bezier(.22, .8, .22, 1)';
-const SWIPE_IGNORE = 'button, a, input, textarea, select, summary, [role="button"], '
-  + '[role="slider"], [contenteditable="true"], .chart-wrap, .table-wrap, .info-tip-panel';
 
 /** 一屏内留得出跨三栏的行程；每走一段，卡片恰好翻 180°。 */
 export const tabTravel = (width) => Math.max(88, Math.min(120, width * .275));
@@ -42,8 +39,8 @@ export function swipeDestination({ dx, velocity = 0, width, index, count, cancel
 }
 
 /**
- * 手势只装在滚动视图上，不碰日期顶栏、底部按钮、设置抽屉和弹窗。
- * 拖动中转到 90° 时才替换内容，下一页从背面继续跟手；无需提前执行页面副作用。
+ * 拖动手势由 app.js 的底部导航独占，这里只管理跟手翻面和页面切换。
+ * 转到 90° 时才替换内容，下一页从背面继续跟手；无需提前执行页面副作用。
  */
 export function installTabSwipe({
   view, app, tabs, currentKey, changeTab, previewTab, commitTab,
@@ -223,21 +220,6 @@ export function installTabSwipe({
     onRelease();
   }
 
-  const removeGesture = dragGesture(view, {
-    axis: 'x',
-    threshold: 16,
-    canStart: (event) => {
-      if (blocked() || motion || event.target.closest?.(SWIPE_IGNORE)) return false;
-      if (document.querySelector('details.info-tip[open]')) return false;
-      const rect = view.getBoundingClientRect();
-      // 保留 iPhone 屏幕边缘的系统返回手势。
-      return event.clientX - rect.left > 24 && rect.right - event.clientX > 24;
-    },
-    onStart: () => beginDrag(),
-    onMove: ({ dx }) => updateDrag(dx),
-    onEnd: endDrag,
-  });
-
   const stopOnHide = () => { if (document.hidden) cancel(); };
   document.addEventListener('visibilitychange', stopOnHide);
   return {
@@ -245,6 +227,6 @@ export function installTabSwipe({
     cancel,
     isAnimating: () => Boolean(motion),
     isDragging: () => gestureStartIndex != null,
-    destroy() { removeGesture(); document.removeEventListener('visibilitychange', stopOnHide); cancel(); },
+    destroy() { document.removeEventListener('visibilitychange', stopOnHide); cancel(); },
   };
 }
