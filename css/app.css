@@ -3669,7 +3669,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 
 .training-last-sets > summary { font-size: var(--fs-body); }
 .training-recorded-set { padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); }
-.training-budget { margin-bottom: var(--space-3); }
+.training-budget {
+  /* 常规字号三列等宽；文字放大时自动减列，避免选项在 200% 下被截断。 */
+  font-size: var(--fs-footnote);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.3em), 1fr));
+  margin-bottom: var(--space-3);
+}
+.training-budget .form-field > select { margin-top: auto; }
 .rec-reason { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }
 /* 标签靠左、下拉靠右：一行两端都有东西，不留半边空 */
 .entries-total { margin: calc(-1 * var(--space-2)) 0 var(--space-3); font-variant-numeric: tabular-nums; }

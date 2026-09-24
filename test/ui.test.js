@@ -1386,7 +1386,6 @@ test('说明层使用 SVG 小写 i，点外面即可收起', () => {
 
 test('卡片级说明层在无关重绘后保持用户选择的展开态', () => {
   const utils = read('js/lib/utils.js');
-  const training = read('js/views/training.js');
   assert.match(utils, /const persistentInfoTipOpen = new Set\(\)/,
     '没有保存卡片级说明层展开态');
   assert.match(utils, /export function persistentInfoTip\(key, label, \.\.\.children\)/);
@@ -1395,9 +1394,6 @@ test('卡片级说明层在无关重绘后保持用户选择的展开态', () =>
     '再次点击、点外面或按 Escape 后没有把关闭状态写回');
   assert.match(utils, /export function infoTip\(label, \.\.\.children\) \{\s*return persistentInfoTip\(`info:\$\{label\}`/,
     '普通说明层重绘时仍会自己收起');
-  assert.match(training,
-    /persistentInfoTip\('training-recommendation-method', '这几个是怎么挑的'/,
-    '选择动作卡右上角说明仍会随整页重绘自动收起');
 });
 
 test('饮食记录默认只读，按「编辑」才能改克数或删除', () => {

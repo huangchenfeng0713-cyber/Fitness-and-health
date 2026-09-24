@@ -427,7 +427,7 @@ function pickerCard(rerender) {
     clearEl(searchContent);
     listHead.hidden = searching;
     searchCount.hidden = !searching;
-    card.querySelector('.picker-card-head').hidden = !searching && !showRecommend;
+    card.querySelector('.picker-card-head').hidden = !searching;
     if (!searching) {
       scopeCount.textContent = showRecommend ? `${rec.items.length} 个推荐` : `${list.length} 个`;
       if (leavingSearch) mount(clearEl(normalContent), normalBody());
@@ -456,9 +456,7 @@ function pickerCard(rerender) {
 
   const card = h('section.card.exercise-picker-card', null,
     h('div.card-head.picker-card-head', null,
-      h('div.card-head-actions', null,
-        searchCount,
-        showRecommend ? recommendTip() : null)),
+      h('div.card-head-actions', null, searchCount)),
     search.el,
     controls,
     listHead,
@@ -862,19 +860,14 @@ function weeklyGroupsCard() {
 }
 
 function recommendationBudget() {
-  const field = (key, label, options) => h('label.form-field', null, h('span', null, label),
+  const field = (key, label, shortLabel, options) => h('label.form-field', null, h('span', null, shortLabel),
     h('select', { 'aria-label': label, onchange: event => {
       budgetOptions[key] = event.target.value === '' ? null : Number(event.target.value); proposal = null; rerenderPicker();
     } }, options.map(([value, text]) => h('option', { value, selected: String(budgetOptions[key] ?? '') === String(value) }, text))));
   return h('div.form-grid.training-budget', null,
-    field('minutes', '本次可用时间', [['','不限'],[15,'15 分钟'],[30,'30 分钟'],[45,'45 分钟'],[60,'60 分钟'],[90,'90 分钟']]),
-    field('setBudget', '本次组数预算', [['','不限'],[3,'3 组'],[6,'6 组'],[9,'9 组'],[12,'12 组'],[18,'18 组'],[24,'24 组']]),
-    field('setsPerExercise', '每动作预留组数', [[1,'1 组'],[2,'2 组'],[3,'3 组'],[4,'4 组'],[5,'5 组']]));
-}
-
-function recommendTip() {
-  return persistentInfoTip('training-recommendation-method', '这几个是怎么挑的',
-    '在当前范围与器械中，优先近 28 日常练动作，再参考本周已安排模式。已选和待选都占预算；每组含休息暂按 3 分钟估算，预留组数可改。时间估算不是消耗或处方；确认只加入动作，不生成完成组。');
+    field('minutes', '本次可用时间', '可用时间', [['','不限'],[15,'15 分钟'],[30,'30 分钟'],[45,'45 分钟'],[60,'60 分钟'],[90,'90 分钟']]),
+    field('setBudget', '本次组数预算', '组数预算', [['','不限'],[3,'3 组'],[6,'6 组'],[9,'9 组'],[12,'12 组'],[18,'18 组'],[24,'24 组']]),
+    field('setsPerExercise', '每动作预留组数', '每动作组数', [[1,'1 组'],[2,'2 组'],[3,'3 组'],[4,'4 组'],[5,'5 组']]));
 }
 
 function recommendBody(rec) {
