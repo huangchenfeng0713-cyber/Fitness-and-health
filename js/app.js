@@ -769,10 +769,11 @@ async function boot() {
 
   // 从后台切回来时刷新一次
   document.addEventListener('visibilitychange', async () => {
-    if (document.hidden || busy()) return;
+    if (document.hidden) return;
     await refreshClock();
+    // 输入框有焦点时 refreshAccountHealth 会记下待读取请求；不要在这里丢掉它。
     await refreshAccountHealth({ minIntervalMs: 60_000 });
-    if (current !== 'today' && current !== 'diet') renderCurrent();
+    if (current !== 'today' && current !== 'diet') renderCurrentSafely();
   });
 
   window.addEventListener('hashchange', () => {

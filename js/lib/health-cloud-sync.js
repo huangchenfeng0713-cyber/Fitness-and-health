@@ -22,6 +22,8 @@ const listeners = new Set();
 let activePull = null;
 let activePullUserId = null;
 let activeDeviceRefresh = null;
+// 线上表结构可能落后于前端。每次打开只探测一次，避免每次刷新都先收到 400。
+let legacyHealthSelect = false;
 
 function snapshot() {
   return {
@@ -168,17 +170,25 @@ async function fetchHealthRowsWithSelect(client, columns, { updatedAfter = null 
   throw cloudError(null, '账号健康数据超过 20000 天，请联系维护者处理');
 }
 
-async function fetchHealthRows(client, options = {}) {
+export async function fetchHealthRows(client, options = {}) {
+  if (legacyHealthSelect) {
+    try {
+      return await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_LEGACY_SELECT, options);
+    } catch (error) {
+      throw cloudError(error, '读取账号健康数据失败');
+    }
+  }
   try {
     return await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_SELECT, options);
   } catch (error) {
     if (!missingIndependentCursorColumn(error)) {
       throw cloudError(error, '读取账号健康数据失败');
     }
-    // Database and Pages deploy independently. Keep existing users readable
-    // until the idempotent v1.6.4 schema migration has been applied.
+    // 数据库和网页分开部署。旧表仍可读，直到补上 v1.6.4 迁移。
     try {
-      return await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_LEGACY_SELECT, options);
+      const rows = await fetchHealthRowsWithSelect(client, CLOUD_HEALTH_LEGACY_SELECT, options);
+      legacyHealthSelect = true;
+      return rows;
     } catch (legacyError) {
       throw cloudError(legacyError, '读取账号健康数据失败');
     }

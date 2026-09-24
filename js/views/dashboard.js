@@ -298,12 +298,8 @@ function energyFreshness(derived) {
   if (derived.demoMode) return h('p.data-freshness.warn', null, '演示档案：请确认身体信息后再使用个人计划。');
   const meta = derived.energyData;
   if (!meta?.valid) {
-    /*
-     * 今天还没收到消耗是最常见的一种，而且多半只是还没到同步的时候 ——
-     * 说清楚「同步之后会怎样」，比一句「还没收到消耗数据」有用。
-     */
     const text = meta?.status === 'missing' && derived.isToday
-      ? '今天的消耗还没同步。同步之后，环上会多出一圈消耗，圈心换成收支。'
+      ? '今天的消耗还没同步。'
       : meta?.reason ? `${meta.reason}。` : '消耗数据还没同步。';
     return h('p.data-freshness', null, text);
   }

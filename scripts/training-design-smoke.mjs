@@ -74,6 +74,15 @@ try {
   await page.waitForTimeout(200);
   check('焦点滞留在下拉上时，点别的控件也不会把它弹回来', await focusedTag() !== 'SELECT');
   await page.locator('.picker-view-switch').getByRole('tab', { name: '推荐', exact: true }).click();
+  check('推荐页不再显示顶部说明图标', await page.locator('.picker-card-head .info-tip').count() === 0);
+  const budgetAlignment = await page.locator('.training-budget .form-field').evaluateAll((fields) => {
+    const boxes = fields.map((field) => field.getBoundingClientRect());
+    const selects = fields.map((field) => field.querySelector('select').getBoundingClientRect());
+    return boxes.length === 3
+      && boxes.every((box) => Math.abs(box.top - boxes[0].top) < 1 && Math.abs(box.width - boxes[0].width) < 1)
+      && selects.every((box) => Math.abs(box.bottom - selects[0].bottom) < 1);
+  });
+  check('三个推荐预算控件同排等宽且下沿对齐', budgetAlignment);
   const batch = await page.locator('.rec-picks .ex-name').allTextContents();
   check('推荐候选按模式给出并设上限', batch.length > 0 && batch.length <= 6);
   await page.locator('.rec-picks .ex-pick').first().click();
