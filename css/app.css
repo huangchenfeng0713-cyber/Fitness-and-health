@@ -3639,7 +3639,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-picker-head { position: sticky; top: 0; z-index: 2; background: var(--card); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .training-picker-head h2 { margin: 0; font-size: var(--fs-title); }
 .sheet:has(.training-picker) { background: var(--card); }
-.training-picker .exercise-picker-card { padding: 0; border-radius: 0; background: transparent; }
+/* 选择器已经处在弹层内，不再投出第二张直角卡片的阴影。 */
+.training-picker .exercise-picker-card { padding: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .training-picker .picker-card-head:has(.card-head-actions:empty) { display: none; }
 .training-picker .picker-card-head { justify-content: flex-end; margin-bottom: var(--space-2); }
 .training-picker .ex-clash-slot { color: var(--muted); text-align: left; }

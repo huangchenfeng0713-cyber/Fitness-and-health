@@ -59,7 +59,8 @@ function installFakeCloud() {
     then(resolve, reject) { return this.run().then(resolve, reject); }
     async run() {
       log.tables.push(this.table);
-      // 健康数据、设备列表只记一下查过没有，内容一律空
+      // 健康行用合成数据模拟快捷指令上传；设备列表留空。
+      if (this.table === 'health_daily') return { data: read()?.healthRows || [], error: null };
       if (this.table !== 'user_snapshots') return { data: [], error: null };
       const cloud = read();
       const row = cloud?.row?.user_id === this.filters.user_id ? cloud.row : null;
@@ -198,6 +199,36 @@ try {
   const second = await page.evaluate(() => window.__fakeCloud.selects);
   console.log(`  第二次启动的读取字段：${JSON.stringify(second)}`);
   check('版本号没变时第二次启动不下载整份快照', second.length > 0 && second.every((fields) => !fields.includes('payload')));
+
+  // 云端健康行进入本机后，不得被误认成本机新编辑而再次上传整份账号快照。
+  const healthPull = await page.evaluate(async () => {
+    const db = await import('/js/lib/db.js');
+    const { pullAccountHealth } = await import('/js/lib/health-cloud-sync.js');
+    const cloud = JSON.parse(localStorage.getItem('smoke.fake-cloud'));
+    localStorage.setItem('smoke.fake-cloud', JSON.stringify({ ...cloud, healthRows: [{
+      date: '2026-09-18', source: 'apple_shortcuts', steps: 8000,
+      captured_at: '2026-09-18T12:00:00Z', updated_at: '2026-09-24T03:00:00Z',
+    }] }));
+    await db.bulkSync(db.STORES.health, [{ date: '2026-09-17', steps: 7000 }], [], { source: 'cloud' });
+    const writes = [];
+    const unsubscribe = db.subscribeWrites(event => writes.push(event));
+    const updatesBefore = window.__fakeCloud.updates;
+    const result = await pullAccountHealth();
+    unsubscribe();
+    const metadata = await db.getCloudSyncMetadata();
+    return {
+      result, dirty: metadata.dirty, updatesBefore,
+      healthWrite: writes.find(event => event.operation === 'bulk-sync'),
+      settingWrite: writes.find(event => event.operation === 'put' && event.stores.includes(db.STORES.settings)),
+      dates: (await db.getAll(db.STORES.health)).map(row => row.date),
+    };
+  });
+  await page.waitForTimeout(1500);
+  check('账号健康读取只落本次新增日期，保留原历史且不触发账号快照重传',
+    healthPull.result.importedDays === 1 && healthPull.healthWrite?.count === 1
+      && healthPull.healthWrite.source === 'cloud' && healthPull.settingWrite?.source === 'cloud'
+      && healthPull.dates.includes('2026-09-17') && healthPull.dates.includes('2026-09-18')
+      && healthPull.dirty === false && await page.evaluate(() => window.__fakeCloud.updates) === healthPull.updatesBefore);
 
   const cloudRevision = () => JSON.parse(localStorage.getItem('smoke.fake-cloud')).row.revision;
   const before = await page.evaluate(cloudRevision);

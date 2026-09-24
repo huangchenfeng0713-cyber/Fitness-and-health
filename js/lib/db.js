@@ -407,10 +407,10 @@ export async function get(store, key) {
   return wrap(tx(db, store, 'readonly').get(key));
 }
 
-export async function put(store, value) {
+export async function put(store, value, { source = 'local' } = {}) {
   validateNutritionRow(store, value);
   return guardedBusinessWrite((db, expectedContext) => committedWrite(
-    db, store, 'put', (objectStore) => objectStore.put(value), { expectedContext, dietDate: value?.date, dietKey: value?.id },
+    db, store, 'put', (objectStore) => objectStore.put(value), { source, expectedContext, dietDate: value?.date, dietKey: value?.id },
   ));
 }
 
@@ -455,17 +455,17 @@ export async function bulkPut(store, values, { merge = false } = {}) {
 }
 
 /** 在同一个事务里写入完整行并删除已失效的主键，供全量快照同步使用。 */
-export async function bulkSync(store, values = [], deleteKeys = []) {
+export async function bulkSync(store, values = [], deleteKeys = [], { source = 'local' } = {}) {
   values.forEach(value => validateNutritionRow(store, value));
   return guardedBusinessWrite((db, expectedContext) => new Promise((resolve, reject) => {
-    const t = writeTransaction(db, store, { expectedContext });
+    const t = writeTransaction(db, store, { source, expectedContext });
     const os = t.objectStore(store);
     for (const key of deleteKeys) os.delete(key);
     for (const value of values) os.put(value);
     t.oncomplete = () => {
       notifyWrite({
         operation: 'bulk-sync', stores: [store], count: values.length,
-        deleted: deleteKeys.length, source: 'local',
+        deleted: deleteKeys.length, source,
       });
       resolve({ written: values.length, deleted: deleteKeys.length });
     };
@@ -505,8 +505,8 @@ export async function getSetting(key, fallback = null) {
   return row ? row.value : fallback;
 }
 
-export async function setSetting(key, value) {
-  return put(STORES.settings, { key, value });
+export async function setSetting(key, value, options = {}) {
+  return put(STORES.settings, { key, value }, options);
 }
 
 /**

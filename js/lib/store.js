@@ -651,6 +651,7 @@ export async function removeCustomFood(id) {
 export async function mergeHealthDays(days, meta = {}) {
   const isCompleteSnapshot = isCompleteAppleSnapshot(meta);
   if (!days?.length && !isCompleteSnapshot) return 0;
+  const source = meta.cloudSync === true ? 'cloud' : 'local';
   const importedAt = new Date();
   const today = todayKey(importedAt);
   const incomingDays = days || [];
@@ -663,12 +664,14 @@ export async function mergeHealthDays(days, meta = {}) {
   let untouched = 0;
   if (isCompleteSnapshot) {
     const replaced = replaceAppleSnapshotRows(existing, incomingDays, importId);
-    await db.bulkSync(db.STORES.health, replaced.upserts, replaced.deletes);
+    await db.bulkSync(db.STORES.health, replaced.upserts, replaced.deletes, { source });
     removed = replaced.deletes.length;
     untouched = replaced.untouched;
   } else {
-    const merged = mergeApplePartialRows(existing, incomingDays, importId);
-    await db.bulkSync(db.STORES.health, merged);
+    // 增量读取只写这次带来的日期；重写整份历史既拖慢手机，也会放大云同步负担。
+    const dates = new Set(incomingDays.map(day => day.date));
+    const merged = mergeApplePartialRows(existing.filter(day => dates.has(day.date)), incomingDays, importId);
+    await db.bulkSync(db.STORES.health, merged, [], { source });
   }
   setHealthDays(await db.getAll(db.STORES.health));
   state.lastImport = {
@@ -681,7 +684,7 @@ export async function mergeHealthDays(days, meta = {}) {
       : null,
     ...meta,
   };
-  await db.setSetting('lastImport', state.lastImport);
+  await db.setSetting('lastImport', state.lastImport, { source });
   recompute();
   emit();
   return { days: incomingDays.length, removed, untouched };
