@@ -199,3 +199,16 @@ test('异常输入不抛，弧不画出圈', () => {
     assert.ok(m.center.label, '圈心总要有一句话');
   }
 });
+
+test('没有可对照的消耗时，圈心用人话说离计划多远，数字不带符号', () => {
+  /*
+   * 原先写「较计划 −2119」：凌晨一口没吃的人得先想明白「较」是谁减谁，
+   * 才读得出这是「还能吃 2119」。
+   */
+  const empty = energyRing({ eaten: 0, burned: null, target: 2119, scale: 2100, balanceAvailable: false });
+  assert.deepEqual(empty.center, { key: 'left', label: '还可摄入', kcal: 2119 });
+  const over = energyRing({ eaten: 2254, burned: 1750, target: 2119, scale: 2100, balanceAvailable: false, historical: true });
+  assert.deepEqual(over.center, { key: 'over', label: '超出计划', kcal: 135 });
+  const pastUnder = energyRing({ eaten: 1719, burned: null, target: 2119, scale: 2100, balanceAvailable: false, historical: true });
+  assert.deepEqual(pastUnder.center, { key: 'left', label: '低于计划', kcal: 400 }, '历史日不能说「还可摄入」');
+});

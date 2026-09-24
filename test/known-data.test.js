@@ -17,7 +17,7 @@ test('部分日保留已知消耗，仍不参与完整日校准；圈心明确�
   assert.equal(completeEnergyDay(row, now), null);
   const ring = energyRing({ eaten: 2254, burned: observation.knownBurnedNow, target: 2119,
     balanceAvailable: observation.valid, historical: true });
-  assert.equal(ring.center.label, '较计划');
+  assert.equal(ring.center.label, '超出计划');
   assert.equal(ring.center.kcal, 135);
   assert.equal(ring.legend.find(l => l.track === 'burn').kcal, 1750);
   assert.equal(ring.legend.find(l => l.track === 'burn').label, '已知消耗');

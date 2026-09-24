@@ -8,7 +8,7 @@
 
 import { h, num, toast } from '../../lib/utils.js';
 import { icon } from '../../lib/icons.js';
-import { infoTip, listRow } from '../../lib/ui.js';
+import { infoTip, listRow, cardTitle } from '../../lib/ui.js';
 import { state, saveHealthDay } from '../../lib/store.js';
 import { MEAL_LABEL } from '../../core/advisor.js';
 import { estimateTag, estimateGroupInfoTip } from './food-estimate.js';
@@ -66,7 +66,7 @@ export function recommendCard(rerender, onPick) {
   const list = expanded.recommend ? all : all.slice(0, 3);
   return h('section.card.recommend-card', null,
     h('div.card-head.recommend-card-head', null,
-      h('h3', null, '当前饮食推荐'),
+      cardTitle('当前饮食推荐', 'diet'),
       h('div.card-head-actions', null,
         estimateGroupInfoTip(all.map((item) => item.food), '查看推荐中的估算说明'))),
     advice.correction?.action ? h('p.recommend-direction', null, advice.correction.action) : null,
@@ -221,7 +221,7 @@ function createWaterCard(day) {
   view.deviceNote = h('p');
   view.card = h('section.card.water-card', null,
     h('div.card-head', null,
-      h('h3', null, '喝水'),
+      cardTitle('喝水', 'waterMl'),
       h('div.water-tools', null, view.undo,
         infoTip('查看饮水说明',
           h('p', null, '这里只数「主动喝了几次水」，不记毫升。汤、粥、水果和饭菜里的水分同样算数，次数不代表全天水分是否充足。'),

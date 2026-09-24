@@ -9,7 +9,7 @@ import { planForProfile, planStepsIn } from '../../lib/store.js';
  */
 
 import { h, num, shiftDay, formatDuration, todayKey } from '../../lib/utils.js';
-import { infoTip, selectField } from '../../lib/ui.js';
+import { infoTip, selectField, cardTitle } from '../../lib/ui.js';
 import { lineChart } from '../../lib/charts.js';
 import { state } from '../../lib/store.js';
 import { weightTrendStats } from '../../core/health-insights.js';
@@ -127,7 +127,7 @@ function fullTable(days, dietByDate) {
     .reverse();
   if (!rows.length) {
     return h('section.card', null,
-      h('div.card-head', null, h('h3', null, '逐日明细')),
+      h('div.card-head', null, cardTitle('逐日明细', 'list')),
       h('p.empty-hint', null, '还没有任何记录。'));
   }
   const cols = [
@@ -143,7 +143,7 @@ function fullTable(days, dietByDate) {
   ];
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '逐日明细'),
+      cardTitle('逐日明细', 'list'),
       h('span.card-tag', null, `${rows.length} 天 · ${rows[rows.length - 1].date} 起`)),
     h('div.table-wrap.table-scroll', null, h('table.data-table', null,
       h('thead', null, h('tr', null, cols.map(([label]) => h('th', null, label)))),
@@ -443,7 +443,7 @@ export function trendCharts(rerender) {
          * 于是同一张卡的名字每切一次就换一个，找不到锚点；
          * 而下拉第一项本来就写着当前看的是什么，标题再说一遍是重复。
          */
-        h('h3', null, '趋势'),
+        cardTitle('趋势', 'trend'),
         h('div.card-head-actions', null,
           infoTip('怎么看这张图',
             h('p', null, spec.tip),

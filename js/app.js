@@ -556,6 +556,13 @@ function watchSafeInsets() {
 async function boot() {
   watchSafeInsets();
   viewRoot = $('#view');
+  /*
+   * 顶栏停在顶上时是透明的、没有分隔线；内容滚上去之后才挂一条线（CSS 的 is-scrolled）。
+   * 只切一个 class，不重绘任何东西 —— 滚动期间不许碰 DOM 结构。
+   */
+  viewRoot.addEventListener('scroll', () => {
+    $('#app')?.classList.toggle('is-scrolled', viewRoot.scrollTop > 4);
+  }, { passive: true });
   const hash = location.hash.replace('#', '');
   const openSettingsOnBoot = hash === 'settings';
   if (TABS.some((t) => t.key === hash)) current = hash;

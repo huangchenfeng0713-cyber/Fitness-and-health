@@ -146,10 +146,23 @@ export function segmentedItemProps(active, kind = 'tab') {
   return { type: 'button', role: role.item, tabindex: active ? 0 : -1, [role.selected]: String(Boolean(active)) };
 }
 
+/**
+ * 卡片标题：前面一枚浅绿小方砖 + 标题字。
+ *
+ * 每张卡一个图标，眼睛扫一屏时靠它找到「这张卡从哪开始」—— 原先十几张卡的标题
+ * 是清一色的 17px 粗黑字，滑到一半分不出看的是哪一张。图标是装饰，读屏只读标题字；
+ * h3 的 textContent 仍然就是标题本身。
+ */
+export function cardTitle(title, iconName = null) {
+  return h('h3', null,
+    iconName ? h('span.card-title-icon', { 'aria-hidden': 'true' }, icon(iconName)) : null,
+    title);
+}
+
 /** Shared card hierarchy. Long summaries get their own line. */
-export function cardHeader(title, { summary = null, actions = [] } = {}) {
+export function cardHeader(title, { summary = null, actions = [], icon: iconName = null } = {}) {
   return h('div.ui-card-heading', null,
-    h('div.card-head', null, h('h3', null, title), actions.length ? h('div.card-head-actions', null, actions) : null),
+    h('div.card-head', null, cardTitle(title, iconName), actions.length ? h('div.card-head-actions', null, actions) : null),
     summary ? h('p.card-desc', null, summary) : null);
 }
 

@@ -29,8 +29,8 @@ try {
       energyObservedAt: '2026-09-19T22:30:00+08:00', energyCoverage: { status: 'partial' } }, '2026-09-19', new Date());
     (await import('/js/views/dashboard.js')).renderDashboard(document.querySelector('#view'));
   });
-  assert.equal(await page.locator('.ring-caption').innerText(), '较计划');
-  assert.equal(await page.locator('.ring-value').innerText(), '+135');
+  assert.equal(await page.locator('.ring-caption').innerText(), '超出计划');
+  assert.equal(await page.locator('.ring-value').innerText(), '135');
   assert.match(await page.locator('.ring-legend').innerText(), /已知消耗[\s\S]*1750/);
   assert.match(await page.locator('.split-known-values').innerText(), /碳水 200 g · 脂肪 60 g/);
   assert.equal(await page.locator('[data-nutrient="fiber"] .nutrient-point').evaluate(el => parseFloat(el.style.left)), 24);

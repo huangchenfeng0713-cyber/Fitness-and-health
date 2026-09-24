@@ -36,3 +36,9 @@ test('每日指标复用同一份目标和提醒门槛，保留食物统计输�
   assert.equal(m.find(m=>m.key==='sodium').attention,2000);
   assert.equal(m.find(m=>m.key==='sugar').eaten,26.2);
 });
+
+test('一笔都还没记时纤维是中性色；记过东西但纤维为 0 仍然亮橙', () => {
+  assert.equal(nutrientScale({ key: 'fiber', eaten: 0 }, { nothingRecorded: true }).level, 'plain',
+    '凌晨一口没吃就亮一个橙点，等于对着没开始的一天说「偏少」');
+  assert.equal(nutrientScale({ key: 'fiber', eaten: 0 }, { nothingRecorded: false }).level, 'near');
+});

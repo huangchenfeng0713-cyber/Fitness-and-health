@@ -95,7 +95,7 @@ test('同一批数字不在两页各写一遍', () => {
   const mounted = dashboard.slice(dashboard.indexOf('export function renderDashboard'));
   assert.ok(!/entriesCard|'今日记录'/.test(mounted), '今日页又挂回了只读的记录卡');
   // 那张卡改叫「饮食记录」，默认只读，按「编辑」才给出改克数和删除
-  assert.match(diet, /h\('h3', null, '饮食记录'\)/, '可编辑的那张记录卡不能一起没了');
+  assert.match(diet, /cardTitle\('饮食记录'/, '可编辑的那张记录卡不能一起没了');
   assert.match(diet, /editing \? '完成' : '编辑'/, '记录卡缺少编辑开关');
 
   // 健康数据每项配一个图标：六项全是数字加两个汉字，扫一眼分不出哪个是哪个
@@ -326,8 +326,8 @@ test('图表 key 认不出来时退回第一张，不让整张卡消失', () => 
 test('趋势卡标题固定，不跟着下拉变', () => {
   // 同一张卡的名字每切一次就换一个，找不到锚点；下拉第一项本来就写着看的是什么
   const charts = read('js/views/cards/trend-charts.js');
-  assert.match(charts, /h\('h3', null, '趋势'\)/);
-  assert.ok(!/h\('h3', null, spec\.title\)/.test(charts), '标题仍在跟着下拉变');
+  assert.match(charts, /cardTitle\('趋势'/);
+  assert.ok(!/(h\('h3', null|cardTitle\()\s*spec\.title/.test(charts), '标题仍在跟着下拉变');
   assert.match(charts, /h\('p\.trend-summary', null, spec\.tag\)/,
     '当前图的日均或达标摘要应靠近选择器，而不是挤在卡片标题右侧');
 });
@@ -1417,7 +1417,7 @@ test('饮食记录默认只读，按「编辑」才能改克数或删除', () =>
   assert.match(diet, /ui\.editEntries = false;\s+\/\/ 一条都没有/, '空态没有退出编辑');
 
   // 搜索卡把「饮食记录」这个名字让出来了，两张卡不能重名
-  assert.match(diet, /h\('h3', null, '添加食物'\)/, '搜索卡应当改名，否则两张卡都叫「饮食记录」');
+  assert.match(diet, /cardTitle\('添加食物'/, '搜索卡应当改名，否则两张卡都叫「饮食记录」');
 });
 
 /*
@@ -2195,10 +2195,11 @@ test('毛玻璃只给真的叠在内容上面的那几处，而且有落回实�
    * 元素栈是 `div.select-bar → div.actionbar-slot → div → body`，没有内容。
    * 给横条加 blur 糊的是一块纯色，白花 GPU。
    *
-   * 真的叠在内容上面的只有三处：份量弹层、设置抽屉、toast。
+   * 真的叠在内容上面的是：份量弹层、toast，以及 v3.26.0 起浮在内容上面的底栏胶囊
+   * （内容真的从它底下滚过去，玻璃才有意义；顶栏和多选条仍是实格，不给）。
    */
   const css = read('css/app.css');
-  const glassy = ['.sheet {', '.toast {'];
+  const glassy = ['.sheet {', '.toast {', '.tabbar {'];
   for (const sel of glassy) {
     const block = css.slice(css.indexOf(sel), css.indexOf('}', css.indexOf(sel)));
     assert.match(block, /backdrop-filter:/, `${sel} 应当是毛玻璃`);

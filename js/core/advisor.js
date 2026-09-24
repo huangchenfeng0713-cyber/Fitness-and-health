@@ -592,6 +592,12 @@ export function judgeStatus({ gaps, kcalLeft, targets, trend = null }) {
   if (trend?.state === 'historical') return { level: 'good', label: '记录回顾', headline: '回看这一天的记录', detail: recorded + '按当前设置对照。' };
   if (trend?.dayComplete) return { level: 'good', headline: '记录已完成', detail: recorded + '不必为凑数强行进食。' };
   if (kcalLeft < -BALANCE_WITHIN) return { level: 'good', headline: '后续餐次照常安排', detail: recorded + '按饥饿感调整份量，不需要跳餐或额外运动抵消。' };
+  /*
+   * 一笔都还没记：原先落到最后那一支，写着「已记录 0 kcal……餐次有记录不代表已吃完」——
+   * 对着一口没吃的人说「有记录不代表吃完」，前后两句互相打架。
+   * 这时候该做的事只有一件：记下第一餐。
+   */
+  if (!(gaps.kcal.eaten > 0)) return { level: 'good', label: '新的一天', headline: '从第一餐开始记', detail: '今天的计划是 ' + gaps.kcal.target + ' kcal。记下第一餐之后，环和下面的刻度会跟着走。' };
   return { level: 'good', headline: '按正常餐次安排', detail: recorded + '餐次有记录不代表已吃完，全天摄入仍需结合后续记录。' };
 }
 
@@ -683,9 +689,26 @@ export function buildInsights({
    * 用户只会看到一个正常的目标，不知道自己的快捷指令一直在取错数据。
    */
   if (observation && !observation.valid && deviceBudgetEnabled) {
-    const missing = Object.entries(observation.fields).filter(([, f]) => f.status === 'missing').map(([k]) => k === 'activeEnergy' ? '活动能量' : '静息能量');
-    add('warn', INSIGHT_PRIORITY.data, missing.length ? '缺少' + missing.join('、') : observation.reason,
-      '原始单项仍可在数据页查看；每日计划与今天记录分开计算。', '核对数据页的日期、来源与字段截止时间。');
+    const fields = Object.values(observation.fields || {});
+    const allMissing = fields.length > 0 && fields.every((f) => f.status === 'missing');
+    /*
+     * 一大早还没同步是常态，不是问题。原先凌晨三点打开也挂着一条橙色的
+     * 「缺少静息能量、活动能量 / 核对数据页的日期、来源与字段截止时间」——
+     * 程序腔、没有可做的事，还把真正的提示挤到了第二条。
+     * 历史日的 now 钉在 20:00，所以这道闸只对今天的早上起作用。
+     */
+    if (allMissing && isToday && hour < 10) {
+      // 什么都不说：圈心照旧按计划对照，同步一到自动换成收支
+    } else if (allMissing) {
+      add('warn', INSIGHT_PRIORITY.data, isToday ? '今天的消耗还没同步过来' : '这一天没有消耗数据',
+        '静息和活动消耗来自手表，要等快捷指令或导入同步进来；在那之前，收支只能按摄入和计划对照。',
+        isToday ? '看看快捷指令今天有没有跑过；数据页「今日健康数据」里能看到最近一次同步。'
+          : '需要的话可以在设置里导入 Apple 健康的导出文件补上。');
+    } else {
+      add('warn', INSIGHT_PRIORITY.data, observation.reason,
+        '这一天的消耗先不参与计算，每日计划照旧按近期完整日算。',
+        '到数据页看看这一天的同步时间；快捷指令最晚那次自动化要排在 23:00 之后。');
+    }
   }
 
   /* ---------------- 2 热量和蛋白 ---------------- */
@@ -699,6 +722,15 @@ export function buildInsights({
       + `而今天只剩 ${round(kcalLeft)} kcal。`,
       dayComplete ? '今天不必为凑数强行进食；若饿了可少量选择奶豆类，明天把蛋白分到正常三餐。'
         : '后续餐次可用鱼虾、去皮禽肉或低脂奶豆类替换高油食物；不必为了凑数强行进食，明天把蛋白分到前几餐。');
+  } else if (proteinShort > 10 && isToday && !dayComplete && gaps.protein.eaten <= 0 && hour < 11) {
+    /*
+     * 一天刚开始、一口还没吃：这时候「还差 109g，约等于 370g 鸡胸肉或 15 个鸡蛋」
+     * 是把全天的量一次压到人面前，读起来像催人早上吃十五个蛋。
+     * 同一个目标换个说法：分到三餐里，每一餐要做的事很小。
+     */
+    add('protein', INSIGHT_PRIORITY.energy, `今天的蛋白目标 ${round(gaps.protein.target)}g`,
+      `${targets.proteinBasis}。`,
+      '分到三餐里并不难：每餐一掌心的肉、鱼或两个鸡蛋，再加一杯奶或一份豆制品。');
   } else if (proteinShort > 10) {
     const eq = proteinEquivalent(proteinShort);
     add('protein', INSIGHT_PRIORITY.energy, `蛋白还差 ${round(proteinShort)}g`,

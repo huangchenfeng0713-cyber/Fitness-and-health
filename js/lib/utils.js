@@ -184,6 +184,15 @@ function placeInfoTip(details) {
   const rightEdge = Math.min(viewport.left + viewport.width, sheet?.right ?? Infinity) - margin;
   const bottomEdge = Math.min(viewport.top + viewport.height, sheet?.bottom ?? Infinity, barTop) - margin;
   const anchor = summary.getBoundingClientRect();
+  /*
+   * 记号整个滚出看得见的区域时收起。说明层跟着记号走，可记号钻到顶栏或底栏后面去之后，
+   * 它只能被夹在边上 —— 一块说明悬在屏幕边缘、而它说的那一项已经看不见了，
+   * 和数值浮层当年「停在屏幕原位」是同一个毛病。
+   */
+  if (anchor.bottom < topEdge - margin || anchor.top > bottomEdge + margin) {
+    details.open = false;
+    return;
+  }
 
   /*
    * 先把说明层放进可见区域再测量。visibility:hidden 仍参与布局，既不会闪到

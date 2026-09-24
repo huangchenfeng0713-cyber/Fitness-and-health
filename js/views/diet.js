@@ -14,6 +14,7 @@ import {
 } from '../lib/utils.js';
 import {
   listRow, searchField, weakTag, segmentedGroupProps, segmentedItemProps, collapseRow, selectField,
+  cardTitle,
 } from '../lib/ui.js';
 import { icon, setIcon, ICON_SHAPES } from '../lib/icons.js';
 import { macroBar, splitBar } from '../lib/charts.js';
@@ -139,7 +140,7 @@ function buildShell(root) {
   nodes.searchCard = h('section.card.search-card', null,
     // 「饮食记录」这个名字让给下面那张真正列出记录的卡；这一张做的是「加一笔」
     h('div.card-head.search-card-head', null,
-      h('h3', null, '添加食物'),
+      cardTitle('添加食物', 'search'),
       h('div.card-head-actions', null,
         nodes.customToggle)),
     nodes.searchField,
@@ -1437,7 +1438,7 @@ function refreshEntries() {
   if (!entries.length) {
     ui.editEntries = false;   // 一条都没有还留在编辑态，下次进来会看到一个没用的「完成」
     mount(nodes.entries, h('section.card', null,
-      h('div.card-head', null, h('h3', null, '饮食记录')),
+      h('div.card-head', null, cardTitle('饮食记录', 'list')),
       h('p.empty-hint', null, '还没有记录。搜索食物加进来，或者用下面的「和昨天一样」。'),
       copyRow()));
     return;
@@ -1449,15 +1450,13 @@ function refreshEntries() {
 
   mount(nodes.entries, h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '饮食记录'),
+      cardTitle('饮食记录', 'list'),
       /*
        * ⓘ 排在最后。全应用其余五张卡的说明入口都贴着卡头右边缘，
        * 只有这一张夹在摘要和「编辑」中间 —— 同一个记号在同一屏上有两个落点，
        * 眼睛就得每张卡重新找一遍。
        */
       h('div.card-head-actions', null,
-        h('span.card-tag', null,
-          `${num(total.kcal)} kcal · 蛋白 ${num(total.protein, 1)}g${total.coverage.protein.complete ? '' : '（已知部分）'}`),
         h('button.text-btn', {
           type: 'button', 'aria-pressed': String(editing),
           onclick: () => { ui.editEntries = !ui.editEntries; refreshEntries(); },
@@ -1489,6 +1488,12 @@ function refreshEntries() {
             ],
           },
         ))),
+    /*
+     * 当天合计单独一行放在标题下面。它原先挤在卡头右边（标题 · 合计 · 编辑 · ⓘ 四样一行），
+     * 标题前多了图标之后一行放不下，整组被挤到第二行、右对齐悬在半空。
+     */
+    h('p.card-desc.entries-total', null,
+      `${num(total.kcal)} kcal · 蛋白 ${num(total.protein, 1)}g${total.coverage.protein.complete ? '' : '（已知部分）'}`),
     dietCompleteness(),
     Object.entries(grouped).map(([meal, list]) => h('div.meal-group', null,
       h('div.meal-group-head', null,

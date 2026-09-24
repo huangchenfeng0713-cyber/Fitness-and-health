@@ -1,7 +1,7 @@
 /** 身体信息与目标设置。 */
 
 import { h, num, toast, field } from '../../lib/utils.js';
-import { infoTip } from '../../lib/ui.js';
+import { infoTip, cardTitle } from '../../lib/ui.js';
 import { state, saveProfile, planForProfile } from '../../lib/store.js';
 import {
   ACTIVITY_LEVELS, GOALS, bmi, bmiCategory, leanBodyMass, validateProfile, rateGuidance, ageFrom,
@@ -144,7 +144,7 @@ export function profileCard(rerender) {
 
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '身体信息'),
+      cardTitle('身体信息', 'body'),
       h('div.card-head-actions', null,
         dirtyMark,
         infoTip('查看身体信息用途',

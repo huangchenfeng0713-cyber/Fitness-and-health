@@ -15,7 +15,7 @@
 
 import { h, num, formatDuration, durationParts, todayKey, unitGap } from '../../lib/utils.js';
 import { icon, ICON_SHAPES } from '../../lib/icons.js';
-import { infoTip } from '../../lib/ui.js';
+import { infoTip, cardTitle } from '../../lib/ui.js';
 import { state, latestHealthEntry } from '../../lib/store.js';
 import { setIntent } from '../../lib/nav.js';
 import { healthCardState, MISSING_REASONS, FIELD_LABEL } from '../../core/health-card.js';
@@ -121,7 +121,7 @@ export function healthMetricsCard() {
 
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '今日健康数据'),
+      cardTitle('今日健康数据', 'heart'),
       h('div.card-head-actions', null,
         h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
           info.synced ? '已同步' : '未同步'),
