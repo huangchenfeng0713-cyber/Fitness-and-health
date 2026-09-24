@@ -218,14 +218,12 @@ function createWaterCard(day) {
   }, view.surface, icon('waterMl', 'water-drop'),
   h('span.water-label', { 'aria-live': 'polite', 'aria-atomic': 'true' }, '已记录 ', view.count, ' 次饮水'),
   icon('plus', 'water-plus'));
-  view.deviceNote = h('p');
   view.card = h('section.card.water-card', null,
     h('div.card-head', null,
       cardTitle('喝水', 'waterMl'),
       h('div.water-tools', null, view.undo,
         infoTip('查看饮水说明',
-          h('p', null, '这里只数「主动喝了几次水」，不记毫升。汤、粥、水果和饭菜里的水分同样算数，次数不代表全天水分是否充足。'),
-          view.deviceNote))),
+          h('p', null, '这里只数「主动喝了几次水」，不记毫升。汤、粥、水果和饭菜里的水分同样算数，次数不代表全天水分是否充足。')))),
     view.button);
   return view;
 }
@@ -235,10 +233,6 @@ export function waterCard() {
     waterView = pendingWaterViews.get(state.day) || createWaterCard(state.day);
   }
   if (!waterView.saving) waterView.value = savedWater(state.day);
-  const deviceMl = Number(state.derived?.health?.waterMl) || 0;
-  waterView.deviceNote.hidden = deviceMl <= 0;
-  waterView.deviceNote.textContent = deviceMl > 0
-    ? `Apple 健康这一天还同步了 ${num(deviceMl)} ml 饮水，在「数据」页能看到。` : '';
   updateWater(waterView);
   return waterView.card;
 }

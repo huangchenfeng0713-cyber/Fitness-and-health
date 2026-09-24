@@ -55,7 +55,7 @@ test('今天有体重时优先使用今天，不标成历史记录', () => {
   assert.ok(s.presentToday.includes('weightKg'));
 });
 
-test('体脂和饮水只在记到过的时候才占一格', () => {
+test('体脂按历史样本显示，设备饮水不占数据卡格子', () => {
   const bare = healthCardState({ health: { steps: 1 }, today: TODAY });
   assert.ok(!bare.cells.some((c) => c.key === 'bodyFatPct'), '没有体脂秤的人不该常年挂一道杠');
   assert.ok(!bare.cells.some((c) => c.key === 'waterMl'));
@@ -66,10 +66,10 @@ test('体脂和饮水只在记到过的时候才占一格', () => {
   const cells = Object.fromEntries(owner.cells.map((c) => [c.key, c]));
   assert.ok(cells.bodyFatPct, '记到过就该占一格');
   assert.equal(cells.bodyFatPct.value, null, '占了格但今天没测，值是空的');
-  assert.ok(cells.waterMl, '设备同步来的饮水毫升不能丢');
+  assert.ok(!cells.waterMl, '设备饮水不再占展示格，原始记录仍由同步层保留');
 });
 
-test('数据页喝水次数与饮食页同日记录一致，设备毫升独立显示', () => {
+test('数据页饮水次数与饮食页同日记录一致，不显示设备毫升', () => {
   const state = healthCardState({
     health: { steps: 1157, waterCount: 2, waterMl: null },
     today: TODAY, everSeen: ['waterMl'],
@@ -77,10 +77,10 @@ test('数据页喝水次数与饮食页同日记录一致，设备毫升独立�
   const cells = Object.fromEntries(state.cells.map((cell) => [cell.key, cell]));
   assert.equal(cells.waterCount.value, 2);
   assert.equal(cells.waterCount.unit, '次');
-  assert.equal(cells.waterMl.value, null);
-  assert.equal(cells.waterMl.label, '设备饮水');
+  assert.equal(cells.waterCount.label, '饮水');
+  assert.equal(cells.waterMl, undefined);
   assert.ok(!state.presentToday.includes('waterCount'), '手动喝水次数不是健康设备的同步样本');
-  assert.ok(state.missing.includes('waterMl'));
+  assert.ok(!state.missing.includes('waterMl'));
 
   const noWaterToday = healthCardState({ health: { steps: 1157 }, today: TODAY });
   assert.equal(noWaterToday.cells.find((cell) => cell.key === 'waterCount').value, 0);

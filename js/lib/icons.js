@@ -21,6 +21,7 @@
 import { h } from './utils.js';
 
 const path = (d) => `<path d="${d}"/>`;
+const waterDrop = path('M12 3.2c3.4 4 5.4 6.7 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-2.5 2-5.2 5.4-9.2Z');
 
 export const ICON_SHAPES = {
   // ——— 界面控件 ———
@@ -98,7 +99,8 @@ export const ICON_SHAPES = {
    * 百分号在这个尺寸上一眼认得出，全应用也没有第二处用它。
    */
   bodyFatPct: path('M7.4 4.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8M16.6 14.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8M18.6 5 5.4 19'),
-  waterMl: path('M12 3.2c3.4 4 5.4 6.7 5.4 9.2a5.4 5.4 0 0 1-10.8 0c0-2.5 2-5.2 5.4-9.2Z'),
+  waterCount: waterDrop,
+  waterMl: waterDrop,
   restingHR: path('M3.5 12.5h3l1.8-4 2.7 8 2.4-6 1.6 3.4h5'),
 
   // ——— 餐次 ———

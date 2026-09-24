@@ -4,6 +4,7 @@ import {
   h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText, scrimDismiss,
 } from './lib/utils.js';
 import { isGesturing, dragGesture } from './lib/gesture.js';
+import { installTabSwipe, swipeDestination } from './lib/tab-swipe.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -38,6 +39,9 @@ let settingsOpener = null;
 let settingsCloseTimer = null;
 let releaseSettingsFocus = null;
 let accountBootstrapPending = false;
+let tabSwipe = null;
+let tabIndicatorObserver = null;
+let tabbarGestureBound = false;
 
 /** 设置是全局偏好，不占一个主栏目；从右侧抽屉随时打开。 */
 function ensureSettingsDrawer() {
@@ -76,6 +80,7 @@ function ensureSettingsDrawer() {
 
 function openSettings() {
   if (settingsOpen) return;
+  tabSwipe?.cancel();
   ensureSettingsDrawer();
   clearTimeout(settingsCloseTimer);
   settingsOpener = document.activeElement;
@@ -185,22 +190,86 @@ function renderTopbar() {
 
 function renderTabs() {
   const nav = $('#tabbar');
-  clearEl(nav);
-  for (const tab of TABS) {
-    nav.append(h('button', {
-      class: `tab${current === tab.key ? ' active' : ''}`,
-      onclick: () => switchTab(tab.key),
-      'aria-current': current === tab.key ? 'page' : null,
-      'aria-label': tab.label,
-    }, h('span.tab-icon', { html: iconSvg(tab.icon) }), h('span.tab-label', null, tab.label)));
+  if (!nav.querySelector('.tab-indicator')) {
+    nav.append(h('span.tab-indicator', { 'aria-hidden': 'true' }));
+    for (const tab of TABS) {
+      nav.append(h('button.tab', {
+        onclick: () => tabSwipe ? tabSwipe.navigate(tab.key) : switchTab(tab.key),
+        'aria-label': tab.label,
+      }, h('span.tab-icon', { html: iconSvg(tab.icon) }), h('span.tab-label', null, tab.label)));
+    }
+    if (typeof ResizeObserver === 'function') {
+      tabIndicatorObserver = new ResizeObserver(() => placeTabIndicator());
+      tabIndicatorObserver.observe(nav);
+    } else window.addEventListener('resize', placeTabIndicator);
+  }
+  if (!tabbarGestureBound) bindTabbarGesture(nav);
+  nav.querySelectorAll('.tab').forEach((button, index) => {
+    const active = TABS[index].key === current;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  placeTabIndicator();
+}
+
+function bindTabbarGesture(nav) {
+  tabbarGestureBound = true;
+  let startingLeft = 0;
+  let suppressClick = false;
+  nav.addEventListener('click', (event) => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    suppressClick = false;
+  }, true);
+  dragGesture(nav, {
+    axis: 'x',
+    threshold: 12,
+    canStart: (event) => !settingsOpen && !accountDataLocked() && Boolean(event.target.closest?.('.tab')),
+    onStart: () => {
+      startingLeft = nav.querySelector('.tab.active')?.offsetLeft || 0;
+      nav.classList.remove('tabbar-ready');
+    },
+    onMove: ({ dx }) => {
+      const indicator = nav.querySelector('.tab-indicator');
+      if (!indicator) return;
+      const left = Math.max(5, Math.min(nav.clientWidth - indicator.offsetWidth - 5, startingLeft + dx));
+      indicator.style.transform = `translate3d(${left}px, 0, 0)`;
+    },
+    onEnd: ({ dx, velocity, cancelled }) => {
+      suppressClick = true;
+      setTimeout(() => { suppressClick = false; }, 0);
+      nav.classList.add('tabbar-ready');
+      const index = TABS.findIndex((tab) => tab.key === current);
+      const destination = swipeDestination({
+        dx, velocity, width: nav.clientWidth, index, count: TABS.length, cancelled,
+      });
+      if (destination == null) placeTabIndicator();
+      else tabSwipe?.navigate(TABS[destination].key);
+    },
+  });
+}
+
+function placeTabIndicator() {
+  const nav = $('#tabbar');
+  const indicator = nav?.querySelector('.tab-indicator');
+  const selected = nav?.querySelector('.tab.active');
+  if (!indicator || !selected) return;
+  indicator.style.width = `${selected.offsetWidth}px`;
+  indicator.style.transform = `translate3d(${selected.offsetLeft}px, 0, 0)`;
+  if (!nav.classList.contains('tabbar-ready')) {
+    requestAnimationFrame(() => nav.classList.add('tabbar-ready'));
   }
 }
 
-function switchTab(key) {
+function switchTab(key, { fromSwipe = false } = {}) {
   if (key === 'settings') {
     openSettings();
     return;
   }
+  if (!fromSwipe) tabSwipe?.cancel();
+  if (key === current) return;
   if (settingsOpen) closeSettings({ restoreHash: false });
   current = key;
   location.hash = key;
@@ -224,7 +293,7 @@ function isEditing() {
  * 手指正压在某个手势上时同样不能重绘 —— 和输入框是同一件事，
  * 只是把焦点换成了手指：重绘会把正在拖的那个节点连根换掉，手势当场断在半路。
  */
-const busy = () => isEditing() || isGesturing();
+const busy = () => isEditing() || isGesturing() || tabSwipe?.isAnimating();
 
 /*
  * 定时器、可见性、账号轮询这几条路都记得躲开输入框，唯独 store 订阅这条没有 ——
@@ -237,6 +306,7 @@ const busy = () => isEditing() || isGesturing();
 let renderPending = false;
 
 function renderCurrentSafely({ force = false } = {}) {
+  if (force) tabSwipe?.cancel();
   if (!force && busy()) { renderPending = true; return; }
   renderPending = false;
   renderCurrent();
@@ -556,6 +626,13 @@ function watchSafeInsets() {
 async function boot() {
   watchSafeInsets();
   viewRoot = $('#view');
+  tabSwipe = installTabSwipe({
+    view: viewRoot, app: $('#app'), tabs: TABS,
+    currentKey: () => current,
+    changeTab: (key) => switchTab(key, { fromSwipe: true }),
+    blocked: () => settingsOpen || accountDataLocked(),
+    onSettled: () => { if (renderPending) renderCurrentSafely(); },
+  });
   /*
    * 顶栏停在顶上时是透明的、没有分隔线；内容滚上去之后才挂一条线（CSS 的 is-scrolled）。
    * 只切一个 class，不重绘任何东西 —— 滚动期间不许碰 DOM 结构。

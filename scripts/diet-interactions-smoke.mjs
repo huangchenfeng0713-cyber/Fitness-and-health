@@ -12,7 +12,11 @@ const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 let checks = 0;
 const check = (name, ok) => { assert.ok(ok, name); checks++; console.log('✓ ' + engine + ': ' + name); };
-const tab = label => page.locator('.tab').filter({ hasText: label }).click();
+const tab = async label => {
+  await page.locator('.tab').filter({ hasText: label }).click();
+  await page.waitForFunction(() => !document.querySelector('.tab-swipe-ghost')
+    && !document.querySelector('#view')?.getAnimations().length);
+};
 const close = async () => {
   await page.evaluate(async () => (await import('/js/lib/sheet.js')).closeSheet({ force: true }));
   await page.waitForTimeout(300);
@@ -131,11 +135,22 @@ try {
   await waitCount(16);
   check('队列未完成时往返日期再点击，仍共用同日队列', await page.locator('.water-count').textContent() === '16');
   await tab('数据');
-  check('数据页标明当天日期，喝水次数与饮食页同日记录一致', await page.locator('.card').first().evaluate(el => {
-    const cell = [...el.querySelectorAll('.metric-cell')].find(node => node.textContent.includes('喝水记录'));
-    return el.querySelector('.card-tag')?.textContent.includes('09-06')
-      && cell?.querySelector('.metric-value')?.textContent === '16次';
-  }));
+  const healthWater = await page.locator('.card').first().evaluate(el => {
+    const cell = [...el.querySelectorAll('.metric-cell')].find(node => node.querySelector('.metric-label')?.textContent === '饮水');
+    return {
+      date: el.querySelector('.card-tag')?.textContent,
+      value: cell?.querySelector('.metric-value')?.textContent,
+      hasDevice: el.textContent.includes('设备饮水'),
+      metricIcon: cell?.querySelector('.metric-icon path')?.getAttribute('d'),
+    };
+  });
+  const sharedWaterIcon = await page.evaluate(async () => {
+    const { ICON_SHAPES } = await import('/js/lib/icons.js');
+    return ICON_SHAPES.waterCount === ICON_SHAPES.waterMl;
+  });
+  check('数据页标明当天日期，喝水次数与饮食页同日记录一致',
+    healthWater.date?.includes('09-06') && healthWater.value === '16次'
+      && !healthWater.hasDevice && Boolean(healthWater.metricIcon) && sharedWaterIcon);
   await screenshot('.metric-grid', 'health-water-metrics');
   await tab('饮食');
 

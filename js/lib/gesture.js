@@ -106,9 +106,9 @@ export function dragGesture(el, {
   const primary = (dx, dy) => (axis === 'x' ? dx : dy);
   const cross = (dx, dy) => (axis === 'x' ? dy : dx);
 
-  const finish = (dx, dy) => {
+  const finish = (dx, dy, cancelled = false) => {
     if (release) { release(); release = null; }
-    if (started && onEnd) onEnd({ dx, dy, velocity: lastV });
+    if (started && onEnd) onEnd({ dx, dy, velocity: lastV, cancelled });
     id = null;
     started = false;
     dropped = false;
@@ -153,7 +153,7 @@ export function dragGesture(el, {
 
   const up = (ev) => {
     if (ev.pointerId !== id) return;
-    finish(ev.clientX - startX, ev.clientY - startY);
+    finish(ev.clientX - startX, ev.clientY - startY, ev.type === 'pointercancel');
   };
 
   el.addEventListener('pointerdown', down);

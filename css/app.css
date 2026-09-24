@@ -435,13 +435,19 @@ html, body { height: 100%; overflow: hidden; }
 .nav-arrow span, .settings-close span { display: grid; place-items: center; }
 .nav-arrow svg, .settings-close svg { width: var(--icon-md); height: var(--icon-md); }
 
-.view { flex: 1 1 auto; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+.view { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
   /* 底下让出浮动底栏那一截：最后一张卡要能滚到胶囊上面来，而不是永远压在它底下 */
   padding: var(--space-2) calc(var(--view-inline-pad) + var(--safe-right)) calc(var(--view-bottom-pad) + var(--dock-space)) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: var(--section-gap); }
 /* 固定选择栏在的时候，胶囊压在选择栏上，内容区只需要自己的留白 */
 #app:has(> .actionbar-slot:not([hidden])) .view { padding-bottom: var(--view-bottom-pad); }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
+.view.tab-swipe-dragging, .view.tab-swipe-transitioning { will-change: transform; }
+.tab-swipe-ghost {
+  position: absolute; z-index: 30; flex: none; pointer-events: none;
+  overflow: hidden; background: var(--bg); will-change: transform;
+}
+.view.tab-swipe-transitioning { background: var(--bg); }
 
 .tabbar {
   /*
@@ -462,6 +468,15 @@ html, body { height: 100%; overflow: hidden; }
   backdrop-filter: saturate(180%) blur(24px);
   border: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
   box-shadow: 0 12px 32px -14px rgba(8, 30, 24, .35), inset 0 1px 0 rgba(255, 255, 255, .35);
+  touch-action: pan-y;
+}
+.tab-indicator {
+  position: absolute; top: 5px; bottom: 5px; left: 0;
+  border-radius: 999px; pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.tabbar.tabbar-ready .tab-indicator {
+  transition: transform .33s cubic-bezier(.22, .8, .22, 1), width .22s ease;
 }
 
 /*
@@ -490,7 +505,7 @@ html, body { height: 100%; overflow: hidden; }
 }
 .actionbar-slot .select-bar-list { max-height: min(32vh, 240px); }
 .tab {
-  flex: 1;
+  position: relative; z-index: 1; flex: 1;
   border: 0;
   border-radius: 999px;
   background: none;
@@ -521,7 +536,10 @@ html, body { height: 100%; overflow: hidden; }
  */
 .tab.active {
   color: var(--accent); font-weight: var(--w-semibold);
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  background: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabbar.tabbar-ready .tab-indicator { transition: none; }
 }
 /*
  * 选中态也不加粗描边。原先 1.8 → 2.1，于是同一个图标在底栏上有两种粗细，

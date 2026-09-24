@@ -24,16 +24,12 @@ const FIELDS = [
   { key: 'restingHR', label: '静息心率', unit: 'bpm', decimals: 0 },
   { key: 'weightKg', label: '体重', unit: 'kg', decimals: 1 },
   // 与饮食页同一日、同一字段；0 次表示尚未记水，不推断实际摄水量。
-  { key: 'waterCount', label: '喝水记录', unit: '次', decimals: 0, localLog: true },
+  { key: 'waterCount', label: '饮水', unit: '次', decimals: 0, localLog: true },
   /*
-   * 体脂和饮水只在这台设备真的记到过的时候才占一格。
-   * 多数人没有体脂秤、也没让快捷指令带上饮水，常年挂一道杠只是噪音。
-   * 记到过之后它们就和别的项一样，缺了画杠。
-   *
-   * 设备饮水是 Apple 健康的毫升值，与上面的手动次数并列而不换算。
+   * 体脂只在这台设备真的记到过的时候才占一格。
+   * 设备同步的饮水毫升仍保存在原始健康记录中，不在这张卡上重复显示。
    */
   { key: 'bodyFatPct', label: '体脂', unit: '%', decimals: 1, optIn: true },
-  { key: 'waterMl', label: '设备饮水', unit: 'ml', decimals: 0, optIn: true },
 ];
 
 /*
