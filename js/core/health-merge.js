@@ -26,9 +26,9 @@ export function isCompleteAppleSnapshot(meta = {}) {
 function originOf(row, key) {
   const explicit = row?._fieldProvenance?.[key]?.origin;
   if (explicit) return explicit;
-  // 兼容早期没有字段级 provenance 的每日记录。
-  if (row?.source === 'apple' && APPLE_HEALTH_FIELDS.has(key)) return 'apple';
-  if (row?.source === 'manual' && APPLE_HEALTH_FIELDS.has(key)) return 'manual';
+  // 旧记录只有整行来源；未填写的字段不能因此被视作手动覆盖。
+  if (row?.[key] != null && row.source === 'apple' && APPLE_HEALTH_FIELDS.has(key)) return 'apple';
+  if (row?.[key] != null && row.source === 'manual' && APPLE_HEALTH_FIELDS.has(key)) return 'manual';
   return null;
 }
 

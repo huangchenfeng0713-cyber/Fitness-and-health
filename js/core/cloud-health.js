@@ -108,7 +108,7 @@ function timestamp(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** 只返回比本地已落地版本更新的云端行，避免每次轮询都把整份快照标脏。 */
+/** 只返回新增或需要修复的云端字段，避免每次轮询都把整份快照标脏。 */
 export function newerCloudHealthDays(rows = [], localDays = []) {
   const localByDate = new Map(localDays.map((day) => [day.date, day]));
   return rows.map(cloudHealthRowToDay).filter(Boolean).map((day) => {
@@ -116,7 +116,8 @@ export function newerCloudHealthDays(rows = [], localDays = []) {
     if (!local?._cloudHealthSync) return day;
     const remoteUpdated = timestamp(day._cloudHealthSync.updatedAt || day._cloudHealthSync.capturedAt);
     const localUpdated = timestamp(local._cloudHealthSync.updatedAt || local._cloudHealthSync.capturedAt);
-    if (remoteUpdated <= localUpdated) return null;
+    if (remoteUpdated < localUpdated) return null;
+    const sameVersion = remoteUpdated === localUpdated;
 
     const patch = {
       date: day.date,
@@ -134,10 +135,16 @@ export function newerCloudHealthDays(rows = [], localDays = []) {
       const cursorAdvanced = remoteCursor > localCursor;
       const correctedAtSameTime = remoteCursor > 0 && remoteCursor === localCursor
         && previousRemoteValue != null && day[key] !== previousRemoteValue;
-      if (!cursorAdvanced && !correctedAtSameTime) continue;
+      // 旧合并曾只保存同步游标、丢掉实际值；同版本重读时也要补回。
+      // 显式手动来源仍受保护，且 0 是已经落地的真实值。
+      const missingLocally = local[key] == null
+        && local._fieldProvenance?.[key]?.origin !== 'manual'
+        && remoteCursor > 0;
+      if (!cursorAdvanced && !correctedAtSameTime && !missingLocally) continue;
       patch[key] = day[key];
       if (key === 'activeEnergy' || key === 'restingEnergy') energyChanged = true;
     }
+    if (sameVersion && !Object.keys(patch).some((key) => CLOUD_HEALTH_KEYS.has(key))) return null;
     if (energyChanged && day.energyObservedAt) patch.energyObservedAt = day.energyObservedAt;
     return patch;
   }).filter(Boolean).sort((a, b) => (a.date < b.date ? -1 : 1));
