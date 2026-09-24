@@ -139,6 +139,24 @@ test('增量 JSON/CSV 导入不会删除本次缺失的旧字段', () => {
   assert.equal(merged[0].weightKg, 72);
 });
 
+test('手动记录没有填的健康字段仍能由账号同步补齐，已填的零值保留', () => {
+  const existing = [{
+    date: '2026-09-24', source: 'manual', waterMl: 250, activeEnergy: 0,
+    _cloudHealthSync: { updatedAt: '2026-09-24T04:00:09.000Z' },
+  }];
+  const incoming = [{
+    date: '2026-09-24', activeEnergy: 80, restingEnergy: 920,
+    energyObservedAt: '2026-09-24T04:00:03.000Z',
+    _cloudHealthSync: { updatedAt: '2026-09-24T04:00:09.000Z' },
+  }];
+  const [merged] = mergeApplePartialRows(existing, incoming);
+  assert.equal(merged.waterMl, 250);
+  assert.equal(merged.activeEnergy, 0, '显式记录的 0 不是缺失');
+  assert.equal(merged.restingEnergy, 920);
+  assert.equal(merged._fieldProvenance.restingEnergy.origin, 'apple');
+  assert.equal(merged.source, 'mixed');
+});
+
 test('手动修改只把所改字段标成 manual', () => {
   const existing = {
     date: '2026-08-20', source: 'apple', steps: 8000, weightKg: 72,

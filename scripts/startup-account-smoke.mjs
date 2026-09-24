@@ -204,12 +204,24 @@ try {
   const healthPull = await page.evaluate(async () => {
     const db = await import('/js/lib/db.js');
     const { pullAccountHealth } = await import('/js/lib/health-cloud-sync.js');
+    const { cloudHealthRowToDay } = await import('/js/core/cloud-health.js');
+    const { reloadStoreFromDB } = await import('/js/lib/store.js');
     const cloud = JSON.parse(localStorage.getItem('smoke.fake-cloud'));
-    localStorage.setItem('smoke.fake-cloud', JSON.stringify({ ...cloud, healthRows: [{
+    const remoteRow = {
       date: '2026-09-18', source: 'apple_shortcuts', steps: 8000,
+      active_energy: 80, resting_energy: 920,
       captured_at: '2026-09-18T12:00:00Z', updated_at: '2026-09-24T03:00:00Z',
-    }] }));
-    await db.bulkSync(db.STORES.health, [{ date: '2026-09-17', steps: 7000 }], [], { source: 'cloud' });
+    };
+    localStorage.setItem('smoke.fake-cloud', JSON.stringify({ ...cloud, healthRows: [remoteRow] }));
+    await db.bulkSync(db.STORES.health, [
+      { date: '2026-09-17', steps: 7000 },
+      {
+        date: remoteRow.date, source: 'manual', waterMl: 250, steps: 8000,
+        // 重现线上：已写入服务端字段游标与数值元数据，实际每日字段却缺失。
+        _cloudHealthSync: cloudHealthRowToDay(remoteRow)._cloudHealthSync,
+      },
+    ], [], { source: 'cloud' });
+    await reloadStoreFromDB();
     const writes = [];
     const unsubscribe = db.subscribeWrites(event => writes.push(event));
     const updatesBefore = window.__fakeCloud.updates;
@@ -221,13 +233,16 @@ try {
       healthWrite: writes.find(event => event.operation === 'bulk-sync'),
       settingWrite: writes.find(event => event.operation === 'put' && event.stores.includes(db.STORES.settings)),
       dates: (await db.getAll(db.STORES.health)).map(row => row.date),
+      repaired: (await db.getAll(db.STORES.health)).find(row => row.date === remoteRow.date),
     };
   });
   await page.waitForTimeout(1500);
-  check('账号健康读取只落本次新增日期，保留原历史且不触发账号快照重传',
+  check('账号健康读取补回同版本缺失数值，只写变化日期且不触发账号快照重传',
     healthPull.result.importedDays === 1 && healthPull.healthWrite?.count === 1
       && healthPull.healthWrite.source === 'cloud' && healthPull.settingWrite?.source === 'cloud'
       && healthPull.dates.includes('2026-09-17') && healthPull.dates.includes('2026-09-18')
+      && healthPull.repaired?.activeEnergy === 80 && healthPull.repaired?.restingEnergy === 920
+      && healthPull.repaired?.waterMl === 250 && healthPull.repaired?.source === 'mixed'
       && healthPull.dirty === false && await page.evaluate(() => window.__fakeCloud.updates) === healthPull.updatesBefore);
 
   const cloudRevision = () => JSON.parse(localStorage.getItem('smoke.fake-cloud')).row.revision;

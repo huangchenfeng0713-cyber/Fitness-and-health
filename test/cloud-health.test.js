@@ -97,14 +97,41 @@ test('数据库迁移前的旧行仍可读取，并明确保留为 legacy 游标
 
 test('只合并比本地云版本更新的每日行', () => {
   const local = [{
-    date: remoteRow.date,
-    steps: 1000,
-    _cloudHealthSync: { updatedAt: '2026-08-25T06:10:04.000Z' },
+    ...cloudHealthRowToDay(remoteRow),
   }];
   assert.equal(newerCloudHealthDays([remoteRow], local).length, 0);
   const newer = { ...remoteRow, updated_at: '2026-08-25T06:15:00.000Z', steps: 2000 };
   assert.equal(newerCloudHealthDays([newer], local)[0].steps, 2000);
   assert.equal(newerCloudHealthDays([remoteRow], []).length, 1);
+});
+
+test('同版本重读会修复仅有同步游标、缺少实际健康数值的旧记录', () => {
+  const synced = cloudHealthRowToDay(remoteRow);
+  const local = {
+    date: remoteRow.date, source: 'manual', waterMl: 250,
+    steps: synced.steps,
+    _cloudHealthSync: synced._cloudHealthSync,
+    _fieldProvenance: { waterMl: { origin: 'manual' } },
+  };
+  const [patch] = newerCloudHealthDays([remoteRow], [local]);
+  assert.equal(patch.activeEnergy, 103.21);
+  assert.equal(patch.restingEnergy, 791.67);
+  assert.equal(patch.energyObservedAt, '2026-08-25T06:07:00.000Z');
+  assert.equal(patch.steps, undefined, '已落地的字段不应反复重写');
+  assert.equal(patch.waterMl, undefined, '手动补录字段不应覆盖');
+  assert.equal(newerCloudHealthDays([remoteRow], [{ ...local, ...synced }]).length, 0);
+});
+
+test('同版本修复仍保护明确手动填写的字段', () => {
+  const synced = cloudHealthRowToDay(remoteRow);
+  const local = {
+    date: remoteRow.date, source: 'manual',
+    _cloudHealthSync: synced._cloudHealthSync,
+    _fieldProvenance: { activeEnergy: { origin: 'manual' } },
+  };
+  const [patch] = newerCloudHealthDays([remoteRow], [local]);
+  assert.equal(patch.activeEnergy, undefined);
+  assert.equal(patch.restingEnergy, 791.67);
 });
 
 test('部分累计上传只下发真正变动的字段，不重放同一行里保留的旧值', () => {
