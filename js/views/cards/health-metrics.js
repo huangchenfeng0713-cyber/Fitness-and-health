@@ -125,8 +125,6 @@ export function healthMetricsCard() {
     h('div.card-head', null,
       cardTitle('今日健康数据', 'heart'),
       h('div.card-head-actions', null,
-        h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
-          `${today.slice(5)} · ${info.synced ? '已同步' : '未同步'}`),
         infoTip('查看同步情况',
           h('p', null, '饮水次数与饮食页按同一天的记录显示。'),
           h('p', null, syncedClock

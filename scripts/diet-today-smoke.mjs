@@ -99,6 +99,12 @@ try {
       await page.locator('.hero').screenshot({ path: `${process.env.ARTIFACT_DIR}/today-${engine}-${width}.png` });
     }
   }
+  // 接近用户截图的双轨约 85% 场景：浅色起点与有轮廓的终点都应可辨。
+  await render(2040, 2070);
+  await page.waitForTimeout(600);
+  if (process.env.ARTIFACT_DIR) {
+    await page.locator('.hero').screenshot({ path: `${process.env.ARTIFACT_DIR}/today-tip-85-${engine}.png` });
+  }
   const color = () => page.locator('.ring-value').evaluate(el => getComputedStyle(el).color);
   const negativeColor = await color();
   await render(2000, 1680);
@@ -109,20 +115,33 @@ try {
     const canvas = document.querySelector('canvas.energy-ring');
     const ctx = canvas?.getContext('2d');
     const palette = ['intake', 'burn'].map((track, index) => {
-      // 精确端点落在圆头的抗锯齿边沿，取端点内侧 6° 的实色像素。
-      const angle = (260 * Math.PI) / 180;
+      // 弧尾现在有浅色轮廓；取轮廓内侧的实色弧线来对照图例。
+      const angle = (250 * Math.PI) / 180;
       const radius = index ? 55 : 69;
+      const width = index ? 5 : 14;
       const ratio = canvas.width / 164;
       const x = Math.round((82 + Math.cos(angle) * radius) * ratio);
       const y = Math.round((82 + Math.sin(angle) * radius) * ratio);
       const pixel = [...ctx.getImageData(x, y, 1, 1).data];
       const swatch = getComputedStyle(document.querySelector(`.ring-swatch-${track}`)).color;
       const rgb = [...swatch.matchAll(/\d+/g)].slice(0, 3).map(match => Number(match[0]));
-      return { pixel, rgb, matches: pixel[3] > 200 && rgb.every((channel, i) => Math.abs(channel - pixel[i]) < 24) };
+      const tipAngle = (266 * Math.PI / 180) - width / (2 * radius);
+      const tipX = 82 + Math.cos(tipAngle) * radius;
+      const tipY = 82 + Math.sin(tipAngle) * radius;
+      let rimPixels = 0;
+      for (let i = 0; i < 32; i++) {
+        const point = i * Math.PI / 16;
+        const sample = [...ctx.getImageData(
+          Math.round((tipX + Math.cos(point) * width / 2) * ratio),
+          Math.round((tipY + Math.sin(point) * width / 2) * ratio), 1, 1).data];
+        if (sample[3] > 180 && sample.slice(0, 3).every(channel => channel > 230)) rimPixels++;
+      }
+      return { matches: pixel[3] > 200 && rgb.every((channel, i) => Math.abs(channel - pixel[i]) < 24),
+        hasRim: rimPixels >= 2 };
     });
     return { tracks: palette, count: document.querySelectorAll('canvas.energy-ring').length };
   });
-  check('超两圈仍显示真实差值，两条轨道的弧尖与图例同色', await page.locator('.ring-value').textContent() === '−2000' && ringColors.count === 1 && ringColors.tracks.every(track => track.matches));
+  check('超两圈仍显示真实差值，两条实色弧线与图例同色且弧尾有轮廓', await page.locator('.ring-value').textContent() === '−2000' && ringColors.count === 1 && ringColors.tracks.every(track => track.matches && track.hasRim));
   check('纤维高值不标红；钠糖超量标红且标记封顶', await page.locator('[data-nutrient="fiber"] .nutrient-point.plain').count() === 1 && await page.locator('.nutrient-point.over').count() === 2 && await page.locator('.nutrient-point').evaluateAll(els => els.every(el => el.style.left === '100%')));
   await render(2000, null);
   check('设备消耗缺失时显示计划差额，不伪造零或估算黄环', await page.locator('.ring-caption').textContent() === '还可摄入' && await page.locator('.ring-value').textContent() === '400' && await page.locator('.ring-swatch-burn').count() === 0);
