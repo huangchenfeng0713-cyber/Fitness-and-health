@@ -125,7 +125,7 @@ try {
         r.gated && '看到的是启动闸门，不是这个栏目'].filter(Boolean).join('，'));
   }
 
-  // ---- 全部动作与推荐组合共用标签；推荐说明不会被一次无关重绘收起 ----
+  // ---- 全部动作与推荐组合共用标签；无关重绘后仍保留推荐内容 ----
   await page.evaluate(() => [...document.querySelectorAll('.tab')]
     .find((x) => x.textContent.includes('健身'))?.click());
   await page.waitForTimeout(400);
@@ -134,10 +134,10 @@ try {
   await page.waitForTimeout(750);
   await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '推荐' }).click();
   const tags = await page.locator('.rec-picks .exercise-meta').evaluateAll(rows => rows.map(row => row.children.length));
-  await page.getByLabel('这几个是怎么挑的', { exact: true }).click();
   await page.evaluate(async () => (await import('./js/views/training.js')).renderTraining(document.querySelector('#view')));
-  check('推荐使用模式、细分主练、动作类型三项共用标签，主页面重绘不关闭推荐说明', tags.length > 0 && tags.every(n => n === 3)
-    && await page.locator('.picker-card-head .info-tip').evaluate(el => el.open));
+  const tagsAfter = await page.locator('.rec-picks .exercise-meta').evaluateAll(rows => rows.map(row => row.children.length));
+  check('推荐使用模式、细分主练、动作类型三项共用标签，主页面重绘保留推荐内容',
+    tags.length > 0 && tags.every(n => n === 3) && JSON.stringify(tagsAfter) === JSON.stringify(tags));
   await page.locator('.picker-view-switch .chip-btn').filter({ hasText: '列表' }).click();
 
   // 搜索框复用食物搜索的尺寸，但只替换动作结果区，不能把整张卡和键盘一起重建。
