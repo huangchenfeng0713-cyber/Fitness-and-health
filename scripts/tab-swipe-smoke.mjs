@@ -22,7 +22,7 @@ const check = (name, value) => {
 const active = () => page.locator('.tab[aria-current="page"]').getAttribute('aria-label');
 const settled = () => page.waitForFunction(() => !document.querySelector('.tab-swipe-ghost')
   && !document.querySelector('#view')?.getAnimations().length);
-const swipe = (dx, dy = 0, selector = '#view') => page.evaluate(({ dx, dy, selector }) => {
+const swipe = (dx, dy = 0, selector = '#view', freeze = false) => page.evaluate(({ dx, dy, selector, freeze }) => {
   const target = document.querySelector(selector);
   if (!target) throw new Error(`找不到手势目标：${selector}`);
   const box = target.getBoundingClientRect();
@@ -36,12 +36,28 @@ const swipe = (dx, dy = 0, selector = '#view') => page.evaluate(({ dx, dy, selec
   send('pointerdown', start.x, start.y);
   send('pointermove', start.x + dx / 2, start.y + dy / 2);
   send('pointermove', start.x + dx, start.y + dy);
+  const drag = document.querySelector('#view').style.transform;
   send('pointerup', start.x + dx, start.y + dy);
+  const ghost = document.querySelector('.tab-swipe-ghost');
+  const incoming = document.querySelector('#view.tab-swipe-transitioning');
+  if (freeze) {
+    for (const animation of [...(ghost?.getAnimations() || []), ...(incoming?.getAnimations() || [])]) {
+      animation.pause();
+      animation.currentTime = 0;
+    }
+  }
   return {
-    ghost: Boolean(document.querySelector('.tab-swipe-ghost')),
-    incoming: Boolean(document.querySelector('#view.tab-swipe-transitioning')),
+    ghost: Boolean(ghost), incoming: Boolean(incoming), drag,
+    stage: document.querySelector('#app').classList.contains('tab-swipe-stage'),
+    outgoingEnd: ghost?.getAnimations()[0]?.effect?.getKeyframes().at(-1)?.transform,
+    incomingStart: incoming?.getAnimations()[0]?.effect?.getKeyframes()[0]?.transform,
+    faceSwap: Boolean(ghost?.getAnimations()[0]?.effect?.getKeyframes().some(frame =>
+      frame.transform === `rotateY(${dx > 0 ? 90 : -90}deg)` && Number(frame.opacity) === 0))
+      && Boolean(incoming?.getAnimations()[0]?.effect?.getKeyframes().some(frame =>
+        frame.transform === `rotateY(${dx > 0 ? -90 : 90}deg)` && Number(frame.opacity) === 1)),
+    backface: ghost && getComputedStyle(ghost).backfaceVisibility,
   };
-}, { dx, dy, selector });
+}, { dx, dy, selector, freeze });
 
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8137', { waitUntil: 'domcontentloaded' });
@@ -52,12 +68,33 @@ try {
   check('主视图允许纵向原生滚动，同时接收横向手势',
     await page.locator('#view').evaluate(el => getComputedStyle(el).touchAction === 'pan-y'));
 
-  const firstSwipe = await swipe(-135);
-  check('左滑后旧视图与新视图同时在场，不出现切页空白',
-    firstSwipe.ghost && firstSwipe.incoming);
+  const firstSwipe = await swipe(135, 0, '#view', Boolean(process.env.ARTIFACT_DIR));
+  check('右滑时页面沿纵向中轴旋转，正反面同时在场',
+    firstSwipe.ghost && firstSwipe.incoming && firstSwipe.stage
+      && firstSwipe.drag.startsWith('rotateY(') && firstSwipe.outgoingEnd === 'rotateY(180deg)'
+      && firstSwipe.incomingStart?.startsWith('rotateY(-') && firstSwipe.backface === 'hidden'
+      && firstSwipe.faceSwap);
+  if (process.env.ARTIFACT_DIR) {
+    await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+    for (const percent of [25, 50, 75]) {
+      await page.evaluate((progress) => {
+        for (const selector of ['.tab-swipe-ghost', '#view.tab-swipe-transitioning']) {
+          for (const animation of document.querySelector(selector)?.getAnimations() || []) {
+            animation.currentTime = animation.effect.getTiming().duration * progress / 100;
+          }
+        }
+      }, percent);
+      await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-flip-${percent}-${engine}.png` });
+    }
+    await page.evaluate(() => {
+      for (const selector of ['.tab-swipe-ghost', '#view.tab-swipe-transitioning']) {
+        for (const animation of document.querySelector(selector)?.getAnimations() || []) animation.play();
+      }
+    });
+  }
   await settled();
-  check('今日左滑进入饮食且动画清理完成', await active() === '饮食'
-    && await page.locator('#view').evaluate(el => !el.style.transform));
+  check('今日右滑进入饮食且动画清理完成', await active() === '饮食'
+    && await page.locator('#view').evaluate(el => !el.style.transform && !el.closest('#app').classList.contains('tab-swipe-stage')));
 
   await swipe(-125, 0, '.search-card input');
   await settled();
@@ -66,9 +103,9 @@ try {
   await settled();
   check('以纵向为主的滑动不误切栏目', await active() === '饮食');
 
-  await swipe(-135);
+  await swipe(135);
   await settled();
-  check('饮食左滑进入数据', await active() === '数据');
+  check('饮食右滑进入数据', await active() === '数据');
   await page.evaluate(async () => {
     const { saveHealthDay } = await import('/js/lib/store.js');
     const { todayKey } = await import('/js/lib/utils.js');
@@ -100,19 +137,22 @@ try {
     await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-health-320-${engine}.png` });
   }
   await page.setViewportSize({ width: 393, height: 852 });
-  await swipe(-135);
+  await swipe(135);
   await settled();
-  check('数据左滑进入健身', await active() === '健身');
-  await swipe(-150);
+  check('数据右滑进入健身', await active() === '健身');
+  await swipe(150);
   await settled();
-  check('末栏继续左滑会回弹，不越界', await active() === '健身');
-  await swipe(140);
+  check('末栏继续右滑会回弹，不越界', await active() === '健身'
+    && await page.locator('#app').evaluate(el => !el.classList.contains('tab-swipe-stage')));
+  const backSwipe = await swipe(-140);
+  check('反向左滑时翻转方向相反', backSwipe.outgoingEnd === 'rotateY(-180deg)'
+    && backSwipe.incomingStart?.startsWith('rotateY(1'));
   await settled();
-  check('右滑返回相邻栏目', await active() === '数据');
-  await swipe(120, 0, '.tab.active');
+  check('左滑返回相邻栏目', await active() === '数据');
+  await swipe(-120, 0, '.tab.active');
   await settled();
   check('底部主栏目本身也能滑动选择相邻页', await active() === '饮食');
-  await swipe(-120, 0, '.tab.active');
+  await swipe(120, 0, '.tab.active');
   await settled();
   check('底部选中底片随手势移动并落到目标页', await active() === '数据'
     && await page.locator('.tabbar').evaluate(el => {
@@ -135,7 +175,7 @@ try {
   check('重复点当前栏目仍可回到顶部', await active() === '今日');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await swipe(-135);
+  await swipe(135);
   check('减少动态效果时直接切栏目且不制造过渡副本',
     await active() === '饮食' && await page.locator('.tab-swipe-ghost').count() === 0);
   if (engine === 'chromium') {
@@ -143,17 +183,17 @@ try {
     await page.locator('.tab[aria-label="数据"]').click();
     await settled();
     const box = await page.locator('.health-metrics-card .metric-grid').boundingBox();
-    const x = box.x + box.width * .62;
+    const x = box.x + box.width * .35;
     const y = box.y + Math.min(35, box.height / 2);
     const session = await context.newCDPSession(page);
     const touch = (type, tx, ty = y) => session.send('Input.dispatchTouchEvent', {
       type, touchPoints: type === 'touchEnd' ? [] : [{ x: tx, y: ty, id: 1, radiusX: 1, radiusY: 1, force: 1 }],
     });
     await touch('touchStart', x);
-    await touch('touchMove', x - 45);
-    await touch('touchMove', x - 100);
-    await touch('touchMove', x - 155);
-    await touch('touchEnd', x - 155);
+    await touch('touchMove', x + 45);
+    await touch('touchMove', x + 100);
+    await touch('touchMove', x + 155);
+    await touch('touchEnd', x + 155);
     await settled();
     check('真实触摸事件能横滑换页', await active() === '健身');
     await page.locator('.tab[aria-label="数据"]').click();
@@ -187,9 +227,9 @@ try {
     const tabX = activeTabBox.x + activeTabBox.width / 2;
     const tabY = activeTabBox.y + activeTabBox.height / 2;
     await touch('touchStart', tabX, tabY);
-    await touch('touchMove', tabX + 48, tabY);
-    await touch('touchMove', tabX + 105, tabY);
-    await touch('touchEnd', tabX + 105, tabY);
+    await touch('touchMove', tabX - 48, tabY);
+    await touch('touchMove', tabX - 105, tabY);
+    await touch('touchEnd', tabX - 105, tabY);
     await settled();
     check('底部胶囊的真实触摸横滑也能换页', await active() === '饮食');
   }

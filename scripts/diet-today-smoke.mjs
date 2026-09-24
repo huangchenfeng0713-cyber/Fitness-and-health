@@ -16,6 +16,9 @@ const tab = async key => {
     const label = { today: '今日', diet: '饮食' }[key];
     [...document.querySelectorAll('.tab')].find(el => el.textContent.includes(label)).click();
   }, key);
+  // 页面翻面时 getBoundingClientRect() 是投影宽度，布局断言要等过渡落稳。
+  await page.waitForFunction(() => !document.querySelector('.tab-swipe-ghost')
+    && !document.querySelector('#view')?.getAnimations().length);
   await page.waitForTimeout(220);
 };
 try {

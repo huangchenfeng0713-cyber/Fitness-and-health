@@ -1,7 +1,8 @@
-/** 主栏目横滑：方向判定与视觉过渡。所有页面仍由原来的 tab 渲染器负责。 */
+/** 主栏目横滑：向右依次前进，页面绕纵向中轴翻面。 */
 import { dragGesture } from './gesture.js';
 
 const EASE = 'cubic-bezier(.22, .8, .22, 1)';
+const MAX_DRAG_ANGLE = 80;
 const SWIPE_IGNORE = 'button, a, input, textarea, select, summary, [role="button"], '
   + '[role="slider"], [contenteditable="true"], .chart-wrap, .table-wrap, .info-tip-panel';
 
@@ -11,7 +12,7 @@ export function swipeDestination({ dx, velocity = 0, width, index, count, cancel
   const enoughDistance = Math.abs(dx) >= Math.min(82, width * .22);
   const quickFlick = Math.abs(dx) >= 32 && Math.abs(velocity) >= .5;
   if (!enoughDistance && !quickFlick) return null;
-  const next = index + (dx < 0 ? 1 : -1);
+  const next = index + (dx > 0 ? 1 : -1);
   return next >= 0 && next < count ? next : null;
 }
 
@@ -23,7 +24,7 @@ export function installTabSwipe({
   view, app, tabs, currentKey, changeTab, blocked = () => false, onSettled = () => {},
 }) {
   let motion = null;
-  let dragX = 0;
+  let dragAngle = 0;
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const activeIndex = () => tabs.findIndex((tab) => tab.key === currentKey());
 
@@ -33,8 +34,9 @@ export function installTabSwipe({
     entry.animations.forEach((animation) => animation.cancel());
     entry.ghost?.remove();
     view.classList.remove('tab-swipe-dragging', 'tab-swipe-transitioning');
+    app.classList.remove('tab-swipe-stage');
     view.style.removeProperty('transform');
-    dragX = 0;
+    dragAngle = 0;
     onSettled();
   }
 
@@ -42,19 +44,20 @@ export function installTabSwipe({
     if (motion) finishMotion();
     else {
       view.classList.remove('tab-swipe-dragging');
+      app.classList.remove('tab-swipe-stage');
       view.style.removeProperty('transform');
-      dragX = 0;
+      dragAngle = 0;
     }
   }
 
   function snapBack() {
-    if (!dragX || reduceMotion()) { cancel(); return; }
-    const from = dragX;
+    if (!dragAngle || reduceMotion()) { cancel(); return; }
+    const from = dragAngle;
     view.classList.remove('tab-swipe-dragging');
-    view.style.removeProperty('transform');
+    view.classList.add('tab-swipe-transitioning');
     const animation = view.animate([
-      { transform: `translate3d(${from}px, 0, 0)` },
-      { transform: 'translate3d(0, 0, 0)' },
+      { transform: `rotateY(${from}deg)` },
+      { transform: 'rotateY(0deg)' },
     ], { duration: 220, easing: EASE });
     const entry = { animations: [animation], ghost: null };
     motion = entry;
@@ -71,7 +74,7 @@ export function installTabSwipe({
     });
   }
 
-  function navigate(key, { offset = 0 } = {}) {
+  function navigate(key, { angle = 0 } = {}) {
     const from = activeIndex();
     const to = tabs.findIndex((tab) => tab.key === key);
     if (blocked() || to < 0) { snapBack(); return; }
@@ -88,21 +91,20 @@ export function installTabSwipe({
       return;
     }
 
-    const direction = to > from ? -1 : 1;
-    const rect = view.getBoundingClientRect();
-    const appRect = app.getBoundingClientRect();
-    const width = rect.width;
+    const direction = to > from ? 1 : -1;
+    // getBoundingClientRect() 会包含拖动中的 3D 投影，定位副本须用未变形布局尺寸。
+    const { offsetLeft: left, offsetTop: top, offsetWidth: width, offsetHeight: height } = view;
     const ghost = view.cloneNode(true);
     ghost.removeAttribute('id');
     ghost.setAttribute('aria-hidden', 'true');
     ghost.inert = true;
     ghost.classList.add('tab-swipe-ghost');
     Object.assign(ghost.style, {
-      left: `${rect.left - appRect.left - offset}px`,
-      top: `${rect.top - appRect.top}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      transform: `translate3d(${offset}px, 0, 0)`,
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${width}px`,
+      height: `${height}px`,
+      transform: `rotateY(${angle}deg)`,
     });
     copyCanvasPixels(view, ghost);
     app.append(ghost);
@@ -111,25 +113,33 @@ export function installTabSwipe({
     view.classList.remove('tab-swipe-dragging');
     view.style.removeProperty('transform');
     changeTab(key);
+    app.classList.add('tab-swipe-stage');
     view.classList.add('tab-swipe-transitioning');
-    const remaining = Math.max(.25, 1 - Math.min(Math.abs(offset) / width, .75));
-    const duration = Math.round(180 + 150 * remaining);
-    const options = { duration, easing: EASE };
+    const remaining = 1 - Math.min(Math.abs(angle) / 180, .45);
+    const duration = Math.round(360 * remaining);
+    // iOS WebKit 有时在 WAAPI 3D 动画里仍绘制背面的镜像文字；在 90° 接缝显式换面。
+    const turnPoint = (90 - Math.abs(angle)) / (180 - Math.abs(angle));
+    const justBeforeTurn = turnPoint - .001;
+    const options = { duration, easing: EASE, fill: 'both' };
     const outgoing = ghost.animate([
-      { transform: `translate3d(${offset}px, 0, 0)` },
-      { transform: `translate3d(${direction * width}px, 0, 0)` },
+      { transform: `rotateY(${angle}deg)`, opacity: 1, offset: 0 },
+      { transform: `rotateY(${direction * 90}deg)`, opacity: 1, offset: justBeforeTurn },
+      { transform: `rotateY(${direction * 90}deg)`, opacity: 0, offset: turnPoint },
+      { transform: `rotateY(${direction * 180}deg)`, opacity: 0, offset: 1 },
     ], options);
     const incoming = view.animate([
-      { transform: `translate3d(${offset - direction * width}px, 0, 0)` },
-      { transform: 'translate3d(0, 0, 0)' },
+      { transform: `rotateY(${angle - direction * 180}deg)`, opacity: 0, offset: 0 },
+      { transform: `rotateY(${-direction * 90}deg)`, opacity: 0, offset: justBeforeTurn },
+      { transform: `rotateY(${-direction * 90}deg)`, opacity: 1, offset: turnPoint },
+      { transform: 'rotateY(0deg)', opacity: 1, offset: 1 },
     ], options);
     const entry = { animations: [outgoing, incoming], ghost };
     motion = entry;
     Promise.allSettled(entry.animations.map((animation) => animation.finished))
       .then(() => finishMotion(entry));
     app.querySelector('.topbar-context')?.animate([
-      { opacity: .55, transform: `translateX(${-direction * 12}px)` },
-      { opacity: 1, transform: 'none' },
+      { opacity: .55 },
+      { opacity: 1 },
     ], { duration: Math.min(duration, 260), easing: EASE });
   }
 
@@ -146,17 +156,19 @@ export function installTabSwipe({
     onMove: ({ dx }) => {
       if (reduceMotion()) return;
       const index = activeIndex();
-      const atEdge = (dx > 0 && index === 0) || (dx < 0 && index === tabs.length - 1);
-      dragX = atEdge ? Math.sign(dx) * Math.min(Math.abs(dx) * .28, 60) : dx;
+      const atEdge = (dx < 0 && index === 0) || (dx > 0 && index === tabs.length - 1);
+      const distance = atEdge ? Math.abs(dx) * .28 : Math.abs(dx);
+      dragAngle = Math.sign(dx) * Math.min(distance / view.clientWidth * 180, MAX_DRAG_ANGLE);
+      app.classList.add('tab-swipe-stage');
       view.classList.add('tab-swipe-dragging');
-      view.style.transform = `translate3d(${dragX}px, 0, 0)`;
+      view.style.transform = `rotateY(${dragAngle}deg)`;
     },
     onEnd: ({ dx, velocity, cancelled }) => {
       const destination = swipeDestination({
         dx, velocity, width: view.clientWidth, index: activeIndex(), count: tabs.length, cancelled,
       });
       if (destination == null) snapBack();
-      else navigate(tabs[destination].key, { offset: dragX });
+      else navigate(tabs[destination].key, { angle: dragAngle });
     },
   });
 
