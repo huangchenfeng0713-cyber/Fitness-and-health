@@ -442,12 +442,18 @@ html, body { height: 100%; overflow: hidden; }
 #app:has(> .actionbar-slot:not([hidden])) .view { padding-bottom: var(--view-bottom-pad); }
 /* flex 容器高度不够时，卡片不能被压扁后裁掉内容。 */
 .view > * { flex: 0 0 auto; }
-.view.tab-swipe-dragging, .view.tab-swipe-transitioning { will-change: transform; }
+#app.tab-swipe-stage { perspective: 1200px; perspective-origin: center center; }
+.view.tab-swipe-dragging, .view.tab-swipe-transitioning, .tab-swipe-ghost {
+  will-change: transform;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--bg);
+}
 .tab-swipe-ghost {
   position: absolute; z-index: 30; flex: none; pointer-events: none;
-  overflow: hidden; background: var(--bg); will-change: transform;
+  overflow: hidden;
 }
-.view.tab-swipe-transitioning { background: var(--bg); }
 
 .tabbar {
   /*
