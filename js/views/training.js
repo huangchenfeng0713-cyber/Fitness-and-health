@@ -907,6 +907,26 @@ document.addEventListener('click', event => {
   rerenderPicker();
 });
 
+/** 训练页的视图切换与其他页面的日期/同步状态共占一条顶部功能栏。 */
+export function trainingViewControl(root) {
+  return h('div.range-switch.training-view-tabs', segmentedGroupProps('健身视图'),
+    [['current', '本次训练'], ['history', '训练记录']].map(([key, label]) => h('button.chip-btn', {
+      ...segmentedItemProps(trainingView === key), class: trainingView === key ? 'active' : '',
+      id: `training-tab-${key}`, 'aria-controls': `training-panel-${key}`,
+      'data-training-view': key,
+      onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
+    }, label)));
+}
+
+function syncTrainingViewControl() {
+  document.querySelectorAll('#topbar-inner .training-view-tabs [data-training-view]').forEach(button => {
+    const active = button.dataset.trainingView === trainingView;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+    button.tabIndex = active ? 0 : -1;
+  });
+}
+
 export function renderTraining(root) {
   if (!observingAccount) {
     observingAccount = true;
@@ -934,15 +954,10 @@ export function renderTraining(root) {
   const content = document.createDocumentFragment();
   const actionSlot = document.getElementById('actionbar');
   if (actionSlot) { clearEl(actionSlot); actionSlot.hidden = true; }
-  const tabs = h('div.range-switch.training-view-tabs', segmentedGroupProps('健身视图'),
-    [['current', '本次训练'], ['history', '训练记录']].map(([key, label]) => h('button.chip-btn', {
-      ...segmentedItemProps(trainingView === key), class: trainingView === key ? 'active' : '',
-      id: `training-tab-${key}`, 'aria-controls': `training-panel-${key}`,
-      onclick: () => { trainingView = key; renderTraining(root); root.scrollTop = 0; },
-    }, label)));
-  mount(content, tabs, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
+  mount(content, h('div.training-panel', { id: `training-panel-${trainingView}`, role: 'tabpanel', 'aria-labelledby': `training-tab-${trainingView}` },
     trainingView === 'current' ? [trainingDateControl(), planCard(), adviceCard()] : [weeklyCard(), weeklyGroupsCard()]));
   // Build off-screen and replace atomically: an empty scroll container clamps to zero.
   root.replaceChildren(content);
   root.scrollTop = scrollTop;
+  syncTrainingViewControl();
 }

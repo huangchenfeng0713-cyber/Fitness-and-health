@@ -4,8 +4,8 @@ import { ringProgressColor, ringTipColor } from '../js/lib/energy-ring-chart.js'
 import { energyRing } from '../js/core/energy-ring.js';
 
 const palette = {
-  intake: ['#c4f7df', '#6fe0b6', '#2fc99b'],
-  burn: ['#fff0c2', '#f2c66b', '#dda840'],
+  intake: ['#a7eccf', '#77dfb8', '#49c99f'],
+  burn: ['#f9dda0', '#edc875', '#dca958'],
 };
 
 test('两条轨道各自从浅到深，第二圈延续第一圈终色并封顶', () => {

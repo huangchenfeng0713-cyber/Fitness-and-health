@@ -56,6 +56,23 @@ try {
     await page.locator('.tab').count() === 4 && await page.locator('.tab-indicator').count() === 1);
   check('主视图允许纵向原生滚动，同时接收横向手势',
     await page.locator('#view').evaluate(el => getComputedStyle(el).touchAction === 'pan-y'));
+  const header = () => page.evaluate(() => {
+    const box = document.querySelector('.topbar-inner').getBoundingClientRect();
+    const settings = document.querySelector('.topbar-settings-btn').getBoundingClientRect();
+    return { height: box.height, settingsX: settings.x,
+      fits: settings.right <= innerWidth && document.querySelector('.topbar-inner').scrollWidth <= innerWidth };
+  });
+  const todayHeader = await header();
+  check('今日顶栏只留单行日期、切日按钮和设置',
+    await page.locator('.topbar-day strong').textContent() === await page.evaluate(() => {
+      const day = new Date(); return `${day.getMonth() + 1}月${day.getDate()}日`;
+    }) && await page.locator('.topbar-context').getByText('今天', { exact: true }).count() === 0
+      && await page.locator('.topbar-inner h1').textContent() === '今日'
+      && await page.locator('.topbar-inner .nav-arrow').count() === 2 && todayHeader.fits);
+  if (process.env.ARTIFACT_DIR) {
+    await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+    await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-today-header-${engine}.png` });
+  }
 
   const firstSwipe = await swipe(135, 0, '#view', { offsets: [25, 75, 135] });
   check('翻转角度跟手，越过半圈才显出背面的饮食页',
@@ -68,6 +85,11 @@ try {
   await settled();
   check('今日右滑进入饮食且动画清理完成', await active() === '饮食'
     && await page.locator('#view').evaluate(el => !el.style.transform && !el.closest('#app').classList.contains('tab-swipe-stage')));
+  const dietHeader = await header();
+  check('饮食仍共用单行日期导航，设置位置和顶栏高度不跳',
+    await page.locator('.topbar-day strong').count() === 1
+    && Math.abs(dietHeader.height - todayHeader.height) < 1
+    && Math.abs(dietHeader.settingsX - todayHeader.settingsX) < 1);
 
   await swipe(-125, 0, '.search-card input');
   await settled();
@@ -90,6 +112,21 @@ try {
   await settled();
   check('跨三栏后只提交最终 URL', await active() === '健身'
     && await page.evaluate(() => location.hash === '#training'));
+  const trainingHeader = await header();
+  check('健身顶栏接住唯一一组训练视图切换，设置与日期页对齐',
+    await page.locator('.topbar-inner .training-view-tabs').count() === 1
+      && await page.locator('#view .training-view-tabs').count() === 0
+      && Math.abs(trainingHeader.height - todayHeader.height) < 1
+      && Math.abs(trainingHeader.settingsX - todayHeader.settingsX) < 1);
+  await page.locator('#training-tab-history').click();
+  check('顶栏切到训练记录时面板和无障碍选中态同步',
+    await page.locator('#training-panel-history').count() === 1
+      && await page.locator('#training-tab-history').getAttribute('aria-selected') === 'true');
+  await page.locator('#training-tab-current').click();
+  check('顶栏可切回本次训练', await page.locator('#training-panel-current').count() === 1);
+  if (process.env.ARTIFACT_DIR) {
+    await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-training-header-${engine}.png` });
+  }
   const reverse = await swipe(-330, 0, '#view', {
     startX: 355, offsets: [-35, -80, -115, -160, -215, -275, -330],
   });
@@ -121,6 +158,12 @@ try {
     return Boolean(water?.querySelector('.metric-icon path'))
       && !cells.some(node => node.textContent.includes('设备饮水'));
   }));
+  const healthHeader = await header();
+  check('数据页同步状态只在顶栏出现，四页同高且设置对齐',
+    /\d{2}-\d{2} · (已同步|未同步)/.test(await page.locator('.topbar-status').textContent())
+      && await page.locator('.health-metrics-card .card-tag').count() === 0
+      && Math.abs(healthHeader.height - todayHeader.height) < 1
+      && Math.abs(healthHeader.settingsX - todayHeader.settingsX) < 1);
   if (process.env.ARTIFACT_DIR) {
     await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
     await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-health-393-${engine}.png` });
@@ -133,6 +176,35 @@ try {
     return view.scrollWidth <= view.clientWidth + 1 && card.right <= innerWidth
       && tabbar.left >= 0 && tabbar.right <= innerWidth;
   }));
+  await page.locator('.tab[aria-label="健身"]').click();
+  await settled();
+  check('320px 时训练视图切换与设置并排不溢出', await page.evaluate(() => {
+    const control = document.querySelector('.topbar-inner .training-view-tabs');
+    const settings = document.querySelector('.topbar-settings-btn').getBoundingClientRect();
+    return control.scrollWidth <= control.clientWidth + 1
+      && control.getBoundingClientRect().right < settings.left
+      && settings.right <= innerWidth;
+  }));
+  if (process.env.ARTIFACT_DIR) {
+    await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-training-header-320-${engine}.png` });
+  }
+  await page.locator('.tab[aria-label="数据"]').click();
+  await settled();
+  await page.locator('.tab[aria-label="今日"]').click();
+  await settled();
+  await page.locator('.topbar-inner .nav-arrow').first().click();
+  await page.waitForFunction(() => Boolean(document.querySelector('.topbar-back-icon')));
+  check('320px 历史日期保留可读日期和可访问的回今天入口', await page.evaluate(() => {
+    const date = document.querySelector('.topbar-day');
+    const settings = document.querySelector('.topbar-settings-btn').getBoundingClientRect();
+    return Boolean(date?.querySelector('.topbar-back-icon'))
+      && date.getAttribute('aria-label')?.includes('回到今天')
+      && date.scrollWidth <= date.clientWidth + 1 && settings.right <= innerWidth;
+  }));
+  await page.locator('.topbar-day').click();
+  await page.waitForFunction(() => !document.querySelector('.topbar-back-icon'));
+  await page.locator('.tab[aria-label="数据"]').click();
+  await settled();
   if (process.env.ARTIFACT_DIR) {
     await page.screenshot({ path: `${process.env.ARTIFACT_DIR}/tabs-health-320-${engine}.png` });
   }
@@ -173,6 +245,13 @@ try {
   await page.locator('.tab.active').click();
   await page.waitForFunction(() => document.querySelector('#view').scrollTop < 1);
   check('重复点当前栏目仍可回到顶部', await active() === '今日');
+  await page.locator('.topbar-inner .nav-arrow').first().click();
+  await page.waitForFunction(() => document.querySelector('.topbar-back-text'));
+  check('历史日期在同一行提供回今天入口',
+    await page.locator('.topbar-back-text').textContent() === '回今天'
+      && await page.locator('.topbar-day').getAttribute('aria-label') !== null);
+  await page.locator('.topbar-day').click();
+  await page.waitForFunction(() => !document.querySelector('.topbar-back-text'));
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await swipe(135);
