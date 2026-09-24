@@ -128,7 +128,7 @@ export function healthMetricsCard() {
         h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
           `${today.slice(5)} · ${info.synced ? '已同步' : '未同步'}`),
         infoTip('查看同步情况',
-          h('p', null, '喝水记录与饮食页按同一天的次数显示；设备饮水是 Apple 健康同步的毫升数，两者不换算。'),
+          h('p', null, '饮水次数与饮食页按同一天的记录显示。'),
           h('p', null, syncedClock
             ? `最近一次同步：${syncedClock}${info.synced ? '（今天）' : ''}。`
             : '还没有同步过健康数据。'),

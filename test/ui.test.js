@@ -227,8 +227,8 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
   assert.ok(!/card-tag[^\n]*已记录/.test(card), '同一个数在一张卡上写了两遍');
   assert.match(read('js/core/water-log.js'), /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
 
-  // Apple 健康同步来的毫升不能丢：那是设备数据，仍留在数据页
-  assert.match(read('js/core/health-card.js'), /key: 'waterMl'/, '数据页不该丢掉设备记录的饮水');
+  // 设备毫升仍可作为原始健康数据保存，但用户只要展示手动饮水次数。
+  assert.doesNotMatch(read('js/core/health-card.js'), /key: 'waterMl'/, '数据页不应再显示设备饮水');
 
   /*
    * 说明里必须讲清楚这个数不代表全天水分 —— 否则「今天只喝了 3 次」
@@ -290,11 +290,9 @@ test('缺数据的指标画一道杠，不是整格消失', () => {
   // 一个数都没有时是「还没同步过」，不是一排杠
   assert.match(metrics, /info\.hasAny\s*\n?\s*\? h\('div\.metric-grid'/, '空状态判断没有走「有没有任何数据」');
 
-  // 体脂和饮水例外：没有体脂秤 / 没同步过饮水的人，常年挂一道杠只是噪音
+  // 体脂例外：没有体脂秤的人，常年挂一道杠只是噪音
   const core = strip(read('js/core/health-card.js'));
-  for (const key of ['bodyFatPct', 'waterMl']) {
-    assert.ok(new RegExp(`key: '${key}'[^}]*optIn: true`).test(core), `${key} 应当只在记到过时占一格`);
-  }
+  assert.ok(/key: 'bodyFatPct'[^}]*optIn: true/.test(core), '体脂应当只在记到过时占一格');
   assert.match(core, /!f\.optIn \|\| seen\.has\(f\.key\)/, '可选项没有按「历史上有没有记到过」筛');
 });
 
@@ -1294,7 +1292,7 @@ test('输入框有焦点时不许整页重绘，但事后要补上', () => {
    * 手指正压在某个手势上时同样不能重绘 —— 和输入框是同一件事，
    * 只是把焦点换成了手指：重绘会把正在拖的那个节点连根换掉，手势断在半路。
    */
-  assert.match(app, /const busy = \(\) => isEditing\(\) \|\| isGesturing\(\);/,
+  assert.match(app, /const busy = \(\) => isEditing\(\) \|\| isGesturing\(\) \|\| tabSwipe\?\.isAnimating\(\);/,
     '手势没有和输入框走同一道闸门');
   assert.doesNotMatch(app, /if \(document\.hidden \|\| isEditing\(\)\) return;/,
     '定时器那几条路要走 busy()，不然手势拖到一半会被 60 秒的重绘打断');

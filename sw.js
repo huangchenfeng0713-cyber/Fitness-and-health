@@ -2,7 +2,7 @@
  * 离线缓存：把应用外壳缓存下来，断网也能记录。
  * 用户数据在 IndexedDB 里，与这里无关。
  */
-const CACHE = 'health-diet-v3.26.4';
+const CACHE = 'health-diet-v3.26.5';
 const SDK_CACHE = 'health-diet-supabase-sdk-2.112.4';
 const CACHE_PREFIX = 'health-diet-';
 const UPDATE_READY = 'health-diet-update-ready';
@@ -28,6 +28,7 @@ const SHELL = [
   './js/lib/health-cloud-sync.js',
   './js/lib/utils.js',
   './js/lib/gesture.js',
+  './js/lib/tab-swipe.js',
   './js/lib/icons.js',
   './js/lib/ui.js',
   './js/lib/point-value-tip.js',
