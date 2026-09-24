@@ -13,6 +13,8 @@
  *     较早的测量伪装成今天的数据。
  */
 
+import { recordedWaterCount } from './water-log.js';
+
 const FIELDS = [
   { key: 'steps', label: '步数', unit: '', decimals: 0 },
   { key: 'activeEnergy', label: '活动', unit: 'kcal', decimals: 0 },
@@ -21,17 +23,17 @@ const FIELDS = [
   { key: 'sleepMinutes', label: '睡眠', unit: '', kind: 'duration' },
   { key: 'restingHR', label: '静息心率', unit: 'bpm', decimals: 0 },
   { key: 'weightKg', label: '体重', unit: 'kg', decimals: 1 },
+  // 与饮食页同一日、同一字段；0 次表示尚未记水，不推断实际摄水量。
+  { key: 'waterCount', label: '喝水记录', unit: '次', decimals: 0, localLog: true },
   /*
    * 体脂和饮水只在这台设备真的记到过的时候才占一格。
    * 多数人没有体脂秤、也没让快捷指令带上饮水，常年挂一道杠只是噪音。
    * 记到过之后它们就和别的项一样，缺了画杠。
    *
-   * 饮水这一格是**设备记录的毫升数**，和今日页那个「喝了几次」不是一个数：
-   * 那个是主动饮水的次数，不当进度目标；这个是 Apple 健康同步来的原始值，
-   * 撤掉它等于把同步上来的数据丢了。
+   * 设备饮水是 Apple 健康的毫升值，与上面的手动次数并列而不换算。
    */
   { key: 'bodyFatPct', label: '体脂', unit: '%', decimals: 1, optIn: true },
-  { key: 'waterMl', label: '饮水', unit: 'ml', decimals: 0, optIn: true },
+  { key: 'waterMl', label: '设备饮水', unit: 'ml', decimals: 0, optIn: true },
 ];
 
 /*
@@ -61,10 +63,11 @@ export function healthCardState({
   const row = health || {};
   const seen = new Set(everSeen);
   const fallbackWeight = numeric(latestWeight?.value);
+  const loggedWaterValue = numeric(row.waterCount);
   const cells = FIELDS
     .filter((f) => !f.optIn || seen.has(f.key))
     .map((f) => {
-      const todayValue = numeric(row[f.key]);
+      const todayValue = f.localLog ? recordedWaterCount(loggedWaterValue) : numeric(row[f.key]);
       if (f.key === 'weightKg' && todayValue == null && fallbackWeight != null) {
         const observedDate = String(latestWeight?.date || '');
         return {
@@ -82,10 +85,12 @@ export function healthCardState({
       };
     });
 
-  const present = cells.filter((c) => c.value != null).map((c) => c.key);
-  const presentToday = cells.filter((c) => c.value != null && !c.recent).map((c) => c.key);
-  const recent = cells.filter((c) => c.value != null && c.recent).map((c) => c.key);
-  const missing = cells.filter((c) => c.value == null).map((c) => c.key);
+  // 同步提示只统计设备项；手动次数的 0 不等于 Apple 健康读到了饮水样本。
+  const deviceCells = cells.filter((c) => !c.localLog);
+  const present = deviceCells.filter((c) => c.value != null).map((c) => c.key);
+  const presentToday = deviceCells.filter((c) => c.value != null && !c.recent).map((c) => c.key);
+  const recent = deviceCells.filter((c) => c.value != null && c.recent).map((c) => c.key);
+  const missing = deviceCells.filter((c) => c.value == null).map((c) => c.key);
 
   /*
    * 「今天同步过没有」问的是同步这个动作，不是某一项有没有值。
@@ -102,8 +107,8 @@ export function healthCardState({
     presentToday,
     recent,
     missing,
-    hasAny: present.length > 0,
-    sourceNote: sourceNote(row.source),
+    hasAny: present.length > 0 || (loggedWaterValue != null && loggedWaterValue >= 0),
+    sourceNote: sourceNote(row),
   };
 }
 
@@ -115,9 +120,11 @@ function localDay(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function sourceNote(source) {
+function sourceNote(row) {
+  const source = row.source;
   if (source === 'manual') return '这一天的数据是手动补录的。';
   if (source === 'mixed') return '这一天既有同步来的数据，也有手动补录的部分。';
+  if (source && row.waterCount != null) return '设备数据来自 Apple 健康；喝水次数是应用内记录。';
   if (source) return '数据来自 Apple 健康同步。';
   return '';
 }

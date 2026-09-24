@@ -11,6 +11,7 @@ import { icon } from '../../lib/icons.js';
 import { infoTip, listRow, cardTitle } from '../../lib/ui.js';
 import { state, saveHealthDay } from '../../lib/store.js';
 import { MEAL_LABEL } from '../../core/advisor.js';
+import { MAX_WATER_TAPS, recordedWaterCount } from '../../core/water-log.js';
 import { estimateTag, estimateGroupInfoTip } from './food-estimate.js';
 
 const expanded = { recommend: false };
@@ -98,11 +99,10 @@ export function recommendCard(rerender, onPick) {
  * 撤销不常驻。它一天里最多用上一次（误触），却要一直占着一个控件和四个字；
  * 改成刚点完那几秒钟内出现，过了就收起来。
  */
-const MAX_WATER_TAPS = 40;
 const UNDO_WINDOW_MS = 5000;
 const BURST_GAP_MS = 1500;
-const clampWater = (n) => Math.max(0, Math.min(MAX_WATER_TAPS, Math.round(n)));
-const savedWater = (day) => clampWater(Number(state.healthByDate.get(day)?.waterCount) || 0);
+const clampWater = recordedWaterCount;
+const savedWater = (day) => recordedWaterCount(state.healthByDate.get(day)?.waterCount);
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let waterView = null;
 const pendingWaterViews = new Map();

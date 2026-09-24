@@ -18,7 +18,7 @@ test('缺的项留在列表里，值是 null —— 不许整格消失', () => {
     today: TODAY,
   });
   const keys = s.cells.map((c) => c.key);
-  assert.deepEqual(keys, ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'restingHR', 'weightKg']);
+  assert.deepEqual(keys, ['steps', 'activeEnergy', 'exerciseMinutes', 'sleepMinutes', 'restingHR', 'weightKg', 'waterCount']);
   assert.deepEqual(s.present, ['steps', 'activeEnergy']);
   assert.ok(s.missing.includes('weightKg'), '没有当天或历史体重时就该缺着');
   assert.equal(s.hasAny, true);
@@ -69,6 +69,25 @@ test('体脂和饮水只在记到过的时候才占一格', () => {
   assert.ok(cells.waterMl, '设备同步来的饮水毫升不能丢');
 });
 
+test('数据页喝水次数与饮食页同日记录一致，设备毫升独立显示', () => {
+  const state = healthCardState({
+    health: { steps: 1157, waterCount: 2, waterMl: null },
+    today: TODAY, everSeen: ['waterMl'],
+  });
+  const cells = Object.fromEntries(state.cells.map((cell) => [cell.key, cell]));
+  assert.equal(cells.waterCount.value, 2);
+  assert.equal(cells.waterCount.unit, '次');
+  assert.equal(cells.waterMl.value, null);
+  assert.equal(cells.waterMl.label, '设备饮水');
+  assert.ok(!state.presentToday.includes('waterCount'), '手动喝水次数不是健康设备的同步样本');
+  assert.ok(state.missing.includes('waterMl'));
+
+  const noWaterToday = healthCardState({ health: { steps: 1157 }, today: TODAY });
+  assert.equal(noWaterToday.cells.find((cell) => cell.key === 'waterCount').value, 0);
+  assert.equal(healthCardState({ health: { waterCount: 2 }, today: TODAY }).hasAny, true);
+  assert.equal(healthCardState({ today: TODAY }).hasAny, false);
+});
+
 /*
  * 「已同步」问的是同步这个动作，不是某一项有没有值。
  * 手表哪天没戴，静息心率就是空的，可那天照样同步成功了 ——
@@ -96,6 +115,7 @@ test('同步状态按「今天同步过没有」判定，缺项不影响它', ()
 test('来源写成人话，缺项原因有统一说法', () => {
   assert.match(healthCardState({ health: { steps: 1, source: 'manual' }, today: TODAY }).sourceNote, /手动补录/);
   assert.match(healthCardState({ health: { steps: 1, source: 'mixed' }, today: TODAY }).sourceNote, /手动补录/);
+  assert.match(healthCardState({ health: { steps: 1, waterCount: 2, source: 'apple' }, today: TODAY }).sourceNote, /喝水次数是应用内记录/);
   assert.equal(healthCardState({ health: { steps: 1 }, today: TODAY }).sourceNote, '');
   assert.equal(FIELD_LABEL.sleepMinutes, '睡眠');
 });

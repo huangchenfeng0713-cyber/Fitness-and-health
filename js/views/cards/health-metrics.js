@@ -1,5 +1,5 @@
 /**
- * 今日健康数据卡：今天的活动数据 + 截至今天最近一次有效体重。
+ * 今日健康数据卡：今天的设备数据、同日喝水记录 + 最近一次有效体重。
  *
  * 挂在数据页最顶上。下面那张趋势卡画的就是这几项的走势——
  * 「今天多少」和「这些天在往哪走」放在同一页，才不用来回切。
@@ -7,7 +7,7 @@
  * 它不跟今日 / 饮食页选的日期走。那两页翻回昨天是为了补记饮食；
  * 这张卡跟着翻的话，「今日健康数据」这个标题就成了假的。
  *
- * 图标不是装饰：六项数值排在一起时，全是数字加两个汉字，
+ * 图标不是装饰：多项数值排在一起时，全是数字加两个汉字，
  * 扫一眼分不出哪个是哪个；图标是那个能先被认出来的锚点。
  *
  * 算什么、缺项怎么讲、同步算不算成功都在 core/health-card.js。
@@ -27,7 +27,7 @@ const DASH = '—';
 /*
  * 列数按项数挑，别让末行只剩一个。
  *
- * 显示几项完全看当天同步上来了什么，从 1 项到 8 项都可能。
+ * 设备字段随同步内容变化，另有一格同日喝水次数。
  * 固定三列的话 7 项就排成 3+3+1，最后那个吊在中间，怎么摆都是歪的。
  * 先找能整除的（8 → 4+4，6 → 3+3），实在整除不了就挑一个末行至少剩两个的。
  */
@@ -107,7 +107,9 @@ export function healthMetricsCard() {
     everSeen: [...seen],
     latestWeight,
   });
-  const cols = metricColumns(info.cells.length);
+  // 只有饮食页的喝水记录时，不铺六格「设备未测到」；数据卡仍保留同步入口。
+  const cells = info.present.length ? info.cells : info.cells.filter((cell) => cell.key === 'waterCount');
+  const cols = metricColumns(cells.length);
   // 有数据但缺了活动能量时也值得再同步一次：热量预算就靠它动态调整
   const needsImport = !info.hasAny || info.missing.includes('activeEnergy');
   const syncedClock = info.syncedAt
@@ -119,13 +121,14 @@ export function healthMetricsCard() {
   const optionalLastSeen = lastSeenLines(today);
   const weightCell = info.cells.find((cell) => cell.key === 'weightKg');
 
-  return h('section.card', null,
+  return h('section.card.health-metrics-card', null,
     h('div.card-head', null,
       cardTitle('今日健康数据', 'heart'),
       h('div.card-head-actions', null,
         h('span.card-tag', { class: info.synced ? 'card-tag' : 'card-tag muted' },
-          info.synced ? '已同步' : '未同步'),
+          `${today.slice(5)} · ${info.synced ? '已同步' : '未同步'}`),
         infoTip('查看同步情况',
+          h('p', null, '喝水记录与饮食页按同一天的次数显示；设备饮水是 Apple 健康同步的毫升数，两者不换算。'),
           h('p', null, syncedClock
             ? `最近一次同步：${syncedClock}${info.synced ? '（今天）' : ''}。`
             : '还没有同步过健康数据。'),
@@ -156,7 +159,7 @@ export function healthMetricsCard() {
        * 密一档的排布配密一档的字号，不是所有列数都用同一个 17px。
        */
       ? h('div.metric-grid', { class: `metric-grid cols-${cols}` },
-        info.cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
+        cells.map((cell) => h('div.metric-cell', { class: `metric-cell${cell.value == null ? ' empty' : ''}` },
           icon(ICON_SHAPES[cell.key] ? cell.key : 'steps', 'metric-icon'),
           h('div.metric-body', null,
             h('div.metric-value', null, ...valueParts(cell)),
@@ -164,8 +167,9 @@ export function healthMetricsCard() {
       // 一个数都没有时不画一排杠：那不是「今天没测到」，是压根还没同步过
       : h('p.empty-hint', null,
         '今天还没有健康数据。到设置里的「数据管理」从健康 App、快捷指令或导出文件同步。'),
+    info.hasAny && !info.present.length && h('p.form-hint', null, '今天还没有设备健康数据；喝水次数来自饮食页。'),
     needsImport && dataCenterBtn(),
-    needsImport && info.hasAny && h('p.form-hint', { style: { marginTop: '6px' } },
+    needsImport && info.present.length > 0 && h('p.form-hint', { style: { marginTop: '6px' } },
       '缺活动能量，本日记录收支待补齐。每日计划来源见计算说明。'),
   );
 }
