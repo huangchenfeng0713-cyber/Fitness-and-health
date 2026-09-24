@@ -24,6 +24,8 @@ try {
   check('空计划突出添加操作，无其他模块档案提示', await page.locator('.training-add').isVisible() && await page.locator('.training-coverage').count() === 0);
   await open();
   check('弹窗隔离背景并将焦点移入', await page.evaluate(() => document.querySelector('#app').inert && document.querySelector('.sheet').contains(document.activeElement)));
+  check('添加动作融入弹层，不出现第二张直角投影卡', await page.locator('.exercise-picker-card').evaluate((el) =>
+    getComputedStyle(el).boxShadow === 'none' && getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)'));
   await page.locator('.ex-row').first().click();
   check('点击动作行不意外选中', await page.locator('.ex-row.marked').count() === 0);
   /*
