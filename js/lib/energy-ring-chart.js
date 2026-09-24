@@ -1,7 +1,6 @@
 /**
  * 今日热量环只负责绘制，刻度、圈数和真实数值仍由 core/energy-ring.js 决定。
- * Canvas 把每条弧切成细小的角度片，颜色沿进度轻微加深，细圆缘指明实际弧尾。
- * 圈心与图例仍是 HTML，图例颜色继续取弧尾而不取圆缘。
+ * Canvas 把每条弧切成细小的角度片，颜色沿进度单调加深；圈心与图例仍是 HTML。
  */
 
 const GAP_DEG = 8;
@@ -12,8 +11,8 @@ const TOKENS = {
   burn: ['--ring-burn-start', '--ring-burn', '--ring-burn-wrap'],
 };
 const FALLBACK = {
-  intake: ['#a7eccf', '#77dfb8', '#49c99f'],
-  burn: ['#f9dda0', '#edc875', '#dca958'],
+  intake: ['#dcfff0', '#42c992', '#1c9e75'],
+  burn: ['#fff3d3', '#e8ad55', '#c88935'],
 };
 
 const lastArc = new Map();
@@ -59,19 +58,6 @@ function endpoint(ctx, cx, cy, radius, angle, width, color) {
   ctx.fill();
 }
 
-function tipMarker(ctx, { cx, cy, radius, angle, width, color }) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius,
-    width / 2, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.lineWidth = width >= 10 ? 1.6 : 1.2;
-  ctx.strokeStyle = 'rgba(250,255,252,.92)';
-  ctx.stroke();
-  ctx.restore();
-}
-
 function trackArc(ctx, cx, cy, radius, width, start, span, color) {
   const trim = width / (2 * radius);
   ctx.strokeStyle = color;
@@ -83,7 +69,7 @@ function trackArc(ctx, cx, cy, radius, width, start, span, color) {
 }
 
 function gradientArc(ctx, cx, cy, radius, width, start, span, pct, track, tone, palette) {
-  if (!(pct > .3)) return null;
+  if (!(pct > .3)) return;
   const length = radius * span * clamp(pct, 0, 100) / 100;
   // 圆头两侧各占半个描边，几何范围仍停在轨道的起止点之内。
   const insetOf = (l) => Math.min(width / 2, Math.max(0, l) / 2);
@@ -107,7 +93,6 @@ function gradientArc(ctx, cx, cy, radius, width, start, span, pct, track, tone, 
   }
   endpoint(ctx, cx, cy, radius, from, width, firstColor);
   endpoint(ctx, cx, cy, radius, to, width, tipColor);
-  return { cx, cy, radius, angle: to, width, color: tipColor };
 }
 
 export function energyRingChart({ model, size = 152, stroke = 14, animateKey = null }) {
@@ -155,17 +140,14 @@ export function energyRingChart({ model, size = 152, stroke = 14, animateKey = n
     ctx.clearRect(0, 0, vb, vb);
     trackArc(ctx, cx, cy, radius, stroke, start, span, trackColor);
     if (model.hasBurn) trackArc(ctx, cx, cy, burnRadius, burnWidth, start, span, trackColor);
-    const tips = new Map();
     for (const tone of ['light', 'deep']) for (const seg of model.segments || []) {
       if (seg.tone !== tone) continue;
       const from = previous.get(seg.key) ?? seg.toPct;
       const to = current.get(seg.key) ?? seg.toPct;
       const pct = from + (to - from) * progress;
-      const tip = gradientArc(ctx, cx, cy, seg.track === 'burn' ? burnRadius : radius,
+      gradientArc(ctx, cx, cy, seg.track === 'burn' ? burnRadius : radius,
         seg.track === 'burn' ? burnWidth : stroke, start, span, pct, seg.track, tone, palette);
-      if (tip) tips.set(seg.track, tip);
     }
-    for (const tip of tips.values()) tipMarker(ctx, tip);
   };
   const canAnimate = animateKey != null && hasChange && !reduceMotion()
     && typeof requestAnimationFrame === 'function';

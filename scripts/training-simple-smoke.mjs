@@ -179,12 +179,6 @@ try {
     }
   });
   check('200% 字号组表保持可操作', await page.locator('.training-sets-table').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
-  check('200% 字号顶栏训练切换仍完整可读且不碰设置', await page.locator('.topbar-inner').evaluate(el => {
-    const control = el.querySelector('.training-view-tabs');
-    const settings = el.querySelector('.topbar-settings-btn').getBoundingClientRect();
-    return control && [...control.querySelectorAll('button')].every(button => button.scrollWidth <= button.clientWidth + 1)
-      && control.getBoundingClientRect().right < settings.left && settings.right <= innerWidth;
-  }));
   await page.locator('.training-set-draft').scrollIntoViewIfNeeded();
   check('200% 字号重量和次数文字完整显示', await readableValues());
   await screenshot('sets-200');

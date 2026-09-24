@@ -44,13 +44,13 @@
   --hero-ink-2: rgba(226, 250, 240, .74);
   --hero-track: rgba(255, 255, 255, .14);
   --hero-shadow: 0 22px 44px -26px rgba(6, 74, 58, .75);
-  /* 渐变只给弧线质感；进度终点另用细圆缘定位，不靠色差猜方向。 */
-  --ring-eat-start: #a7eccf;
-  --ring-eat: #77dfb8;
-  --ring-eat-wrap: #49c99f;
-  --ring-burn-start: #f9dda0;
-  --ring-burn: #edc875;
-  --ring-burn-wrap: #dca958;
+  /* 双轨分别从浅色走向深色；第二圈沿用第一圈终色继续加深。 */
+  --ring-eat-start: #dcfff0;
+  --ring-eat: #42c992;
+  --ring-eat-wrap: #1c9e75;
+  --ring-burn-start: #fff3d3;
+  --ring-burn: #e8ad55;
+  --ring-burn-wrap: #c88935;
   /*
    * 层次三件套（v3.25.0 起）：
    *  - --glow：页面顶上一层很淡的品牌色光，落在顶栏和第一张卡后面；
@@ -133,6 +133,7 @@
    * 那两个「＋」永远一样大：它们做的是同一件事，早先一个 40 一个 40 靠各写一遍维持。
    */
   --control-inline: 40px;
+  --topbar-row: 46px;
   /*
    * 底栏是一条浮在内容上面的胶囊（见 .tabbar）。它占掉的那一截叫 --dock-space：
    * 胶囊本身 + 离屏幕底边的一档 + 安全区。滚动容器、固定选择栏、toast
@@ -374,17 +375,19 @@ html, body { height: 100%; overflow: hidden; }
 }
 .topbar-inner {
   position: relative;
-  display: flex; align-items: center; gap: var(--space-2); min-height: var(--control-md);
-  padding: 2px calc(12px + var(--safe-right)) 2px calc(12px + var(--safe-left));
+  display: flex; align-items: center; gap: var(--space-2); min-height: var(--topbar-row);
+  padding: 3px calc(12px + var(--safe-right)) 5px calc(12px + var(--safe-left));
 }
 .topbar-context { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
-.topbar-screen-reader-title { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .topbar-context:has(.topbar-day) { justify-content: space-between; }
 .topbar-context:has(.topbar-day) .nav-arrow { position: relative; z-index: 2; }
-.topbar-status { padding-left: var(--space-2); color: var(--muted); font-size: var(--fs-body);
-  font-weight: var(--w-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-context .training-view-tabs { flex: 1 1 auto; width: 100%; max-width: 340px; min-width: 0; }
+.topbar-page-context { flex-direction: column; align-items: flex-start; gap: 0; padding-left: 4px; }
+.topbar-page-context h1 { margin-left: 0; line-height: 1.15; }
+/* 颜色和字号由下面「说明类小字」那条统一给，这里不再写第二份 */
+.topbar-context-note {
+  max-width: 100%; margin-top: var(--space-0);
+  line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .topbar-settings-btn {
   flex: none; border: 0; border-radius: 50%;
   display: grid; place-items: center; cursor: pointer;
@@ -395,23 +398,30 @@ html, body { height: 100%; overflow: hidden; }
 .topbar-settings-btn:active { background: var(--card-2); color: var(--accent); }
 .topbar-settings-btn span { display: grid; place-items: center; }
 .topbar-settings-btn svg { width: var(--icon-lg); height: var(--icon-lg); }
-/* 单行日期保留跨日导航，但不重复底栏的「今日／饮食」栏目名。 */
+/* 页名。原来 17px / 650 / 负字距，中文落到 PingFang 上又细又挤，
+   看着不像标题像行说明文字。加大加重、去掉负字距 —— 负字距是给西文标题用的。 */
+/*
+ * iOS 的大标题：字重高、字距略收，靠尺寸本身建立层级，
+ * 不靠加粗加色加背景。
+ */
+.topbar h1 {
+  font-size: var(--fs-display); margin: 0 0 0 2px; font-weight: var(--w-bold); letter-spacing: -.02em;
+}
+
+/* 日期切换直接住在顶栏里，省掉原来那张独立的日期卡 */
 .topbar-day {
-  position: relative; flex: 1; display: flex; align-items: center; justify-content: center;
-  gap: var(--space-1);
+  position: relative; flex: 1;
   z-index: 1; width: auto; min-width: 0;
-  text-align: center; line-height: 1;
+  text-align: center; line-height: 1.15;
   border: 0; background: none; color: inherit; font-family: inherit;
   cursor: pointer; padding: 2px 4px;
 }
-.topbar-day strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: var(--fs-title); font-weight: var(--w-bold); letter-spacing: -.01em; }
-.topbar-date { display: inline-flex; align-items: center; flex: none; font-size: var(--fs-caption); color: var(--muted); }
+.topbar-day strong { font-size: var(--fs-title); font-weight: var(--w-bold); letter-spacing: -.01em; }
+.topbar-date { display: block; font-size: var(--fs-caption); color: var(--faint); margin-top: var(--space-0); }
 /* 返回箭头是画出来的，不是打出来的：和底栏、健康数据那几个图标同一套描边参数 */
-.topbar-date.back { gap: var(--space-0); }
+.topbar-date.back { display: flex; align-items: center; justify-content: center; gap: var(--space-1); }
 .topbar-back-icon { display: inline-flex; }
 .topbar-back-icon svg { width: var(--icon-xs); height: var(--icon-xs); }
-@media (max-width: 360px) { .topbar-back-text { display: none; } }
 .nav-arrow {
   flex-shrink: 0; border-radius: 50%;
   border: 0; color: var(--text); line-height: 1; cursor: pointer;
@@ -424,7 +434,8 @@ html, body { height: 100%; overflow: hidden; }
 .nav-arrow span, .settings-close span { display: grid; place-items: center; }
 .nav-arrow svg, .settings-close svg { width: var(--icon-md); height: var(--icon-md); }
 
-.view { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+/* 栏目横滑只由底部导航接管；内容区保持原生触摸，图表和表格可自己横向滚动。 */
+.view { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; touch-action: auto;
   /* 底下让出浮动底栏那一截：最后一张卡要能滚到胶囊上面来，而不是永远压在它底下 */
   padding: var(--space-2) calc(var(--view-inline-pad) + var(--safe-right)) calc(var(--view-bottom-pad) + var(--dock-space)) calc(var(--view-inline-pad) + var(--safe-left)); display: flex; flex-direction: column; gap: var(--section-gap); }
 /* 固定选择栏在的时候，胶囊压在选择栏上，内容区只需要自己的留白 */
@@ -3056,6 +3067,9 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 实测两边都写了的选择器有 28 个。合成一张之后仍按原顺序排在最后，
  * 层叠结果不变；后续要改哪一条，就地改，别再新开一层。
  */
+/* 没有副标题时（数据页）标题在顶栏里垂直居中，靠结构判断，不靠 JS 挂类名。 */
+.topbar-page-context:not(:has(.topbar-context-note)) { justify-content: center; }
+
 /*
  * 图标按钮统一 44×44 —— 尺寸只在这里写一次。
  *
@@ -3094,6 +3108,7 @@ h1, h2, h3 { letter-spacing: -.02em; }
  * 几个选择器做同一件事，就写成一条 —— 早先字号被拆成两条一模一样的规则，
  * 而颜色和字号在各自组件那边还各有一份被压掉的旧值。
  */
+.topbar-context-note,
 .card-tag,
 .metric-row-note,
 .trend-summary,
