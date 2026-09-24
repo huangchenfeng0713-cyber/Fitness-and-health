@@ -261,8 +261,14 @@ function bindInfoTipDismiss() {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') closeOthers(null);
   });
-  /* 滚动与旋转屏幕后，说明层继续锚定原来的 i，而不是留在旧坐标。 */
-  document.addEventListener('scroll', () => queueInfoTipPositions(), true);
+  /*
+   * 只有外层滚动才会移动锚点。说明层自己的惯性滚动也会冒到捕获监听器；
+   * 那时重设 max-height/坐标会打断 iOS 的惯性，滑到底前弹回去。
+   */
+  document.addEventListener('scroll', (event) => {
+    if (event.target?.closest?.('.info-tip-panel')) return;
+    queueInfoTipPositions();
+  }, true);
   window.addEventListener('resize', () => queueInfoTipPositions());
   window.visualViewport?.addEventListener('resize', () => queueInfoTipPositions());
   window.visualViewport?.addEventListener('scroll', () => queueInfoTipPositions());

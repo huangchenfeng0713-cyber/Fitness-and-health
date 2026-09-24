@@ -30,6 +30,27 @@ const screenshot = async (selector, name) => {
   await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
   await page.locator(selector).screenshot({ path: process.env.ARTIFACT_DIR + '/' + name + '-' + engine + '.png' });
 };
+const tipScrollResult = async tip => {
+  // 打开后先等首轮锚点定位完成；否则测到的是打开动画，而非内部滚动。
+  await tip.locator('.info-tip-panel[data-positioned="true"]').waitFor();
+  return tip.evaluate(async el => {
+    const panel = el.querySelector('.info-tip-panel');
+    for (let i = 0; i < 24; i += 1) {
+      const row = document.createElement('p');
+      row.textContent = `长注释滑动样本 ${i + 1}：核对每条记录的原始份量。`;
+      panel.append(row);
+    }
+    let positionWrites = 0;
+    const observer = new MutationObserver(records => { positionWrites += records.length; });
+    observer.observe(panel, { attributes: true, attributeFilter: ['style', 'data-positioned'] });
+    panel.scrollTop = panel.scrollHeight;
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    observer.disconnect();
+    return { scrollable: panel.scrollHeight > panel.clientHeight,
+      bottom: Math.abs(panel.scrollTop - (panel.scrollHeight - panel.clientHeight)) < 2,
+      positionWrites };
+  });
+};
 try {
   await page.goto(process.argv[2] || 'http://127.0.0.1:8146', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.tab');
@@ -109,6 +130,14 @@ try {
   });
   await waitCount(16);
   check('队列未完成时往返日期再点击，仍共用同日队列', await page.locator('.water-count').textContent() === '16');
+  await tab('数据');
+  check('数据页标明当天日期，喝水次数与饮食页同日记录一致', await page.locator('.card').first().evaluate(el => {
+    const cell = [...el.querySelectorAll('.metric-cell')].find(node => node.textContent.includes('喝水记录'));
+    return el.querySelector('.card-tag')?.textContent.includes('09-06')
+      && cell?.querySelector('.metric-value')?.textContent === '16次';
+  }));
+  await screenshot('.metric-grid', 'health-water-metrics');
+  await tab('饮食');
 
   await custom();
   check('自定义食物使用同一弹窗、滚动区与固定底栏', await page.locator('.sheet .custom-form').count() === 1 && await page.locator('.sheet-footer .primary-btn').isVisible());
@@ -146,6 +175,12 @@ try {
   check('保存毫升口径与分量，复用添加食物份量弹窗', food.basis === '100ml' && food.n[0] === 100 && food.s[0][1] === 250 && await page.locator('.sheet').getAttribute('aria-label') === '选择份量');
   await page.evaluate(async food => (await import('/js/lib/store.js')).addEntry({ foodId: food.id, grams: 250, meal: 'dinner' }), food);
   await close();
+  const recordTip = page.locator('.card-head .info-tip').filter({ has: page.locator('summary[aria-label="查看本日记录说明"]') });
+  await recordTip.locator('summary').click();
+  const recordScroll = await tipScrollResult(recordTip);
+  if (!recordScroll.scrollable || !recordScroll.bottom || recordScroll.positionWrites) console.log('记录说明滑动详情', recordScroll);
+  check('饮食记录长注释快速滑到底不触发重新定位', recordScroll.scrollable && recordScroll.bottom && recordScroll.positionWrites === 0);
+  await recordTip.locator('summary').click();
   await custom();
   await page.getByRole('button', { name: '修改 测试奶', exact: true }).click();
   check('编辑回填已有数据与ml单位', await formField('食物名称').inputValue() === '测试奶' && await page.getByRole('button', { name: '切换克重或体积单位', exact: true }).textContent() === 'ml');
@@ -182,6 +217,9 @@ try {
   await page.locator('.sheet .info-tip summary').first().click();
   await page.waitForTimeout(100);
   await screenshot('.sheet', 'anchored-food-tip');
+  const tipScroll = await tipScrollResult(page.locator('.sheet .info-tip').first());
+  if (!tipScroll.scrollable || !tipScroll.bottom || tipScroll.positionWrites) console.log('弹层说明滑动详情', tipScroll);
+  check('长注释内部快速滑到底不触发重新定位', tipScroll.scrollable && tipScroll.bottom && tipScroll.positionWrites === 0);
   await close();
   await page.evaluate(async () => {
     const s = await import('/js/lib/store.js'), db = await import('/js/lib/db.js');

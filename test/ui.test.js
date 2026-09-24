@@ -225,7 +225,7 @@ test('喝水只数次数，不记毫升，也不画完成条', () => {
   assert.match(card, /view\.undo\.hidden = view\.undoBaseline == null/, '撤销的显示条件没有跟着时间窗走');
   // 次数写在那条状态里，标题右边不能再挂一个同样的数
   assert.ok(!/card-tag[^\n]*已记录/.test(card), '同一个数在一张卡上写了两遍');
-  assert.match(card, /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
+  assert.match(read('js/core/water-log.js'), /Math\.min\(MAX_WATER_TAPS/, '次数没有上限，长按会一直加');
 
   // Apple 健康同步来的毫升不能丢：那是设备数据，仍留在数据页
   assert.match(read('js/core/health-card.js'), /key: 'waterMl'/, '数据页不该丢掉设备记录的饮水');
