@@ -629,3 +629,17 @@ test('推荐行的理由不重复右边那列已经印着的数', () => {
     assert.deepEqual(dup, [], `${r.food.name} 把右边那列的数又写了一遍：${dup.join('、')}`);
   }
 });
+
+test('一天刚开始、一口没吃时不拿全天蛋白缺口压人，也不为还没同步的消耗报警', () => {
+  const observation = { valid: false, status: 'missing', reason: '还没收到消耗数据',
+    fields: { restingEnergy: { status: 'missing' }, activeEnergy: { status: 'missing' } } };
+  const early = advise({}, { now: at('03:41'), observation });
+  const text = JSON.stringify(early.insights);
+  assert.doesNotMatch(text, /\d+ 个鸡蛋|鸡胸肉，或/, '凌晨三点对着一口没吃的人换算成十几个鸡蛋');
+  assert.ok(early.insights.some((i) => /今天的蛋白目标/.test(i.title)), '蛋白目标仍要说，只是换成分三餐的说法');
+  assert.ok(!early.insights.some((i) => /消耗/.test(i.title)), '一大早还没同步是常态，不该挂一条橙色警告');
+  assert.doesNotMatch(text, /字段|截止时间/, '给人看的话里不许出现程序内部的叫法');
+
+  const noon = advise({}, { now: at('14:00'), observation });
+  assert.ok(noon.insights.some((i) => i.title === '今天的消耗还没同步过来'), '下午还没同步就该说出来');
+});

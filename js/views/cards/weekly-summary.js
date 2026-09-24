@@ -5,7 +5,7 @@ import { h, shiftDay, todayKey } from '../../lib/utils.js';
 import { state } from '../../lib/store.js';
 import { weeklySummary } from '../../core/weekly-summary.js';
 import { planShift } from '../../core/trend-reading.js';
-import { infoTip } from '../../lib/ui.js';
+import { infoTip, cardTitle } from '../../lib/ui.js';
 
 export function weeklySummaryCard() {
   const endDate = shiftDay(todayKey(), -1);
@@ -30,7 +30,7 @@ export function weeklySummaryCard() {
 
   return h('section.card.weekly-summary-card', null,
     h('div.card-head', null,
-      h('h3', null, '近 7 日速览'),
+      cardTitle('近 7 日速览', 'calendar'),
       // 样本与窗口可在帮助中核对，主表仍只保留标签和值。
       h('div.card-head-actions', null,
         h('span.card-tag', null, `${s.from.slice(5)} – ${s.to.slice(5)}`),

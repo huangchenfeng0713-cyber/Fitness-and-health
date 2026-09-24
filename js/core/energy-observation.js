@@ -64,9 +64,16 @@ function bounds(row, day) {
   return { start, end, natural };
 }
 
-const STATUS_LABELS = { missing: '缺少能量字段', suspect: '能量记录可疑，暂不参与建议', future: '记录时间在未来',
-  partial: '仅有部分日记录', 'unknown-coverage': '完整日覆盖未确认', 'missing-time': '缺少字段截止时间',
-  'wrong-day': '字段日期不一致', stale: '能量记录已过期', unaligned: '两项截止时间待对齐' };
+/*
+ * 这几句是直接印在主卡上给人看的，不是给维护的人看的日志。
+ * 原先写的是「缺少能量字段」「缺少字段截止时间」「两项截止时间待对齐」——
+ * 程序内部的叫法，读的人不知道「字段」是什么，更不知道该做什么。
+ */
+const STATUS_LABELS = { missing: '还没收到消耗数据', suspect: '消耗数据异常，暂不参与计算',
+  future: '消耗数据的时间在未来，暂不采用', partial: '这一天只同步了一部分消耗',
+  'unknown-coverage': '这一天的消耗是否记全还不确定', 'missing-time': '消耗数据缺少同步时间，暂不采用',
+  'wrong-day': '消耗数据的日期对不上，暂不采用', stale: '消耗数据有一阵没更新了',
+  unaligned: '静息和活动消耗的同步时间对不上' };
 
 /**
  * 「部分日」要说清停在几点。

@@ -724,7 +724,7 @@ function planCard() {
   if (!list.length) {
     const brief = emptyPlanBrief(state.trainingDays, trainingDay());
     return h('section.card.training-current-card', null,
-      cardHeader('本次训练', { summary: trainingDay(), actions: brief ? [
+      cardHeader('本次训练', { icon: 'training', summary: trainingDay(), actions: brief ? [
         persistentInfoTip('training-empty-brief', '这两行是怎么来的',
           '只统计已记录组数或标记完成的动作，按主练部位归类；未记录不代表没有训练。'),
       ] : [] }),
@@ -737,7 +737,7 @@ function planCard() {
   }
   const volume = sessionVolume(session());
   return h('section.card.training-current-card', null,
-    cardHeader('本次训练', { summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,
+    cardHeader('本次训练', { icon: 'training', summary: `${trainingDay()} · 已安排 ${list.length} 个动作 · 已记录 ${volume.doneSets} 组`,
       actions: [h('button.text-btn', { onclick: async () => {
         const date = trainingDay();
         let removed;
@@ -782,7 +782,7 @@ function adviceCard() {
   const tips = planAdvice(pickedExercises());
   if (!tips.length) return null;
   return h('section.card.training-advice', null,
-    cardHeader('训练建议', { actions: [persistentInfoTip('training-advice-method', '训练建议依据', '根据当前动作的主要肌群、动作模式和顺序提供参考。标签相近不等于刺激相同，不要求删除或替换；未评估个人恢复与动作质量。')] }),
+    cardHeader('训练建议', { icon: 'spark', actions: [persistentInfoTip('training-advice-method', '训练建议依据', '根据当前动作的主要肌群、动作模式和顺序提供参考。标签相近不等于刺激相同，不要求删除或替换；未评估个人恢复与动作质量。')] }),
     h('div.insight-list', null, tips.map(t => h('div.insight.info', null,
       h('div.insight-title', null, t.title), h('div.insight-text', null, t.text),
       t.actions?.length ? h('div.tip-actions', null, t.actions.map(a => h('button.chip-btn.tip-action', {
@@ -807,7 +807,7 @@ function weeklyCard() {
   historyDate = model.selected;
   const recorded = model.rows.filter(isRecordedItem), planned = model.rows.filter(row => !isRecordedItem(row));
   return h('section.card.training-history-card', null,
-    cardHeader('近 7 日训练记录', { summary: `${shiftDay(todayKey(), -6)} 至 ${todayKey()}` }),
+    cardHeader('近 7 日训练记录', { icon: 'calendar', summary: `${shiftDay(todayKey(), -6)} 至 ${todayKey()}` }),
     h('div.training-date-strip', { role: 'group', 'aria-label': '选择训练日期' }, model.days.map(day => h('button.training-date', {
       type: 'button', 'aria-pressed': String(day.date === historyDate),
       'aria-label': `${day.date}${day.recorded ? ' 有训练记录' : ' 暂无记录'}`,
@@ -845,7 +845,7 @@ function showAreaDetail(area) {
 function weeklyGroupsCard() {
   const model = weeklyTrainingSummary(state.trainingDays, todayKey());
   return h('section.card.training-week-groups', null,
-    cardHeader('近 7 日训练概览', { summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
+    cardHeader('近 7 日训练概览', { icon: 'body', summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
       persistentInfoTip('training-week-groups-method', '训练统计说明',
         `已记录 ${model.recorded} 组，其中正式组 ${model.work}、热身 ${model.warmup}、未区分类型 ${model.unknown}。未区分类型的旧记录保留原值，无需补填。主练与协同分别展示，协同不折半；同组同部位只计一次，各部位不能相加为全身组数。间隔只看主练记录，未记录不代表没练。`),
     ] }),

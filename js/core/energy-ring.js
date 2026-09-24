@@ -100,6 +100,12 @@ function centerOf(ate, burn) {
  *   target  今日摄入目标，只用来在没传 scale 时算尺子、图例中显示计划
  *   scale   当天锁定的圆周。传入则不再改
  */
+function planCenter(ate, goal, historical) {
+  const diff = Math.round(ate - goal);
+  if (diff > 0) return { key: 'over', label: '超出计划', kcal: diff };
+  return { key: 'left', label: historical ? '低于计划' : '还可摄入', kcal: -diff };
+}
+
 export function energyRing({
   eaten = 0, burned = null, target = null, scale = null,
   balanceAvailable = true, intakeComplete = true, intakeKnown = true, historical = false,
@@ -156,7 +162,12 @@ export function energyRing({
     center: !intakeKnown || !intakeComplete
       ? { key: 'intake', label: '已知摄入', kcal: intakeKnown ? Math.round(ate) : null }
       : !balanceAvailable
-        ? goal > 0 ? { key: 'plan', label: '较计划', kcal: Math.round(ate - goal) }
+        /*
+         * 没有可对照的消耗时，圈心说「离计划还有多远」—— 用人话说，数字不带符号。
+         * 原先写的是「较计划 −2119」：凌晨什么都没吃的人看到一个负两千，
+         * 得先想明白「较」是谁减谁，才读得出这是「还能吃 2119」。
+         */
+        ? goal > 0 ? planCenter(ate, goal, historical)
           : { key: 'intake', label: '已记录摄入', kcal: Math.round(ate) }
         : { ...centerOf(ate, hasBurn ? burn : null), label: historical ? '当日收支' : '当前收支' },
     /** 相对今日目标还剩多少（负数表示已经超出计划）。界面用圈心，这个数留给测试和提示层 */

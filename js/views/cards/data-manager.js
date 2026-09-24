@@ -7,7 +7,7 @@
 
 import { h, num, toast, confirmAction, download, todayKey } from '../../lib/utils.js';
 import { icon } from '../../lib/icons.js';
-import { infoTip } from '../../lib/ui.js';
+import { infoTip, cardTitle } from '../../lib/ui.js';
 import { state, saveHealthDay, saveProfile, clearAllData, db } from '../../lib/store.js';
 import { isPlausibleHealthValue } from '../../core/health.js';
 import { runImportWorker, applyImport } from '../../lib/importer.js';
@@ -709,7 +709,7 @@ export function dataManagerCard(rerender) {
   return h('section.card.data-manager#data-manager', null,
     h('div.card-head', null,
       h('div', null,
-        h('h3', null, '数据管理'),
+        cardTitle('数据管理', 'data'),
         h('p.card-desc', null, '需要同步、补录、换设备或恢复时再展开。')),
       h('div.card-head-actions', null,
         infoTip('查看数据来源说明',

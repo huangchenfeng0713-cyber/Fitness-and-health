@@ -138,8 +138,15 @@ try {
     return view.scrollTop - before;
   });
   await page.waitForTimeout(180);
-  check('内容区滚动时浮层保持屏幕原位且不关闭', scroll > 0 && await panel().count() === 1
-    && JSON.stringify(await panel().boundingBox()) === JSON.stringify(beforeScroll));
+  /*
+   * 浮层跟着圆点走，不钉在屏幕上。原先它挂在 body 上 position: fixed，
+   * 一滚动圆点走了、读数还停在原地，压到下一张卡的标题上 —— 用户截图里那枚
+   * 「0 mg」就浮在「今日提示」旁边，分不清在说哪一项。
+   */
+  const afterScroll = await panel().boundingBox();
+  const followed = await geometry('sodium');
+  check('内容区滚动时浮层跟着圆点一起走、箭头仍对准且不关闭', scroll > 0 && await panel().count() === 1
+    && Math.abs((beforeScroll.y - afterScroll.y) - scroll) < 1 && followed.arrow && followed.above);
   for (const cancelled of [false, true]) {
     await page.locator('#view').evaluate((el, cancelled) => {
       const options = { bubbles: true, pointerType: 'touch', pointerId: 10, isPrimary: true, clientX: 2, clientY: 200 };
@@ -157,11 +164,12 @@ try {
 
   await render();
   await trigger('sodium').tap();
-  const beforeRender = await panel().boundingBox();
   await render();
   await page.waitForTimeout(80);
-  check('同日重绘保留浮层坐标与唯一高亮', JSON.stringify(await panel().boundingBox()) === JSON.stringify(beforeRender)
-    && await page.locator('.is-value-open').count() === 1);
+  // 重绘换掉了整张卡：浮层要搬进新卡、仍然对准同一个圆点（它跟着圆点走，不记屏幕坐标）
+  const rerendered = await geometry('sodium');
+  check('同日重绘后浮层搬进新卡、仍对准圆点，高亮唯一', rerendered.arrow && rerendered.above && rerendered.fits
+    && rerendered.single && await page.locator('.hero .point-value-tip').count() === 1);
   await render({ sodium: 999999 });
   await page.waitForTimeout(80);
   check('同日数据刷新更新真实值，长读数重新避让', await panel().textContent() === '999999 mg'

@@ -1,7 +1,7 @@
 /** 今日：当前状态、核心目标与可执行提示。 */
 
 import { h, clearEl, num, mount } from '../lib/utils.js';
-import { infoTip, persistentInfoTip } from '../lib/ui.js';
+import { infoTip, persistentInfoTip, cardTitle } from '../lib/ui.js';
 import { pointValueTrack } from '../lib/point-value-tip.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
 import { dailyMetrics, macroSplit, nutrientScale, KIND } from '../core/metrics.js';
@@ -94,8 +94,8 @@ function splitRow(split) {
     }));
 }
 
-function metricChip(m) {
-  const scale = nutrientScale(m);
+function metricChip(m, nothingRecorded = false) {
+  const scale = nutrientScale(m, { nothingRecorded });
   const value = m.display ?? num(m.eaten, m.decimals || 0);
   return h('div.micro-chip', { 'data-nutrient': m.key },
     h('span.micro-label', null, m.label),
@@ -137,7 +137,13 @@ function heroCard(advice, targets, derived) {
     scale: ringScale,
   });
 
+  /*
+   * 上下两截：上面是深翡翠色的光面（判断 + 环），下面回到卡片底色放三种营养刻度。
+   * 光面只装「热量这件事」—— 蛋白、碳水脂肪和那三个方框各有自己的数据色和语义色，
+   * 摆在深绿底上会糊成一片，也会让光面从「今天的主角」变成一块花背景。
+   */
   return h(`section.card.hero.${status.level}`, null,
+    h('div.hero-top', null,
     h('div.hero-head', null,
       h('div.hero-head-main', null,
         h('span.status-pill', null, status.label || LEVEL_TEXT[status.level]),
@@ -158,7 +164,7 @@ function heroCard(advice, targets, derived) {
           // 只在同一天里让弧长过去；翻日期是换了一份数据，不是「长了一截」
           energyRingChart({ model: ringModel, animateKey: state.day }),
           ringCenter(ringModel)),
-        ringLegend(ringModel))),
+        ringLegend(ringModel)))),
     /*
      * 环下面原先还有一句「每日计划 2119 kcal；环心是记录摄入减设备消耗，
      * 不代表全天结余。」—— 两截都是重复：`2119` 就印在紧邻的图例上
@@ -166,12 +172,13 @@ function heroCard(advice, targets, derived) {
      * **解释「这个数是怎么算出来的」属于说明层**，不占卡面。
      */
 
-    h('div.metric-list', null,
-      metricRow(by.protein),
-      splitRow(macroSplit(targets, gaps))),
-    h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k]))),
-    derived.energyData?.observedAt ? h('p.form-hint', null, '截至 ' + new Date(derived.energyData.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })) : null,
-    energyFreshness(derived),
+    h('div.hero-bottom', null,
+      h('div.metric-list', null,
+        metricRow(by.protein),
+        splitRow(macroSplit(targets, gaps))),
+      h('div.hero-micros', null, CHIP_KEYS.map((k) => metricChip(by[k], !(gaps.kcal.eaten > 0)))),
+      derived.energyData?.observedAt ? h('p.form-hint', null, '消耗截至 ' + new Date(derived.energyData.observedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })) : null,
+      energyFreshness(derived)),
   );
 }
 
@@ -198,7 +205,8 @@ function heroCard(advice, targets, derived) {
 function ringCenter(model) {
   const c = model.center;
   if (!c) return null;
-  const value = c.kcal == null ? '—' : c.key === 'intake' ? String(c.kcal) : c.kcal > 0 ? '+' + c.kcal
+  const plain = ['intake', 'left', 'over'].includes(c.key);
+  const value = c.kcal == null ? '—' : plain ? String(c.kcal) : c.kcal > 0 ? '+' + c.kcal
     : c.kcal < 0 ? `−${Math.abs(c.kcal)}` : '0';
   return h('div.ring-center', null,
     h('span.ring-caption', null, c.label),
@@ -289,7 +297,16 @@ function heroInfo(derived, targets) {
 function energyFreshness(derived) {
   if (derived.demoMode) return h('p.data-freshness.warn', null, '演示档案：请确认身体信息后再使用个人计划。');
   const meta = derived.energyData;
-  if (!meta?.valid) return h('p.data-freshness', null, meta?.reason || '能量数据待同步');
+  if (!meta?.valid) {
+    /*
+     * 今天还没收到消耗是最常见的一种，而且多半只是还没到同步的时候 ——
+     * 说清楚「同步之后会怎样」，比一句「还没收到消耗数据」有用。
+     */
+    const text = meta?.status === 'missing' && derived.isToday
+      ? '今天的消耗还没同步。同步之后，环上会多出一圈消耗，圈心换成收支。'
+      : meta?.reason ? `${meta.reason}。` : '消耗数据还没同步。';
+    return h('p.data-freshness', null, text);
+  }
   return null;
 }
 
@@ -300,7 +317,7 @@ function trendCard(advice) {
   if (!t || !t.active || ['historical', 'future', 'unavailable'].includes(t.state)) return null;
   const titles = { under: '全天摄入可能偏少', over: '留意后续餐次搭配', steady: '暂未见明确偏离', uncertain: '记录尚不足，先观察', watch: '先留出餐后观察时间', late: '今晚不必追齐数字', settled: '今天不必追齐计划差额', covered: '当前不必额外加餐' };
   return h('section.card.intake-trend', { 'data-state': t.state },
-    h('div.card-head', null, h('h3', null, '今日摄入趋势'),
+    h('div.card-head', null, cardTitle('今日摄入趋势', 'trend'),
       persistentInfoTip('intake-trend-method', '查看摄入预测依据',
         h('div', null, h('p', null, '餐次有记录不代表吃完。未确认全天记录完整时，不外推确定的摄入不足；晚间仍可照常吃尚未吃的正餐。')))),
     h('p.trend-title', null, titles[t.state] || titles.uncertain),
@@ -327,7 +344,7 @@ function insightsCard(advice, rerender) {
   evidence?.classList.add('insight-evidence-tip');
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, isToday ? '今日提示' : '当日回顾'),
+      cardTitle(isToday ? '今日提示' : '当日回顾', 'spark'),
       evidence),
     h('div.insight-list', null, list.map((i) => {
       const focus = isToday ? INSIGHT_FOCUS[i.type] : null;

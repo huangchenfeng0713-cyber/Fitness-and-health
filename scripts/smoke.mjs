@@ -997,11 +997,33 @@ try {
       const cs = getComputedStyle(el);
       return cs.backdropFilter || cs.webkitBackdropFilter || 'none';
     };
-    return { toast: read('.toast'), actionbar: read('.actionbar-slot'), drawer: read('.settings-drawer') };
+    return { toast: read('.toast'), tabbar: read('.tabbar'), actionbar: read('.actionbar-slot'), drawer: read('.settings-drawer') };
   });
+  // 底栏是浮在内容上面的胶囊（内容从它底下滚过去），所以它也是玻璃；多选条和抽屉仍是实色
   check('毛玻璃只给真的叠在内容上面的那几处',
-    /blur/.test(glass.toast || '') && !/blur/.test(glass.actionbar || '') && !/blur/.test(glass.drawer || ''),
+    /blur/.test(glass.toast || '') && /blur/.test(glass.tabbar || '')
+      && !/blur/.test(glass.actionbar || '') && !/blur/.test(glass.drawer || ''),
     JSON.stringify(glass));
+
+  /*
+   * 浮动底栏压在内容上面：每一页滚到底时，最后一张卡必须整张露在胶囊上面。
+   * 内容区的底部留白少让一截的话，最后几行永远被玻璃盖着、手指也点不到。
+   */
+  const buried = [];
+  for (const tab of ['今日', '饮食', '数据', '健身']) {
+    await page.evaluate((t) => [...document.querySelectorAll('.tab')]
+      .find((x) => x.textContent.includes(t))?.click(), tab);
+    await page.waitForTimeout(450);
+    const r = await page.evaluate(() => {
+      const view = document.querySelector('#view');
+      view.scrollTop = view.scrollHeight;
+      const last = [...view.children].filter((el) => el.getBoundingClientRect().height > 0).at(-1);
+      const bar = document.querySelector('.tabbar').getBoundingClientRect();
+      return { lastBottom: last?.getBoundingClientRect().bottom ?? 0, barTop: bar.top };
+    });
+    if (r.lastBottom > r.barTop + 0.5) buried.push(`${tab}：最后一块底边 ${r.lastBottom.toFixed(0)} 压在底栏 ${r.barTop.toFixed(0)} 下面`);
+  }
+  check('浮动底栏不盖住任何一页的最后一张卡', buried.length === 0, buried.join('；'));
 
   check('运行期无 JS 错误', errors.length === 0, errors.slice(0, 3).join(' | '));
 } finally {

@@ -387,7 +387,7 @@ export function dailyMetrics(targets, gaps, water = null) {
 }
 
 /** 三个短刻度只映射读数，不缩放真实数据。最高建议量在 78% 处。 */
-export function nutrientScale(m) {
+export function nutrientScale(m, { nothingRecorded = false } = {}) {
   if (m.known === false) return { markerPct: null, zoneStart: null, zoneEnd: null, limitPct: null, level: LEVEL.plain };
   const value = Math.max(0, Number(m.eaten) || 0);
   const fiber = m.key === 'fiber';
@@ -398,7 +398,12 @@ export function nutrientScale(m) {
     zoneStart: fiber ? (m.recommendedLo ?? 25) / axisMax * 100 : null,
     zoneEnd: fiber ? (m.recommendedHi ?? 30) / axisMax * 100 : null,
     limitPct: fiber ? null : 78,
-    level: fiber ? (m.complete !== false && value < (m.recommendedLo ?? 25) ? LEVEL.near : LEVEL.plain)
+    /*
+     * 一笔饮食都还没记的时候是中性色，不是橙色：凌晨打开、早饭还没吃，0 本来就是 0，
+     * 亮一个橙点等于对着没开始的一天说「偏少」。但吃了一整天肉、纤维真是 0 的时候照样亮橙 ——
+     * 所以看的是「今天记没记过东西」，不是纤维这一项是不是 0。
+     */
+    level: fiber ? (!nothingRecorded && m.complete !== false && value < (m.recommendedLo ?? 25) ? LEVEL.near : LEVEL.plain)
       : ceilingLevel(value, m.target, m.attention),
   };
 }

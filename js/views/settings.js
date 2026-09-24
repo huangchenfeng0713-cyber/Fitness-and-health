@@ -11,7 +11,7 @@
 import {
   h, clearEl, toast, mount, num, confirmAction, field, todayKey, runLocalAction,
 } from '../lib/utils.js';
-import { infoTip } from '../lib/ui.js';
+import { infoTip, cardTitle } from '../lib/ui.js';
 import { icon, iconSvg } from '../lib/icons.js';
 import { profileCard } from './cards/profile.js';
 import { dataManagerCard, collapseManagerSections } from './cards/data-manager.js';
@@ -40,7 +40,7 @@ function toggleCard() {
   return h('section.card', null,
     h('div.card-head', null,
       h('div', null,
-        h('h3', null, '计算方式'),
+        cardTitle('计算方式', 'calc'),
         h('p.card-desc', null, '计划来源与记录偏好。')),
       infoTip('查看计算方式说明',
         h('p', null, '计划修改从保存当天生效；旧日无版本时按当前设置对照，进食节奏采用固定三餐参照，已记录的饮食保持原样。'))),
@@ -360,7 +360,7 @@ function accountCard() {
   return h('section.card.account-card', null,
     h('div.card-head', null,
       h('div', null,
-        h('h3', null, '账号与云同步'),
+        cardTitle('账号与云同步', 'account'),
         h('p.card-desc', null, account.status === 'locked'
           ? '原账号数据正在隐私锁保护下。'
           : configured ? '跨设备保存，每个账号的数据彼此隔离。' : '无需登录也能继续使用。')),
@@ -465,7 +465,7 @@ function feedbackCard({ about = null } = {}) {
 
   return h('section.card', null,
     h('div.card-head', null,
-      h('h3', null, '关于与反馈'),
+      cardTitle('关于与反馈', 'about'),
       infoTip('查看反馈隐私说明',
         h('p', null, '提交时会附带应用版本、浏览器、语言和各类记录条数，便于排查。'),
         h('p', null, '不会附带体重、体脂、生日或具体饮食内容；打开 GitHub 后仍由你确认提交。'))),
