@@ -44,14 +44,13 @@
   --hero-ink-2: rgba(226, 250, 240, .74);
   --hero-track: rgba(255, 255, 255, .14);
   --hero-shadow: 0 22px 44px -26px rgba(6, 74, 58, .75);
-  /*
-   * 环画在光面上，所以是浅色系。第二圈比第一圈**更亮**，不是更深 ——
-   * 深底上压暗一档等于看不见，「这条跑过一整圈了」要靠亮起来说。
-   */
+  /* 双轨分别从浅色走向深色；第二圈沿用第一圈终色继续加深。 */
+  --ring-eat-start: #c4f7df;
   --ring-eat: #6fe0b6;
-  --ring-eat-wrap: #e4fff4;
+  --ring-eat-wrap: #2fc99b;
+  --ring-burn-start: #fff0c2;
   --ring-burn: #f2c66b;
-  --ring-burn-wrap: #fff0c4;
+  --ring-burn-wrap: #dda840;
   /*
    * 层次三件套（v3.25.0 起）：
    *  - --glow：页面顶上一层很淡的品牌色光，落在顶栏和第一张卡后面；
@@ -884,26 +883,7 @@ html, body { height: 100%; overflow: hidden; }
   font-size: var(--fs-footnote); line-height: 1; font-weight: var(--w-medium); color: var(--hero-ink-2);
 }
 
-/*
- * 两条轨道，每条两档明度。
- *
- * 深浅只说一件事：**这条已经跑过一整圈了**。第一圈浅色，越过 12 点进第二圈
- * 换深色盖在浅色上。两条轨道互不覆盖 —— 消耗跑得再远也碰不到绿弧，
- * 浅色永远不会被擦回灰轨。
- *
- * 具体颜色由画的时候按 track / tone 直接给（见 energy-ring-chart.js 的 TRACK），
- * 这里只管描边端头和灰轨。
- */
-.ring-track, .ring-burn-track { stroke: var(--track); }
-/*
- * 端头一律圆，灰轨也是。
- *
- * 圆头读作「走到这儿了」，方切读作「被裁断」，而这只环只说前一件事；
- * 一圈圆头的弧躺在方切的槽里，两端对不上，12 点那道缺口看着像裁出来的。
- * 圆头会往两端各鼓出半个描边，所以画之前先从长度里扣掉这一截
- * （energy-ring-chart.js 的 arc()）—— 落笔范围仍是 352°，缺口一点没被糊上。
- */
-.ring-track, .ring-burn-track, .ring-seg { stroke-linecap: round; }
+/* 轨道、渐变弧与圆头统一由 energy-ring-chart.js 画在同一张 Canvas 上。 */
 
 /*
  * 环占满一行但有上限：卡片再宽（平板、横屏）它也不该无限长大 ——
@@ -917,14 +897,11 @@ html, body { height: 100%; overflow: hidden; }
  */
 .energy-ring {
   display: block; width: min(213.44px, 57.04vw); height: auto; overflow: visible;
-  /* 弧在光面上微微发光：整只环一层柔光，比给每段弧单独加滤镜稳（Safari 不给 SVG 子元素上滤镜） */
+  /* 整只环一层柔光，不给细分的角度片逐片加滤镜。 */
   filter: drop-shadow(0 0 10px color-mix(in srgb, var(--ring-eat) 30%, transparent));
 }
 
-/*
- * 图例：一项对着环上一条弧。色块的颜色和深浅必须和环上完全一致 ——
- * 「颜色变深」在两处说的是同一件事：这条跑过一整圈了。
- */
+/* 图例色块用弧尖的实时颜色，和渐变末端一致。 */
 .ring-legend {
   /*
    * 图例是环下面并排的两块「读数」：上一行色块 + 名字，下一行数字。
@@ -954,10 +931,8 @@ html, body { height: 100%; overflow: hidden; }
  * 这是全表唯一一处不走阶梯的矩形圆角。
  */
 .ring-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; background: currentColor; }
-.ring-swatch-intake { color: var(--ring-eat); }
-.ring-swatch-intake.is-deep { color: var(--ring-eat-wrap); }
-.ring-swatch-burn { color: var(--ring-burn); }
-.ring-swatch-burn.is-deep { color: var(--ring-burn-wrap); }
+.ring-swatch-intake { color: var(--ring-eat-start); }
+.ring-swatch-burn { color: var(--ring-burn-start); }
 
 .mini-macro-top { display: flex; align-items: baseline; gap: var(--space-1); font-size: var(--fs-footnote); margin-bottom: var(--space-1); }
 .mini-macro-top span:first-child { flex: 1; color: var(--muted); }

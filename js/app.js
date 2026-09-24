@@ -4,7 +4,7 @@ import {
   h, $, clearEl, todayKey, toast, dayHeading, shiftDay, copyText, scrimDismiss,
 } from './lib/utils.js';
 import { isGesturing, dragGesture } from './lib/gesture.js';
-import { installTabSwipe, swipeDestination } from './lib/tab-swipe.js';
+import { installTabSwipe } from './lib/tab-swipe.js';
 import { initStore, subscribe, state, recompute, saveProfile, setDay } from './lib/store.js';
 import { importFromUrlHash } from './lib/importer.js';
 import { renderDashboard } from './views/dashboard.js';
@@ -215,7 +215,6 @@ function renderTabs() {
 
 function bindTabbarGesture(nav) {
   tabbarGestureBound = true;
-  let startingLeft = 0;
   let suppressClick = false;
   nav.addEventListener('click', (event) => {
     if (!suppressClick) return;
@@ -226,29 +225,35 @@ function bindTabbarGesture(nav) {
   dragGesture(nav, {
     axis: 'x',
     threshold: 12,
-    canStart: (event) => !settingsOpen && !accountDataLocked() && Boolean(event.target.closest?.('.tab')),
+    canStart: (event) => !settingsOpen && !accountDataLocked() && !tabSwipe?.isAnimating()
+      && Boolean(event.target.closest?.('.tab')),
     onStart: () => {
-      startingLeft = nav.querySelector('.tab.active')?.offsetLeft || 0;
+      tabSwipe?.beginDrag();
       nav.classList.remove('tabbar-ready');
     },
-    onMove: ({ dx }) => {
-      const indicator = nav.querySelector('.tab-indicator');
-      if (!indicator) return;
-      const left = Math.max(5, Math.min(nav.clientWidth - indicator.offsetWidth - 5, startingLeft + dx));
-      indicator.style.transform = `translate3d(${left}px, 0, 0)`;
-    },
+    onMove: ({ dx }) => tabSwipe?.updateDrag(dx),
     onEnd: ({ dx, velocity, cancelled }) => {
       suppressClick = true;
       setTimeout(() => { suppressClick = false; }, 0);
-      nav.classList.add('tabbar-ready');
-      const index = TABS.findIndex((tab) => tab.key === current);
-      const destination = swipeDestination({
-        dx, velocity, width: nav.clientWidth, index, count: TABS.length, cancelled,
-      });
-      if (destination == null) placeTabIndicator();
-      else tabSwipe?.navigate(TABS[destination].key);
+      tabSwipe?.endDrag({ dx, velocity, cancelled });
     },
   });
+}
+
+function placeTabIndicatorAt({ position }) {
+  const nav = $('#tabbar');
+  const indicator = nav?.querySelector('.tab-indicator');
+  const buttons = [...(nav?.querySelectorAll('.tab') || [])];
+  if (!indicator || !Number.isFinite(position)) return;
+  const low = Math.floor(position);
+  const high = Math.ceil(position);
+  if (!buttons[low] || !buttons[high]) return;
+  const fraction = position - low;
+  const left = buttons[low].offsetLeft + (buttons[high].offsetLeft - buttons[low].offsetLeft) * fraction;
+  const width = buttons[low].offsetWidth + (buttons[high].offsetWidth - buttons[low].offsetWidth) * fraction;
+  nav.classList.remove('tabbar-ready');
+  indicator.style.width = `${width}px`;
+  indicator.style.transform = `translate3d(${left}px, 0, 0)`;
 }
 
 function placeTabIndicator() {
@@ -258,27 +263,30 @@ function placeTabIndicator() {
   if (!indicator || !selected) return;
   indicator.style.width = `${selected.offsetWidth}px`;
   indicator.style.transform = `translate3d(${selected.offsetLeft}px, 0, 0)`;
-  if (!nav.classList.contains('tabbar-ready')) {
-    requestAnimationFrame(() => nav.classList.add('tabbar-ready'));
+  if (!nav.classList.contains('tabbar-ready') && !tabSwipe?.isDragging()) {
+    requestAnimationFrame(() => { if (!tabSwipe?.isDragging()) nav.classList.add('tabbar-ready'); });
   }
 }
 
-function switchTab(key, { fromSwipe = false } = {}) {
+function switchTab(key, { fromSwipe = false, preview = false } = {}) {
   if (key === 'settings') {
     openSettings();
     return;
   }
   if (!fromSwipe) tabSwipe?.cancel();
-  if (key === current) return;
+  if (key === current) {
+    if (!preview && location.hash !== `#${key}`) location.hash = key;
+    return;
+  }
   if (settingsOpen) closeSettings({ restoreHash: false });
   current = key;
-  location.hash = key;
+  if (!preview) location.hash = key;
   renderTabs();
   renderTopbar();
   syncOnboarding();
   renderCurrent();
 
-  runUrlImport();
+  if (!preview) runUrlImport();
   viewRoot?.scrollTo({ top: 0, behavior: 'instant' });   // 滚动容器是 #view，不是 window
 }
 
@@ -630,6 +638,10 @@ async function boot() {
     view: viewRoot, app: $('#app'), tabs: TABS,
     currentKey: () => current,
     changeTab: (key) => switchTab(key, { fromSwipe: true }),
+    previewTab: (key) => switchTab(key, { fromSwipe: true, preview: true }),
+    commitTab: (key) => { if (location.hash !== `#${key}`) location.hash = key; },
+    onProgress: placeTabIndicatorAt,
+    onRelease: () => { $('#tabbar')?.classList.add('tabbar-ready'); placeTabIndicator(); },
     blocked: () => settingsOpen || accountDataLocked(),
     onSettled: () => { if (renderPending) renderCurrentSafely(); },
   });

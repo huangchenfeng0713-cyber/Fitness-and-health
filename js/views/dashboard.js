@@ -4,6 +4,7 @@ import { h, clearEl, num, mount } from '../lib/utils.js';
 import { infoTip, persistentInfoTip, cardTitle } from '../lib/ui.js';
 import { pointValueTrack } from '../lib/point-value-tip.js';
 import { energyRingChart, macroBar, rangeBar, splitBar } from '../lib/charts.js';
+import { ringTipColor, ringPalette } from '../lib/energy-ring-chart.js';
 import { dailyMetrics, macroSplit, nutrientScale, KIND } from '../core/metrics.js';
 import { energyRing, lockTrackScale } from '../core/energy-ring.js';
 import { state } from '../lib/store.js';
@@ -216,15 +217,16 @@ function ringCenter(model) {
 
 /*
  * 图例：色块 + 名字 + 值，一项对着环上一条弧。
- * 色块的深浅跟着那条轨道当前画到第几圈走 —— 环上颜色变深和图例上变深
- * 说的是同一件事：这条已经跑过一整圈了。
+ * 色块直接取本轨弧尖颜色：同一天从浅到深连续变化，不等第二圈才跳色。
  */
 function ringLegend(model) {
   const items = model.legend || [];
   if (!items.length) return null;
+  const palette = ringPalette();
   return h('div.ring-legend', null, items.map((item) => h('span.ring-legend-item', null,
-    h(`span.ring-swatch.ring-swatch-${item.track}${item.deep ? '.is-deep' : ''}`, {
+    h(`span.ring-swatch.ring-swatch-${item.track}`, {
       'aria-hidden': 'true',
+      style: { color: ringTipColor(model, item.track, palette) },
     }),
     h('span.ring-legend-k', null, item.label),
     h('span.ring-legend-v', null, item.track === 'intake'

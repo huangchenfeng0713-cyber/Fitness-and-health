@@ -1,159 +1,167 @@
 /**
- * 今日热量环：整圈 = 今天计划吃多少。只负责画，不算。
- *
- * 两条轨道各画各的：外圈粗的是摄入，内圈细的是消耗。
- * 每条轨道第一圈浅色、第二圈深色盖在浅色上，一条不去动另一条。
- *
- * **这里只画弧，一个字都不写。** 圈心那两行和下面的图例都是 HTML
- * （见 views/dashboard.js 的 ringCenter / ringLegend）：SVG 里的字会跟着环缩放，
- * 窄屏上环缩到 62vw，一行 14px 的说明就掉到 12px 可读下限以下，
- * 而且它用的是自己算出来的字号，接不上 app.css 顶部那七档。
+ * 今日热量环只负责绘制，刻度、圈数和真实数值仍由 core/energy-ring.js 决定。
+ * Canvas 把每条弧切成细小的角度片，颜色沿进度单调加深；圈心与图例仍是 HTML。
  */
 
-const NS = 'http://www.w3.org/2000/svg';
-const RING_GAP_DEG = 8;
-
-/*
- * 上一次画到哪儿，用来让弧长「长过去」而不是直接跳。
- *
- * 记在模块里而不是 DOM 上：整张卡每次重绘都会重建这棵 SVG，
- * 挂在节点上的旧值会跟着节点一起被扔掉。
- *
- * 只在同一天、同一把尺子上才动画（`animateKey`）：翻到别的日期、
- * 改档案换了尺子，弧的含义都变了，把它当成「长了一截」是骗人。
- */
-const lastArc = new Map();
+const GAP_DEG = 8;
 const ARC_MS = 520;
+const STEPS_PER_LAP = 120;
+const TOKENS = {
+  intake: ['--ring-eat-start', '--ring-eat', '--ring-eat-wrap'],
+  burn: ['--ring-burn-start', '--ring-burn', '--ring-burn-wrap'],
+};
+const FALLBACK = {
+  intake: ['#c4f7df', '#6fe0b6', '#2fc99b'],
+  burn: ['#fff0c2', '#f2c66b', '#dda840'],
+};
+
+const lastArc = new Map();
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const hex = (value) => /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
 
 function reduceMotion() {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-function el(tag, attrs = {}) {
-  const node = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v != null) node.setAttribute(k, String(v));
+/** 从设计 token 读取两条轨道各自的三档颜色。 */
+export function ringPalette() {
+  const style = getComputedStyle(document.documentElement);
+  return Object.fromEntries(Object.entries(TOKENS).map(([track, names]) => [track,
+    names.map((name, i) => hex(style.getPropertyValue(name).trim()) || FALLBACK[track][i])]));
+}
+
+function mixHex(from, to, t) {
+  const channels = [1, 3, 5].map(i => Math.round(
+    parseInt(from.slice(i, i + 2), 16) * (1 - t) + parseInt(to.slice(i, i + 2), 16) * t,
+  ));
+  return `#${channels.map(value => value.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** 第一圈由浅到中，第二圈由中到深；超过两圈时颜色停在最深档。 */
+export function ringProgressColor(track, totalPct, palette) {
+  const stops = palette[track];
+  const progress = clamp(Number.isFinite(totalPct) ? totalPct : 0, 0, 200);
+  const stage = progress <= 100 ? 0 : 1;
+  return mixHex(stops[stage], stops[stage + 1], (progress - stage * 100) / 100);
+}
+
+/** 图例色块始终取当前弧尖端的颜色，而非固定的圈数档。 */
+export function ringTipColor(model, track, palette = ringPalette()) {
+  const lap = model.laps?.[track === 'burn' ? 'burned' : 'eaten'];
+  return ringProgressColor(track, (lap?.firstPct || 0) + (lap?.wrapPct || 0), palette);
+}
+
+function endpoint(ctx, cx, cy, radius, angle, width, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius, width / 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function trackArc(ctx, cx, cy, radius, width, start, span, color) {
+  const trim = width / (2 * radius);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, start + trim, start + span - trim);
+  ctx.stroke();
+}
+
+function gradientArc(ctx, cx, cy, radius, width, start, span, pct, track, tone, palette) {
+  if (!(pct > .3)) return;
+  const length = radius * span * clamp(pct, 0, 100) / 100;
+  // 圆头两侧各占半个描边，几何范围仍停在轨道的起止点之内。
+  const insetOf = (l) => Math.min(width / 2, Math.max(0, l) / 2);
+  const from = start + insetOf(length) / radius;
+  const to = start + length / radius - insetOf(length) / radius;
+  const base = tone === 'deep' ? 100 : 0;
+  const firstColor = ringProgressColor(track, base, palette);
+  const tipColor = ringProgressColor(track, base + pct, palette);
+  const sliceAngle = span / STEPS_PER_LAP;
+
+  ctx.lineWidth = width;
+  ctx.lineCap = 'butt';
+  for (let angle = from; angle < to - .0001; angle += sliceAngle) {
+    const end = Math.min(to, angle + sliceAngle);
+    const atPct = (angle + end) / 2 - start;
+    ctx.strokeStyle = ringProgressColor(track, base + atPct / span * 100, palette);
+    ctx.beginPath();
+    // 相邻色段重叠约 1.5px，避免 Canvas 每段独立抗锯齿留下放射状细缝。
+    ctx.arc(cx, cy, radius, angle, Math.min(to, end + .025));
+    ctx.stroke();
   }
-  return node;
+  endpoint(ctx, cx, cy, radius, from, width, firstColor);
+  endpoint(ctx, cx, cy, radius, to, width, tipColor);
 }
 
 export function energyRingChart({ model, size = 152, stroke = 14, animateKey = null }) {
-  /*
-   * 留白只够描边的抗锯齿用。
-   *
-   * 原先是 16，因为刻度和起点方块要从轨道外面探出来 —— 那两样都没了，
-   * 于是 232px 的框里有 40px 是空的，环白白小了一圈，
-   * 到下面那行图例的距离也跟着被撑开。框还是 232px，环填得更满。
-   */
   const pad = 6;
   const vb = size + pad * 2;
   const cx = vb / 2;
   const cy = vb / 2;
-  const r = (size - stroke) / 2;
-  const burnR = r - stroke / 2 - 7;
-  /*
-   * 消耗环的粗细。原先是 3.5，主环 14 —— 4:1 之下它细得像一根发丝，
-   * 和外面那条读不出是一套东西。5 仍然一眼分得出主次，又配得上。
-   */
-  const BURN_STROKE = 5;
-  const span = 360 - RING_GAP_DEG;
-  const start = -90 + RING_GAP_DEG / 2;
+  const radius = (size - stroke) / 2;
+  const burnRadius = radius - stroke / 2 - 7;
+  const burnWidth = 5;
+  const span = (360 - GAP_DEG) * Math.PI / 180;
+  const start = (-90 + GAP_DEG / 2) * Math.PI / 180;
+  const pixelRatio = Math.min(3, window.devicePixelRatio || 1);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'ring energy-ring';
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.width = Math.round(vb * pixelRatio);
+  canvas.height = Math.round(vb * pixelRatio);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
-  const svg = el('svg', {
-    viewBox: `0 0 ${vb} ${vb}`, class: 'ring energy-ring',
-    preserveAspectRatio: 'xMidYMid meet', overflow: 'visible',
-  });
-
-  /* 两条轨道的几何和配色都只写一次，段落按 track / tone 取 */
-  const TRACK = {
-    intake: { radius: r, width: stroke, light: 'var(--ring-eat)', deep: 'var(--ring-eat-wrap)' },
-    burn: { radius: burnR, width: BURN_STROKE, light: 'var(--ring-burn)', deep: 'var(--ring-burn-wrap)' },
-  };
-
-  /* 这一版的记忆重记一份，画完整棵树再换上去 —— 中途失败不该留下半份 */
+  const palette = ringPalette();
+  const trackColor = getComputedStyle(document.querySelector('.hero-body') || document.documentElement)
+    .getPropertyValue('--hero-track').trim() || 'rgba(255,255,255,.14)';
+  const current = new Map();
+  const previous = new Map();
   const nextArc = new Map();
-  const canAnimate = animateKey != null && !reduceMotion() && typeof SVGElement !== 'undefined'
-    && typeof SVGElement.prototype.animate === 'function';
-
-  /*
-   * 弧画成圆头（`round`），灰轨仍是方头。
-   *
-   * 圆头是这次改观感的主要一条：方切的端头读作「被裁断」，圆头读作「走到这儿了」——
-   * 而「走到哪儿了」正是这只环唯一要说的事。原先端头另外刻一条同色的短线来说它，
-   * 两端各出头 2.5px，在真机上读出来是弧上的一道划痕、一个豁口，不是记号。
-   * 端头本身能说清楚，就不该再加一道线。
-   *
-   * 圆头会往两端各多画半个描边宽，所以画之前把这一截从长度里扣掉：
-   * 落笔范围和方头时一模一样，吃满计划那一下也不会顶进 12 点的缺口。
-   * 短到扣不出来的（刚记第一笔）留一个点 —— 圆头下的零长度就是个圆点。
-   *
-   * **起点靠 dashoffset 挪，不靠在 dasharray 前面塞一段 0。**
-   * 「0 起点 长度 …」在方头下画不出东西，换成圆头之后那个零长度的段
-   * 立刻变成一个整圆的点 —— 弧的起点上就鼓出一个比描边还宽的疙瘩，
-   * 和弧身之间还留着一道豁口。实测就是这么来的。
-   */
-  const arc = (radius, width, cls, colour, fromPct, toPct, memoKey = null) => {
-    const circ = 2 * Math.PI * radius;
-    const usable = (span / 360) * circ;
-    const from = (Math.max(0, Math.min(100, fromPct)) / 100) * usable;
-    const len = (Math.max(0, Math.min(100, toPct)) / 100) * usable - from;
-    const insetOf = (l) => Math.min(width / 2, Math.max(0, l) / 2);
-    const dash = (l) => `${Math.max(0.01, Math.max(0, l) - insetOf(l) * 2)} ${circ}`;
-    const memo = memoKey && { key: `${animateKey}|${model.scale}|${memoKey}`, len };
-    if (memo) nextArc.set(memo.key, len);
-    if (!(len > 0.3)) return;
-    const node = el('circle', {
-      cx, cy, r: radius, fill: 'none', class: cls, 'stroke-width': width, stroke: colour,
-      'stroke-dasharray': dash(len),
-      'stroke-dashoffset': -(from + insetOf(len)),
-      transform: `rotate(${start} ${cx} ${cy})`,
-    });
-    svg.append(node);
-    /*
-     * 记一笔饮食之后弧应该长过去，而不是原地换一个长度 ——
-     * 那一下是「刚才这口饭走了这么远」，跳变把它说没了。
-     * 动画只改 CSS 上的 stroke-dasharray，结束后自然落回属性上的终值。
-     */
-    if (!canAnimate || !memo) return;
-    const prev = lastArc.get(memo.key);
-    if (prev == null || Math.abs(prev - len) < 0.5) return;
-    node.animate(
-      [{ strokeDasharray: dash(prev) }, { strokeDasharray: dash(len) }],
-      { duration: ARC_MS, easing: 'cubic-bezier(.22,.61,.36,1)' },
-    );
-  };
-
-  /*
-   * 灰轨先铺满 —— 没画到的地方就是还没走到的部分。
-   *
-   * **灰轨的两端也是圆头。** 一圈圆头的弧躺在一条方切的槽里，两端对不上，
-   * 12 点那道缺口读出来像是被裁出来的，不像特意留的。
-   * 圆头会往两端各鼓出半个描边，所以和弧走同一套长度补偿（`round` 那条路）：
-   * 落笔范围仍是 352°，缺口一点没被糊上。
-   *
-   * **消耗那条轨道只在真有设备数据时才铺。** 手表没连、今天没同步的时候，
-   * 里面那圈灰是画给一条永远不会出现的弧的：它说「这儿还有一样东西」，
-   * 然后一整天什么都不来。粗细从 3.5 提到 5 之后这一圈更显眼，更不能空着。
-   */
-  arc(r, stroke, 'ring-track', null, 0, 100);
-  if (model.hasBurn) arc(burnR, BURN_STROKE, 'ring-burn-track', null, 0, 100);
-
-  /*
-   * 先画完所有第一圈，再画所有第二圈。
-   *
-   * 同一条轨道上第二圈必须压在第一圈上面（深色盖浅色），而 model.segments
-   * 的顺序不保证这一点 —— 按 tone 分两趟画，叠放次序就跟数据顺序无关了。
-   */
-  for (const tone of ['light', 'deep']) {
-    for (const seg of model.segments || []) {
-      if (seg.tone !== tone) continue;
-      const t = TRACK[seg.track] || TRACK.intake;
-      arc(t.radius, t.width, `ring-seg ring-seg-${seg.track} ring-seg-${tone}`,
-        t[tone], seg.fromPct, seg.toPct, seg.key);
-    }
+  let hasChange = false;
+  for (const seg of model.segments || []) {
+    const radiusFor = seg.track === 'burn' ? burnRadius : radius;
+    const usable = radiusFor * span;
+    const len = clamp(seg.toPct, 0, 100) / 100 * usable;
+    const memo = animateKey == null ? null : `${animateKey}|${model.scale}|${seg.key}`;
+    const prev = memo == null ? null : lastArc.get(memo);
+    if (memo) nextArc.set(memo, len);
+    current.set(seg.key, seg.toPct);
+    previous.set(seg.key, prev == null ? seg.toPct : prev / usable * 100);
+    if (prev != null && Math.abs(prev - len) >= .5) hasChange = true;
   }
-
   lastArc.clear();
-  for (const [k, v] of nextArc) lastArc.set(k, v);
-  return svg;
+  for (const [key, len] of nextArc) lastArc.set(key, len);
+
+  const paint = (progress) => {
+    ctx.clearRect(0, 0, vb, vb);
+    trackArc(ctx, cx, cy, radius, stroke, start, span, trackColor);
+    if (model.hasBurn) trackArc(ctx, cx, cy, burnRadius, burnWidth, start, span, trackColor);
+    for (const tone of ['light', 'deep']) for (const seg of model.segments || []) {
+      if (seg.tone !== tone) continue;
+      const from = previous.get(seg.key) ?? seg.toPct;
+      const to = current.get(seg.key) ?? seg.toPct;
+      const pct = from + (to - from) * progress;
+      gradientArc(ctx, cx, cy, seg.track === 'burn' ? burnRadius : radius,
+        seg.track === 'burn' ? burnWidth : stroke, start, span, pct, seg.track, tone, palette);
+    }
+  };
+  const canAnimate = animateKey != null && hasChange && !reduceMotion()
+    && typeof requestAnimationFrame === 'function';
+  if (!canAnimate) paint(1);
+  else {
+    paint(0);
+    const started = performance.now();
+    const tick = (now) => {
+      if (!canvas.isConnected) return;
+      const progress = clamp((now - started) / ARC_MS, 0, 1);
+      paint(1 - (1 - progress) ** 3);
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  return canvas;
 }

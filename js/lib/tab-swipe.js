@@ -2,31 +2,84 @@
 import { dragGesture } from './gesture.js';
 
 const EASE = 'cubic-bezier(.22, .8, .22, 1)';
-const MAX_DRAG_ANGLE = 80;
 const SWIPE_IGNORE = 'button, a, input, textarea, select, summary, [role="button"], '
   + '[role="slider"], [contenteditable="true"], .chart-wrap, .table-wrap, .info-tip-panel';
 
-/** 返回相邻栏目的索引；短距离慢滑、边界外滑动都不切页。 */
+/** 一屏内留得出跨三栏的行程；每走一段，卡片恰好翻 180°。 */
+export const tabTravel = (width) => Math.max(88, Math.min(120, width * .275));
+
+/** 由手指位置决定正面是哪一页及其角度；过 90° 才换成下一页。 */
+export function swipePose({ dx, width, index, count }) {
+  if (!Number.isFinite(dx) || !Number.isFinite(width) || width <= 0
+    || index < 0 || index >= count) return { position: index, displayIndex: index, angle: 0 };
+  const direction = Math.sign(dx);
+  const available = direction > 0 ? count - 1 - index : index;
+  if (!direction || !available) return {
+    position: index, displayIndex: index,
+    angle: direction * Math.min(Math.abs(dx) / width * 40, 12),
+  };
+  const progress = Math.min(Math.abs(dx) / tabTravel(width), available);
+  const segment = Math.min(Math.floor(progress), available - 1);
+  const fraction = progress - segment;
+  const source = index + direction * segment;
+  return {
+    position: index + direction * progress,
+    displayIndex: source + (fraction >= .5 ? direction : 0),
+    angle: direction * (fraction < .5 ? fraction : fraction - 1) * 180,
+  };
+}
+
+/** 返回最终栏目；短距离慢滑、边界外滑动都不切页。 */
 export function swipeDestination({ dx, velocity = 0, width, index, count, cancelled = false }) {
   if (cancelled || !Number.isFinite(dx) || !Number.isFinite(width) || width <= 0) return null;
-  const enoughDistance = Math.abs(dx) >= Math.min(82, width * .22);
+  const enoughDistance = Math.abs(dx) >= tabTravel(width) / 2;
   const quickFlick = Math.abs(dx) >= 32 && Math.abs(velocity) >= .5;
   if (!enoughDistance && !quickFlick) return null;
-  const next = index + (dx > 0 ? 1 : -1);
-  return next >= 0 && next < count ? next : null;
+  const steps = Math.max(1, Math.round(Math.abs(dx) / tabTravel(width)));
+  const next = index + Math.sign(dx) * steps;
+  const clamped = Math.max(0, Math.min(count - 1, next));
+  return clamped === index ? null : clamped;
 }
 
 /**
  * 手势只装在滚动视图上，不碰日期顶栏、底部按钮、设置抽屉和弹窗。
- * 页面在松手时才重绘：先留一份只供动画使用的旧视图，避免切页瞬间空白。
+ * 拖动中转到 90° 时才替换内容，下一页从背面继续跟手；无需提前执行页面副作用。
  */
 export function installTabSwipe({
-  view, app, tabs, currentKey, changeTab, blocked = () => false, onSettled = () => {},
+  view, app, tabs, currentKey, changeTab, previewTab, commitTab,
+  blocked = () => false, onProgress = () => {}, onRelease = () => {}, onSettled = () => {},
 }) {
   let motion = null;
   let dragAngle = 0;
+  let gestureStartIndex = null;
+  const scrollByIndex = new Map();
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const activeIndex = () => tabs.findIndex((tab) => tab.key === currentKey());
+
+  function beginDrag() {
+    if (blocked() || motion) return false;
+    gestureStartIndex = activeIndex();
+    scrollByIndex.clear();
+    scrollByIndex.set(gestureStartIndex, view.scrollTop);
+    return true;
+  }
+
+  function updateDrag(dx) {
+    if (gestureStartIndex == null && !beginDrag()) return null;
+    const pose = swipePose({ dx, width: view.clientWidth, index: gestureStartIndex, count: tabs.length });
+    if (reduceMotion()) return pose;
+    if (pose.displayIndex !== activeIndex()) {
+      scrollByIndex.set(activeIndex(), view.scrollTop);
+      previewTab(tabs[pose.displayIndex].key);
+      view.scrollTop = scrollByIndex.get(pose.displayIndex) || 0;
+    }
+    dragAngle = pose.angle;
+    app.classList.add('tab-swipe-stage');
+    view.classList.add('tab-swipe-dragging');
+    view.style.transform = `rotateY(${dragAngle}deg)`;
+    onProgress(pose);
+    return pose;
+  }
 
   function finishMotion(entry = motion) {
     if (!entry || motion !== entry) return;
@@ -37,16 +90,24 @@ export function installTabSwipe({
     app.classList.remove('tab-swipe-stage');
     view.style.removeProperty('transform');
     dragAngle = 0;
+    gestureStartIndex = null;
+    scrollByIndex.clear();
     onSettled();
   }
 
   function cancel() {
     if (motion) finishMotion();
     else {
+      if (gestureStartIndex != null && activeIndex() !== gestureStartIndex) {
+        previewTab(tabs[gestureStartIndex].key);
+        view.scrollTop = scrollByIndex.get(gestureStartIndex) || 0;
+      }
       view.classList.remove('tab-swipe-dragging');
       app.classList.remove('tab-swipe-stage');
       view.style.removeProperty('transform');
       dragAngle = 0;
+      gestureStartIndex = null;
+      scrollByIndex.clear();
     }
   }
 
@@ -143,6 +204,25 @@ export function installTabSwipe({
     ], { duration: Math.min(duration, 260), easing: EASE });
   }
 
+  function endDrag({ dx, velocity = 0, cancelled = false }) {
+    if (gestureStartIndex == null) return;
+    if (cancelled || blocked()) { cancel(); onRelease(); return; }
+    const origin = gestureStartIndex;
+    const destination = swipeDestination({
+      dx, velocity, width: view.clientWidth, index: origin, count: tabs.length,
+    }) ?? origin;
+    gestureStartIndex = null;
+    scrollByIndex.clear();
+    if (destination === activeIndex()) {
+      if (destination !== origin) commitTab(tabs[destination].key);
+      snapBack();
+    } else if (destination === origin && Math.abs(dx) < tabTravel(view.clientWidth) / 2) {
+      // 半圈附近退回原页，仍按同一方向完成回转，不留下临时预览的 URL。
+      navigate(tabs[origin].key, { angle: dragAngle });
+    } else navigate(tabs[destination].key, { angle: dragAngle });
+    onRelease();
+  }
+
   const removeGesture = dragGesture(view, {
     axis: 'x',
     threshold: 16,
@@ -153,31 +233,18 @@ export function installTabSwipe({
       // 保留 iPhone 屏幕边缘的系统返回手势。
       return event.clientX - rect.left > 24 && rect.right - event.clientX > 24;
     },
-    onMove: ({ dx }) => {
-      if (reduceMotion()) return;
-      const index = activeIndex();
-      const atEdge = (dx < 0 && index === 0) || (dx > 0 && index === tabs.length - 1);
-      const distance = atEdge ? Math.abs(dx) * .28 : Math.abs(dx);
-      dragAngle = Math.sign(dx) * Math.min(distance / view.clientWidth * 180, MAX_DRAG_ANGLE);
-      app.classList.add('tab-swipe-stage');
-      view.classList.add('tab-swipe-dragging');
-      view.style.transform = `rotateY(${dragAngle}deg)`;
-    },
-    onEnd: ({ dx, velocity, cancelled }) => {
-      const destination = swipeDestination({
-        dx, velocity, width: view.clientWidth, index: activeIndex(), count: tabs.length, cancelled,
-      });
-      if (destination == null) snapBack();
-      else navigate(tabs[destination].key, { angle: dragAngle });
-    },
+    onStart: () => beginDrag(),
+    onMove: ({ dx }) => updateDrag(dx),
+    onEnd: endDrag,
   });
 
   const stopOnHide = () => { if (document.hidden) cancel(); };
   document.addEventListener('visibilitychange', stopOnHide);
   return {
-    navigate,
+    navigate, beginDrag, updateDrag, endDrag,
     cancel,
     isAnimating: () => Boolean(motion),
+    isDragging: () => gestureStartIndex != null,
     destroy() { removeGesture(); document.removeEventListener('visibilitychange', stopOnHide); cancel(); },
   };
 }
