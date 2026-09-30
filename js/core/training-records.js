@@ -5,6 +5,14 @@ export const SET_TYPES = { unknown: '性质未注明', warmup: '热身', work: '
 export const LOAD_MODES = { unknown: '重量方式未注明', bodyweight: '自重', external: '附加负重', assistance: '辅助重量', machine: '器械标示' };
 export const LOAD_CONVENTIONS = { unknown: '重量口径未注明', single: '单手／单侧', total: '双手合计', scale: '器械刻度' };
 export const SET_LIMITS = { reps: 500, weightKg: 500, durationSeconds: 86400 };
+/*
+ * 目标次数区间（按次数记录时用），存在动作的记录设置里；不存就是「按动作类型自动」。
+ * 可选的只有这几档：它是一个「这个动作我打算练在哪一段」的偏好，不是任意两个数。
+ * 放在记录契约里而不是 progression.js，是因为恢复备份和云端同步都要按它校验。
+ */
+export const REP_RANGES = Object.freeze({
+  '4-6': [4, 6], '6-10': [6, 10], '8-12': [8, 12], '10-15': [10, 15], '12-20': [12, 20],
+});
 export function validTrainingDate(date) {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date + 'T00:00:00Z'))
     && new Date(date + 'T00:00:00Z').toISOString().slice(0, 10) === date;
@@ -17,7 +25,8 @@ export function validateTrainingRecord(raw) {
       const defaults = item.recordingDefaults;
       if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)
         || !Object.hasOwn(LOAD_MODES, defaults.loadMode) || !Object.hasOwn(LOAD_CONVENTIONS, defaults.loadConvention)
-        || !['reps', 'time'].includes(defaults.measure)) throw new RangeError(`${item.id}：动作记录设置无效`);
+        || !['reps', 'time'].includes(defaults.measure)
+        || (defaults.repRange != null && !Object.hasOwn(REP_RANGES, defaults.repRange))) throw new RangeError(`${item.id}：动作记录设置无效`);
     }
     if (item?.exerciseSnapshot != null) {
       const s = item.exerciseSnapshot;

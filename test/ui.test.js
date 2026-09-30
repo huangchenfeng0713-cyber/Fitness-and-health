@@ -2288,3 +2288,25 @@ test('弹层关掉要有退场动画，且点那道小横杠不会误关', () =>
   assert.match(sheet, /cancelExitAnimations\(\);/,
     '重新打开时没有掐掉上一次的退场动画');
 });
+
+test('每周复盘挂在数据页健康数据和速览之间；采用走 saveProfile，撤销把整份档案放回去', () => {
+  const health = page('health');
+  const rendered = health.slice(health.indexOf('export function renderHealth'));
+  const at = (name) => rendered.indexOf(name);
+  assert.ok(at('weeklyReviewCard()') > at('healthMetricsCard()'), '复盘应排在今日健康数据之后');
+  assert.ok(at('weeklyReviewCard()') < at('weeklySummaryCard()'), '复盘应排在近 7 日速览之前');
+  const card = read('js/views/cards/weekly-review.js');
+  assert.match(card, /saveProfile\(\{ \[key\]: apply\.value \}\)/);
+  // 再存一次旧值会按今天的数据重算计划，撤销完目标对不上
+  assert.match(card, /restoreProfile\(snapshot\)/);
+  assert.match(card, /fresh: planIfSaved\(\)/);
+});
+
+test('健身页记组的草稿按本次目标预填，目标写在收起的那一行上', () => {
+  const training = page('training');
+  assert.match(training, /setDraftFor\(item, state\.trainingDays, trainingDay\(\), target\)/);
+  assert.ok(!/createSetDraft\(/.test(training), '草稿要走 setDraftFor，别绕过本次目标');
+  assert.match(training, /progressionTarget\(state\.trainingDays, item, trainingDay\(\)\)/);
+  assert.match(training, /weeklySetVolume\(state\.trainingDays, todayKey\(\), \{ goal: goal\(\) \}\)/);
+  assert.match(training, /weeklyVolumeTips\(/);
+});

@@ -364,6 +364,7 @@ export const equipFilterOf = (key) => EQUIP_FILTERS.find((f) => f.key === key) |
  */
 export function recommendFor({
   mode = 'group', groupKey = null, splitKey = null, selection = [], equip = 'all', target = 'all', sessions = [], endDate = null, minutes = null, setBudget = null, setsPerExercise = 3,
+  goal = 'maintain',
 } = {}) {
   const byGroup = mode !== 'split';
   const scopeKey = byGroup ? groupKey : splitKey;
@@ -409,8 +410,33 @@ export function recommendFor({
   const weeklyPatterns = new Set(thisWeek.flatMap(s => normalizeSession(s).items.map(item => exerciseForRecord(item).pattern)));
   // 本周已经练过的**具体动作**，不只是模式
   const weeklyExercises = new Set(thisWeek.flatMap(s => normalizeSession(s).items.filter(isRecordedItem).map(item => item.id)));
+  /*
+   * **周组数落后的肌群排在最前面**（它比「本周练没练过这个模式」更准）。
+   *
+   * 「腿」那一屏，深蹲和硬拉这周都做过、弓步没做过 —— 只按模式排，第一个推荐是弓步，
+   * 可股四头已经 16 组了，真正空着的是腘绳（2 组）。按周组数和参考量的差排，
+   * 腿弯举才会排到前面。差是按这一屏范围里的肌群算的：在「胸」那一屏，
+   * 三头落后不该把双杠臂屈伸顶到卧推前面。
+   *
+   * 近 14 天不到 3 个训练日时不参与（和「训练建议」同一道门槛）：新用户什么都是 0 组，
+   * 按差排只会把「主动肌多的动作」顶到前面，把原来按代表性排好的顺序搅乱。
+   */
+  const volume = trainingDaysIn(sessions, endDate, 14) >= MIN_TRAINING_DAYS_FOR_GAP
+    ? weeklySetVolume(sessions, endDate, { goal }) : null;
+  const scopeGroups = volume
+    ? volume.groups.filter((g) => !scopeMuscles || g.muscles.some((m) => scopeMuscles.includes(m))) : [];
+  const laggingGroupOf = (e) => scopeGroups
+    .filter((g) => g.sets < volume.reference.lo && e.primary.some((m) => g.muscles.includes(m)))
+    .sort((a, b) => a.sets - b.sets)[0] || null;
+  const lagOf = (e) => {
+    const g = laggingGroupOf(e);
+    return g ? volume.reference.lo - g.sets : 0;
+  };
+  const patternLag = new Map(missingPatterns.map((p) => [p,
+    Math.max(0, ...candidates.filter((e) => e.pattern === p).map(lagOf))]));
   const combo = [];
-  for (const pattern of [...missingPatterns].sort((a, b) => Number(weeklyPatterns.has(a)) - Number(weeklyPatterns.has(b)))) {
+  for (const pattern of [...missingPatterns].sort((a, b) => (patternLag.get(b) - patternLag.get(a))
+    || Number(weeklyPatterns.has(a)) - Number(weeklyPatterns.has(b)))) {
     if (combo.length >= size || remainingSets <= 0) break;
     /*
      * **「本周还没练过」先于「你最常练」。**
@@ -424,7 +450,8 @@ export function recommendFor({
      * 现在按动作也过一遍同一把尺子，熟悉度退为同档之内的次序。
      */
     const options = candidates.filter(e => e.pattern === pattern && !combo.some(c => overlapLevel(overlapScore(e, c)) === 'high'))
-      .sort((a, b) => Number(weeklyExercises.has(a.id)) - Number(weeklyExercises.has(b.id))
+      .sort((a, b) => (lagOf(b) - lagOf(a))
+        || Number(weeklyExercises.has(a.id)) - Number(weeklyExercises.has(b.id))
         || (histories.get(b.id)?.count || 0) - (histories.get(a.id)?.count || 0)
         || (histories.get(b.id)?.lastDate || '').localeCompare(histories.get(a.id)?.lastDate || ''));
     if (!options.length) continue;
@@ -470,12 +497,17 @@ export function recommendFor({
      * 返回 null，上面那条不出现，日期就只剩这一处了。
      * 所以 core 给事实（`lastDate`），视图看自己印没印过再决定。
      */
-    items: combo.map((e) => ({
-      id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }), suggestedSets: e.suggestedSets,
-      lastDate: histories.get(e.id)?.lastDate || null,
-      reason: histories.has(e.id) ? `近 28 日记录 ${histories.get(e.id).count} 天`
-        : weeklyPatterns.has(e.pattern) ? '本周已安排此模式，可选另一训练日复用' : '近 7 日未安排此模式，可选参考',
-    })),
+    items: combo.map((e) => {
+      // 因为周组数落后才排上来的，理由就说这个；和别的理由相比，它最能回答「为什么是它」
+      const lag = laggingGroupOf(e);
+      return {
+        id: e.id, name: e.name, tags: exerciseTags(e, { scopeMuscles }), suggestedSets: e.suggestedSets,
+        lastDate: histories.get(e.id)?.lastDate || null,
+        reason: lag ? `${lag.label}近 7 日 ${setCountText(lag.sets)} 组，参考每周至少 ${volume.reference.lo} 组`
+          : histories.has(e.id) ? `近 28 日记录 ${histories.get(e.id).count} 天`
+            : weeklyPatterns.has(e.pattern) ? '本周已安排此模式，可选另一训练日复用' : '近 7 日未安排此模式，可选参考',
+      };
+    }),
     replacements,
   };
 }
@@ -770,6 +802,160 @@ export function weeklyTrainingSummary(sessions = [], endDate) {
     areas: areas.map(({ dates: areaDates, ...area }) => ({ ...area, days: areaDates.size })) };
 }
 
+/* ------------------------------------------------- 周组数对照 ------------- */
+
+/*
+ * 拿去和「每周几组」对照的肌群。**和挑动作的六个部位不是一回事。**
+ *
+ * 参考量说的是「每个肌群每周多少组」，而「腿」「臂」是好几块肌肉：
+ * 腿按部位数一共 18 组，看着落在 10–20 里，可能是股四头 16 组、腘绳 2 组 ——
+ * 拿部位对照会把最该补的那块藏起来。所以腿拆成股四头 / 腘绳 / 臀 / 小腿，
+ * 臂拆成二头 / 三头；胸、背、肩、腹各按一块算（和常见训练量指南的分法一致）。
+ * 前臂、内收外展、深层核心、髂腰肌平时都是顺带练到的，不列参考。
+ */
+export const VOLUME_GROUPS = Object.freeze([
+  { key: 'chest', label: '胸', muscles: ['pec_upper', 'pec_mid', 'pec_lower'] },
+  { key: 'back', label: '背', muscles: ['lat', 'trap_mid', 'rhomboid', 'trap_upper', 'erector'] },
+  { key: 'shoulder', label: '肩', muscles: ['delt_front', 'delt_side', 'delt_rear'] },
+  { key: 'biceps', label: '二头', muscles: ['biceps'] },
+  { key: 'triceps', label: '三头', muscles: ['triceps'] },
+  { key: 'quad', label: '股四头', muscles: ['quad'] },
+  { key: 'ham', label: '腘绳', muscles: ['ham'] },
+  { key: 'glute', label: '臀', muscles: ['glute'] },
+  { key: 'calf', label: '小腿', muscles: ['calf'] },
+  { key: 'core', label: '腹', muscles: ['abs', 'oblique'] },
+]);
+
+/*
+ * 每个肌群每周正式组数的参考（见 docs/算法依据.md）。
+ *   增肌 / 维持：10–20 组 —— 每周 ≥10 组的增长明显多于更少的量（Schoenfeld 等 2017
+ *   剂量反应荟萃），12–20 组附近收益最好、再往上边际递减而恢复负担上升（Baz-Valle 等 2022）。
+ *   减脂：下限放到约 6 组 —— 维持肌肉所需的量远低于增长所需（Bickel 等 2011、
+ *   Spiering 等 2021 的最低剂量都更低），6 组是留了余量的惯例取值。
+ * 参考不是处方：没记下来的训练这里看不见。
+ */
+export const WEEKLY_SET_REFERENCE = Object.freeze({
+  bulk: Object.freeze({ lo: 10, hi: 20 }),
+  maintain: Object.freeze({ lo: 10, hi: 20 }),
+  cut: Object.freeze({ lo: 6, hi: 20 }),
+});
+
+/*
+ * 协同肌的一组算半组（Pelland 等 2024 的计数方式，和肌肉增长的拟合最好）。
+ * 按 1 组算的话推类动作会让三头「每周 30 组」，按 0 算又会说「三头一组没练」——
+ * 两头都和实际刺激对不上。只在对照参考时这么算；概览表的主练 / 协同两列仍是原始组数。
+ */
+export const INDIRECT_SET_WEIGHT = 0.5;
+
+const countsAsHardSet = (set) => ['work', 'unknown'].includes(setCategory(set));
+
+/** 窗口里有几天记下了至少一组（用来判断「这个人最近在练」） */
+export function trainingDaysIn(sessions = [], endDate, days = 14) {
+  const dates = new Set();
+  if (!validTrainingDate(endDate)) return 0;
+  for (const raw of sessions) {
+    if (!validTrainingDate(raw?.date) || raw.date > endDate || dayOffset(endDate, raw.date) >= days) continue;
+    if (normalizeSession(raw).items.some(isRecordedItem)) dates.add(raw.date);
+  }
+  return dates.size;
+}
+
+/**
+ * 近 7 日每个肌群练了多少组，对照参考量。
+ *
+ * 只数正式组（热身不算；没注明性质的老记录照旧算）。主练算 1 组、协同算半组；
+ * 同一组即使压到一个肌群里的好几块肉，也只在这个肌群记一次。
+ *
+ * @returns {{ reference, goal, days, trainingDays, groups: Array<{key,label,muscles,direct,indirect,sets,status}> }}
+ *   status: 'low' 低于下限 | 'ok' | 'high' 高于上沿
+ */
+export function weeklySetVolume(sessions = [], endDate, { goal = 'maintain', days = 7 } = {}) {
+  const reference = WEEKLY_SET_REFERENCE[goal] || WEEKLY_SET_REFERENCE.maintain;
+  const rows = VOLUME_GROUPS.map((g) => ({ ...g, direct: 0, indirect: 0 }));
+  const dates = new Set();
+  if (validTrainingDate(endDate)) for (const raw of sessions) {
+    if (!validTrainingDate(raw?.date) || raw.date > endDate || dayOffset(endDate, raw.date) >= days) continue;
+    for (const item of normalizeSession(raw).items) {
+      const exercise = exerciseForRecord(item);
+      const hard = item.sets.filter(countsAsHardSet).length;
+      if (!exercise || !hard) continue;
+      dates.add(raw.date);
+      for (const row of rows) {
+        if (exercise.primary.some((m) => row.muscles.includes(m))) row.direct += hard;
+        else if (exercise.secondary.some((m) => row.muscles.includes(m))) row.indirect += hard;
+      }
+    }
+  }
+  return {
+    reference, goal: WEEKLY_SET_REFERENCE[goal] ? goal : 'maintain', days, trainingDays: dates.size,
+    groups: rows.map((row) => {
+      const sets = row.direct + row.indirect * INDIRECT_SET_WEIGHT;
+      return { ...row, sets, status: sets < reference.lo ? 'low' : sets > reference.hi ? 'high' : 'ok' };
+    }),
+  };
+}
+
+/** 组数写成「9.5」「12」：协同算半组，所以会有 .5 */
+export const setCountText = (sets) => String(Math.round(sets * 2) / 2);
+
+/*
+ * 每个肌群各挑一个能补上的动作。几个肌群的肌肉混在一起挑的话，
+ * 两个名额全落在同一个肌群上 —— 实测是「杠铃卧推 / 哑铃卧推」，同一件事两遍。
+ * 前一个挑中的也算进「已选」，后一个不会和它高度重合。
+ */
+function pickPerGroup(groups, selection, limit) {
+  const picks = [];
+  for (const g of groups) {
+    if (picks.length >= limit) break;
+    const [e] = exercisesForMuscles(g.muscles, { exclude: [...toExercises(selection), ...picks], limit: 1 });
+    if (e) picks.push(e);
+  }
+  return picks;
+}
+
+/**
+ * 「训练建议」卡里关于周组数的那一两条。
+ *
+ * 门槛和空状态那两行共用 MIN_TRAINING_DAYS_FOR_GAP：近 14 天不到 3 个训练日时，
+ * 「腘绳这周 0 组」只说明刚开始记，不说明漏了什么。
+ * 今天已经安排了能补上它的动作，就不再提那个肌群 —— 已经在补了还劝人补，是噪音。
+ * 建议只给记录和参考之间的差，不替人决定今天练什么（卡头 ⓘ 里写着未记录不代表没练）。
+ */
+export function weeklyVolumeTips(sessions = [], endDate, { goal = 'maintain', selection = [] } = {}) {
+  if (trainingDaysIn(sessions, endDate, 14) < MIN_TRAINING_DAYS_FOR_GAP) return [];
+  const volume = weeklySetVolume(sessions, endDate, { goal });
+  const { lo, hi } = volume.reference;
+  const planned = new Set(toExercises(selection).flatMap((e) => e.primary));
+  // 差得最多的先说：一次最多点名三个，按清单顺序截的话「背 7.5 组」会挤掉「小腿 0 组」
+  const low = volume.groups.filter((g) => g.status === 'low' && !g.muscles.some((m) => planned.has(m)))
+    .sort((a, b) => a.sets - b.sets);
+  const high = volume.groups.filter((g) => g.status === 'high');
+  const list = (groups) => groups.map((g) => `${g.label} ${setCountText(g.sets)} 组`).join('、');
+  const reference = volume.goal === 'cut'
+    ? `减脂期每个肌群每周至少保留约 ${lo} 组，有助于保住肌肉`
+    : `增肌常用的参考是每个肌群每周 ${lo}–${hi} 组`;
+  const tips = [];
+  if (low.length) {
+    const shown = low.slice(0, 3);
+    tips.push({
+      level: 'info',
+      key: 'volume-low',
+      title: `今天可以补一下${shown.map((g) => g.label).join('、')}`,
+      text: `近 7 日记录里${list(shown)}${low.length > shown.length ? `，另有 ${low.length - shown.length} 个肌群也低于参考` : ''}（协同算半组）；${reference}。`,
+      actions: pickPerGroup(shown, selection, 2).map((e) => ({ id: e.id, label: e.name, adds: true })),
+    });
+  }
+  if (high.length) {
+    tips.push({
+      level: 'info',
+      key: 'volume-high',
+      title: `${high.map((g) => g.label).join('、')}这周组数偏多`,
+      text: `近 7 日记录里${list(high)}，超过每周 ${hi} 组后增长的收益变小、恢复负担变大；酸痛久不消或力量往下掉时，先从这里减。`,
+    });
+  }
+  return tips;
+}
+
 /** 复用记录语义：记有有效次数的组，或明确完成标记；空计划不计。 */
 export function trainingCoverage(sessions = [], endDate) {
   const validDate = key => typeof key === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(key)
@@ -980,7 +1166,8 @@ export function trainingHistoryDays(sessions = [], endDate, selectedDate = null)
 }
 
 export function trainingAreaDetail(sessions, endDate, areaKey) {
-  const area = [...TRAINING_AREAS, ...ARM_AREAS].find(a => a.key === areaKey);
+  // 周组数那张表按 VOLUME_GROUPS 列（腿拆成股四头 / 腘绳…），点进来的键也得认得
+  const area = [...TRAINING_AREAS, ...ARM_AREAS, ...VOLUME_GROUPS].find(a => a.key === areaKey);
   if (!area) return { muscles: [], records: [] };
   // 有些细分肌群并不以旧肌群键开头，不能只靠字符串前缀还原所属部位。
   const targetParent = { gastrocnemius: 'calf', soleus: 'calf', brachialis: 'biceps', brachioradialis: 'forearm' };

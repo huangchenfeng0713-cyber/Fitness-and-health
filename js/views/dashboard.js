@@ -286,6 +286,8 @@ function heroInfo(derived, targets) {
     h('p', null, targets.effectiveDate ? `本计划自 ${targets.effectiveDate} 生效；今天新增记录不会自动改写已保存计划。` : '此日没有已保存的目标版本，按当前设置作对照。'),
     h('p', null, planBasisText(targets)),
     h('p', null, `本计划实际采用 TDEE ${num(targets.tdee)} kcal，结合每日调整后，摄入目标为 ${num(targets.kcal)} kcal。`),
+    targets.tdeeAdjust ? h('p', null, `其中含每周复盘采用的消耗校正 ${targets.tdeeAdjust > 0 ? '+' : ''}${targets.tdeeAdjust} kcal/天：`
+      + '照目标吃了、体重却走得和计划不一样时，按实际走势补上估算的偏差。可在「身体信息」里清除。') : null,
     h('p', null, '七日速览是另一个统计窗口，不必等于计划参考值。设备热量是估算；本应用不单独加算食物热效应，这不表示已证实 Apple 包含或排除了它。'),
     // 环心那个数是什么，只在这儿说一次 —— 环下面曾经还印着同一句
     h('p', null, '收支是已记录摄入减去可对照的消耗。消耗不完整时，环心改为摄入较计划的差额；摄入数据也有缺失时，只显示已知摄入。已知消耗仍显示在环上，不补算缺失时段。'),

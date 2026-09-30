@@ -627,3 +627,25 @@ test('零活动基线不覆盖有效观测，异常原值仍保留并隔离', ()
   assert.equal(suspect.active, 0);
   assert.equal(suspect.measured, 750);
 });
+
+test('每周复盘的消耗校正加在估算消耗上：目标跟着变，计划速度的说法不变', async () => {
+  const { tdeeAdjustOf, TDEE_ADJUST_MAX } = await import('../js/core/nutrition.js');
+  const bulk = { ...male, goal: 'bulk', rateKgPerWeek: 0.25 };
+  const plain = dailyTargets(bulk);
+  const adjusted = dailyTargets({ ...bulk, tdeeAdjustKcal: 150 });
+  assert.equal(adjusted.kcal - plain.kcal, 150);
+  assert.equal(adjusted.tdee - plain.tdee, 150);
+  assert.equal(adjusted.tdeeAdjust, 150);
+  assert.equal(plain.tdeeAdjust, 0);
+  // 速率是用户想要的体重变化速度，不拿它当热量旋钮
+  assert.equal(adjusted.rateKgPerWeek, plain.rateKgPerWeek);
+  assert.equal(adjusted.dailyDelta, plain.dailyDelta);
+  // 表单拦超范围；恢复备份绕过表单时计算里再夹一次
+  assert.equal(validateProfile({ ...bulk, tdeeAdjustKcal: 600 }).valid, false);
+  assert.equal(validateProfile({ ...bulk, tdeeAdjustKcal: -500 }).valid, true);
+  assert.equal(tdeeAdjustOf({ tdeeAdjustKcal: 9000 }), TDEE_ADJUST_MAX);
+  assert.equal(tdeeAdjustOf({ tdeeAdjustKcal: 'x' }), 0);
+  // 减脂负校正照样受女 1200 / 男 1500 的下限约束
+  const cut = dailyTargets({ ...male, goal: 'cut', rateKgPerWeek: -0.7, tdeeAdjustKcal: -500 });
+  assert.ok(cut.kcal >= 1500);
+});

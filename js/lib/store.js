@@ -37,6 +37,7 @@ export const DEFAULT_PROFILE = {
   goal: 'maintain',
   rateKgPerWeek: null,
   proteinPerKg: null,
+  tdeeAdjustKcal: 0,      // 每周复盘手动采用的消耗校正（kcal/天），见 core/nutrition.js 的 TDEE_ADJUST_MAX
   useAppleEnergy: true,   // 用 Apple 设备记录动态估算热量预算
   syncWeightFromApple: true,
   appleSourcePriority: [], // 可选：export.xml sourceName 的统一优先顺序
@@ -400,6 +401,22 @@ export async function setDay(dayKey) {
   emit();
 }
 
+/**
+ * 照这份改动今天存下去，新计划会是什么样。
+ *
+ * 存档案时计划是按「今天的数据」从头算的（设备基线、最近一次称重），
+ * 不是在旧计划上加减 —— 所以旧计划存得早的话，光存一次，目标就可能动上几百 kcal。
+ * 每周复盘要让「采用：每天多吃 150」真的只多 150，就得先知道存下去会落在哪儿。
+ */
+export function planIfSaved(patch = {}) {
+  const planProfile = { ...state.profile, ...patch, targetVersions: [] };
+  for (const key of ['weightKg', 'heightCm', 'bodyFatPct']) {
+    const hit = latestHealthEntry(key, todayKey());
+    if (hit) planProfile[key] = hit.value;
+  }
+  return planForProfile(planProfile, todayKey());
+}
+
 export async function saveProfile(patch) {
   // 是否完成首次引导由调用方明确写入。只改同步开关或来源优先级，不能把默认身体数据
   // 悄悄当成用户已经确认过的真实档案。
@@ -407,18 +424,28 @@ export async function saveProfile(patch) {
   delete next.rhythmMode;
   const checked = validateProfile(next);
   if (!checked.valid && Object.keys(patch).some(k => !['useAppleEnergy', 'appleSourcePriority', 'syncWeightFromApple'].includes(k))) throw new RangeError(checked.errors.join('；'));
-  const planProfile = { ...next, targetVersions: [] };
-  for (const key of ['weightKg', 'heightCm', 'bodyFatPct']) {
-    const hit = latestHealthEntry(key, todayKey());
-    if (hit) planProfile[key] = hit.value;
-  }
-  const targets = planForProfile(planProfile, todayKey());
+  const targets = planIfSaved(patch);
   const savedAt = new Date().toISOString();
   next.targetVersions = [...(state.profile.targetVersions || []), {
     id: savedAt, savedAt, effectiveDate: todayKey(), targets,
   }];
   await db.setSetting('profile', next);
   state.profile = next;
+  recompute();
+  emit();
+}
+
+/**
+ * 撤销一次档案保存：把整份档案原样放回去，目标版本一起。
+ *
+ * 不能用「再存一次旧值」来撤销：存档案会按今天的数据重算计划、再追加一个版本，
+ * 旧计划存得早的话，撤销之后的目标和撤销之前那份对不上 —— 实测采用复盘建议再撤销，
+ * 目标从 2831 变成了 2531，而用户以为自己什么都没改。
+ */
+export async function restoreProfile(previous) {
+  if (!previous || typeof previous !== 'object') return;
+  await db.setSetting('profile', previous);
+  state.profile = previous;
   recompute();
   emit();
 }
