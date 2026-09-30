@@ -25,7 +25,9 @@
 
 /**
  * @param {Array<{x:number,y:number}>} points x 是天序号，y 是测量值
- * @returns {{perDay:number, stdErrPerDay:number, n:number}|null}
+ * @returns {{perDay:number, stdErrPerDay:number, n:number, intercept:number}|null}
+ *          intercept 是 x = 0 处的拟合值；要「这段开头和结尾各落在多少」的调用方
+ *          （力量趋势的起止估算）用它，不用再把均值自己算一遍。
  */
 export function linearFit(points = []) {
   const pts = points.filter((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y));
@@ -48,7 +50,7 @@ export function linearFit(points = []) {
     const resid = p.y - (intercept + perDay * p.x);
     sse += resid * resid;
   }
-  return { perDay, stdErrPerDay: Math.sqrt(sse / (n - 2)) / Math.sqrt(den), n };
+  return { perDay, stdErrPerDay: Math.sqrt(sse / (n - 2)) / Math.sqrt(den), n, intercept };
 }
 
 /**

@@ -18,8 +18,14 @@ import {
   exercisesForGroup, exercisesForSplit, SPLITS, coveredGroupKeys, planAdvice,
   recommendFor, exerciseTags, EQUIP_FILTERS, equipFilterOf, lastPerformance,
   sessionVolume, recentTrainingRows, trainingCoverage, emptyPlanBrief, weeklyTrainingSummary,
-  overlapScore, overlapLevel, restoreTrainingItems, newTrainingItem, recordingDefaultsFor, createSetDraft, appendConfirmedSets, trainingHistoryDays, trainingAreaDetail,
+  overlapScore, overlapLevel, restoreTrainingItems, newTrainingItem, recordingDefaultsFor, appendConfirmedSets, trainingHistoryDays, trainingAreaDetail,
+  weeklySetVolume, weeklyVolumeTips, setCountText,
 } from '../core/training.js';
+import {
+  progressionTarget, targetText, targetReason, bigJumpNote, stallNote, strengthTrend, trendText, trendWord,
+  setDraftFor, repRangeFor, defaultRepRange,
+} from '../core/progression.js';
+import { REP_RANGES } from '../core/training-records.js';
 
 let activeGroup = 'chest';
 let pickMode = 'group';     // 'group' 按部位 | 'split' 按推拉腿
@@ -99,12 +105,14 @@ let proposal = null;
 let proposalKey = '';
 let committing = false;
 
+const goal = () => state.profile?.goal || 'maintain';
+
 function currentProposal() {
-  const key = [pickMode, activeGroup, activeSplit, equipFilter, targetFilter, budgetOptions.minutes, budgetOptions.setBudget, budgetOptions.setsPerExercise].join(':');
+  const key = [pickMode, activeGroup, activeSplit, equipFilter, targetFilter, budgetOptions.minutes, budgetOptions.setBudget, budgetOptions.setsPerExercise, goal()].join(':');
   if (!proposal || key !== proposalKey) {
     proposalKey = key;
     proposal = recommendFor({ mode: pickMode, groupKey: activeGroup, splitKey: activeSplit,
-      selection: [...session().items.map(exerciseForRecord), ...pending], equip: equipFilter, target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), ...budgetOptions });
+      selection: [...session().items.map(exerciseForRecord), ...pending], equip: equipFilter, target: targetFilter, sessions: state.trainingDays, endDate: trainingDay(), goal: goal(), ...budgetOptions });
   }
   return proposal;
 }
@@ -506,12 +514,29 @@ function recordingSettings(item) {
   const exercise = exerciseForRecord(item), variants = exerciseVariants(item.id);
   let variantId = item.id;
   const settingInputs = {};
+  /*
+   * 次数区间「自动」那一项要写出自动是几到几：只写「自动」的话，
+   * 人不知道目标是按什么推出来的，也就不知道要不要改。负重方式一改（徒手 / 附加负重），
+   * 自动的那一档会跟着变，所以每次改完设置都重写一遍这一项的字。
+   */
+  const autoOption = h('option', { value: '' });
+  const syncAutoRange = () => {
+    const key = defaultRepRange(exerciseForRecord({ id: variantId }), settings.loadMode);
+    autoOption.textContent = `自动（${key.replace('-', '–')} 次）`;
+  };
   const field = (label, key, values) => {
-    const input = h('select', { 'aria-label': label, onchange: event => { settings[key] = event.target.value; } },
+    const input = h('select', { 'aria-label': label, onchange: event => { settings[key] = event.target.value; syncAutoRange(); } },
       values.map(([value, text]) => h('option', { value, selected: settings[key] === value }, text)));
     settingInputs[key] = input;
     return h('label.form-field', null, h('span', null, label), input);
   };
+  // 空值是「按动作类型自动」：不存这个键，记录契约只认那几档
+  const rangeInput = h('select', { 'aria-label': '目标次数区间', onchange: event => {
+    if (event.target.value) settings.repRange = event.target.value; else delete settings.repRange;
+  } }, autoOption, Object.keys(REP_RANGES).map(key => h('option', { value: key }, `${key.replace('-', '–')} 次`)));
+  syncAutoRange();
+  rangeInput.value = settings.repRange || '';
+  settingInputs.repRange = rangeInput;
   const save = h('button.primary-btn', { type: 'button', onclick: async () => {
     const changedVariant = variantId !== item.id;
     const result = await updateSession(items => {
@@ -539,15 +564,20 @@ function recordingSettings(item) {
     cardHeader(exercise.name),
     variants.length ? h('label.form-field', null, h('span', null, '练法'),
       h('select', { 'aria-label': '练法', onchange: event => { variantId = event.target.value; variantNote.textContent = variants.find(v => v.id === variantId)?.note || '';
-        Object.assign(settings, recordingDefaultsFor(session().items.find(i => i.id === variantId) || newTrainingItem(variantId, state.trainingDays, date), state.trainingDays, date));
-        Object.entries(settingInputs).forEach(([key, input]) => { input.value = settings[key]; }); } },
+        const next = recordingDefaultsFor(session().items.find(i => i.id === variantId) || newTrainingItem(variantId, state.trainingDays, date), state.trainingDays, date);
+        delete settings.repRange;
+        Object.assign(settings, next);
+        syncAutoRange();
+        Object.entries(settingInputs).forEach(([key, input]) => { input.value = settings[key] ?? ''; }); } },
         variants.map(v => h('option', { value: v.id, selected: item.id === v.id }, v.label)))) : null,
     variants.length ? variantNote : null,
     h('div.training-settings-fields', null,
       field('记录方式', 'measure', [['reps','按次数'],['time','按时长']]),
       field('负重方式', 'loadMode', [['bodyweight','自重'],['external','附加负重'],['assistance','辅助重量'],['machine','器械标示']]),
-      field('重量单位与口径', 'loadConvention', [['single','每只／单侧 kg'],['total','合计 kg'],['scale','器械刻度']])),
+      field('重量单位与口径', 'loadConvention', [['single','每只／单侧 kg'],['total','合计 kg'],['scale','器械刻度']]),
+      h('label.form-field', null, h('span', null, '目标次数区间'), rangeInput)),
     h('p.form-hint', null, '设置用于之后记录的组，下次练这个动作时沿用。已有组的重量和口径保留。'),
+    h('p.form-hint', null, '次数区间决定「本次目标」什么时候加重：每组都做到上限，下次就加一档，再从下限做起。'),
     variants.length ? h('p.form-hint', null, '已有记录时，另一练法会单独加入本次训练。') : null),
     { label: '动作记录设置' });
   setSheetFooter(save);
@@ -641,6 +671,47 @@ function previousSets(exercise) {
 
 }
 
+const PROGRESSION_HELP = [
+  '按双重渐进给目标：同一个重量上把每组次数往区间上限推，每组都到了上限就加一档重量、从区间下限重新做起。',
+  '只看上一次的正式组，热身组不算；目标只填进待确认的那一组，状态不好时照上次做、或者直接改数都可以。次数区间在「设置」里改，默认复合动作 8–12、孤立动作 10–15、小腿和腹 12–20。',
+  '力量趋势按 Epley 公式（重量 × (1 + 次数 / 30)）从每次最好的一组估算，只用近 4 周、次数不超过 15 的正式组。它用来看自己前后的变化，不是真实的最大重量，别据此去试极限。',
+];
+
+/*
+ * 「这次做多少」：目标一行，依据一句（点开是上次逐组），加一档太猛或连续停滞时各补一句，
+ * 最后是近几周力量往哪走。
+ *
+ * 依据那一句本身就是「上次 09-26 · 60kg × 12,12,12，……」，所以有目标时原来那条
+ * 「上次 2026-09-26 · 3 组 · 查看逐组」不再单独出现 —— 同一个日期在一处只印一遍。
+ * 没有目标（第一次练、上次只做了热身、口径换过）时退回原来那一条。
+ */
+function progressionBlock(item, exercise, target) {
+  const date = trainingDay();
+  const trend = strengthTrend(state.trainingDays, item, date);
+  const text = targetText(target);
+  const incomparable = target?.kind === 'incomparable' ? h('p.progression-note', null, targetReason(target)) : null;
+  if (!text && !trend) return [previousSets(exercise), incomparable];
+  const help = persistentInfoTip(`progression-${exercise.id}`, '本次目标和力量趋势怎么来的',
+    ...PROGRESSION_HELP.map(line => h('p', null, line)));
+  const lastSets = text
+    ? (trainingFor(target.lastDate).items.find(i => i.id === item.id)?.sets || []).filter(isRecordedSet) : [];
+  const reason = !text ? previousSets(exercise)
+    : lastSets.length ? disclosure(`last:${date}:${exercise.id}`, 'training-last-sets.progression-reason', targetReason(target),
+      lastSets.map((set, n) => h('p.form-hint', null, `第 ${n + 1} 组 · ${setLabel(set)}`)))
+      : h('p.progression-reason', null, targetReason(target));
+  return h('div.progression', null,
+    text ? h('div.progression-row', null,
+      h('span.progression-label', null, '本次目标'),
+      h('strong.progression-value', null, text), help) : null,
+    reason,
+    [bigJumpNote(target), stallNote(target, goal())].filter(Boolean).map(note => h('p.progression-note', null, note)),
+    incomparable,
+    trend ? h('div.progression-row.progression-trend', null,
+      h('span.progression-label', null, `近 ${trend.weeks} 周力量`),
+      h('span.progression-value', null, `${trendWord(trend, goal())} · ${trendText(trend)}`),
+      text ? null : help) : null);
+}
+
 /*
  * 「移除」写在动作行上，不藏进「记组」展开层里。
  *
@@ -653,11 +724,19 @@ function planRow(exercise, index) {
   const item = session().items.find(i => i.id === exercise.id);
   const open = expanded === exercise.id;
   const recorded = item.sets.filter(isRecordedSet).length;
-  const label = recorded ? `已记录 ${recorded} 组` : item.done ? '已标记完成' : '尚未记组';
+  /*
+   * 目标写在收起的那一行上：到了器械前面最想知道的就是「这次做多少」，
+   * 不该还得先点开「记组」。有目标时「尚未记组」那四个字就不用了 —— 目标本身就说明还没开始。
+   */
+  const target = progressionTarget(state.trainingDays, item, trainingDay());
+  const goalLine = targetText(target);
+  const label = recorded ? `已记录 ${recorded} 组` : item.done ? '已标记完成' : goalLine ? null : '尚未记组';
   return h('div.plan-row-wrap', null,
     h('div.plan-row', null,
       h('span.plan-index', null, String(index + 1)),
-      h('div.plan-main', null, h('div.ex-name', null, h('strong', null, exercise.name)), h('span.form-hint', null, label)),
+      h('div.plan-main', null, h('div.ex-name', null, h('strong', null, exercise.name)),
+        label ? h('span.form-hint', null, label) : null,
+        goalLine ? h('span.plan-target', null, h('span.plan-target-label', null, '目标'), goalLine) : null),
       h('div.plan-row-actions', null,
         h('button.text-btn', { type: 'button', 'aria-expanded': String(open),
           'aria-controls': `sets-${exercise.id}`, onclick: () => { expanded = open ? null : exercise.id; rerenderTraining(); },
@@ -668,19 +747,21 @@ function planRow(exercise, index) {
       const defaults = recordingDefaultsFor(item, state.trainingDays, trainingDay());
       const showWeight = defaults.loadMode !== 'bodyweight' || item.sets.some(s => s.loadMode !== 'bodyweight');
       const variant = exerciseVariants(item.id).find(v => v.id === item.id);
+      // 次数区间也写在这一行：目标是按它推出来的，要改也是从这个「设置」进去
+      const range = repRangeFor(exercise, defaults);
       const settingsLabel = [variant?.label, defaults.loadMode === 'bodyweight' ? '自重' : defaults.loadConvention === 'single' ? '每只／单侧 kg'
         : defaults.loadConvention === 'scale' ? '器械刻度' : defaults.loadMode === 'assistance' ? '辅助重量 kg' : '合计 kg',
-        defaults.measure === 'time' ? '按时长' : '按次数'].filter(Boolean).join(' · ');
+        defaults.measure === 'time' ? '按时长' : `按次数 ${range.lo}–${range.hi}`].filter(Boolean).join(' · ');
       return h('div.set-editor', { id: `sets-${exercise.id}` },
         h('button.training-settings-trigger', { type: 'button', onclick: () => recordingSettings(item), 'aria-label': `${exercise.name} 记录设置` },
-          h('span', null, settingsLabel), h('span', null, '设置')), previousSets(exercise),
+          h('span', null, settingsLabel), h('span', null, '设置')), progressionBlock(item, exercise, target),
         h('div.training-sets-table', null,
           h('div.training-set-head' + (showWeight ? '' : '.training-timed-row'), null, h('span', null, '组'), showWeight ? h('span', null, '重量') : null,
             h('span', null, defaults.measure === 'time' ? '时长' : '次数'), h('span', null, '完成')),
           item.sets.map((set, k) => setRow(item, k, set, showWeight)), draftSetEditor(item, showWeight)),
         h('div.training-edit-actions', null, h('button.secondary-btn.compact', {
           disabled: item.sets.length >= 20 || setDrafts.has(draftKey(item.id)), onclick: () => {
-            setDrafts.set(draftKey(item.id), createSetDraft(item, state.trainingDays, trainingDay())); rerenderTraining();
+            setDrafts.set(draftKey(item.id), setDraftFor(item, state.trainingDays, trainingDay(), target)); rerenderTraining();
           } }, item.sets.length >= 20 ? '已达 20 组记录上限' : item.sets.length ? '再加一组' : '加第一组')));
     })() : null);
 
@@ -776,16 +857,43 @@ async function replaceExercise(action) {
   }, date) });
 }
 
+/*
+ * 从「训练建议」里直接加一个动作，和「替换为」同一个路数：点一下就进本次训练，带撤销。
+ * 已经在计划里的不重复加；撤销时它若已经记了组就不动（那几组是真做过的）。
+ */
+async function addExerciseFromTip(id) {
+  const date = trainingDay();
+  const exercise = EXERCISE_BY_ID.get(id);
+  if (!exercise || trainingFor(date).items.some(i => i.id === id)) return;
+  const result = await updateSession(items => (items.some(i => i.id === id) ? null
+    : [...items, newTrainingItem(id, state.trainingDays, date)]), date);
+  if (!result.ok) return;
+  toast(`已加入「${exercise.name}」`, 'ok', { label: '撤销', onClick: () => updateSession(items => {
+    const added = items.find(i => i.id === id);
+    if (added?.sets.length || added?.done) throw Object.assign(new Error('这个动作已经记了组，未撤销。'), { name: 'TrainingConflictError' });
+    return items.filter(i => i.id !== id);
+  }, date) });
+}
+
 function adviceCard() {
-  const tips = planAdvice(pickedExercises());
+  /*
+   * 周组数那一两条排在最前面，而且今天一个动作都没安排时也出现 ——
+   * 「今天练什么」这一栏最该回答的正是「这周哪儿练得少」。
+   * 补记过去某一天时不说：「今天可以补一下腘绳」对着上周一说不通。
+   */
+  const volumeTips = trainingDay() === todayKey()
+    ? weeklyVolumeTips(state.trainingDays, todayKey(), { goal: goal(), selection: pickedExercises() }) : [];
+  const tips = [...volumeTips, ...planAdvice(pickedExercises())];
   if (!tips.length) return null;
   return h('section.card.training-advice', null,
-    cardHeader('训练建议', { icon: 'spark', actions: [persistentInfoTip('training-advice-method', '训练建议依据', '根据当前动作的主要肌群、动作模式和顺序提供参考。标签相近不等于刺激相同，不要求删除或替换；未评估个人恢复与动作质量。')] }),
+    cardHeader('训练建议', { icon: 'spark', actions: [persistentInfoTip('training-advice-method', '训练建议依据',
+      h('p', null, '周组数按近 7 日已记录的正式组算：主练算 1 组，协同算半组，热身不算。增肌常用的参考是每个肌群每周 10–20 组，减脂期至少保留约 6 组；没记下来的训练这里看不见，所以它只是参考。'),
+      h('p', null, '动作相近的提示根据当前动作的主要肌群、动作模式和顺序给出；标签相近不等于刺激相同，不要求删除或替换，也没有评估个人恢复与动作质量。'))] }),
     h('div.insight-list', null, tips.map(t => h('div.insight.info', null,
       h('div.insight-title', null, t.title), h('div.insight-text', null, t.text),
       t.actions?.length ? h('div.tip-actions', null, t.actions.map(a => h('button.chip-btn.tip-action', {
-        onclick: () => replaceExercise(a),
-      }, `替换为：${a.label}`))) : null))));
+        onclick: () => (a.adds ? addExerciseFromTip(a.id) : replaceExercise(a)),
+      }, `${a.adds ? '加入' : '替换为'}：${a.label}`))) : null))));
 }
 
 function coverageTable() {
@@ -845,18 +953,47 @@ function weeklyGroupsCard() {
   return h('section.card.training-week-groups', null,
     cardHeader('近 7 日训练概览', { icon: 'body', summary: `${model.days} 天 · ${model.recorded} 组`, actions: [
       persistentInfoTip('training-week-groups-method', '训练统计说明',
-        `已记录 ${model.recorded} 组，其中正式组 ${model.work}、热身 ${model.warmup}、未区分类型 ${model.unknown}。未区分类型的旧记录保留原值，无需补填。主练与协同分别展示，协同不折半；同组同部位只计一次，各部位不能相加为全身组数。间隔只看主练记录，未记录不代表没练。`),
+        h('p', null, '组数一栏：主练算 1 组、协同算半组，热身不算。浅绿那段是增肌常用的每周 10–20 组参考（减脂期至少约 6 组），不是处方；点一行能看主练、协同各多少组，来自哪几个动作。'),
+        h('p', null, `已记录 ${model.recorded} 组，其中正式组 ${model.work}、热身 ${model.warmup}、未区分类型 ${model.unknown}；未区分类型的旧记录照正式组算，无需补填。同一组只在一个肌群里记一次，但一个动作会同时练到几个肌群，所以各肌群相加不等于全身组数。`),
+        h('p', null, '间隔只看主练记录。未记录不代表没练。')),
     ] }),
     h('div.range-switch.training-overview-switch', { role: 'group', 'aria-label': '训练概览内容' },
       [['sets','组数'],['interval','间隔']].map(([key, label]) => h('button.chip-btn', {
         type: 'button', class: overviewMode === key ? 'active' : '', 'aria-pressed': String(overviewMode === key),
         onclick: () => { overviewMode = key; rerenderTraining(); },
       }, label))),
-    overviewMode === 'interval' ? coverageTable() : h('div', null,
-      h('div.coverage-row.coverage-heading', null, h('span', null, '部位'), h('span', null, '主练'), h('span', null, '协同')),
-      model.areas.filter(area => !['biceps','triceps','forearm'].includes(area.key)).map(area =>
-        h('button.coverage-row.training-area-row', { type: 'button', 'aria-label': `查看${area.label}训练详情`, onclick: () => showAreaDetail(area) },
-          h('strong', null, area.label), h('span', null, `${area.direct} 组`), h('span', null, `${area.secondary} 组`)))));
+    overviewMode === 'interval' ? coverageTable() : volumeTable());
+}
+
+/*
+ * 「组数」那一栏：每个肌群一行，一根刻度 —— 浅绿那段是参考区间，圆点是近 7 日记了多少组。
+ *
+ * 原先这里是「主练 9 组 · 协同 2 组」两列数字，可「9 组算多算少」得自己去查。
+ * 这是一个区间类的量（少了长得慢、多了恢复不过来），按指标性质的规矩就该画成区间：
+ * 落在区间里是绿点，两头都是中性的灰点 —— 练得少不是危险，不画警告色。
+ * 主练 / 协同的原始组数点进这一行就有（部位详情）。
+ * 横轴固定到 24 组：每一行的参考段落在同一个位置，上下才能一眼比。
+ */
+const VOLUME_AXIS = 24;
+function volumeTable() {
+  const volume = weeklySetVolume(state.trainingDays, todayKey(), { goal: goal() });
+  const { lo, hi } = volume.reference;
+  const at = value => `${Math.min(100, (value / VOLUME_AXIS) * 100)}%`;
+  const statusText = { low: '低于参考', ok: '在参考区间内', high: '高于参考' };
+  return h('div.volume-table', null,
+    h('div.coverage-row.coverage-heading.volume-row', null,
+      h('span', null, '肌群'),
+      h('span', null, volume.goal === 'cut' ? `参考每周至少 ${lo} 组` : `参考每周 ${lo}–${hi} 组`),
+      h('span', null, '近 7 日')),
+    volume.groups.map(g => h('button.coverage-row.training-area-row.volume-row', {
+      type: 'button', 'data-status': g.status,
+      'aria-label': `${g.label}近 7 日 ${setCountText(g.sets)} 组，${statusText[g.status]}，查看详情`,
+      onclick: () => showAreaDetail(g),
+    },
+    h('strong', null, g.label),
+    h('span.volume-bar', { 'aria-hidden': 'true', style: { '--band-from': at(lo), '--band-to': at(hi), '--at': at(g.sets) } },
+      h('span.volume-band'), h('span.volume-dot')),
+    h('span.volume-value', null, `${setCountText(g.sets)} 组`))));
 }
 
 function recommendationBudget() {

@@ -64,6 +64,7 @@ export function profileCard(rerender) {
     dirtyMark.hidden = !dirty;
     syncRateHint();
     syncDraftStats();
+    if (adjustRow) syncAdjust();
   };
 
   const sexSelect = h('select', {
@@ -130,6 +131,23 @@ export function profileCard(rerender) {
     },
   }, Object.values(GOALS).map((g) => h('option', { value: g.key, selected: d.goal === g.key }, g.label)));
 
+  /*
+   * 每周复盘采用过消耗校正时，它得在这里看得见、也清得掉 —— 否则目标比算出来的多 150，
+   * 人翻遍设置都找不到为什么。清除和别的改动一样走草稿，按「保存」才生效。
+   */
+  const savedAdjust = Number(state.profile.tdeeAdjustKcal) || 0;
+  const adjustNote = h('span');
+  const clearAdjust = h('button.text-btn', { type: 'button', onclick: () => { d.tdeeAdjustKcal = 0; touch(); } }, '清除');
+  const signedKcal = (v) => `${v > 0 ? '+' : ''}${v} kcal/天`;
+  const syncAdjust = () => {
+    const value = Number(d.tdeeAdjustKcal) || 0;
+    adjustNote.textContent = value ? `消耗校正 ${signedKcal(value)} · 来自每周复盘`
+      : `保存后清除消耗校正（原 ${signedKcal(savedAdjust)}）`;
+    clearAdjust.hidden = !value;
+  };
+  const adjustRow = savedAdjust ? h('div.tdee-adjust-row', null, adjustNote, clearAdjust) : null;
+  if (adjustRow) syncAdjust();
+
   const stats = h('div.stat-row');
   const syncDraftStats = () => {
     const p = previewProfile(), solved = planForProfile(p);
@@ -163,7 +181,8 @@ export function profileCard(rerender) {
         || field('体脂率（%，可选）', numInput('bodyFatPct', '0.1', '可以留空')),
       field('日常活动量', activity, '综合工作、通勤、家务和训练，不只看每周健身次数。', 'span-all'),
       field('目标', goal),
-      field('目标速率（kg/周）', rate, rateHint, 'span-all')),
+      field('目标速率（kg/周）', rate, rateHint, 'span-all'),
+      adjustRow),
     saveBtn,
     h('p.form-hint', null, '新计划从保存当天生效，历史无版本时按当前设置对照。'),
     stats);

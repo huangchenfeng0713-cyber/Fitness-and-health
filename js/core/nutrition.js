@@ -47,6 +47,23 @@ export const MAX_GAIN_RATE_PCT = 0.005;
 /* 1.5%/周是本应用自动计划范围，不代表普遍生理极限。 */
 export const ABSURD_RATE_PCT = 0.015;
 
+/*
+ * 每周复盘采用的「消耗校正」上限（护栏）。
+ *
+ * 计划里的消耗是估算（设备或公式），偏差会原样落到体重上：照计划吃了、体重却比计划
+ * 走得慢，说明实际消耗比估算高。复盘给出的是一个手动采用的校正值，加在估算消耗上 ——
+ * 不改计划速率：那是用户想要的体重变化速度，拿它当热量旋钮的话，
+ * 「计划 +0.35 kg/周」就成了一句谎话，下一次复盘还会拿实际去比这个假目标，一直往上加。
+ * 超过 ±500 kcal 时，更可能是饮食漏记或设备数据有问题，不该靠继续加校正来盖住。
+ */
+export const TDEE_ADJUST_MAX = 500;
+
+/** 档案里的消耗校正（kcal/天），非法值当 0；恢复备份、云端同步绕过表单，这里再夹一次 */
+export function tdeeAdjustOf(profile) {
+  const v = Number(profile?.tdeeAdjustKcal);
+  return Number.isFinite(v) ? Math.min(TDEE_ADJUST_MAX, Math.max(-TDEE_ADJUST_MAX, Math.round(v))) : 0;
+}
+
 export const GOALS = {
   cut: { key: 'cut', label: '减脂', defaultRateKgPerWeek: -0.5 },
   maintain: { key: 'maintain', label: '维持', defaultRateKgPerWeek: 0 },
@@ -134,6 +151,9 @@ export function validateProfile(profile, today = new Date()) {
   if (profile.proteinPerKg != null
     && (!Number.isFinite(Number(profile.proteinPerKg)) || Number(profile.proteinPerKg) < 0.5
       || Number(profile.proteinPerKg) > 3.5)) errors.push('自定义蛋白质需在 0.5–3.5 g/kg');
+  if (profile.tdeeAdjustKcal != null && !finiteIn(profile.tdeeAdjustKcal, -TDEE_ADJUST_MAX, TDEE_ADJUST_MAX)) {
+    errors.push(`消耗校正需在 ±${TDEE_ADJUST_MAX} kcal 以内`);
+  }
   return { valid: errors.length === 0, errors, age };
 }
 
@@ -450,7 +470,9 @@ export function dailyTargets(profile, dynamic = null, today = new Date()) {
   const hasDynamicTdee = dynamic?.tdee > 0;
   const hasDeviceContribution = hasDynamicTdee
     && (dynamic.basalSource !== 'formula' || dynamic.activeSource !== 'formula-fallback');
-  const tdee = hasDynamicTdee ? dynamic.tdee : stat.tdee;
+  // 每周复盘手动采用的消耗校正加在估算消耗上：速率、下限、方向检查都照原样作用在校正后的数上
+  const tdeeAdjust = tdeeAdjustOf(profile);
+  const tdee = (hasDynamicTdee ? dynamic.tdee : stat.tdee) + tdeeAdjust;
   // 固定 7700 只是短期预算近似；离谱值已经在上面拦掉，这里再限制常用的 500–750 kcal 调整范围。
   const requestedDailyDelta = (rateByWeight * KCAL_PER_KG_FAT) / 7;
   const plannedDelta = clamp(requestedDailyDelta, -750, 500);
@@ -555,6 +577,7 @@ export function dailyTargets(profile, dynamic = null, today = new Date()) {
     measuredKcal: dynamic?.measured ?? null,
     carbBelowRda: round(carb) < CARB_RDA_G,
     tdee: round(tdee),
+    tdeeAdjust,
     tdeeSource: hasDeviceContribution ? 'apple' : 'formula',
     // 今天的活动能量数值不可信、已改按平时节奏估算 —— 要让界面能说出这件事，
     // 否则用户看到一个正常的目标，不会知道自己的快捷指令取错了数据

@@ -113,7 +113,8 @@ try {
   check('切换日期只显示该日动作', await page.locator('.log-row').count() === 1);
   await page.getByRole('button', { name: '2026-09-11 暂无记录', exact: true }).click();
   check('空日期明确显示暂无记录', await page.getByText('这一天暂无训练记录。', { exact: true }).isVisible());
-  await page.getByRole('button', { name: '查看腿训练详情', exact: true }).click();
+  // 组数一栏按肌群对照参考（腿拆成股四头 / 腘绳 / 臀 / 小腿），点「臀」那一行看来源
+  await page.getByRole('button', { name: /^臀近 7 日 .+ 组，.+，查看详情$/ }).click();
   check('部位详情列出肌群和真实动作来源', await page.locator('.training-area-sheet').getByText('臀大肌', { exact: true }).isVisible() && await page.locator('.training-area-sheet').getByText('山羊挺身（臀腿侧重）', { exact: true }).isVisible());
   await screenshot('area-detail');
   // 公共弹层保留 700ms 防误触关闭窗口，与真实用户看完详情再关闭一致。

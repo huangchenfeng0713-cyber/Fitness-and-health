@@ -56,7 +56,10 @@ try {
   await page.getByRole('tab', { name: '训练记录', exact: true }).click();
   const week = page.locator('.training-week-groups');
   check('周回顾不重复铺陈性质未知', !(await week.innerText()).includes('性质未知') && await week.locator('.training-area-details').count() === 0);
-  check('肩、臂分开显示', await week.getByText('肩', { exact: true }).count() === 1 && await week.getByText('臂', { exact: true }).count() === 1);
+  // 组数一栏按肌群对照参考：肩一行，臂拆成二头 / 三头；「肩臂」合成一档的老样子不许回来
+  check('肩、臂分开显示', await week.getByText('肩', { exact: true }).count() === 1
+    && await week.getByText('二头', { exact: true }).count() === 1 && await week.getByText('三头', { exact: true }).count() === 1
+    && !(await week.innerText()).includes('肩臂'));
   const results = await page.evaluate(async () => {
     const s = await import('/js/lib/store.js'), db = await import('/js/lib/db.js');
     await s.setDay('2026-09-13');

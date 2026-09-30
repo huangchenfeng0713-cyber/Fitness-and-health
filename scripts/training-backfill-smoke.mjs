@@ -28,7 +28,9 @@ try {
   await selectDate('2026-09-19');
   const row = page.locator('.plan-row-wrap').filter({ hasText: '哑铃侧平举' });
   await row.getByRole('button', { name: '记组', exact: true }).click();
-  assert.match(await row.innerText(), /2026-09-01/);
+  // 补记 09-19 时「上次」是它之前的 09-01，不是之后的 09-20（本次目标那句依据写的是月-日）
+  assert.match(await row.innerText(), /上次 09-01/);
+  assert.doesNotMatch(await row.innerText(), /上次 09-20/);
   await page.getByRole('button', { name: '再加一组', exact: true }).click();
   await page.getByLabel('待确认次数', { exact: true }).fill('13');
   await selectDate('2026-09-01');

@@ -17,6 +17,7 @@ import { setIntent } from '../lib/nav.js';
 import { trendCharts } from './cards/trend-charts.js';
 import { healthMetricsCard } from './cards/health-metrics.js';
 import { weeklySummaryCard } from './cards/weekly-summary.js';
+import { weeklyReviewCard } from './cards/weekly-review.js';
 
 /** 可疑记录先核对来源证据；提供预览并保留原值。 */
 function repairCard(rerender) {
@@ -83,6 +84,11 @@ export function renderHealth(root) {
     repairCard(rerender),
     implausibleCard(rerender),
     metrics,
+    /*
+     * 复盘排在速览前面：这一页原来只回答「在往哪走」，走得不对该怎么办得自己拼；
+     * 复盘把那一步做了，是这一页最该先看的。速览和趋势图是它的明细。
+     */
+    weeklyReviewCard(),
     // 速览在趋势图上面：先回答「这七天整体怎么样」，想看某项怎么走再往下翻
     weeklySummaryCard(),
     ...(trendCharts(rerender) || []),

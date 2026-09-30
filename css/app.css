@@ -1294,6 +1294,13 @@ html, body { height: 100%; overflow: hidden; }
   max-height: min(60vh, 420px); overflow-y: auto;
   overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
+/*
+ * 每周复盘一条三段：标题说做什么，依据是灰的（凭什么），做法用正文色（怎么做）。
+ * 今日提示把依据收进 ⓘ，这里不收：复盘要动目标，凭什么动得摆在明面上。
+ */
+.review-basis { margin-top: var(--space-0); color: var(--muted); font-size: var(--fs-footnote); line-height: 1.6; }
+.review-action { margin-top: var(--space-1); color: var(--text); font-size: var(--fs-footnote); line-height: 1.6; }
+.review-apply { white-space: normal; text-align: left; }
 /* 可选替换入口；有组数时先确认，完成后可撤销。 */
 .tip-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .tip-action { font-size: var(--fs-footnote); display: inline-flex; align-items: baseline; gap: var(--space-1); }
@@ -1506,6 +1513,12 @@ button, select, input, textarea { font-family: inherit; font-size: inherit; colo
 }
 /* iOS 的原生日期控件自带内边距和固有宽度，不压一下会溢出容器 */
 .form-field.span-all { grid-column: 1 / -1; }
+/* 身体信息里那行「消耗校正 +150 kcal/天 · 来自每周复盘　清除」：一行两端都有东西 */
+.tdee-adjust-row {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2); color: var(--muted); font-size: var(--fs-footnote);
+}
+.tdee-adjust-row > span { min-width: 0; overflow-wrap: anywhere; }
 .form-field input[type="date"] {
   -webkit-appearance: none; appearance: none;
   min-height: 40px; line-height: 1.2; text-align: left;
@@ -3739,6 +3752,54 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appe
 .training-area-sheet .coverage-row > * { min-width: 0; overflow-wrap: anywhere; }
 .training-area-source { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .training-area-source > span:last-child { color: var(--muted); font-size: var(--fs-footnote); }
+/*
+ * 收起的那一行上的「目标 62.5kg · 每组至少 8次」。它是这一行第二重要的字（仅次于动作名），
+ * 所以用正文色而不是灰；前面那两个字退成灰，读的人扫过去先看到的是数。
+ */
+.plan-target { display: block; margin-top: var(--space-1); color: var(--text); font-size: var(--fs-footnote); overflow-wrap: anywhere; }
+.plan-target-label { margin-right: var(--space-1); color: var(--muted); }
+/*
+ * 「本次目标」那一块：一片极浅的品牌色底，装目标、依据、力量趋势。
+ * 它是展开层里唯一在回答「这次做多少」的东西，底色把它和下面那张组表分开；
+ * 不加边框 —— 实线框已经给了待确认的那一组，虚线只给拖放目标。
+ * 底色比 --accent-soft 再淡一半：说明层 ⓘ 打开时的圆底就是 --accent-soft，同色会看不见。
+ */
+.progression {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  margin-block: var(--space-2); padding: var(--space-3);
+  border-radius: var(--r-sm); background: color-mix(in srgb, var(--accent-soft) 55%, var(--card));
+}
+.progression-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.progression-label { flex: none; color: var(--muted); font-size: var(--fs-footnote); }
+.progression-value { flex: 1; min-width: 0; font-size: var(--fs-value); font-weight: var(--w-semibold); overflow-wrap: anywhere; }
+.progression-row > .info-tip { flex: none; }
+.progression-trend { padding-top: var(--space-1); }
+.progression-trend .progression-value { font-size: var(--fs-footnote); font-weight: var(--w-medium); }
+.progression-reason, .progression-note { margin: 0; font-size: var(--fs-footnote); overflow-wrap: anywhere; }
+.progression-reason { color: var(--muted); }
+.progression-note { color: var(--text); }
+.progression .training-last-sets { margin-block: 0; }
+.progression .training-last-sets > summary { color: var(--muted); font-size: var(--fs-footnote); }
+/*
+ * 周组数那张表：肌群 | 刻度 | 组数。刻度是一条灰轨，浅绿那段是参考区间，圆点是近 7 日的组数。
+ * 落在区间里的点是绿的，两头是灰的：练得少不是危险，不画警告色。
+ */
+.training-week-groups .volume-row { grid-template-columns: minmax(3.5em, auto) minmax(0, 1fr) minmax(4em, auto); }
+.training-week-groups .coverage-heading.volume-row > span:nth-child(2) { text-align: left; }
+.volume-bar { position: relative; height: 6px; border-radius: 3px; background: var(--track); }
+.volume-band {
+  position: absolute; top: 0; bottom: 0; left: var(--band-from);
+  width: calc(var(--band-to) - var(--band-from)); border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+/* 0 组和顶到头的点收进轨道两端：半个圆点探出轨道之外，读出来像画歪了 */
+.volume-dot {
+  position: absolute; top: 50%; left: clamp(6px, var(--at), calc(100% - 6px)); width: 12px; height: 12px;
+  border: 2px solid var(--card); border-radius: 50%; background: var(--muted);
+  transform: translate(-50%, -50%);
+}
+.volume-row[data-status="ok"] .volume-dot { background: var(--accent); }
+.volume-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 380px) {
   .training-panel .set-row, .training-set-head { gap: var(--space-1); }
   .training-date-strip { gap: var(--space-0); }
